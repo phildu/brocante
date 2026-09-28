@@ -153,6 +153,9 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
         $categories[$i] = ['key' => slugify_portail($label), 'label' => $label, 'icon' => isset(PORTAIL_ICONS[$icon]) ? $icon : 'ic-vase'];
     }
     if (!$categories) throw new InvalidArgumentException('Ajoutez au moins une catégorie.');
+    if (mb_strlen(trim((string) ($f['admin_password'] ?? ''))) < 6) {
+        throw new InvalidArgumentException("Choisissez un mot de passe d'administration d'au moins 6 caractères.");
+    }
 
     $item1 = trim((string) ($f['item1'] ?? '')) ?: 'article';
     $item2 = trim((string) ($f['item2'] ?? '')) ?: 'articles';

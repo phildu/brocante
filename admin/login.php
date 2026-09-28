@@ -6,12 +6,17 @@ $content = get_content();
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Sans mot de passe configuré, l'administration reste fermée.
-    if (ADMIN_PASSWORD !== '' && hash_equals(ADMIN_PASSWORD, (string) ($_POST['password'] ?? ''))) {
-        $_SESSION['is_admin'] = true;
+    if (admin_password_matches((string) ($_POST['password'] ?? ''))) {
+        session_regenerate_id(true);
+        $_SESSION['is_admin'] = tenant_slug();
         header('Location: /admin/catalog.php');
         exit;
     }
     $error = 'Mot de passe incorrect.';
+}
+if (!admin_password_configured()) {
+    $error = "Aucun mot de passe n'est défini pour ce commerce : renseignez admin_password dans tenants/"
+        . tenant_slug() . '/tenant.php.';
 }
 ?><!DOCTYPE html>
 <html lang="fr">

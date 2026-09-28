@@ -1540,9 +1540,30 @@ function flash_get(): ?array
     return $f;
 }
 
+/**
+ * Mot de passe admin accepté : celui du commerce (tenant.php → admin_password)
+ * et celui de la configuration (variable ADMIN_PASSWORD, ou config.local.php
+ * en local, qui s'applique alors à tous les commerces).
+ */
+function admin_password_matches(string $input): bool
+{
+    foreach ([(string) tenant('admin_password'), ADMIN_PASSWORD] as $password) {
+        if ($password !== '' && hash_equals($password, $input)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function admin_password_configured(): bool
+{
+    return (string) tenant('admin_password') !== '' || ADMIN_PASSWORD !== '';
+}
+
 function require_admin(): void
 {
-    if (empty($_SESSION['is_admin'])) {
+    // Une connexion ne vaut que pour le commerce où elle a été faite.
+    if (($_SESSION['is_admin'] ?? null) !== tenant_slug()) {
         header('Location: /admin/login.php');
         exit;
     }
