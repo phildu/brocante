@@ -44,10 +44,16 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
   <div class="layout">
     <aside class="side">
       <div class="shop-list">
-        <?php foreach ($shops as $slug => $shop): $isActive = $slug === $viewing; ?>
+        <?php foreach ($shops as $slug => $shop): $isActive = $slug === $viewing; $look = portail_appearance($shop); ?>
           <div class="shop<?= $isActive ? ' is-active' : '' ?>">
-            <span class="swatch" style="background:<?= e($shop['colors']['accent'] ?? '#b5502e') ?>"></span>
+            <span class="swatch" style="background:<?= e($look['colors']['accent']) ?>"></span>
             <h3><?= e($shop['name']) ?><?php if ($isActive): ?> <span class="pill done">À l'écran</span><?php endif; ?></h3>
+            <span class="look" title="Apparence<?= $look['custom'] ? ' réglée dans l\'administration du commerce' : ' de départ' ?>">
+              <span class="look-colors" aria-hidden="true">
+                <?php foreach (['bg', 'accent', 'accent-2', 'ink'] as $key): ?><span style="background:<?= e($look['colors'][$key]) ?>"></span><?php endforeach; ?>
+              </span>
+              <span class="meta">Titres <?= e($look['fonts']['display']) ?> · textes <?= e($look['fonts']['body']) ?></span>
+            </span>
             <span class="meta">admin : <?= e($shop['admin_user']) ?></span>
             <a class="meta" href="<?= e($shopUrl($slug)) ?>/" target="_blank" rel="noopener"><?= e("$slug.$base") ?> ↗</a>
             <div class="actions">

@@ -222,3 +222,8 @@
     color: var(--accent); font-size: 0.8rem; font-weight: 600;
   }
   .confirm.access input { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; }
+  .shop .look { grid-column: 2; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .look-colors { display: inline-flex; height: 14px; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .look-colors span { width: 16px; }
+  .shop > :not(.swatch) { grid-column: 2; }
+  .shop .swatch { grid-column: 1; grid-row: 1 / span 3; }

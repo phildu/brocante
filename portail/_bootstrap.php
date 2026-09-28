@@ -68,6 +68,38 @@ function set_active_slug(string $slug): void
     }
 }
 
+/**
+ * Apparence d'un commerce pour le portail : celle réglée dans son
+ * administration (table settings de sa base), sinon celle de son tenant.php.
+ * Retourne ['colors' => [bg, ink, accent, accent-2], 'fonts' => [display, body], 'custom' => bool].
+ */
+function portail_appearance(array $shop): array
+{
+    $saved = null;
+    $dbFile = tenant_file($shop, 'db_file');
+    if (is_file($dbFile)) {
+        try {
+            $pdo = new PDO('sqlite:' . $dbFile, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            $value = $pdo->query("SELECT value FROM settings WHERE name = 'appearance'")->fetchColumn();
+            $saved = $value ? json_decode($value, true) : null;
+        } catch (Throwable $e) {
+            $saved = null; // table settings absente : apparence jamais modifiée
+        }
+    }
+    $colors = [];
+    foreach (APPEARANCE_BASE as $key => $base) {
+        $colors[$key] = appearance_color((string) ($saved['colors'][$key] ?? $shop['colors'][$key] ?? ''), $base);
+    }
+    return [
+        'colors' => $colors,
+        'fonts' => [
+            'display' => $saved['fonts']['display'] ?? $shop['fonts']['display'] ?? APPEARANCE_BASE_FONTS['display'],
+            'body' => $saved['fonts']['body'] ?? $shop['fonts']['body'] ?? APPEARANCE_BASE_FONTS['body'],
+        ],
+        'custom' => (bool) $saved,
+    ];
+}
+
 /** Contrôle un identifiant et un mot de passe d'administration ; retourne l'identifiant normalisé. */
 function validate_admin_access(string $user, string $password): string
 {
@@ -203,7 +235,7 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
     $accent = valid_color((string) ($f['accent'] ?? ''), '#1e5f8c');
     $accent2 = valid_color((string) ($f['accent2'] ?? ''), '#6a6f3a');
     $bg = valid_color((string) ($f['bg'] ?? ''), '#f6f5f1');
-    $ink = '#2b2620';
+    $ink = valid_color((string) ($f['ink'] ?? ''), '#2b2620');
     $palette = appearance_derive(['bg' => $bg, 'ink' => $ink, 'accent' => $accent, 'accent-2' => $accent2]);
 
     // Logo : fichier envoyé, sinon logo texte au nom du commerce, dans assets/tenants/<slug>/.

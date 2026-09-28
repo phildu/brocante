@@ -52,10 +52,65 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <style>
-  .new-wrap { max-width: 760px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .new-layout { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 1050px) { .new-layout { grid-template-columns: 1fr; } }
+  .new-wrap { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+
+  .palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+  .palette { border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 6px; cursor: pointer; font-size: 0.78rem; text-align: left; display: flex; flex-direction: column; gap: 5px; }
+  .palette[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .swatches { display: flex; height: 18px; border-radius: 4px; overflow: hidden; }
+  .swatches span { flex: 1; }
+  .colors.four { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 560px) { .colors.four { grid-template-columns: repeat(2, 1fr); } }
+  #contrast[data-kind="warn"] { color: var(--warn); }
+
+  .pv-col { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: flex; flex-direction: column; gap: 10px; }
+  @media (max-width: 1050px) { .pv-col { position: static; } }
+  .pv-stage { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: flex; justify-content: center; max-height: calc(100dvh - 90px); overflow: auto; }
+  .pv-stage.mobile .pv { width: 380px; max-width: 100%; }
+
+  /* Maquette de la boutique : mêmes variables que assets/style.css. */
+  .pv { width: 100%; background: var(--s-bg); color: var(--s-ink); font-family: var(--s-font-body); border: 1px solid var(--s-line); container-type: inline-size; }
+  .pv-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px 18px; padding: 14px 18px; border-bottom: 1px solid var(--s-line); flex-wrap: wrap; }
+  .pv-brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+  .pv-name { font-family: var(--s-font-display); font-weight: 600; font-size: 1.25rem; color: var(--s-accent); }
+  .pv-tag { font-family: "Special Elite", "Courier New", monospace; font-size: 0.72rem; color: var(--s-ink-soft); }
+  .pv-nav { display: flex; gap: 14px; align-items: center; font-size: 0.85rem; color: var(--s-ink-soft); flex-wrap: wrap; }
+  .pv-nav .is-current { color: var(--s-ink); border-bottom: 2px solid var(--s-accent); padding-bottom: 2px; }
+  .pv-cta { border: 1px solid var(--s-accent); color: var(--s-accent); padding: 4px 10px; font-weight: 600; }
+  .pv-hero { padding: 34px 18px 26px; display: grid; gap: 12px; }
+  .pv-eyebrow { margin: 0; font-family: "Special Elite", "Courier New", monospace; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--s-accent); }
+  .pv-title { margin: 0; font-family: var(--s-font-display); font-size: clamp(1.6rem, 5cqi, 2.6rem); line-height: 1.08; color: var(--s-ink); text-wrap: balance; }
+  .pv-lede { margin: 0; color: var(--s-ink-soft); max-width: 56ch; }
+  .pv-ctas { display: flex; gap: 10px; flex-wrap: wrap; }
+  .pv-btn { padding: 10px 18px; font-weight: 700; font-size: 0.9rem; border: 1px solid var(--s-line); }
+  .pv-btn.primary { background: var(--s-accent); border-color: var(--s-accent); color: var(--s-accent-ink); }
+  .pv-btn.ghost { color: var(--s-ink); }
+  .pv-section { padding: 18px; display: grid; gap: 10px; border-top: 1px solid var(--s-line); }
+  .pv-h3 { margin: 0; font-family: var(--s-font-display); font-size: 1.35rem; color: var(--s-ink); }
+  .pv-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+  .pv-cat { background: var(--s-surface); border: 1px solid var(--s-line); padding: 12px 10px; display: grid; gap: 4px; justify-items: start; }
+  .pv-cat svg { width: 30px; height: 30px; color: var(--s-accent-2); }
+  .pv-cat b { font-family: var(--s-font-display); font-weight: 600; font-size: 0.95rem; color: var(--s-ink); }
+  .pv-cat small { font-size: 0.72rem; color: var(--s-ink-soft); }
+  .pv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .pv-card { background: var(--s-surface); border: 1px solid var(--s-line); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .pv-card .pic { aspect-ratio: 4 / 3; background: var(--s-surface-2); display: grid; place-items: center; color: var(--s-accent); }
+  .pv-card .pic svg { width: 40px; height: 40px; }
+  .pv-card .ref { font-family: "Special Elite", "Courier New", monospace; font-size: 0.66rem; color: var(--s-ink-soft); }
+  .pv-card b { font-family: var(--s-font-display); font-size: 0.98rem; color: var(--s-ink); }
+  .pv-card .desc { font-size: 0.78rem; color: var(--s-ink-soft); }
+  .pv-card .foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: auto; }
+  .pv-card .price { font-family: "Special Elite", "Courier New", monospace; color: var(--s-ink); }
+  .pv-card .add { border: 1px solid var(--s-ink); color: var(--s-ink); padding: 3px 9px; font-size: 0.78rem; font-weight: 700; }
+  .pv-card .badge { align-self: flex-start; font-family: "Special Elite", "Courier New", monospace; font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--s-line); padding: 2px 6px; color: var(--s-ink-soft); }
+  .pv-foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 14px 18px; border-top: 1px solid var(--s-line); background: var(--s-surface); font-size: 0.78rem; color: var(--s-ink-soft); }
+  .pv-foot span:first-child { font-family: var(--s-font-display); font-weight: 600; color: var(--s-ink); }
 </style>
 </head>
 <body>
+<?php include __DIR__ . '/../includes/icons.php'; ?>
 <div class="app">
   <header class="topbar">
     <div class="brand">
@@ -64,6 +119,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
     </div>
   </header>
 
+  <div class="new-layout">
   <form class="new-wrap form-col" method="post" enctype="multipart/form-data" id="builder">
     <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
     <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= e($error) ?></p><?php endif; ?>
@@ -82,11 +138,39 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
         <label class="field">Identifiant — adresse &lt;identifiant&gt;.<?= e(tenant_base_host()) ?> (facultatif)<input name="slug" id="f-slug" maxlength="40" pattern="[a-z0-9][a-z0-9_-]*" placeholder="calculé à partir du nom, ex. naty" value="<?= e($v('slug')) ?>"></label>
         <label class="field">Slogan<input name="tagline" id="f-tagline" maxlength="80" value="<?= e($v('tagline')) ?>"></label>
         <label class="field">Logo (PNG, JPG, WebP ou SVG — facultatif)<input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label>
-        <div class="colors">
-          <label class="field">Couleur principale<input type="color" name="accent" id="f-accent" value="<?= e($v('accent')) ?>"></label>
-          <label class="field">Couleur secondaire<input type="color" name="accent2" id="f-accent2" value="<?= e($v('accent2')) ?>"></label>
-          <label class="field">Fond<input type="color" name="bg" id="f-bg" value="<?= e($v('bg')) ?>"></label>
+        <label class="field">Adresse du site<input name="url" id="f-url" value="<?= e($v('url')) ?>" placeholder="https://www.mon-commerce.fr"></label>
+        <div class="two">
+          <label class="field">Identifiant de l'administration<input name="admin_user" id="f-admin-user" required pattern="[A-Za-z0-9._@\-]{3,40}" maxlength="40" autocomplete="off" autocapitalize="none" value="<?= e($v('admin_user')) ?>" placeholder="ex. naty"></label>
+          <label class="field">Mot de passe de l'administration
+            <span class="password-field">
+              <input type="password" name="admin_password" id="f-admin" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum">
+              <button type="button" class="password-toggle" id="f-admin-toggle" aria-controls="f-admin" aria-pressed="false">Afficher</button>
+            </span>
+          </label>
         </div>
+        <p class="hint">Notez-les : le mot de passe est enregistré sous forme chiffrée et ne pourra pas être relu.</p>
+      </div>
+    </details>
+
+    <details class="box" open>
+      <summary>Apparence <small>aperçu à droite</small></summary>
+      <div class="box-body">
+        <div class="palettes" role="group" aria-label="Palettes toutes prêtes">
+          <?php foreach (APPEARANCE_PALETTES as $key => [$label, $pBg, $pInk, $pAccent, $pAccent2]): ?>
+            <button type="button" class="palette" aria-pressed="false"
+                    data-colors="<?= e(json_encode(['bg' => $pBg, 'ink' => $pInk, 'accent' => $pAccent, 'accent2' => $pAccent2])) ?>">
+              <span class="swatches"><span style="background:<?= e($pBg) ?>"></span><span style="background:<?= e($pAccent) ?>"></span><span style="background:<?= e($pAccent2) ?>"></span><span style="background:<?= e($pInk) ?>"></span></span>
+              <?= e($label) ?>
+            </button>
+          <?php endforeach; ?>
+        </div>
+        <div class="colors four">
+          <label class="field">Fond<input type="color" name="bg" id="f-bg" value="<?= e($v('bg')) ?>"></label>
+          <label class="field">Texte<input type="color" name="ink" id="f-ink" value="<?= e($v('ink') ?: '#2b2620') ?>"></label>
+          <label class="field">Principale<input type="color" name="accent" id="f-accent" value="<?= e($v('accent')) ?>"></label>
+          <label class="field">Secondaire<input type="color" name="accent2" id="f-accent2" value="<?= e($v('accent2')) ?>"></label>
+        </div>
+        <p class="slug" id="contrast" role="status"></p>
         <div class="two">
           <label class="field">Police des titres
             <select name="font_display" id="f-font-display">
@@ -103,18 +187,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
             </select>
           </label>
         </div>
-        <p class="hint">Couleurs et polices restent modifiables ensuite dans l'administration du commerce, page « Apparence », avec un aperçu en direct.</p>
-        <label class="field">Adresse du site<input name="url" id="f-url" value="<?= e($v('url')) ?>" placeholder="https://www.mon-commerce.fr"></label>
-        <div class="two">
-          <label class="field">Identifiant de l'administration<input name="admin_user" id="f-admin-user" required pattern="[A-Za-z0-9._@\-]{3,40}" maxlength="40" autocomplete="off" autocapitalize="none" value="<?= e($v('admin_user')) ?>" placeholder="ex. naty"></label>
-          <label class="field">Mot de passe de l'administration
-            <span class="password-field">
-              <input type="password" name="admin_password" id="f-admin" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum">
-              <button type="button" class="password-toggle" id="f-admin-toggle" aria-controls="f-admin" aria-pressed="false">Afficher</button>
-            </span>
-          </label>
-        </div>
-        <p class="hint">Notez-les : le mot de passe est enregistré sous forme chiffrée et ne pourra pas être relu.</p>
+        <p class="hint">Couleurs et polices restent modifiables ensuite dans l'administration du commerce, page « Apparence ».</p>
       </div>
     </details>
 
@@ -201,6 +274,46 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
       <div class="send-actions"><button class="btn btn-primary" type="submit">Créer et afficher</button></div>
     </div>
   </form>
+
+  <aside class="pv-col" aria-label="Aperçu de l'apparence">
+    <div class="toolbar">
+      <strong>Aperçu</strong>
+      <div class="seg" id="pv-mode" role="group" aria-label="Thème de l'aperçu">
+        <button type="button" data-mode="light" aria-pressed="true">Clair</button>
+        <button type="button" data-mode="dark" aria-pressed="false">Sombre</button>
+      </div>
+      <div class="seg" id="pv-device" role="group" aria-label="Format de l'aperçu">
+        <button type="button" data-device="desktop" aria-pressed="true">Ordinateur</button>
+        <button type="button" data-device="mobile" aria-pressed="false">Mobile</button>
+      </div>
+    </div>
+    <div class="pv-stage" id="pv-stage">
+      <div class="pv" id="pv">
+        <div class="pv-bar">
+          <div class="pv-brand"><span class="pv-name" data-bind="name"></span><span class="pv-tag" data-bind="tagline"></span></div>
+          <nav class="pv-nav"><span class="is-current">Accueil</span><span>La boutique</span><span>Contact</span><span>Panier</span><span class="pv-cta">Connexion</span></nav>
+        </div>
+        <div class="pv-hero">
+          <p class="pv-eyebrow" data-bind="hero_eyebrow"></p>
+          <h2 class="pv-title" data-bind="hero_title"></h2>
+          <p class="pv-lede" data-bind="hero_sub"></p>
+          <div class="pv-ctas"><span class="pv-btn primary">Voir la boutique</span><span class="pv-btn ghost">Notre histoire</span></div>
+        </div>
+        <div class="pv-section">
+          <p class="pv-eyebrow">Explorer par catégorie</p>
+          <h3 class="pv-h3" data-bind="cat_title"></h3>
+          <div class="pv-cats" id="pv-cats"></div>
+        </div>
+        <div class="pv-section">
+          <p class="pv-eyebrow">Cette semaine</p>
+          <h3 class="pv-h3">Coups de cœur du moment</h3>
+          <div class="pv-cards" id="pv-cards"></div>
+        </div>
+        <div class="pv-foot"><span data-bind="name"></span><span data-bind="address"></span></div>
+      </div>
+    </div>
+  </aside>
+  </div>
 </div>
 <script>
 (function () {
@@ -279,6 +392,135 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
       refreshCats();
     });
   });
+})();
+
+// ── Aperçu de l'apparence (même calcul qu'appearance_derive() en PHP) ──
+(function () {
+  var FONTS = <?= json_encode(array_map(static fn ($list) => array_map(static fn ($font) => [
+      'css' => $font[0],
+      'fallback' => $font[1],
+  ], $list), APPEARANCE_FONTS), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  var pv = document.getElementById('pv');
+  var mode = 'light';
+  function $(id) { return document.getElementById(id); }
+  function val(id) { var el = $(id); return el ? el.value.trim() : ''; }
+
+  function rgb(h) { return [1, 3, 5].map(function (i) { return parseInt(h.substr(i, 2), 16); }); }
+  function hex(c) { return '#' + c.map(function (v) { return Math.round(v).toString(16).padStart(2, '0'); }).join(''); }
+  function mix(a, b, t) { var x = rgb(a), y = rgb(b); return hex(x.map(function (v, i) { return v + (y[i] - v) * t; })); }
+  function lum(h) {
+    var c = rgb(h).map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+  function on(h) { return lum(h) > 0.4 ? '#1d1a16' : '#fffaf2'; }
+  function ratio(a, b) { var x = lum(a) + 0.05, y = lum(b) + 0.05; return Math.max(x, y) / Math.min(x, y); }
+  function derive(bg, ink, a, a2) {
+    if (mode === 'dark') {
+      var dBg = mix(ink, '#000000', 0.35), dInk = mix(bg, '#ffffff', 0.15);
+      var dA = mix(a, '#ffffff', 0.3), dA2 = mix(a2, '#ffffff', 0.35);
+      return { bg: dBg, surface: mix(dBg, dInk, 0.06), 'surface-2': mix(dBg, dInk, 0.11), ink: dInk,
+        'ink-soft': mix(dInk, dBg, 0.3), accent: dA, 'accent-ink': on(dA), 'accent-2': dA2, line: mix(dBg, dInk, 0.22) };
+    }
+    return { bg: bg, surface: mix(bg, ink, 0.06), 'surface-2': mix(bg, ink, 0.12), ink: ink,
+      'ink-soft': mix(ink, bg, 0.38), accent: a, 'accent-ink': on(a), 'accent-2': a2, line: mix(bg, ink, 0.25) };
+  }
+  function font(role, name) {
+    var f = FONTS[role][name]; if (!f) return '';
+    var id = 'pv-font-' + name.replace(/\W+/g, '-');
+    if (!document.getElementById(id)) {
+      var link = document.createElement('link');
+      link.id = id; link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=' + f.css + '&display=swap';
+      document.head.appendChild(link);
+    }
+    return '"' + name + '", ' + f.fallback;
+  }
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function icon(id) {
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 64 64');
+    var use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', '#' + id); svg.appendChild(use); return svg;
+  }
+
+  function render() {
+    var bg = val('f-bg'), ink = val('f-ink'), a = val('f-accent'), a2 = val('f-accent2');
+    var vars = derive(bg, ink, a, a2);
+    Object.keys(vars).forEach(function (k) { pv.style.setProperty('--s-' + k, vars[k]); });
+    pv.style.setProperty('--s-font-display', font('display', val('f-font-display')));
+    pv.style.setProperty('--s-font-body', font('body', val('f-font-body')));
+
+    var texts = {
+      name: val('f-name') || 'Mon commerce', tagline: val('f-tagline'),
+      hero_eyebrow: val('f-hero-eyebrow'), hero_title: val('f-hero-title') || 'Votre accroche', hero_sub: val('f-hero-sub'),
+      cat_title: val('f-cattitle') || 'Nos catégories', address: val('f-address')
+    };
+    pv.querySelectorAll('[data-bind]').forEach(function (n) { n.textContent = texts[n.dataset.bind] || ''; });
+
+    // Catégories et produits du formulaire.
+    var item1 = val('f-item1') || 'article', item2 = val('f-item2') || 'articles';
+    var cats = [], counts = {};
+    for (var i = 0; i < 6; i++) {
+      var label = val('c' + i);
+      if (label) cats.push({ i: i, label: label, icon: val('ci' + i) });
+    }
+    var products = [];
+    for (var j = 0; j < 6; j++) {
+      var name = val('p' + j + '-name');
+      if (!name) continue;
+      var ci = val('p' + j + '-cat');
+      counts[ci] = (counts[ci] || 0) + 1;
+      products.push({ name: name, price: val('p' + j + '-price'), desc: val('p' + j + '-desc'), badge: val('p' + j + '-badge'),
+        ref: String(products.length + 1).padStart(3, '0'), icon: val('ci' + ci) || 'ic-vase' });
+    }
+    var catBox = $('pv-cats'); catBox.textContent = '';
+    cats.forEach(function (c) {
+      var n = counts[c.i] || 0, tile = el('div', 'pv-cat');
+      tile.appendChild(icon(c.icon)); tile.appendChild(el('b', '', c.label)); tile.appendChild(el('small', '', n + ' ' + (n === 1 ? item1 : item2)));
+      catBox.appendChild(tile);
+    });
+    var cardBox = $('pv-cards'); cardBox.textContent = '';
+    products.slice(0, 3).forEach(function (p) {
+      var card = el('div', 'pv-card'), pic = el('div', 'pic');
+      pic.appendChild(icon(p.icon)); card.appendChild(pic);
+      card.appendChild(el('span', 'ref', 'Réf. N°' + p.ref));
+      card.appendChild(el('b', '', p.name));
+      if (p.desc) card.appendChild(el('span', 'desc', p.desc));
+      if (p.badge) card.appendChild(el('span', 'badge', p.badge));
+      var foot = el('div', 'foot'); foot.appendChild(el('span', 'price', p.price)); foot.appendChild(el('span', 'add', 'Ajouter'));
+      card.appendChild(foot); cardBox.appendChild(card);
+    });
+
+    // Lisibilité et palette sélectionnée.
+    var r1 = ratio(ink, bg), r2 = ratio(on(a), a), note = $('contrast'), ok = r1 >= 4.5 && r2 >= 3;
+    note.dataset.kind = ok ? '' : 'warn';
+    note.textContent = 'Contraste texte/fond ' + r1.toFixed(1) + ':1 · boutons ' + r2.toFixed(1) + ':1 — ' + (ok ? 'lisible' : 'peu lisible, foncez le texte ou éclaircissez le fond');
+    document.querySelectorAll('.palette').forEach(function (b) {
+      var p = JSON.parse(b.dataset.colors);
+      b.setAttribute('aria-pressed', String(p.bg === bg.toLowerCase() && p.ink === ink.toLowerCase() && p.accent === a.toLowerCase() && p.accent2 === a2.toLowerCase()));
+    });
+  }
+
+  document.querySelectorAll('.palette').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = JSON.parse(b.dataset.colors);
+      $('f-bg').value = p.bg; $('f-ink').value = p.ink; $('f-accent').value = p.accent; $('f-accent2').value = p.accent2;
+      render();
+    });
+  });
+  function press(group, btn) { group.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === btn)); }); }
+  $('pv-mode').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    mode = b.dataset.mode; press(this, b); render();
+  });
+  $('pv-device').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    press(this, b); $('pv-stage').classList.toggle('mobile', b.dataset.device === 'mobile');
+  });
+  $('builder').addEventListener('input', render);
+  $('builder').addEventListener('change', render);
+  document.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', render); });
+  render();
 })();
 </script>
 </body>
