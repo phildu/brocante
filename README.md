@@ -64,6 +64,17 @@ L'apparence est enregistrée dans la base du commerce (table `settings`) et
 prime sur les couleurs et polices de son `tenant.php` ; « Revenir à
 l'apparence d'origine » l'efface.
 
+## Ajouter une pièce depuis un smartphone
+
+Administration → **Nouvelle pièce (photo)** (`admin/quick-add.php`), pensé pour
+le téléphone : un cadre par angle (face, profil, dos, détail, dessous, autres)
+qui ouvre directement l'appareil photo, photos réduites sur le téléphone avant
+l'envoi, puis, étape par étape (`admin/quick-add-action.php`) : détourage de la
+photo principale, mise en situation et rédaction de la fiche d'après **tous les
+angles** (+ indications facultatives du vendeur). La fiche se relit et se
+corrige sur le téléphone, puis s'enregistre masquée ou publiée. Sans clé
+Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main.
+
 ## Connexion à l'administration
 
 `/admin/` demande un **identifiant** et un **mot de passe** :

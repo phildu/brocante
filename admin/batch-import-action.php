@@ -313,7 +313,7 @@ switch ($action) {
             if ($small !== $chosenAbs) @unlink($small);
             $sheet = $text ? parse_product_sheet_response($text) : null;
         }
-        $sheet ??= ['name' => 'Pièce à décrire', 'description' => 'Description à compléter.', 'category' => 'curiosites', 'price_hint' => ''];
+        $sheet ??= ['name' => 'Pièce à décrire', 'description' => 'Description à compléter.', 'category' => default_category_key(), 'price_hint' => ''];
 
         // 4) Création de la fiche produit, masquée jusqu'à relecture par
         // l'admin (nom/description/prix suggérés par l'IA à corriger).

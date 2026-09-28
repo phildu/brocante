@@ -13,6 +13,13 @@ function category_list(): array
     return tenant('categories');
 }
 
+/** Catégorie par défaut du commerce (« curiosites » pour la brocante, sinon la première). */
+function default_category_key(): string
+{
+    $keys = array_column(category_list(), 'key');
+    return in_array('curiosites', $keys, true) ? 'curiosites' : ($keys[0] ?? 'divers');
+}
+
 function category_label(string $key): string
 {
     foreach (category_list() as $c) {
@@ -665,20 +672,28 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
  * gemini_generate_image() mais sur le modèle texte (bien plus rapide, une
  * requête synchrone reste raisonnable côté admin).
  */
-function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1): ?string
+/**
+ * @param string[] $extraAbsPaths Autres photos du même objet (autres angles),
+ *  envoyées à la suite de la première dans la même requête.
+ */
+function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1, array $extraAbsPaths = []): ?string
 {
     if (!GEMINI_API_KEY) return null;
 
-    $imgData = @file_get_contents($srcAbsPath);
-    if ($imgData === false) return null;
-    $mime = @getimagesize($srcAbsPath)['mime'] ?? 'image/jpeg';
+    $parts = [['text' => $prompt]];
+    foreach (array_merge([$srcAbsPath], $extraAbsPaths) as $i => $path) {
+        $imgData = @file_get_contents($path);
+        if ($imgData === false) {
+            if ($i === 0) return null;
+            continue;
+        }
+        $mime = @getimagesize($path)['mime'] ?? 'image/jpeg';
+        $parts[] = ['inlineData' => ['mimeType' => $mime, 'data' => base64_encode($imgData)]];
+    }
 
     $payload = [
         'contents' => [[
-            'parts' => [
-                ['text' => $prompt],
-                ['inlineData' => ['mimeType' => $mime, 'data' => base64_encode($imgData)]],
-            ],
+            'parts' => $parts,
         ]],
     ];
 
@@ -1019,11 +1034,16 @@ function gemini_score_cutout_simplicity(string $srcAbsPath): ?int
 }
 
 /** Prompt demandant un JSON strict {name, description, category, price_hint} pour une fiche produit. */
-function build_product_sheet_prompt(): string
+function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): string
 {
     $cats = implode(', ', array_column(category_list(), 'key'));
     $examples = tenant('ai.examples') ? ' (' . tenant('ai.examples') . ')' : '';
-    return "Tu regardes la photo d'" . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". "
+    $seen = $photoCount > 1
+        ? "Tu regardes " . $photoCount . " photos du MÊME objet, sous différents angles : " . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". Sers-toi de tous les angles (marques, signatures, état, dessous). "
+        : "Tu regardes la photo d'" . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". ";
+    $notes = trim($notes);
+    return $seen
+        . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
         . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
@@ -1040,7 +1060,7 @@ function parse_product_sheet_response(string $text): ?array
     $data = json_decode($text, true);
     if (!is_array($data) || empty($data['name'])) return null;
     $validCats = array_column(category_list(), 'key');
-    $cat = in_array($data['category'] ?? '', $validCats, true) ? $data['category'] : 'curiosites';
+    $cat = in_array($data['category'] ?? '', $validCats, true) ? $data['category'] : default_category_key();
     return [
         'name' => trim((string) $data['name']),
         'description' => trim((string) ($data['description'] ?? '')),

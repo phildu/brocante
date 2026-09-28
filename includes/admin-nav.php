@@ -12,6 +12,7 @@
  */
 $adminNavItems = [
     'catalogue' => ['/admin/catalog.php', 'Catalogue', 'grid'],
+    'prise' => ['/admin/quick-add.php', 'Nouvelle pièce (photo)', 'camera'],
     'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
     'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
     'hero' => ['/admin/hero.php', 'Diaporama hero', 'image'],
@@ -38,6 +39,7 @@ $adminIcons = [
     'gear' => '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
     'external' => '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     'logout' => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
+    'camera' => '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
     'collapse' => '<path d="m15 18-6-6 6-6"/>',
     'menu' => '<path d="M4 6h16M4 12h16M4 18h16"/>',
 ];

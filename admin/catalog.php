@@ -204,6 +204,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
     <?php endif; ?>
 
     <div class="admin-block" style="margin-top:24px;">
+      <p class="hint" style="margin:0 0 12px;">Sur smartphone : <a href="/admin/quick-add.php"><strong>Nouvelle pièce en photos</strong></a> — photos sous plusieurs angles, puis détourage, mise en situation et fiche rédigés automatiquement.</p>
       <details>
         <summary class="add-product-btn" style="cursor:pointer;">+ Ajouter une pièce</summary>
         <form method="post" action="/admin/add-product.php" enctype="multipart/form-data" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--line);">

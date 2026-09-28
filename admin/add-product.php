@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $validCats = array_column(category_list(), 'key');
-$cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : 'ceramique';
+$cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : default_category_key();
 $name = trim((string) ($_POST['name'] ?? '')) ?: 'Nouvelle pièce';
 $ref = next_ref();
 
