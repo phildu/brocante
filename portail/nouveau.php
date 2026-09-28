@@ -89,7 +89,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
         </div>
         <label class="field">Adresse du site<input name="url" id="f-url" value="<?= e($v('url')) ?>" placeholder="https://www.mon-commerce.fr"></label>
         <div class="two">
-          <label class="field">Identifiant de l'administration<input name="admin_user" id="f-admin-user" required pattern="[a-z0-9._@\-]{3,40}" maxlength="40" autocomplete="off" autocapitalize="none" value="<?= e($v('admin_user')) ?>" placeholder="ex. naty"></label>
+          <label class="field">Identifiant de l'administration<input name="admin_user" id="f-admin-user" required pattern="[A-Za-z0-9._@\-]{3,40}" maxlength="40" autocomplete="off" autocapitalize="none" value="<?= e($v('admin_user')) ?>" placeholder="ex. naty"></label>
           <label class="field">Mot de passe de l'administration
             <span class="password-field">
               <input type="password" name="admin_password" id="f-admin" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum">

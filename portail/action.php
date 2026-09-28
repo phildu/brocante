@@ -33,9 +33,20 @@ switch ($_POST['action'] ?? '') {
         portail_flash('« ' . $shops[$slug]['name'] . " » remis à zéro : $count produits.");
         break;
 
+    case 'acces':
+        try {
+            $user = set_tenant_admin_access($slug, (string) ($_POST['admin_user'] ?? ''), (string) ($_POST['admin_password'] ?? ''));
+            portail_flash('Accès admin de « ' . $shops[$slug]['name'] . " » changé : identifiant « $user » et le nouveau mot de passe.");
+        } catch (InvalidArgumentException $ex) {
+            portail_flash($ex->getMessage(), 'error');
+            header('Location: /portail/?voir=' . rawurlencode($slug) . '&acces=' . rawurlencode($slug));
+            exit;
+        }
+        break;
+
     default:
         portail_flash('Action inconnue.', 'error');
 }
 
-header('Location: /portail/');
+header('Location: /portail/?voir=' . rawurlencode($slug));
 exit;

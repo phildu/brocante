@@ -4,6 +4,7 @@ require __DIR__ . '/_bootstrap.php';
 $shops = tenant_list();
 $flash = portail_flash();
 $confirmReset = $_GET['reinitialiser'] ?? '';
+$editAccess = $_GET['acces'] ?? '';
 
 // Chaque commerce a sa propre adresse : <slug>.brocenstock.test.
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -53,10 +54,30 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
               <?php if (!$isActive): ?>
                 <a class="btn small btn-primary" href="/portail/?voir=<?= e($slug) ?>">Voir</a>
               <?php endif; ?>
+              <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>&amp;acces=<?= e($slug) ?>">Changer l'accès admin</a>
               <?php if ($slug !== TENANT_DEFAULT): ?>
                 <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>&amp;reinitialiser=<?= e($slug) ?>">Réinitialiser les données</a>
               <?php endif; ?>
             </div>
+            <?php if ($editAccess === $slug): ?>
+              <form class="confirm access" method="post" action="/portail/action.php" autocomplete="off">
+                <span>Nouvel accès à l'administration de <strong><?= e($shop['name']) ?></strong> (<?= e("$slug.$base") ?>/admin/) :</span>
+                <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="acces">
+                <input type="hidden" name="slug" value="<?= e($slug) ?>">
+                <label class="field">Identifiant<input name="admin_user" required pattern="[A-Za-z0-9._@\-]{3,40}" maxlength="40" autocapitalize="none" value="<?= e($shop['admin_user']) ?>"></label>
+                <label class="field">Nouveau mot de passe
+                  <span class="password-field">
+                    <input type="password" name="admin_password" id="pw-<?= e($slug) ?>" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum">
+                    <button type="button" class="password-toggle" data-toggle="pw-<?= e($slug) ?>" aria-pressed="false">Afficher</button>
+                  </span>
+                </label>
+                <span class="actions" style="margin:0;">
+                  <button class="btn small btn-primary" type="submit">Enregistrer</button>
+                  <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>">Annuler</a>
+                </span>
+              </form>
+            <?php endif; ?>
             <?php if ($confirmReset === $slug): ?>
               <form class="confirm" method="post" action="/portail/action.php">
                 <span>Remettre le contenu et les produits de <strong><?= e($shop['name']) ?></strong> à leur état de départ (seed-data.json) ? Les modifications faites dans l'administration seront perdues.</span>
@@ -108,6 +129,17 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
   document.getElementById('device').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     press(this, b); document.getElementById('stage').classList.toggle('mobile', b.dataset.device === 'mobile');
+  });
+  // Afficher / masquer le mot de passe saisi.
+  document.querySelectorAll('[data-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var input = document.getElementById(btn.dataset.toggle);
+      var show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.textContent = show ? 'Masquer' : 'Afficher';
+      btn.setAttribute('aria-pressed', String(show));
+      input.focus();
+    });
   });
 })();
 </script>

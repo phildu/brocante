@@ -221,3 +221,4 @@
     background: none; border: 0; padding: 4px 8px; cursor: pointer;
     color: var(--accent); font-size: 0.8rem; font-weight: 600;
   }
+  .confirm.access input { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; }

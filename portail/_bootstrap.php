@@ -68,6 +68,55 @@ function set_active_slug(string $slug): void
     }
 }
 
+/** Contrôle un identifiant et un mot de passe d'administration ; retourne l'identifiant normalisé. */
+function validate_admin_access(string $user, string $password): string
+{
+    $user = mb_strtolower(trim($user));
+    if (!preg_match('/^[a-z0-9._@-]{3,40}$/', $user)) {
+        throw new InvalidArgumentException("Identifiant d'administration : 3 à 40 caractères parmi lettres minuscules, chiffres, point, tiret, @.");
+    }
+    if (mb_strlen(trim($password)) < 6) {
+        throw new InvalidArgumentException("Choisissez un mot de passe d'administration d'au moins 6 caractères.");
+    }
+    return $user;
+}
+
+/**
+ * Remplace l'identifiant et le mot de passe d'administration dans
+ * tenants/<slug>/tenant.php (mot de passe haché). Retourne l'identifiant.
+ */
+function set_tenant_admin_access(string $slug, string $user, string $password): string
+{
+    $user = validate_admin_access($user, $password);
+    $file = PORTAIL_ROOT . "/tenants/$slug/tenant.php";
+    $php = file_get_contents($file);
+
+    $userLine = "'admin_user' => " . var_export($user, true) . ',';
+    $passwordLine = "'admin_password' => " . var_export(password_hash(trim($password), PASSWORD_DEFAULT), true) . ',';
+    $valuePattern = "(?:'(?:[^'\\\\]|\\\\.)*'|\"(?:[^\"\\\\]|\\\\.)*\")";
+
+    $php = preg_replace("/^(\\s*)'admin_user'\\s*=>\\s*$valuePattern\\s*,/m", '$1' . str_replace('$', '\\$', $userLine), $php, 1, $hasUser);
+    $php = preg_replace("/^(\\s*)'admin_password'\\s*=>\\s*$valuePattern\\s*,/m", '$1' . str_replace('$', '\\$', $passwordLine), $php, 1, $hasPassword);
+    if (!$hasPassword) {
+        // Pas de ligne admin_password : on ajoute le compte juste après « return [ ».
+        $php = preg_replace('/return\s*\[\s*\n/', "\$0    $userLine\n    " . str_replace('$', '\\$', $passwordLine) . "\n", $php, 1, $added);
+        if (!$added) throw new RuntimeException("Impossible de modifier $file : ajoutez-y admin_user et admin_password à la main.");
+    } elseif (!$hasUser) {
+        $php = preg_replace("/^(\\s*)('admin_password'\\s*=>)/m", '$1' . $userLine . "\n" . '$1$2', $php, 1);
+    }
+
+    $tmp = "$file.tmp";
+    file_put_contents($tmp, $php);
+    rename($tmp, $file);
+    if (function_exists('opcache_invalidate')) opcache_invalidate($file, true);
+
+    $saved = tenant_load($slug);
+    if ($saved['admin_user'] !== $user || !password_verify(trim($password), $saved['admin_password'])) {
+        throw new RuntimeException("La modification de $file n'a pas été enregistrée correctement.");
+    }
+    return $user;
+}
+
 function slugify_portail(string $text): string
 {
     if (class_exists('Normalizer')) {
