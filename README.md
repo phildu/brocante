@@ -80,6 +80,35 @@ angles** (+ indications facultatives du vendeur). La fiche se relit et se
 corrige sur le téléphone, puis s'enregistre masquée ou publiée. Sans clé
 Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main.
 
+## Déployer le portail en ligne (ex. brocs.arrimage.com)
+
+Le mode `--portail` du script de déploiement envoie **tous les commerces et
+le portail** dans un même dossier OVH. En ligne, le portail exige une
+connexion (compte défini dans `.env.deploy.portail`, stocké haché dans
+`.secrets/portail.json` sur le serveur) ; sans ce compte il reste fermé.
+
+1. Créer `.env.deploy.portail` (jamais envoyé sur GitHub) :
+   ```
+   FTP_SERVER=ftp.clusterXXX.hosting.ovh.net
+   FTP_USER=…
+   FTP_PASS=…
+   FTP_PATH_FRONT=/brocs/
+   URL_FRONT=https://brocs.arrimage.com
+   PORTAIL_USER=phil
+   PORTAIL_PASSWORD=un-mot-de-passe-long
+   ```
+2. `./deploy-brocante.sh --portail --with-db` la première fois (envoie aussi
+   les bases locales), puis `./deploy-brocante.sh --portail` ensuite (les
+   bases du serveur ne sont plus touchées). Une base absente du serveur est
+   créée automatiquement à la première visite du commerce.
+3. Dans l'espace client OVH : **Hébergement → Multisite → Ajouter un
+   domaine** pour `brocs.arrimage.com` puis pour chaque commerce
+   (`naty.brocs.arrimage.com`…), dossier racine `brocs`, SSL activé.
+
+Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
+dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
+`tenants/`, `includes/`…).
+
 ## Connexion à l'administration
 
 `/admin/` demande un **identifiant** et un **mot de passe** :

@@ -67,6 +67,13 @@ function db(): PDO
 {
     static $pdo = null;
     if ($pdo === null) {
+        // Première visite d'un commerce dont la base n'existe pas encore (ex.
+        // commerce créé ou déployé sans --with-db) : base créée à partir de
+        // schema.sql et de son seed-data.json.
+        if (!is_file(DB_PATH) && is_file(tenant_path('seed_file'))) {
+            require_once __DIR__ . '/includes/seed.php';
+            seed_tenant(tenant());
+        }
         $pdo = new PDO('sqlite:' . DB_PATH, null, null, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

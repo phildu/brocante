@@ -1,0 +1,14 @@
+# Protection des fichiers sensibles (Apache / OVH).
+# Bases SQLite, sauvegardes, schéma, journaux : jamais servis en HTTP.
+<FilesMatch "\.(db|sqlite|sqlite3|sql|log|bak)$|\.db\.bak-">
+    Require all denied
+</FilesMatch>
+
+# Fichiers et dossiers cachés (.secrets/, .tenant, .env*, .git/…),
+# sauf .well-known (certificats Let's Encrypt).
+RedirectMatch 404 "(?:^|/)\.(?!well-known)"
+
+# Dossiers internes : configuration des commerces, bases, scripts, journaux.
+RedirectMatch 404 "^/(?:data|tenants|scripts|includes|var|db-backup)(?:/|$)"
+
+Options -Indexes

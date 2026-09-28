@@ -34,7 +34,10 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
       <h1>Portail des commerces</h1>
       <p>Une adresse par commerce, un formulaire pour en créer un nouveau</p>
     </div>
-    <a class="btn btn-primary" href="/portail/nouveau.php">Nouveau commerce</a>
+    <span style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn btn-primary" href="/portail/nouveau.php">Nouveau commerce</a>
+      <?php if (!empty($_SESSION['portail_user'])): ?><a class="btn" href="/portail/logout.php">Se déconnecter</a><?php endif; ?>
+    </span>
   </header>
 
   <?php if ($flash): ?>

@@ -7,7 +7,16 @@
 # Seuls le code, la config de ce commerce (tenants/<slug>, assets/tenants/<slug>)
 # et sa base sont envoyés ; un fichier .tenant indique au serveur quel commerce servir.
 #
+# Mode portail (--portail) : déploie TOUS les commerces et le portail de
+# gestion dans un même dossier (ex. brocs.arrimage.com, chaque commerce sur
+# <slug>.brocs.arrimage.com). Identifiants dans .env.deploy.portail :
+#   FTP_SERVER, FTP_USER, FTP_PASS, FTP_PATH_FRONT (ex. /brocs/),
+#   URL_FRONT (ex. https://brocs.arrimage.com),
+#   PORTAIL_USER, PORTAIL_PASSWORD (compte de connexion au portail en ligne).
+#
 # Usage :
+#   ./deploy-brocante.sh --portail            → portail + tous les commerces (bases non touchées)
+#   ./deploy-brocante.sh --portail --with-db  → idem + envoie les bases locales (1er déploiement)
 #   ./deploy-brocante.sh           → code uniquement (brocante.db JAMAIS touché,
 #                                     pour ne pas écraser les commandes/données
 #                                     réelles accumulées en ligne depuis le
@@ -38,10 +47,12 @@ warn() { echo -e "${YELLOW}⚠️ ${NC} $1"; }
 err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 
 WITH_DB=0
+PORTAIL=0
 TENANT="${TENANT:-petit-chalet}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --with-db) WITH_DB=1 ;;
+        --portail) PORTAIL=1 ;;
         --tenant) TENANT="$2"; shift ;;
         *) err "Option inconnue : $1" ;;
     esac
@@ -56,7 +67,8 @@ DEPLOY_UPLOADS="$(php -r 'require "config.php"; echo tenant("deploy_uploads") ? 
 
 # ── Charger les credentials ───────────────────────────────────────────────────
 ENV_FILE=".env.deploy.$TENANT"
-if [ ! -f "$ENV_FILE" ] && [ "$TENANT" = "petit-chalet" ]; then
+[ "$PORTAIL" = "1" ] && ENV_FILE=".env.deploy.portail"
+if [ ! -f "$ENV_FILE" ] && [ "$TENANT" = "petit-chalet" ] && [ "$PORTAIL" = "0" ]; then
     ENV_FILE=".env.deploy"
 fi
 if [ ! -f "$ENV_FILE" ]; then
@@ -70,10 +82,23 @@ source "$ENV_FILE"
 [ -z "$FTP_PATH_FRONT" ] && err "FTP_PATH_FRONT manquant dans .env.deploy"
 
 command -v lftp >/dev/null 2>&1 || err "lftp non installé. Lance : brew install lftp"
+if [ "$PORTAIL" = "1" ]; then
+    [ -z "$PORTAIL_USER" ] && err "PORTAIL_USER manquant dans $ENV_FILE"
+    [ ${#PORTAIL_PASSWORD} -lt 10 ] && err "PORTAIL_PASSWORD manquant ou trop court (10 caractères minimum) dans $ENV_FILE"
+fi
+
+# Fichier « accès interdit » déposé dans les dossiers sensibles du serveur.
+DENY_FILE="$(mktemp)"
+printf 'Require all denied\n' > "$DENY_FILE"
+trap 'rm -f "$DENY_FILE"' EXIT
 
 echo ""
 echo -e "${BOLD}════════════════════════════════════════════════${NC}"
-echo -e "${BOLD}  DÉPLOIEMENT PREPROD — OVH — commerce : ${TENANT}${NC}"
+if [ "$PORTAIL" = "1" ]; then
+    echo -e "${BOLD}  DÉPLOIEMENT PREPROD — OVH — portail + tous les commerces${NC}"
+else
+    echo -e "${BOLD}  DÉPLOIEMENT PREPROD — OVH — commerce : ${TENANT}${NC}"
+fi
 echo -e "${BOLD}  Front : ${URL_FRONT}${NC}"
 if [ "$WITH_DB" = "1" ]; then
     echo -e "${YELLOW}  ⚠️  --with-db : ${DB_REL} du serveur va être ÉCRASÉ par la version locale${NC}"
@@ -134,6 +159,10 @@ mirror --reverse --no-perms --no-umask --verbose tenants/$TENANT ${FTP_PATH_FRON
 put tenants/.htaccess -o ${FTP_PATH_FRONT}tenants/.htaccess
 $( [ -d "assets/tenants/$TENANT" ] && echo "mirror --reverse --no-perms --no-umask --verbose assets/tenants/$TENANT ${FTP_PATH_FRONT}assets/tenants/$TENANT" )
 put $tenant_file -o ${FTP_PATH_FRONT}.tenant
+mkdir -p -f ${FTP_PATH_FRONT}.secrets
+put $DENY_FILE -o ${FTP_PATH_FRONT}.secrets/.htaccess
+mkdir -p -f ${FTP_PATH_FRONT}data
+put $DENY_FILE -o ${FTP_PATH_FRONT}data/.htaccess
 
 quit
 " 2>&1 | grep -v "^$" | while read line; do
@@ -151,6 +180,75 @@ quit
 
     rm -f "$tenant_file"
     ok "Frontend déployé → ${URL_FRONT}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DÉPLOYER LE PORTAIL (tous les commerces + portail/, compte de connexion)
+# ─────────────────────────────────────────────────────────────────────────────
+deploy_portail() {
+    log "Déploiement du portail et de tous les commerces vers ${FTP_PATH_FRONT}..."
+
+    local db_exclude="--exclude-glob data/ --exclude-glob *.db"
+    [ "$WITH_DB" = "1" ] && db_exclude=""
+    local account_file
+    account_file="$(mktemp)"
+    PORTAIL_USER="$PORTAIL_USER" PORTAIL_PASSWORD="$PORTAIL_PASSWORD" php -r '
+        echo json_encode(["user" => getenv("PORTAIL_USER"), "password_hash" => password_hash(getenv("PORTAIL_PASSWORD"), PASSWORD_DEFAULT)]);
+    ' > "$account_file"
+
+    lftp -c "
+set ftp:ssl-allow yes
+set ftp:ssl-force no
+set net:timeout 30
+set net:max-retries 3
+set mirror:parallel-directories yes
+open ftp://$FTP_USER:$FTP_PASS@$FTP_SERVER
+
+mirror --reverse --no-perms --no-umask \
+  --exclude-glob .git/ \
+  --exclude-glob .github/ \
+  --exclude-glob .claude/ \
+  --exclude-glob .venv/ \
+  --exclude-glob .secrets/ \
+  --exclude-glob var/log/ \
+  --exclude-glob uploads/import/ \
+  --exclude-glob node_modules/ \
+  --exclude-glob db-backup/ \
+  --exclude-glob '*.log' \
+  --exclude-glob .env* \
+  --exclude-glob config.local.php \
+  --exclude-glob deploy-brocante.sh \
+  --exclude-glob '*.bak' \
+  --exclude-glob '*.db.bak-*' \
+  --exclude-glob .DS_Store \
+  --exclude-glob .tenant \
+  $db_exclude \
+  --verbose \
+  . ${FTP_PATH_FRONT}
+mkdir -p -f ${FTP_PATH_FRONT}.secrets
+put $account_file -o ${FTP_PATH_FRONT}.secrets/portail.json
+put $DENY_FILE -o ${FTP_PATH_FRONT}.secrets/.htaccess
+mkdir -p -f ${FTP_PATH_FRONT}data
+put $DENY_FILE -o ${FTP_PATH_FRONT}data/.htaccess
+put tenants/.htaccess -o ${FTP_PATH_FRONT}tenants/.htaccess
+
+quit
+" 2>&1 | grep -v "^$" | while read line; do
+        echo -e "  ${BLUE}→${NC} $line"
+    done
+
+    lftp -c "
+open ftp://$FTP_USER:$FTP_PASS@$FTP_SERVER
+chmod 600 ${FTP_PATH_FRONT}.secrets/portail.json
+chmod 755 ${FTP_PATH_FRONT}uploads
+chmod 755 ${FTP_PATH_FRONT}data
+chmod 755 ${FTP_PATH_FRONT}tenants
+chmod 755 ${FTP_PATH_FRONT}assets/tenants
+quit
+" 2>/dev/null || true
+
+    rm -f "$account_file"
+    ok "Portail déployé → ${URL_FRONT}/portail/"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -194,8 +292,12 @@ git_snapshot() {
 START=$(date +%s)
 
 git_snapshot
-deploy_front
-[ "$WITH_DB" = "1" ] && deploy_db
+if [ "$PORTAIL" = "1" ]; then
+    deploy_portail
+else
+    deploy_front
+    [ "$WITH_DB" = "1" ] && deploy_db
+fi
 
 END=$(date +%s)
 ELAPSED=$((END - START))
@@ -206,7 +308,13 @@ echo -e "${GREEN}${BOLD}  ✅ DÉPLOIEMENT TERMINÉ en ${ELAPSED}s${NC}"
 echo -e "${GREEN}${BOLD}  🌐 Front : ${URL_FRONT}${NC}"
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════${NC}"
 echo ""
-if [ "$WITH_DB" = "0" ]; then
+if [ "$PORTAIL" = "1" ]; then
+    echo "Portail : ${URL_FRONT}/portail/ (identifiant ${PORTAIL_USER})"
+    echo "Chaque commerce : https://<identifiant>.${URL_FRONT#*://} — à ajouter dans OVH"
+    echo "  (Hébergement → Multisite → Ajouter un domaine, dossier racine ${FTP_PATH_FRONT#/}, SSL activé)."
+    echo "Les bases absentes du serveur sont créées automatiquement à la première visite."
+    echo ""
+elif [ "$WITH_DB" = "0" ]; then
     echo -e "${YELLOW}Rappel : ${DB_REL} n'a pas été envoyé (défaut). Pour le tout premier${NC}"
     echo -e "${YELLOW}déploiement, relancez avec : ./deploy-brocante.sh --tenant ${TENANT} --with-db${NC}"
     echo ""

@@ -1,27 +1,92 @@
 <?php
 
-// Portail local de la marque blanche : liste des commerces, choix du commerce
-// affiché, création d'un commerce. Il écrit dans le dossier du projet, il
-// n'est donc accessible que depuis la machine elle-même (Herd, php -S) et
-// n'est jamais déployé (exclu dans deploy-brocante.sh).
+// Portail de la marque blanche : liste des commerces, création d'un
+// commerce, accès admin. Il écrit dans le dossier du projet :
+//  - en local (Herd, php -S, hôte .test / localhost), il est ouvert ;
+//  - en ligne (déploiement « portail » de deploy-brocante.sh, par ex.
+//    brocs.arrimage.com), il exige une connexion avec le compte de
+//    .secrets/portail.json (créé par le script de déploiement). Sans ce
+//    fichier, il reste fermé.
+
+const PORTAIL_ROOT = __DIR__ . '/..';
 
 $host = strtolower(preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? ''));
-$local = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
+$portailLocal = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)
     && ($host === 'localhost' || $host === '127.0.0.1' || str_ends_with($host, '.test'));
-if (!$local) {
-    http_response_code(403);
-    exit('Portail disponible uniquement en local (Herd ou php -S).');
-}
 
 session_start();
 require_once __DIR__ . '/../includes/tenant.php';
 require_once __DIR__ . '/../includes/seed.php';
 
-const PORTAIL_ROOT = __DIR__ . '/..';
-
 function e($s): string
 {
     return htmlspecialchars((string) ($s ?? ''), ENT_QUOTES, 'UTF-8');
+}
+
+/** Compte du portail en ligne : ['user' => …, 'password_hash' => …] ou null. */
+function portail_account(): ?array
+{
+    $file = PORTAIL_ROOT . '/.secrets/portail.json';
+    $data = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+    return is_array($data) && !empty($data['user']) && !empty($data['password_hash']) ? $data : null;
+}
+
+if (!$portailLocal && empty($_SESSION['portail_user'])) {
+    portail_login_page();
+}
+
+/** Page de connexion du portail en ligne (termine la requête). */
+function portail_login_page(): never
+{
+    $account = portail_account();
+    if (!$account) {
+        http_response_code(403);
+        exit('Portail fermé : aucun compte configuré (.secrets/portail.json, créé par ./deploy-brocante.sh --portail).');
+    }
+    $error = null;
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'portail_login') {
+        $userOk = hash_equals(mb_strtolower($account['user']), mb_strtolower(trim((string) ($_POST['username'] ?? ''))));
+        if ($userOk && password_verify((string) ($_POST['password'] ?? ''), $account['password_hash'])) {
+            session_regenerate_id(true);
+            $_SESSION['portail_user'] = $account['user'];
+            header('Location: ' . ($_SERVER['REQUEST_URI'] ?? '/portail/'));
+            exit;
+        }
+        sleep(1); // freine les essais en série
+        $error = 'Identifiant ou mot de passe incorrect.';
+    }
+    http_response_code($error ? 401 : 200);
+    ?><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Connexion — Portail des commerces</title>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/portail/portail.css">
+</head>
+<body>
+<div class="app" style="max-width:380px;padding-top:14vh;">
+  <form class="send" method="post" autocomplete="on">
+    <h2>Portail des commerces</h2>
+    <p class="hint">Connectez-vous pour gérer les commerces.</p>
+    <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= e($error) ?></p><?php endif; ?>
+    <input type="hidden" name="action" value="portail_login">
+    <label class="field">Identifiant<input name="username" autocomplete="username" autocapitalize="none" required autofocus></label>
+    <label class="field">Mot de passe
+      <span class="password-field">
+        <input type="password" name="password" id="pp" autocomplete="current-password" required>
+        <button type="button" class="password-toggle" onclick="var i=document.getElementById('pp');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'Afficher':'Masquer';">Afficher</button>
+      </span>
+    </label>
+    <div class="send-actions"><button class="btn btn-primary" type="submit">Se connecter</button></div>
+  </form>
+</div>
+</body>
+</html>
+<?php
+    exit;
 }
 
 function csrf_token(): string
