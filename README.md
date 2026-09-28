@@ -22,24 +22,36 @@ Commerces fournis :
 ## Quel commerce est affiché ?
 
 1. la variable d'environnement `TENANT` ;
-2. sinon le fichier `.tenant` à la racine (écrit sur le serveur par le déploiement) ;
-3. sinon `petit-chalet`.
+2. sinon le sous-domaine, s'il porte le nom d'un commerce (`naty.brocenstock.test` → `tenants/naty`) ;
+3. sinon le fichier `.tenant` à la racine (écrit sur le serveur par le déploiement) ;
+4. sinon `petit-chalet`.
 
 Le Petit Chalet garde ses emplacements historiques (`brocante.db`, `.secrets/`,
 `assets/logo.png`) : le site en ligne et `config.local.php` fonctionnent comme avant.
 Les autres commerces ont leur base dans `data/<slug>.db` et leurs clés dans
 `.secrets/<slug>/`.
 
-## Portail local (Herd)
+## Tester en local avec Herd : une adresse par commerce
 
-Avec Herd (`herd link brocenstock` dans ce dossier), le portail est sur
-**http://brocenstock.test/portail/** : liste des commerces, choix du commerce
-affiché par le site, réinitialisation des données de démonstration et
-formulaire « Nouveau commerce » (identité, logo, couleurs, catégories, textes,
-premiers produits). Il écrit dans le dossier du projet : il ne répond qu'en
-local (hôte `.test`, `localhost` ou `127.0.0.1`) et n'est jamais déployé.
-Pensez à ajouter à git les dossiers `tenants/<slug>` et `assets/tenants/<slug>`
-qu'il crée.
+`herd link brocenstock` dans ce dossier, puis :
+
+| Adresse                                     | Affiche                                        |
+|---------------------------------------------|------------------------------------------------|
+| http://brocenstock.test/portail/            | le portail des commerces                       |
+| http://naty.brocenstock.test                | le commerce `tenants/naty`                     |
+| http://exemple-librairie.brocenstock.test   | la Librairie des Quais                         |
+| http://brocenstock.test                     | le commerce par défaut (`.tenant`, sinon Petit Chalet) |
+
+Le sous-domaine est l'identifiant du commerce (nom de son dossier dans
+`tenants/`) ; un sous-domaine inconnu affiche le commerce par défaut.
+
+Le portail liste les commerces avec leur adresse, affiche la boutique choisie
+(accueil, boutique, panier, administration, vue mobile), réinitialise les
+données de démonstration et crée un nouveau commerce depuis un formulaire
+(identité, logo, couleurs, catégories, textes, premiers produits). Il écrit
+dans le dossier du projet : il ne répond qu'en local (hôte `.test`,
+`localhost` ou `127.0.0.1`) et n'est jamais déployé. Pensez à ajouter à git
+les dossiers `tenants/<slug>` et `assets/tenants/<slug>` qu'il crée.
 
 ## Créer un nouveau commerce en ligne de commande
 

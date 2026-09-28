@@ -7,9 +7,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     try {
         $slug = create_tenant_from_form($f, $_FILES['logo'] ?? null);
-        set_active_slug($slug);
-        portail_flash('Commerce « ' . trim($f['name']) . " » créé dans tenants/$slug et affiché par le site.");
-        header('Location: /portail/');
+        portail_flash('Commerce « ' . trim($f['name']) . " » créé dans tenants/$slug, à l'adresse $slug." . tenant_base_host() . '.');
+        header('Location: /portail/?voir=' . rawurlencode($slug));
         exit;
     } catch (InvalidArgumentException $ex) {
         $error = $ex->getMessage();
@@ -80,7 +79,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
       <summary>Identité</summary>
       <div class="box-body">
         <label class="field">Nom du commerce<input name="name" id="f-name" required maxlength="60" value="<?= e($v('name')) ?>"></label>
-        <label class="field">Identifiant (dossier tenants/, facultatif)<input name="slug" id="f-slug" maxlength="40" pattern="[a-z0-9][a-z0-9_-]*" placeholder="calculé à partir du nom" value="<?= e($v('slug')) ?>"></label>
+        <label class="field">Identifiant — adresse &lt;identifiant&gt;.<?= e(tenant_base_host()) ?> (facultatif)<input name="slug" id="f-slug" maxlength="40" pattern="[a-z0-9][a-z0-9_-]*" placeholder="calculé à partir du nom, ex. naty" value="<?= e($v('slug')) ?>"></label>
         <label class="field">Slogan<input name="tagline" id="f-tagline" maxlength="80" value="<?= e($v('tagline')) ?>"></label>
         <label class="field">Logo (PNG, JPG, WebP ou SVG — facultatif)<input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label>
         <div class="colors">
@@ -174,7 +173,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
 
     <div class="send">
       <h2>Créer le commerce</h2>
-      <p class="hint">Crée <code>tenants/&lt;identifiant&gt;/</code> (configuration et contenu de départ), sa base de données et son logo, puis l'affiche sur ce site. Pensez à ajouter le nouveau dossier à git pour le conserver.</p>
+      <p class="hint">Crée <code>tenants/&lt;identifiant&gt;/</code> (configuration et contenu de départ), sa base de données et son logo, puis l'ouvre à son adresse <code>&lt;identifiant&gt;.<?= e(tenant_base_host()) ?></code>. Pensez à ajouter le nouveau dossier à git pour le conserver.</p>
       <div class="send-actions"><button class="btn btn-primary" type="submit">Créer et afficher</button></div>
     </div>
   </form>

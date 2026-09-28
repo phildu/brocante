@@ -5,16 +5,42 @@
 //
 // Le commerce actif est, par ordre de priorité :
 //   1. la variable d'environnement TENANT (session cloud, SetEnv Apache) ;
-//   2. le fichier .tenant à la racine (écrit par le script de déploiement) ;
-//   3. petit-chalet (comportement historique).
+//   2. le sous-domaine, s'il porte le nom d'un commerce : naty.brocenstock.test
+//      affiche tenants/naty (tests locaux avec Herd) ;
+//   3. le fichier .tenant à la racine (écrit par le script de déploiement) ;
+//   4. petit-chalet (comportement historique).
 
 const TENANT_DEFAULT = 'petit-chalet';
+
+/**
+ * Commerce désigné par le sous-domaine de l'hôte (« naty » pour
+ * naty.brocenstock.test), ou '' si le premier segment n'est pas un commerce.
+ */
+function tenant_from_host(?string $host = null): string
+{
+    $host = strtolower(preg_replace('/:\d+$/', '', $host ?? ($_SERVER['HTTP_HOST'] ?? '')));
+    $labels = explode('.', $host);
+    if (count($labels) < 3) {
+        return '';
+    }
+    $candidate = $labels[0];
+    return preg_match('/^[a-z0-9][a-z0-9_-]*$/', $candidate) && is_file(tenant_dir($candidate) . '/tenant.php')
+        ? $candidate
+        : '';
+}
+
+/** Domaine sans le sous-domaine de commerce (brocenstock.test pour naty.brocenstock.test). */
+function tenant_base_host(?string $host = null): string
+{
+    $host = strtolower($host ?? ($_SERVER['HTTP_HOST'] ?? ''));
+    return tenant_from_host($host) !== '' ? substr($host, strpos($host, '.') + 1) : $host;
+}
 
 function tenant_slug(): string
 {
     static $slug = null;
     if ($slug === null) {
-        $slug = getenv('TENANT') ?: '';
+        $slug = getenv('TENANT') ?: tenant_from_host();
         $file = __DIR__ . '/../.tenant';
         if ($slug === '' && is_file($file)) {
             $slug = trim((string) file_get_contents($file));

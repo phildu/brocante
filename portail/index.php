@@ -2,9 +2,21 @@
 require __DIR__ . '/_bootstrap.php';
 
 $shops = tenant_list();
-$active = active_slug();
 $flash = portail_flash();
 $confirmReset = $_GET['reinitialiser'] ?? '';
+
+// Chaque commerce a sa propre adresse : <slug>.brocenstock.test.
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$base = tenant_base_host();
+$viewing = (string) ($_GET['voir'] ?? active_slug());
+if (!isset($shops[$viewing])) {
+    $viewing = array_key_first($shops);
+}
+// Base de démonstration créée au premier affichage d'un commerce.
+if (!is_file(tenant_file($shops[$viewing], 'db_file'))) {
+    seed_tenant($shops[$viewing]);
+}
+$shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -19,7 +31,7 @@ $confirmReset = $_GET['reinitialiser'] ?? '';
   <header class="topbar">
     <div class="brand">
       <h1>Portail des commerces</h1>
-      <p>Choisir le commerce affiché par ce site, en créer un nouveau</p>
+      <p>Une adresse par commerce, un formulaire pour en créer un nouveau</p>
     </div>
     <a class="btn btn-primary" href="/portail/nouveau.php">Nouveau commerce</a>
   </header>
@@ -31,22 +43,17 @@ $confirmReset = $_GET['reinitialiser'] ?? '';
   <div class="layout">
     <aside class="side">
       <div class="shop-list">
-        <?php foreach ($shops as $slug => $shop): $isActive = $slug === $active; ?>
+        <?php foreach ($shops as $slug => $shop): $isActive = $slug === $viewing; ?>
           <div class="shop<?= $isActive ? ' is-active' : '' ?>">
             <span class="swatch" style="background:<?= e($shop['colors']['accent'] ?? '#b5502e') ?>"></span>
-            <h3><?= e($shop['name']) ?><?php if ($isActive): ?> <span class="pill done">Affiché</span><?php endif; ?></h3>
-            <span class="meta">tenants/<?= e($slug) ?></span>
+            <h3><?= e($shop['name']) ?><?php if ($isActive): ?> <span class="pill done">À l'écran</span><?php endif; ?></h3>
+            <a class="meta" href="<?= e($shopUrl($slug)) ?>/" target="_blank" rel="noopener"><?= e("$slug.$base") ?> ↗</a>
             <div class="actions">
               <?php if (!$isActive): ?>
-                <form method="post" action="/portail/action.php">
-                  <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
-                  <input type="hidden" name="action" value="activer">
-                  <input type="hidden" name="slug" value="<?= e($slug) ?>">
-                  <button class="btn small btn-primary" type="submit">Afficher</button>
-                </form>
+                <a class="btn small btn-primary" href="/portail/?voir=<?= e($slug) ?>">Voir</a>
               <?php endif; ?>
               <?php if ($slug !== TENANT_DEFAULT): ?>
-                <a class="btn small" href="/portail/?reinitialiser=<?= e($slug) ?>">Réinitialiser les données</a>
+                <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>&amp;reinitialiser=<?= e($slug) ?>">Réinitialiser les données</a>
               <?php endif; ?>
             </div>
             <?php if ($confirmReset === $slug): ?>
@@ -57,14 +64,14 @@ $confirmReset = $_GET['reinitialiser'] ?? '';
                 <input type="hidden" name="slug" value="<?= e($slug) ?>">
                 <span class="actions" style="margin:0;">
                   <button class="btn small btn-primary" type="submit">Réinitialiser</button>
-                  <a class="btn small" href="/portail/">Annuler</a>
+                  <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>">Annuler</a>
                 </span>
               </form>
             <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </div>
-      <p class="hint">Le commerce affiché est enregistré dans le fichier <code>.tenant</code> du projet (jamais envoyé sur GitHub). Le Petit Chalet utilise toujours sa base <code>brocante.db</code>, qui n'est jamais réinitialisée depuis ce portail.</p>
+      <p class="hint">Chaque commerce s'ouvre à l'adresse <code>&lt;identifiant&gt;.<?= e($base) ?></code>. Sans sous-domaine, <code><?= e($base) ?></code> affiche <?= e($shops[active_slug()]['name'] ?? '') ?>. Le Petit Chalet utilise toujours sa base <code>brocante.db</code>, jamais réinitialisée depuis ce portail.</p>
     </aside>
 
     <section class="main-stage">
@@ -79,10 +86,10 @@ $confirmReset = $_GET['reinitialiser'] ?? '';
           <button type="button" data-device="desktop" aria-pressed="true">Ordinateur</button>
           <button type="button" data-device="mobile" aria-pressed="false">Mobile</button>
         </div>
-        <a class="btn" href="/" target="_blank" rel="noopener">Ouvrir dans un onglet ↗</a>
+        <a class="btn" href="<?= e($shopUrl($viewing)) ?>/" target="_blank" rel="noopener">Ouvrir <?= e("$viewing.$base") ?> ↗</a>
       </div>
       <div class="stage" id="stage">
-        <iframe id="frame" src="/" title="Boutique affichée"></iframe>
+        <iframe id="frame" src="<?= e($shopUrl($viewing)) ?>/" data-origin="<?= e($shopUrl($viewing)) ?>" title="Boutique <?= e($shops[$viewing]['name']) ?>"></iframe>
       </div>
     </section>
   </div>
@@ -95,7 +102,7 @@ $confirmReset = $_GET['reinitialiser'] ?? '';
   }
   document.getElementById('pages').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
-    press(this, b); frame.src = b.dataset.src;
+    press(this, b); frame.src = frame.dataset.origin + b.dataset.src;
   });
   document.getElementById('device').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
