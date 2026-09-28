@@ -1541,14 +1541,36 @@ function flash_get(): ?array
 }
 
 /**
- * Mot de passe admin accepté : celui du commerce (tenant.php → admin_password)
- * et celui de la configuration (variable ADMIN_PASSWORD, ou config.local.php
- * en local, qui s'applique alors à tous les commerces).
+ * Comptes admin acceptés, sous forme [identifiant, mot de passe] :
+ *  - celui du commerce (tenant.php → admin_user / admin_password) ;
+ *  - celui de la configuration (ADMIN_USER / ADMIN_PASSWORD : variables
+ *    d'environnement, ou config.local.php en local, valable alors pour tous
+ *    les commerces ; identifiant « admin » s'il n'est pas précisé).
  */
-function admin_password_matches(string $input): bool
+function admin_accounts(): array
 {
-    foreach ([(string) tenant('admin_password'), ADMIN_PASSWORD] as $password) {
-        if ($password !== '' && hash_equals($password, $input)) {
+    $configUser = defined('ADMIN_USER') ? ADMIN_USER : (getenv('ADMIN_USER') ?: 'admin');
+    return [
+        [(string) tenant('admin_user'), (string) tenant('admin_password')],
+        [(string) $configUser, ADMIN_PASSWORD],
+    ];
+}
+
+/**
+ * Vérifie un couple identifiant / mot de passe. Le mot de passe peut être
+ * stocké en clair ou haché (password_hash, comme le fait le portail local).
+ */
+function admin_login_matches(string $user, string $password): bool
+{
+    $user = mb_strtolower(trim($user));
+    foreach (admin_accounts() as [$expectedUser, $expected]) {
+        if ($expectedUser === '' || $expected === '' || !hash_equals(mb_strtolower($expectedUser), $user)) {
+            continue;
+        }
+        $ok = password_get_info($expected)['algo'] !== null
+            ? password_verify($password, $expected)
+            : hash_equals($expected, $password);
+        if ($ok) {
             return true;
         }
     }
@@ -1557,7 +1579,12 @@ function admin_password_matches(string $input): bool
 
 function admin_password_configured(): bool
 {
-    return (string) tenant('admin_password') !== '' || ADMIN_PASSWORD !== '';
+    foreach (admin_accounts() as [$user, $password]) {
+        if ($user !== '' && $password !== '') {
+            return true;
+        }
+    }
+    return false;
 }
 
 function require_admin(): void

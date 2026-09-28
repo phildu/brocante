@@ -6,7 +6,9 @@ return [
     'name' => 'Librairie des Quais',
     'tagline' => "Livres anciens & d'occasion",
     'site_url' => 'https://librairie-des-quais.example.com',
-    // Ou variable d'environnement ADMIN_PASSWORD. Vide = administration fermée.
+    // Compte de l'administration (ou variables d'environnement ADMIN_USER /
+    // ADMIN_PASSWORD). Mot de passe vide = administration fermée.
+    'admin_user' => 'admin',
     'admin_password' => '',
 
     'logo' => 'assets/tenants/exemple-librairie/logo.svg',

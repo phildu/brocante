@@ -8,7 +8,9 @@ return [
     'name' => 'La Brocante du Petit Chalet',
     'tagline' => 'Trouvailles chinées & pièces uniques',
     'site_url' => 'https://brocante.arrimage.com',
-    // À changer avant toute mise en ligne réelle (ou variable d'environnement ADMIN_PASSWORD).
+    // Compte de l'administration — mot de passe à changer avant toute mise en
+    // ligne réelle (ou variables d'environnement ADMIN_USER / ADMIN_PASSWORD).
+    'admin_user' => 'admin',
     'admin_password' => 'armoire2026',
 
     'db_file' => 'brocante.db',

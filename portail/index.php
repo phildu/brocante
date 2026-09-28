@@ -47,6 +47,7 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
           <div class="shop<?= $isActive ? ' is-active' : '' ?>">
             <span class="swatch" style="background:<?= e($shop['colors']['accent'] ?? '#b5502e') ?>"></span>
             <h3><?= e($shop['name']) ?><?php if ($isActive): ?> <span class="pill done">À l'écran</span><?php endif; ?></h3>
+            <span class="meta">admin : <?= e($shop['admin_user']) ?></span>
             <a class="meta" href="<?= e($shopUrl($slug)) ?>/" target="_blank" rel="noopener"><?= e("$slug.$base") ?> ↗</a>
             <div class="actions">
               <?php if (!$isActive): ?>

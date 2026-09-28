@@ -120,6 +120,8 @@ function tenant_defaults(string $slug): array
         'name' => 'Ma boutique',
         'tagline' => '',
         'site_url' => 'http://localhost:8000',
+        // Compte de l'administration (mot de passe en clair ou haché avec password_hash).
+        'admin_user' => 'admin',
         'admin_password' => '',
         // Chemins relatifs à la racine du projet.
         'db_file' => "data/$slug.db",

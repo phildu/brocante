@@ -53,6 +53,19 @@ dans le dossier du projet : il ne répond qu'en local (hôte `.test`,
 `localhost` ou `127.0.0.1`) et n'est jamais déployé. Pensez à ajouter à git
 les dossiers `tenants/<slug>` et `assets/tenants/<slug>` qu'il crée.
 
+## Connexion à l'administration
+
+`/admin/` demande un **identifiant** et un **mot de passe** :
+
+- le compte du commerce : `admin_user` / `admin_password` dans son `tenant.php`
+  (identifiant `admin` par défaut ; le portail enregistre le mot de passe haché —
+  pour le changer, remplacer la valeur par le nouveau mot de passe en clair) ;
+- le compte de la configuration : `ADMIN_USER` / `ADMIN_PASSWORD` (variables
+  d'environnement, ou `config.local.php` sur le Mac, identifiant `admin` par
+  défaut), valable pour tous les commerces.
+
+Une connexion ne vaut que pour le commerce où elle a été faite.
+
 ## Créer un nouveau commerce en ligne de commande
 
 ```bash

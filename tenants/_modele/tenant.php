@@ -9,7 +9,9 @@ return [
     'name' => 'Mon Commerce',
     'tagline' => 'Votre slogan',
     'site_url' => 'https://mon-commerce.example.com',
-    // Ou variable d'environnement ADMIN_PASSWORD. Vide = administration fermée.
+    // Compte de l'administration (ou variables d'environnement ADMIN_USER /
+    // ADMIN_PASSWORD). Mot de passe vide = administration fermée.
+    'admin_user' => 'admin',
     'admin_password' => '',
 
     // Logos (chemins relatifs à la racine web) — déposer les fichiers dans assets/tenants/<slug>/.

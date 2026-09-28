@@ -6,16 +6,16 @@ $content = get_content();
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Sans mot de passe configuré, l'administration reste fermée.
-    if (admin_password_matches((string) ($_POST['password'] ?? ''))) {
+    if (admin_login_matches((string) ($_POST['username'] ?? ''), (string) ($_POST['password'] ?? ''))) {
         session_regenerate_id(true);
         $_SESSION['is_admin'] = tenant_slug();
         header('Location: /admin/catalog.php');
         exit;
     }
-    $error = 'Mot de passe incorrect.';
+    $error = 'Identifiant ou mot de passe incorrect.';
 }
 if (!admin_password_configured()) {
-    $error = "Aucun mot de passe n'est défini pour ce commerce : renseignez admin_password dans tenants/"
+    $error = "Aucun compte n'est défini pour ce commerce : renseignez admin_user et admin_password dans tenants/"
         . tenant_slug() . '/tenant.php.';
 }
 ?><!DOCTYPE html>
@@ -33,7 +33,7 @@ if (!admin_password_configured()) {
   .login-box { background: var(--surface); border: 1px solid var(--line); padding: 32px; }
   .login-box h1 { font-size: 1.5rem; margin-bottom: 6px; }
   .login-box p.lede { font-size: 0.9rem; margin-bottom: 22px; }
-  .login-box input[type="password"] {
+  .login-box input[type="password"], .login-box input[type="text"] {
     width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--ink);
     padding: 12px 14px; font-family: var(--font-body); font-size: 0.95rem; margin-bottom: 16px;
   }
@@ -48,7 +48,8 @@ if (!admin_password_configured()) {
     <p class="lede">Connectez-vous pour gérer les contenus et le catalogue.</p>
     <?php if ($error): ?><p class="login-error"><?= h($error) ?></p><?php endif; ?>
     <form method="post">
-      <input type="password" name="password" placeholder="Mot de passe" autofocus required>
+      <input type="text" name="username" placeholder="Identifiant" aria-label="Identifiant" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required value="<?= h($_POST['username'] ?? '') ?>">
+      <input type="password" name="password" placeholder="Mot de passe" aria-label="Mot de passe" autocomplete="current-password" required>
       <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Se connecter</button>
     </form>
   </div>

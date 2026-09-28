@@ -153,6 +153,10 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
         $categories[$i] = ['key' => slugify_portail($label), 'label' => $label, 'icon' => isset(PORTAIL_ICONS[$icon]) ? $icon : 'ic-vase'];
     }
     if (!$categories) throw new InvalidArgumentException('Ajoutez au moins une catégorie.');
+    $adminUser = mb_strtolower(trim((string) ($f['admin_user'] ?? '')));
+    if (!preg_match('/^[a-z0-9._@-]{3,40}$/', $adminUser)) {
+        throw new InvalidArgumentException("Identifiant d'administration : 3 à 40 caractères parmi lettres minuscules, chiffres, point, tiret, @.");
+    }
     if (mb_strlen(trim((string) ($f['admin_password'] ?? ''))) < 6) {
         throw new InvalidArgumentException("Choisissez un mot de passe d'administration d'au moins 6 caractères.");
     }
@@ -184,7 +188,10 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
         'name' => $name,
         'tagline' => trim((string) ($f['tagline'] ?? '')),
         'site_url' => trim((string) ($f['url'] ?? '')) ?: "https://$slug.example.com",
-        'admin_password' => trim((string) ($f['admin_password'] ?? '')),
+        'admin_user' => $adminUser,
+        // Haché : le mot de passe n'est lisible nulle part. Pour le changer,
+        // remplacer cette valeur par le nouveau mot de passe, en clair.
+        'admin_password' => password_hash(trim((string) $f['admin_password']), PASSWORD_DEFAULT),
         'logo' => $logo,
         'logo_macaron' => $logo,
         'colors' => [

@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Valeurs de départ : un exemple rempli (boulangerie), remplaçable par les boutons « Partir de ».
 $defaults = [
     'name' => 'Boulangerie Martin', 'tagline' => 'Pains au levain & viennoiseries maison', 'url' => 'https://www.boulangerie-martin.fr',
-    'admin_password' => '', 'accent' => '#b0622b', 'accent2' => '#5b7a4a', 'bg' => '#faf5ec',
+    'admin_user' => 'admin', 'accent' => '#b0622b', 'accent2' => '#5b7a4a', 'bg' => '#faf5ec',
     'item1' => 'produit', 'item2' => 'produits', 'cat_title' => 'Du four à votre table',
     'cat' => ['Pains', 'Viennoiseries', 'Pâtisseries', 'Épicerie fine', '', ''],
     'cat_icon' => ['ic-basket', 'ic-bowls', 'ic-candle', 'ic-pot', 'ic-vase', 'ic-vase'],
@@ -87,10 +87,12 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
           <label class="field">Couleur secondaire<input type="color" name="accent2" id="f-accent2" value="<?= e($v('accent2')) ?>"></label>
           <label class="field">Fond<input type="color" name="bg" id="f-bg" value="<?= e($v('bg')) ?>"></label>
         </div>
+        <label class="field">Adresse du site<input name="url" id="f-url" value="<?= e($v('url')) ?>" placeholder="https://www.mon-commerce.fr"></label>
         <div class="two">
-          <label class="field">Adresse du site<input name="url" id="f-url" value="<?= e($v('url')) ?>" placeholder="https://www.mon-commerce.fr"></label>
-          <label class="field">Mot de passe de l'administration<input name="admin_password" id="f-admin" required minlength="6" maxlength="60" value="<?= e($v('admin_password')) ?>" placeholder="6 caractères minimum"></label>
+          <label class="field">Identifiant de l'administration<input name="admin_user" id="f-admin-user" required pattern="[a-z0-9._@\-]{3,40}" maxlength="40" autocomplete="off" autocapitalize="none" value="<?= e($v('admin_user')) ?>" placeholder="ex. naty"></label>
+          <label class="field">Mot de passe de l'administration<input type="password" name="admin_password" id="f-admin" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum"></label>
         </div>
+        <p class="hint">Notez-les : le mot de passe est enregistré sous forme chiffrée et ne pourra pas être relu.</p>
       </div>
     </details>
 

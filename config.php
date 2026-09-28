@@ -22,8 +22,9 @@ if (is_file(__DIR__ . '/config.local.php')) {
 } else {
     // --- Valeurs de production / préprod OVH ---
 
-    // Mot de passe de l'espace Administration : variable d'environnement
-    // ADMIN_PASSWORD, sinon admin_password du tenant.php.
+    // Compte de l'espace Administration : variables d'environnement
+    // ADMIN_USER / ADMIN_PASSWORD, sinon admin_user / admin_password du tenant.php.
+    define('ADMIN_USER', getenv('ADMIN_USER') ?: (string) tenant('admin_user'));
     define('ADMIN_PASSWORD', getenv('ADMIN_PASSWORD') ?: (string) tenant('admin_password'));
 
     // Clés Stripe (mode test) — se règlent depuis Administration → Réglages
