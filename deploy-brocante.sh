@@ -123,6 +123,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob '*.db.bak-*' \
   --exclude-glob .DS_Store \
   --exclude-glob .tenant \
+  --exclude-glob portail/ \
   --exclude-glob data/ \
   --exclude-glob tenants/ \
   --exclude-glob assets/tenants/ \

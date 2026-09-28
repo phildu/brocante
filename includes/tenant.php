@@ -40,13 +40,7 @@ function tenant(?string $key = null, $default = null)
 {
     static $config = null;
     if ($config === null) {
-        $slug = tenant_slug();
-        $file = tenant_dir($slug) . '/tenant.php';
-        if (!is_file($file)) {
-            throw new RuntimeException("Commerce introuvable : tenants/$slug/tenant.php");
-        }
-        $config = array_replace_recursive(tenant_defaults($slug), require $file);
-        $config['slug'] = $slug;
+        $config = tenant_load(tenant_slug());
     }
     if ($key === null) {
         return $config;
@@ -59,6 +53,39 @@ function tenant(?string $key = null, $default = null)
         $value = $value[$part];
     }
     return $value;
+}
+
+/** Configuration complète d'un commerce quelconque (valeurs par défaut incluses). */
+function tenant_load(string $slug): array
+{
+    $file = tenant_dir($slug) . '/tenant.php';
+    if (!is_file($file)) {
+        throw new RuntimeException("Commerce introuvable : tenants/$slug/tenant.php");
+    }
+    $config = array_replace_recursive(tenant_defaults($slug), require $file);
+    $config['slug'] = $slug;
+    return $config;
+}
+
+/** Commerces présents dans tenants/ (hors modèle), par slug. */
+function tenant_list(): array
+{
+    $list = [];
+    foreach (glob(dirname(__DIR__) . '/tenants/*/tenant.php') as $file) {
+        $slug = basename(dirname($file));
+        if ($slug[0] !== '_') {
+            $list[$slug] = tenant_load($slug);
+        }
+    }
+    ksort($list);
+    return $list;
+}
+
+/** Chemin absolu d'un fichier d'un commerce donné (clé relative à la racine du projet). */
+function tenant_file(array $config, string $key): string
+{
+    $path = (string) $config[$key];
+    return str_starts_with($path, '/') ? $path : dirname(__DIR__) . '/' . $path;
 }
 
 function tenant_defaults(string $slug): array
@@ -107,8 +134,7 @@ function tenant_defaults(string $slug): array
 /** Chemin absolu d'un fichier déclaré relativement à la racine du projet. */
 function tenant_path(string $key): string
 {
-    $path = (string) tenant($key);
-    return str_starts_with($path, '/') ? $path : dirname(__DIR__) . '/' . $path;
+    return tenant_file(tenant(), $key);
 }
 
 function tenant_text(string $key): string

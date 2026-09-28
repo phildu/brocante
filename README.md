@@ -30,7 +30,18 @@ Le Petit Chalet garde ses emplacements historiques (`brocante.db`, `.secrets/`,
 Les autres commerces ont leur base dans `data/<slug>.db` et leurs clés dans
 `.secrets/<slug>/`.
 
-## Créer un nouveau commerce
+## Portail local (Herd)
+
+Avec Herd (`herd link brocenstock` dans ce dossier), le portail est sur
+**http://brocenstock.test/portail/** : liste des commerces, choix du commerce
+affiché par le site, réinitialisation des données de démonstration et
+formulaire « Nouveau commerce » (identité, logo, couleurs, catégories, textes,
+premiers produits). Il écrit dans le dossier du projet : il ne répond qu'en
+local (hôte `.test`, `localhost` ou `127.0.0.1`) et n'est jamais déployé.
+Pensez à ajouter à git les dossiers `tenants/<slug>` et `assets/tenants/<slug>`
+qu'il crée.
+
+## Créer un nouveau commerce en ligne de commande
 
 ```bash
 scripts/new-tenant.sh boulangerie-martin "Boulangerie Martin"
