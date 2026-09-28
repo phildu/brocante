@@ -6,6 +6,7 @@ require_admin();
 $content = get_content();
 $flash = flash_get();
 $current = appearance_current();
+$logos = logos_saved();
 $colors = $current['colors'];
 $fonts = $current['fonts'];
 
@@ -55,6 +56,22 @@ $colorFields = [
   .apx-contrast { font-size: 0.8rem; font-family: var(--font-mono); color: var(--ink-soft); }
   .apx-contrast[data-kind="warn"] { color: #b3261e; }
 
+  .apx-logo-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 760px) { .apx-logo-grid { grid-template-columns: 1fr 1fr; } .apx-logo-horizontal { grid-column: 1 / -1; } }
+  .apx-logo { display: flex; flex-direction: column; gap: 6px; }
+  .apx-logo-frame {
+    display: grid; place-items: center; padding: 12px; border: 1px solid var(--line);
+    /* Damier : laisse voir la transparence du logo. */
+    background: #fff repeating-conic-gradient(#ececec 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+  }
+  .apx-logo-horizontal .apx-logo-frame { aspect-ratio: 4 / 1.4; }
+  .apx-logo-vertical .apx-logo-frame { aspect-ratio: 3 / 4; }
+  .apx-logo-square .apx-logo-frame { aspect-ratio: 1; }
+  .apx-logo-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .apx-logo small { color: var(--ink-soft); font-size: 0.78rem; line-height: 1.35; }
+  .apx-logo .apx-logo-format { font-family: var(--font-mono); font-size: 0.7rem; }
+  .apx-logo-pick { align-self: flex-start; cursor: pointer; font-size: 0.85rem; padding: 7px 12px; }
+  .apx-logo-reset { font-size: 0.8rem; color: var(--ink-soft); display: flex; gap: 6px; align-items: center; }
   .apx-preview-wrap { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
   .apx-preview-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; color: var(--ink-soft); }
   .apx-mode { display: inline-flex; border: 1px solid var(--line); }
@@ -94,6 +111,28 @@ $colorFields = [
     <?php if ($flash): ?>
       <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin:16px 0;"><?= h($flash['message']) ?></p>
     <?php endif; ?>
+
+    <form class="apx-block apx-logos" id="logos" method="post" action="/admin/appearance-action.php" enctype="multipart/form-data" style="margin-top:20px;">
+      <input type="hidden" name="action" value="logos">
+      <h2>Logos</h2>
+      <p class="hint" style="margin:0;">Trois déclinaisons, chacune utilisée là où sa forme convient. Sans logo vertical, le carré est utilisé à sa place. Formats : PNG ou SVG sur fond transparent de préférence, JPG ou WebP acceptés (3 Mo maximum).</p>
+      <div class="apx-logo-grid">
+        <?php foreach (LOGO_VARIANTS as $variant => [$title, $usage, $format]): $custom = isset($logos[$variant]); ?>
+          <div class="apx-logo apx-logo-<?= h($variant) ?>">
+            <div class="apx-logo-frame"><img id="logo-img-<?= h($variant) ?>" src="/<?= h(logo_url($variant)) ?>" alt="Logo <?= h(mb_strtolower($title)) ?> actuel"></div>
+            <b><?= h($title) ?></b>
+            <small><?= h($usage) ?></small>
+            <small class="apx-logo-format"><?= h($format) ?> · <?= $custom ? 'personnalisé' : ($variant === 'vertical' && !isset($logos['vertical']) ? 'carré utilisé à la place' : "logo d'origine") ?></small>
+            <label class="btn btn-ghost apx-logo-pick" for="logo-<?= h($variant) ?>">Choisir un fichier…</label>
+            <input type="file" name="logo_<?= h($variant) ?>" id="logo-<?= h($variant) ?>" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" hidden data-preview="logo-img-<?= h($variant) ?>">
+            <?php if ($custom): ?>
+              <label class="apx-logo-reset"><input type="checkbox" name="reset_<?= h($variant) ?>" value="1"> Revenir au logo d'origine</label>
+            <?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <div class="apx-actions"><button class="btn btn-primary" type="submit">Enregistrer les logos</button></div>
+    </form>
 
     <div class="apx-grid">
       <form class="apx-form" method="post" action="/admin/appearance-action.php" id="apx-form">
@@ -279,6 +318,15 @@ $colorFields = [
     });
   });
   render();
+
+  // Logos : aperçu du fichier choisi avant l'envoi.
+  document.querySelectorAll('input[data-preview]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      if (!input.files[0]) return;
+      document.getElementById(input.dataset.preview).src = URL.createObjectURL(input.files[0]);
+      input.previousElementSibling.textContent = input.files[0].name;
+    });
+  });
 })();
 </script>
 </body>

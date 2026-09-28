@@ -224,3 +224,107 @@ function appearance_current(): array
         'custom' => $saved !== null,
     ];
 }
+
+/* ---------- logos ---------- */
+
+/**
+ * Déclinaisons du logo : clé => [titre, usage, format conseillé].
+ * Enregistrées dans la base du commerce (settings « logos »), sinon valeurs
+ * du tenant.php (logo, logo_macaron).
+ */
+const LOGO_VARIANTS = [
+    'horizontal' => ['Horizontal', "En-tête du site et barre d'administration", 'Environ 4 × 1, par ex. 800 × 200 px'],
+    'vertical' => ['Vertical', "Écran d'accueil sur mobile", 'Environ 3 × 4, par ex. 600 × 800 px'],
+    'square' => ['Carré', "Macaron de l'accueil, menu replié, icône d'onglet", '1 × 1, par ex. 512 × 512 px'],
+];
+
+/** Logos réglés dans l'administration : ['horizontal' => 'uploads/…', …]. */
+function logos_saved(): array
+{
+    static $logos = null;
+    if ($logos === null) {
+        $logos = [];
+        try {
+            appearance_table();
+            $stmt = db()->prepare("SELECT value FROM settings WHERE name = 'logos'");
+            $stmt->execute();
+            $logos = json_decode((string) $stmt->fetchColumn(), true) ?: [];
+        } catch (Throwable $e) {
+            $logos = [];
+        }
+    }
+    return $logos;
+}
+
+/** Chemin (relatif à la racine web) du logo à utiliser pour une déclinaison. */
+function logo_url(string $variant): string
+{
+    $saved = logos_saved();
+    $horizontal = $saved['horizontal'] ?? (string) tenant('logo');
+    $square = $saved['square'] ?? (string) tenant('logo_macaron');
+    return match ($variant) {
+        'square' => $square ?: $horizontal,
+        'vertical' => $saved['vertical'] ?? ($square ?: $horizontal),
+        default => $horizontal,
+    };
+}
+
+/** Balise <link rel="icon"> avec le logo carré. */
+function logo_favicon_html(): string
+{
+    $url = logo_url('square');
+    return $url !== '' ? '<link rel="icon" href="/' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">' . "\n" : '';
+}
+
+/**
+ * Enregistre un logo envoyé ($_FILES[$field]) pour une déclinaison.
+ * Formats : PNG, JPG, WebP, SVG (sans script). Retourne le chemin enregistré.
+ */
+function logo_store_upload(string $variant, array $file): string
+{
+    if (!isset(LOGO_VARIANTS[$variant])) {
+        throw new InvalidArgumentException('Déclinaison de logo inconnue.');
+    }
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new InvalidArgumentException("L'envoi du fichier a échoué, réessayez.");
+    }
+    if (($file['size'] ?? 0) > 3 * 1024 * 1024) {
+        throw new InvalidArgumentException('Logo trop lourd : 3 Mo maximum.');
+    }
+    $mime = mime_content_type($file['tmp_name']) ?: '';
+    $ext = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp', 'image/svg+xml' => 'svg', 'image/svg' => 'svg'][$mime] ?? null;
+    if (!$ext && str_ends_with(strtolower((string) ($file['name'] ?? '')), '.svg') && str_contains((string) file_get_contents($file['tmp_name'], false, null, 0, 2000), '<svg')) {
+        $ext = 'svg';
+    }
+    if (!$ext) {
+        throw new InvalidArgumentException('Formats acceptés : PNG, JPG, WebP ou SVG.');
+    }
+    if ($ext === 'svg') {
+        $svg = (string) file_get_contents($file['tmp_name']);
+        if (preg_match('/<script|<foreignObject|\son\w+\s*=|javascript:|<!ENTITY/i', $svg)) {
+            throw new InvalidArgumentException('Ce SVG contient du code actif : exportez-le à nouveau sans script, ou utilisez un PNG.');
+        }
+    }
+    $dir = dirname(__DIR__) . '/uploads';
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    $name = 'logo-' . tenant_slug() . '-' . $variant . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], "$dir/$name")) {
+        throw new RuntimeException("Impossible d'enregistrer le fichier dans uploads/.");
+    }
+    return 'uploads/' . $name;
+}
+
+/** Enregistre la liste des logos (chemins ou null pour revenir au logo par défaut). */
+function logos_save(array $logos): void
+{
+    $clean = [];
+    foreach (LOGO_VARIANTS as $variant => $_) {
+        if (!empty($logos[$variant]) && preg_match('#^uploads/logo-[a-z0-9_-]+\.(png|jpg|webp|svg)$#', $logos[$variant])) {
+            $clean[$variant] = $logos[$variant];
+        }
+    }
+    appearance_table();
+    db()->prepare("INSERT INTO settings (name, value) VALUES ('logos', ?)
+                   ON CONFLICT(name) DO UPDATE SET value = excluded.value")
+        ->execute([json_encode($clean, JSON_UNESCAPED_SLASHES)]);
+}

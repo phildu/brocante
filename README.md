@@ -60,6 +60,11 @@ prêtes ou 4 couleurs au choix (fond, texte, principale, secondaire), polices
 des titres et des textes parmi une sélection Google Fonts, aperçu en direct
 (clair et sombre) et indicateur de contraste. Les nuances intermédiaires et le
 thème sombre sont calculés automatiquement (`includes/appearance.php`).
+La section **Logos** de la même page accepte trois déclinaisons (PNG, JPG,
+WebP ou SVG sans script) : **horizontal** (en-tête, administration),
+**vertical** (écran d'accueil mobile ; à défaut, le carré) et **carré**
+(macaron de l'accueil, menu replié, icône d'onglet). Sans logo envoyé, ceux
+du `tenant.php` (`logo`, `logo_macaron`) s'appliquent.
 L'apparence est enregistrée dans la base du commerce (table `settings`) et
 prime sur les couleurs et polices de son `tenant.php` ; « Revenir à
 l'apparence d'origine » l'efface.

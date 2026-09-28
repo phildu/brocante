@@ -40,7 +40,7 @@ include __DIR__ . '/includes/header.php';
 ?>
 
 <div class="welcome-splash" id="welcome-splash">
-  <img src="/<?= h(tenant('logo')) ?>" alt="<?= h($content['site_name']) ?>" class="welcome-splash-logo">
+  <img src="/<?= h(logo_url('vertical')) ?>" alt="<?= h($content['site_name']) ?>" class="welcome-splash-logo">
   <p class="welcome-splash-text">Bienvenue</p>
 </div>
 
@@ -65,7 +65,7 @@ include __DIR__ . '/includes/header.php';
         <div class="polaroid-frame<?= $extraClass ?> <?= $posClass ?>" data-dwell="<?= $dwell ?>">
           <?php if ($item['type'] === 'welcome'): ?>
             <div class="polaroid-welcome-inner">
-              <span class="welcome-macaron"><img src="/<?= h(tenant('logo_macaron')) ?>" alt="<?= h($content['site_name']) ?>"></span>
+              <span class="welcome-macaron"><img src="/<?= h(logo_url('square')) ?>" alt="<?= h($content['site_name']) ?>"></span>
               <p class="welcome-caption">Bienvenue</p>
             </div>
           <?php elseif ($item['type'] === 'promo'): $pr = $item['data']; ?>

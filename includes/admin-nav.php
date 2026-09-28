@@ -54,14 +54,14 @@ $adminIcon = static fn (string $name): string =>
 </script>
 <header class="admin-topbar">
   <button type="button" class="admin-topbar-btn" id="admin-sidebar-open" aria-controls="admin-sidebar" aria-expanded="false" aria-label="Ouvrir le menu d'administration"><?= $adminIcon('menu') ?></button>
-  <a class="wordmark" href="/admin/catalog.php"><img src="/<?= h(tenant('logo')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo"></a>
+  <a class="wordmark" href="/admin/catalog.php"><img src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo"></a>
 </header>
 <div class="admin-sidebar-overlay" id="admin-sidebar-overlay"></div>
 <aside class="admin-sidebar" id="admin-sidebar" aria-label="Administration">
   <div class="admin-sidebar-head">
     <a class="admin-sidebar-logo" href="/index.php" title="Voir le site">
-      <img class="logo-full" src="/<?= h(tenant('logo')) ?>" alt="<?= h($content['site_name'] ?? '') ?>">
-      <img class="logo-mini" src="/<?= h(tenant('logo_macaron')) ?>" alt="">
+      <img class="logo-full" src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($content['site_name'] ?? '') ?>">
+      <img class="logo-mini" src="/<?= h(logo_url('square')) ?>" alt="">
     </a>
     <span class="admin-sidebar-tag">Espace boutique</span>
   </div>

@@ -22,7 +22,7 @@ $siteTagline = $siteContent['site_tagline'] ?: tenant('tagline');
 <header class="site">
   <div class="wrap site-bar">
     <a class="wordmark" href="/index.php">
-      <img src="/<?= h(tenant('logo')) ?>" alt="<?= h($siteName) ?>" class="site-logo">
+      <img src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($siteName) ?>" class="site-logo">
       <span class="tag"><?= h($siteTagline) ?></span>
     </a>
     <nav class="primary" aria-label="Navigation principale" id="primary-nav">

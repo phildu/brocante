@@ -201,7 +201,8 @@ function tenant_head_html(): string
         ];
     }
 
-    $html = '<link href="' . h($fontsUrl) . '" rel="stylesheet">';
+    $html = (function_exists('logo_favicon_html') ? logo_favicon_html() : '')
+        . '<link href="' . h($fontsUrl) . '" rel="stylesheet">';
     $vars = static function (array $colors): string {
         $css = '';
         foreach ($colors as $name => $value) {
