@@ -1406,3 +1406,74 @@
   }
   .address-suggestion-item:last-child { border-bottom: none; }
   .address-suggestion-item:hover { background: var(--surface); }
+
+  /* ---------- administration : barre latérale repliable ---------- */
+
+  html.has-admin-sidebar { --admin-sidebar-w: 236px; }
+  html.has-admin-sidebar.admin-sidebar-collapsed { --admin-sidebar-w: 64px; }
+  html.has-admin-sidebar body { padding-left: var(--admin-sidebar-w); transition: padding-left 0.2s ease; }
+
+  .admin-sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 40;
+    width: var(--admin-sidebar-w);
+    display: flex; flex-direction: column;
+    background: var(--surface); border-right: 1px solid var(--line);
+    transition: width 0.2s ease, transform 0.25s ease;
+    overflow-x: hidden; overflow-y: auto;
+  }
+  .admin-sidebar-head { padding: 18px 16px 14px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--line); }
+  .admin-sidebar-logo img { max-width: 100%; max-height: 44px; display: block; }
+  .admin-sidebar-tag { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); white-space: nowrap; }
+  .admin-sidebar-nav, .admin-sidebar-foot { display: flex; flex-direction: column; padding: 10px 8px; gap: 2px; }
+  .admin-sidebar-nav { flex: 1; }
+  .admin-sidebar-foot { border-top: 1px solid var(--line); }
+  .admin-sidebar a, .admin-collapse {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 12px; border-radius: 6px;
+    color: var(--ink-soft); text-decoration: none; font-size: 0.92rem; white-space: nowrap;
+    background: none; border: 0; cursor: pointer; font-family: var(--font-body); text-align: left; width: 100%;
+  }
+  .admin-sidebar a:hover, .admin-collapse:hover { background: var(--surface-2); color: var(--ink); }
+  .admin-sidebar a[aria-current="page"] { background: var(--bg); color: var(--ink); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+  .admin-ico { width: 20px; height: 20px; flex: none; }
+  .admin-collapse .admin-ico { transition: transform 0.2s ease; }
+
+  /* Replié : icônes seules. */
+  html.admin-sidebar-collapsed .admin-label,
+  html.admin-sidebar-collapsed .admin-sidebar-tag { display: none; }
+  html.admin-sidebar-collapsed .admin-sidebar a,
+  html.admin-sidebar-collapsed .admin-collapse { justify-content: center; padding: 10px 0; }
+  html.admin-sidebar-collapsed .admin-sidebar-head { padding: 14px 8px; align-items: center; }
+  html.admin-sidebar-collapsed .admin-sidebar-logo img { max-height: 32px; }
+  html.admin-sidebar-collapsed .admin-collapse .admin-ico { transform: rotate(180deg); }
+
+  /* Barre du haut et panneau coulissant : mobile uniquement. */
+  .admin-topbar, .admin-sidebar-overlay { display: none; }
+  @media (max-width: 860px) {
+    html.has-admin-sidebar body { padding-left: 0; }
+    .admin-topbar {
+      display: flex; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 30;
+      padding: 10px 16px; background: var(--bg); border-bottom: 1px solid var(--line);
+    }
+    .admin-topbar-btn { background: none; border: 1px solid var(--line); padding: 6px; cursor: pointer; color: var(--ink); display: grid; }
+    .admin-topbar .site-logo { max-height: 32px; }
+    .admin-sidebar { width: 260px; transform: translateX(-100%); box-shadow: 12px 0 32px rgba(20,15,8,0.2); }
+    .admin-sidebar.is-open { transform: translateX(0); }
+    .admin-sidebar-overlay { position: fixed; inset: 0; z-index: 35; background: rgba(20,15,8,0.4); }
+    .admin-sidebar-overlay.is-open { display: block; }
+    /* Sur mobile, le panneau est toujours déplié. */
+    html.admin-sidebar-collapsed .admin-label, html.admin-sidebar-collapsed .admin-sidebar-tag { display: inline; }
+    html.admin-sidebar-collapsed .admin-sidebar a { justify-content: flex-start; padding: 9px 12px; }
+    .admin-collapse { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html.has-admin-sidebar body, .admin-sidebar, .admin-collapse .admin-ico { transition: none; }
+  }
+  .admin-sidebar-logo .logo-mini { display: none; }
+  html.admin-sidebar-collapsed .admin-sidebar-logo .logo-full { display: none; }
+  html.admin-sidebar-collapsed .admin-sidebar-logo .logo-mini { display: block; width: 40px; height: 40px; object-fit: contain; }
+  @media (max-width: 860px) {
+    html.admin-sidebar-collapsed .admin-sidebar-logo .logo-full { display: block; }
+    html.admin-sidebar-collapsed .admin-sidebar-logo .logo-mini { display: none; }
+  }
