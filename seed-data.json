@@ -1,0 +1,160 @@
+{
+  "brand": {
+    "name": "La Brocante du Petit Chalet",
+    "tagline": "Trouvailles chinées & pièces uniques"
+  },
+  "hero": {
+    "eyebrow": "Collection Automne 2026",
+    "title": "Des trouvailles qui ont déjà une histoire.",
+    "subtitle": "Céramiques chinées dans les brocantes de la vallée, bois patiné et pièces façonnées à la main par des artisans du coin — sélectionnées une à une pour habiller votre intérieur d'âme et de chaleur.",
+    "photo": "uploads/hero.jpg"
+  },
+  "story": {
+    "eyebrow": "Notre histoire",
+    "title": "Née dans un petit chalet, remplie brocante après brocante.",
+    "text": "Tout a commencé par une armoire savoyarde ramenée d'un vide-grenier et un pichet en grès trouvé sous la pluie. Depuis, nous parcourons les brocantes de la vallée, les Puces du Canal et les ateliers de potiers et de mosaïstes croisés en voyage pour réunir des objets qui ont déjà vécu — ou qui sont faits pour durer. Rien n'est choisi pour son étiquette : tout l'est pour sa patine, son geste, son imperfection.",
+    "photo": "uploads/story.jpg",
+    "photoCaption": "En tournée de sourcing — chaque pièce a un lieu et une histoire",
+    "principles": [
+      {
+        "title": "Chiné avec soin",
+        "text": "Chaque trouvaille est inspectée, nettoyée et restaurée si besoin avant de rejoindre la boutique."
+      },
+      {
+        "title": "Façonné à la main",
+        "text": "Nos pièces neuves viennent d'un petit cercle d'artisans potiers, tourneurs et tisserands de la vallée."
+      },
+      {
+        "title": "Choisi pour durer",
+        "text": "Peu de références, mais des objets pensés pour rester — pas pour tourner d'une saison à l'autre."
+      }
+    ]
+  },
+  "contact": {
+    "address": "à compléter",
+    "hours": "à compléter",
+    "delivery": "Retrait à l'atelier ou envoi soigné partout en France"
+  },
+  "shipping": {
+    "fee": "6,90 €",
+    "pickupLabel": "Retrait à l'atelier",
+    "shippingLabel": "Envoi postal"
+  },
+  "featuredRefs": [
+    "014",
+    "023",
+    "041"
+  ],
+  "products": [
+    {
+      "ref": "014",
+      "name": "Pichet en grès émaillé vert",
+      "cat": "ceramique",
+      "desc": "Trouvé sur un marché, glaçure mouchetée tourbillonnante du plus bel effet.",
+      "price": "42 €",
+      "badge": "Chiné",
+      "photo": "uploads/product-014.jpg"
+    },
+    {
+      "ref": "015",
+      "name": "Bols et assiettes à motifs, la pièce",
+      "cat": "ceramique",
+      "desc": "Étagère de bols et assiettes chinés, motifs fleuris et bleu marine.",
+      "price": "28 €",
+      "badge": "Chiné",
+      "photo": "uploads/product-015.jpg"
+    },
+    {
+      "ref": "016",
+      "name": "Étagère de vases et pichets anciens",
+      "cat": "ceramique",
+      "desc": "Sélection de vases et pichets à motifs fleuris, toute une étagère à choisir.",
+      "price": "dès 22 €",
+      "badge": "Chiné",
+      "photo": "uploads/product-016.jpg"
+    },
+    {
+      "ref": "017",
+      "name": "Vases marocains peints à la main",
+      "cat": "ceramique",
+      "desc": "Poteries peintes à la main, rapportées de nos tournées chez les artisans du Maghreb.",
+      "price": "68 €",
+      "badge": "Chiné",
+      "photo": "uploads/product-017.jpg"
+    },
+    {
+      "ref": "023",
+      "name": "Miroir ouvragé & vitrine de curiosités",
+      "cat": "bois",
+      "desc": "Miroir ouvragé et objets de vitrine, dénichés aux Puces du Canal.",
+      "price": "95 €",
+      "badge": "Chiné",
+      "photo": "uploads/product-023.jpg"
+    },
+    {
+      "ref": "024",
+      "name": "Totem en bois peint, pièce unique",
+      "cat": "bois",
+      "desc": "Sculpture en bois peinte à la main, motifs graphiques, pièce unique.",
+      "price": "120 €",
+      "badge": "Pièce unique",
+      "photo": "uploads/product-024.jpg"
+    },
+    {
+      "ref": "031",
+      "name": "Plaid en laine cardée",
+      "cat": "textile",
+      "icon": "ic-plaid",
+      "desc": "Tissé sur métier à bras dans le Jura, laine locale non traitée.",
+      "price": "52 €",
+      "badge": "Fait main",
+      "photo": null
+    },
+    {
+      "ref": "032",
+      "name": "Coussin en lin lavé",
+      "cat": "textile",
+      "icon": "ic-cushion",
+      "desc": "Teinture végétale, façonné et cousu à la main à l'atelier.",
+      "price": "29 €",
+      "badge": "Fait main",
+      "photo": null
+    },
+    {
+      "ref": "041",
+      "name": "Suspension mosaïque orientale",
+      "cat": "lumiere",
+      "desc": "Suspension artisanale en mosaïque de verre, ambiance chaude garantie.",
+      "price": "89 €",
+      "badge": "Fait main",
+      "photo": "uploads/product-041.jpg"
+    },
+    {
+      "ref": "042",
+      "name": "Guirlande de lampions mosaïque",
+      "cat": "lumiere",
+      "desc": "Cascade de lampions en mosaïque de verre, pour une lumière tamisée et colorée.",
+      "price": "76 €",
+      "badge": "Fait main",
+      "photo": "uploads/product-042.jpg"
+    },
+    {
+      "ref": "061",
+      "name": "Jarres en terre cuite vernissée",
+      "cat": "jardin",
+      "desc": "Jarres en terre cuite émaillée, patine naturelle, parfaites en extérieur.",
+      "price": "54 €",
+      "badge": "Chiné",
+      "photo": "uploads/product-061.jpg"
+    },
+    {
+      "ref": "062",
+      "name": "Carillon en grès tourné",
+      "cat": "jardin",
+      "desc": "Cloches en grès tourné à la main, suspendues au jardin — chacune sonne différemment.",
+      "price": "24 €",
+      "badge": "Fait main",
+      "photo": "uploads/product-062.jpg"
+    }
+  ]
+}
