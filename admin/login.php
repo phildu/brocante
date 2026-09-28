@@ -2,6 +2,12 @@
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
 
+// Déjà connecté (bouton « Connexion » du site) : direction l'administration.
+if (is_admin_logged_in()) {
+    header('Location: /admin/catalog.php');
+    exit;
+}
+
 $content = get_content();
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

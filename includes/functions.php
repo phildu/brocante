@@ -1587,10 +1587,15 @@ function admin_password_configured(): bool
     return false;
 }
 
+/** Connecté à l'administration de ce commerce ? (une connexion ne vaut que pour un commerce) */
+function is_admin_logged_in(): bool
+{
+    return ($_SESSION['is_admin'] ?? null) === tenant_slug();
+}
+
 function require_admin(): void
 {
-    // Une connexion ne vaut que pour le commerce où elle a été faite.
-    if (($_SESSION['is_admin'] ?? null) !== tenant_slug()) {
+    if (!is_admin_logged_in()) {
         header('Location: /admin/login.php');
         exit;
     }

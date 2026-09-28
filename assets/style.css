@@ -175,6 +175,20 @@
 
   nav.primary a:hover { color: var(--ink); }
 
+  /* Bouton « Connexion / Administration » en bout de barre. */
+  nav.primary a.nav-cta {
+    margin-left: 8px;
+    padding: 7px 14px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  nav.primary a.nav-cta:hover,
+  nav.primary a.nav-cta:focus-visible {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
   /* ---------- menu burger (mobile) ---------- */
 
   .burger-btn {
@@ -243,6 +257,12 @@
       font-size: 1.05rem;
       padding: 16px 4px;
       border-bottom: 1px solid var(--line);
+    }
+    nav.primary a.nav-cta {
+      margin: 20px 0 0;
+      padding: 12px 16px;
+      text-align: center;
+      border: 1px solid var(--accent);
     }
   }
 

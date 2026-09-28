@@ -31,6 +31,11 @@ $siteTagline = $siteContent['site_tagline'] ?: tenant('tagline');
       <a href="/index.php#histoire">Notre histoire</a>
       <a href="/index.php#contact">Contact</a>
       <a href="/cart.php">Panier<?= $cartCount ? ' (' . $cartCount . ')' : '' ?></a>
+      <?php if (is_admin_logged_in()): ?>
+        <a class="nav-cta" href="/admin/catalog.php">Administration</a>
+      <?php else: ?>
+        <a class="nav-cta" href="/admin/login.php">Connexion</a>
+      <?php endif; ?>
     </nav>
     <button type="button" class="burger-btn" id="burger-btn" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="primary-nav">
       <span></span><span></span><span></span>
