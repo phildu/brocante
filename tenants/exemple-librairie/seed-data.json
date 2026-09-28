@@ -1,0 +1,86 @@
+{
+  "brand": {
+    "name": "Librairie des Quais",
+    "tagline": "Livres anciens & d'occasion"
+  },
+  "hero": {
+    "eyebrow": "Arrivages de la semaine",
+    "title": "Des livres qui ont déjà voyagé.",
+    "subtitle": "Romans, beaux livres et éditions anciennes, choisis un à un sur les quais et dans les greniers.",
+    "photo": ""
+  },
+  "story": {
+    "eyebrow": "Notre histoire",
+    "title": "Une boutique au bord de l'eau",
+    "text": "Depuis vingt ans, nous rachetons des bibliothèques entières pour offrir une seconde vie aux livres.",
+    "photo": "",
+    "photoCaption": "",
+    "principles": [
+      {
+        "title": "Vérifié page à page",
+        "text": "Chaque livre est contrôlé avant la mise en vente."
+      },
+      {
+        "title": "Décrit honnêtement",
+        "text": "L'état est précisé, défauts compris."
+      },
+      {
+        "title": "Emballé avec soin",
+        "text": "Envoi protégé, partout en France."
+      }
+    ]
+  },
+  "contact": {
+    "address": "12 quai Romain Rolland, 69005 Lyon",
+    "hours": "Du mardi au samedi, 10 h – 19 h",
+    "delivery": "Retrait en boutique ou envoi soigné partout en France"
+  },
+  "shipping": {
+    "fee": "4,90 €",
+    "pickupLabel": "Retrait en boutique",
+    "shippingLabel": "Envoi postal"
+  },
+  "featuredRefs": [
+    "L01",
+    "L02",
+    "L03"
+  ],
+  "products": [
+    {
+      "ref": "L01",
+      "name": "Les Misérables, édition 1950",
+      "cat": "anciens",
+      "desc": "Deux volumes reliés, bon état général.",
+      "price": "35 €",
+      "badge": "Rare",
+      "icon": "ic-candle"
+    },
+    {
+      "ref": "L02",
+      "name": "Le Petit Prince",
+      "cat": "jeunesse",
+      "desc": "Édition Folio, quelques annotations au crayon.",
+      "price": "6,50 €",
+      "badge": "",
+      "icon": "ic-basket"
+    },
+    {
+      "ref": "L03",
+      "name": "Atlas des vins de France",
+      "cat": "beaux-livres",
+      "desc": "Beau livre illustré, grand format, comme neuf.",
+      "price": "22 €",
+      "badge": "Coup de cœur",
+      "icon": "ic-mirror"
+    },
+    {
+      "ref": "L04",
+      "name": "Madame Bovary",
+      "cat": "romans",
+      "desc": "Livre de poche, couverture légèrement pliée.",
+      "price": "3 €",
+      "badge": "",
+      "icon": "ic-cushion"
+    }
+  ]
+}

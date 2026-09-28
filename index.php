@@ -40,7 +40,7 @@ include __DIR__ . '/includes/header.php';
 ?>
 
 <div class="welcome-splash" id="welcome-splash">
-  <img src="/assets/logo.png" alt="<?= h($content['site_name']) ?>" class="welcome-splash-logo">
+  <img src="/<?= h(tenant('logo')) ?>" alt="<?= h($content['site_name']) ?>" class="welcome-splash-logo">
   <p class="welcome-splash-text">Bienvenue</p>
 </div>
 
@@ -65,7 +65,7 @@ include __DIR__ . '/includes/header.php';
         <div class="polaroid-frame<?= $extraClass ?> <?= $posClass ?>" data-dwell="<?= $dwell ?>">
           <?php if ($item['type'] === 'welcome'): ?>
             <div class="polaroid-welcome-inner">
-              <span class="welcome-macaron"><img src="/assets/logo-macaron.png" alt="<?= h($content['site_name']) ?>"></span>
+              <span class="welcome-macaron"><img src="/<?= h(tenant('logo_macaron')) ?>" alt="<?= h($content['site_name']) ?>"></span>
               <p class="welcome-caption">Bienvenue</p>
             </div>
           <?php elseif ($item['type'] === 'promo'): $pr = $item['data']; ?>
@@ -130,8 +130,8 @@ include __DIR__ . '/includes/header.php';
 <section>
   <div class="wrap">
     <div class="section-head">
-      <p class="eyebrow">Explorer par univers</p>
-      <h2 style="font-size:1.9rem;">Cinq univers, une même armoire</h2>
+      <p class="eyebrow"><?= h(tenant_text('categories_eyebrow')) ?></p>
+      <h2 style="font-size:1.9rem;"><?= h(tenant_text('categories_title')) ?></h2>
     </div>
   </div>
   <div class="wrap">
@@ -140,7 +140,7 @@ include __DIR__ . '/includes/header.php';
         <a class="cat-tile" href="/boutique.php?cat=<?= h($c['key']) ?>">
           <svg viewBox="0 0 64 64"><use href="#<?= h($c['icon']) ?>"/></svg>
           <span class="name"><?= h($c['label']) ?></span>
-          <span class="count"><?= $n ?> <?= $n === 1 ? 'pièce' : 'pièces' ?></span>
+          <span class="count"><?= $n ?> <?= h(tenant_text($n === 1 ? 'item_singular' : 'item_plural')) ?></span>
         </a>
       <?php endforeach; ?>
     </div>
@@ -179,8 +179,8 @@ include __DIR__ . '/includes/header.php';
 <?php if ($followPhotos): ?>
 <section class="follow tight">
   <div class="wrap">
-    <p class="eyebrow">Au fil des trouvailles</p>
-    <h2 style="font-size:1.6rem;margin-top:10px;">Suivez l'armoire au quotidien</h2>
+    <p class="eyebrow"><?= h(tenant_text('follow_eyebrow')) ?></p>
+    <h2 style="font-size:1.6rem;margin-top:10px;"><?= h(tenant_text('follow_title')) ?></h2>
     <div class="follow-grid">
       <?php foreach ($followPhotos as $p): ?>
         <div class="follow-tile"><img src="/<?= h($p['photo']) ?>" alt=""></div>
@@ -203,8 +203,8 @@ include __DIR__ . '/includes/header.php';
   <div class="wrap contact-grid">
     <div>
       <p class="eyebrow">Restez informé·e</p>
-      <h2 style="font-size:1.9rem;margin:12px 0 10px;">Les nouvelles trouvailles, avant tout le monde</h2>
-      <p class="lede">Un e-mail par mois, quand une nouvelle tournée de brocante rentre à l'atelier. Pas plus.</p>
+      <h2 style="font-size:1.9rem;margin:12px 0 10px;"><?= h(tenant_text('newsletter_title')) ?></h2>
+      <p class="lede"><?= h(tenant_text('newsletter_text')) ?></p>
       <form method="post" action="/newsletter.php">
         <div class="field-row">
           <input type="email" name="email" required placeholder="votre@email.fr" aria-label="Adresse e-mail">

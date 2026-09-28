@@ -23,7 +23,7 @@ if (str_starts_with($secret, 'pk_') && str_starts_with($publishable, 'sk_')) {
     $swapped = true;
 }
 
-$secretsDir = __DIR__ . '/../.secrets';
+$secretsDir = SECRETS_DIR;
 if (!is_dir($secretsDir)) mkdir($secretsDir, 0700, true);
 
 if ($secret !== '') {

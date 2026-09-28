@@ -4,8 +4,8 @@ require_once __DIR__ . '/functions.php';
 $activeNav = $activeNav ?? '';
 $cartCount = cart_count();
 $siteContent = get_content();
-$siteName = $siteContent['site_name'] ?: 'La Brocante du Petit Chalet';
-$siteTagline = $siteContent['site_tagline'] ?: '';
+$siteName = $siteContent['site_name'] ?: tenant('name');
+$siteTagline = $siteContent['site_tagline'] ?: tenant('tagline');
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -14,7 +14,7 @@ $siteTagline = $siteContent['site_tagline'] ?: '';
 <title><?= isset($pageTitle) ? h($pageTitle) . ' — ' . h($siteName) : h($siteName) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+<?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
@@ -22,7 +22,7 @@ $siteTagline = $siteContent['site_tagline'] ?: '';
 <header class="site">
   <div class="wrap site-bar">
     <a class="wordmark" href="/index.php">
-      <img src="/assets/logo.png" alt="<?= h($siteName) ?>" class="site-logo">
+      <img src="/<?= h(tenant('logo')) ?>" alt="<?= h($siteName) ?>" class="site-logo">
       <span class="tag"><?= h($siteTagline) ?></span>
     </a>
     <nav class="primary" aria-label="Navigation principale" id="primary-nav">

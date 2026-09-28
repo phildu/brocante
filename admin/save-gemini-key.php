@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $key = trim((string) ($_POST['gemini_key'] ?? ''));
 
 if ($key !== '') {
-    $secretsDir = __DIR__ . '/../.secrets';
+    $secretsDir = SECRETS_DIR;
     if (!is_dir($secretsDir)) mkdir($secretsDir, 0700, true);
     file_put_contents($secretsDir . '/gemini.key', $key);
     chmod($secretsDir . '/gemini.key', 0600);

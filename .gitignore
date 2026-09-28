@@ -8,3 +8,9 @@ config.local.php
 .env.deploy
 brocante.db
 db-backup/
+# Marque blanche : commerce actif sur un serveur, bases des autres commerces,
+# identifiants FTP par commerce, sauvegardes de base.
+.tenant
+data/
+.env.deploy.*
+*.db.bak-*

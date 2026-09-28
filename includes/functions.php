@@ -7,16 +7,10 @@ function h($s): string
     return htmlspecialchars((string) ($s ?? ''), ENT_QUOTES, 'UTF-8');
 }
 
+/** Catégories du commerce actif (tenants/<slug>/tenant.php → categories). */
 function category_list(): array
 {
-    return [
-        ['key' => 'ceramique', 'label' => 'Céramique', 'icon' => 'ic-vase'],
-        ['key' => 'bois', 'label' => 'Bois & mobilier', 'icon' => 'ic-stool'],
-        ['key' => 'textile', 'label' => 'Textile', 'icon' => 'ic-plaid'],
-        ['key' => 'lumiere', 'label' => 'Lumière', 'icon' => 'ic-candle'],
-        ['key' => 'jardin', 'label' => 'Jardin', 'icon' => 'ic-pot'],
-        ['key' => 'curiosites', 'label' => 'Curiosités', 'icon' => 'ic-mirror'],
-    ];
+    return tenant('categories');
 }
 
 function category_label(string $key): string
@@ -720,7 +714,7 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
 /** Prompt demandant un JSON strict {label, tags} décrivant honnêtement l'image. */
 function build_media_describe_prompt(): string
 {
-    return "Tu regardes la photo d'un objet ou d'une scène pour la médiathèque d'une brocante en ligne. "
+    return "Tu regardes la photo d'un objet ou d'une scène pour la médiathèque d'" . tenant('ai.shop') . ". "
         . "Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, de cette forme exacte : "
         . '{"label": "titre court et factuel en français (5-8 mots)", "tags": "4 à 6 mots-clés en français séparés par des virgules"}. '
         . "Décris uniquement ce que tu vois réellement (matière, forme, couleur, type d'objet ou de scène) — "
@@ -898,7 +892,7 @@ function gemini_group_photos_chunk(array $absPaths): ?array
 
     $parts = [
         ['text' => "Voici " . count($absPaths) . " photos numérotées de 1 à " . count($absPaths) . ", dans l'ordre où elles apparaissent ci-dessous. "
-            . "Certaines montrent le MÊME objet sous des angles ou un cadrage différents (photos d'une seule pièce pour une brocante en ligne) ; "
+            . "Certaines montrent le MÊME objet sous des angles ou un cadrage différents (photos d'une seule pièce pour " . tenant('ai.shop') . ") ; "
             . "d'autres montrent des objets différents. Regroupe les numéros de photos qui montrent le même objet. "
             . "Sois prudent : en cas de doute, considère que ce sont des objets différents plutôt que de les regrouper à tort. "
             . "Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, de cette forme exacte : "
@@ -1028,8 +1022,9 @@ function gemini_score_cutout_simplicity(string $srcAbsPath): ?int
 function build_product_sheet_prompt(): string
 {
     $cats = implode(', ', array_column(category_list(), 'key'));
-    return "Tu regardes la photo d'un objet chiné pour une brocante en ligne (meubles, céramique, "
-        . "luminaires, textile, jardin, curiosités...). Réponds UNIQUEMENT avec un objet JSON strict, "
+    $examples = tenant('ai.examples') ? ' (' . tenant('ai.examples') . ')' : '';
+    return "Tu regardes la photo d'" . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". "
+        . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
         . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "

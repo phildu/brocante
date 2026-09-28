@@ -2,7 +2,7 @@
 <footer class="site">
   <div class="wrap footer-grid">
     <div>
-      <p class="mark" style="font-family:var(--font-display);font-size:1.2rem;font-weight:600;"><?= h($siteName ?? 'La Brocante du Petit Chalet') ?></p>
+      <p class="mark" style="font-family:var(--font-display);font-size:1.2rem;font-weight:600;"><?= h($siteName ?? tenant('name')) ?></p>
       <p class="lede" style="margin-top:10px;font-size:0.9rem;"><?= h($siteTagline ?? '') ?></p>
     </div>
     <div>
@@ -24,7 +24,7 @@
     </div>
   </div>
   <div class="wrap footer-bottom">
-    <span>© 2026 <?= h($siteName ?? 'La Brocante du Petit Chalet') ?></span>
+    <span>© 2026 <?= h($siteName ?? tenant('name')) ?></span>
     <span>Prototype de boutique — déploiement local</span>
   </div>
 </footer>

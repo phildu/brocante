@@ -6,8 +6,8 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS content (
   id INTEGER PRIMARY KEY DEFAULT 1,
-  site_name TEXT NOT NULL DEFAULT 'La Brocante du Petit Chalet',
-  site_tagline TEXT NOT NULL DEFAULT 'Trouvailles chinées & pièces uniques',
+  site_name TEXT NOT NULL DEFAULT '', -- vide : nom du tenant.php
+  site_tagline TEXT NOT NULL DEFAULT '',
   hero_eyebrow TEXT NOT NULL DEFAULT '',
   hero_title TEXT NOT NULL DEFAULT '',
   hero_subtitle TEXT,

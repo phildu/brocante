@@ -49,7 +49,7 @@ include __DIR__ . '/includes/header.php';
         <?php foreach ($products as $i => $p) echo product_card_html($p, $i); ?>
       </div>
     <?php else: ?>
-      <p class="empty-state"><?= $q !== '' ? 'Aucun résultat pour « ' . h($q) . ' ».' : 'Aucune pièce dans cet univers pour le moment — repassez après notre prochaine tournée de brocante.' ?></p>
+      <p class="empty-state"><?= $q !== '' ? 'Aucun résultat pour « ' . h($q) . ' ».' : h(tenant_text('empty_category')) ?></p>
     <?php endif; ?>
   </div>
 </section>

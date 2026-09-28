@@ -1,0 +1,38 @@
+{
+  "brand": {
+    "name": "Mon Commerce",
+    "tagline": "Votre slogan"
+  },
+  "hero": {
+    "eyebrow": "Bienvenue",
+    "title": "Une accroche courte pour la page d'accueil.",
+    "subtitle": "Deux ou trois phrases pour présenter le commerce et ce qu'on y trouve.",
+    "photo": ""
+  },
+  "story": {
+    "eyebrow": "Notre histoire",
+    "title": "Qui sommes-nous ?",
+    "text": "L'histoire du commerce, en un paragraphe.",
+    "photo": "",
+    "photoCaption": "",
+    "principles": [
+      { "title": "Premier engagement", "text": "Une phrase." },
+      { "title": "Deuxième engagement", "text": "Une phrase." },
+      { "title": "Troisième engagement", "text": "Une phrase." }
+    ]
+  },
+  "contact": {
+    "address": "à compléter",
+    "hours": "à compléter",
+    "delivery": "Retrait en boutique ou envoi partout en France"
+  },
+  "shipping": {
+    "fee": "6,90 €",
+    "pickupLabel": "Retrait en boutique",
+    "shippingLabel": "Envoi postal"
+  },
+  "featuredRefs": ["001"],
+  "products": [
+    { "ref": "001", "name": "Premier produit", "cat": "categorie-a", "desc": "Description du produit.", "price": "20 €", "badge": "Nouveau", "icon": "ic-basket" }
+  ]
+}

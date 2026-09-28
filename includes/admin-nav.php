@@ -22,7 +22,7 @@ $adminNav = $adminNav ?? '';
 <header class="site">
   <div class="wrap site-bar">
     <a class="wordmark" href="/index.php">
-      <img src="/assets/logo.png" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo">
+      <img src="/<?= h(tenant('logo')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo">
       <span class="tag">Espace boutique</span>
     </a>
     <nav class="primary" aria-label="Navigation administration">

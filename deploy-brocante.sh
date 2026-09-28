@@ -1,13 +1,19 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────────────────
-# deploy-brocante.sh — Déploiement local vers OVH (preprod La Brocante du Petit Chalet)
+# deploy-brocante.sh — Déploiement local vers OVH d'un commerce (marque blanche)
+#
+# Commerce déployé : --tenant <slug>, sinon variable TENANT, sinon petit-chalet.
+# Identifiants FTP : .env.deploy.<slug> (ou .env.deploy pour petit-chalet).
+# Seuls le code, la config de ce commerce (tenants/<slug>, assets/tenants/<slug>)
+# et sa base sont envoyés ; un fichier .tenant indique au serveur quel commerce servir.
 #
 # Usage :
 #   ./deploy-brocante.sh           → code uniquement (brocante.db JAMAIS touché,
 #                                     pour ne pas écraser les commandes/données
 #                                     réelles accumulées en ligne depuis le
 #                                     dernier déploiement)
-#   ./deploy-brocante.sh --with-db → envoie EN PLUS brocante.db tel quel en
+#   ./deploy-brocante.sh --tenant exemple-librairie → déploie un autre commerce
+#   ./deploy-brocante.sh --with-db → envoie EN PLUS la base (brocante.db) telle quelle en
 #                                     local, en écrasant celui du serveur.
 #                                     À utiliser UNIQUEMENT pour le tout premier
 #                                     déploiement (base vide côté serveur), ou
@@ -32,13 +38,31 @@ warn() { echo -e "${YELLOW}⚠️ ${NC} $1"; }
 err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 
 WITH_DB=0
-[ "$1" = "--with-db" ] && WITH_DB=1
+TENANT="${TENANT:-petit-chalet}"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --with-db) WITH_DB=1 ;;
+        --tenant) TENANT="$2"; shift ;;
+        *) err "Option inconnue : $1" ;;
+    esac
+    shift
+done
+[ -f "tenants/$TENANT/tenant.php" ] || err "Commerce introuvable : tenants/$TENANT/tenant.php"
+export TENANT
+
+# Base et envoi des photos : lus dans la config du commerce.
+DB_REL="$(php -r 'require "config.php"; echo substr(DB_PATH, strlen(__DIR__) + 1);')"
+DEPLOY_UPLOADS="$(php -r 'require "config.php"; echo tenant("deploy_uploads") ? 1 : 0;')"
 
 # ── Charger les credentials ───────────────────────────────────────────────────
-if [ ! -f ".env.deploy" ]; then
-    err ".env.deploy introuvable. Voir l'en-tête de ce script pour le format attendu."
+ENV_FILE=".env.deploy.$TENANT"
+if [ ! -f "$ENV_FILE" ] && [ "$TENANT" = "petit-chalet" ]; then
+    ENV_FILE=".env.deploy"
 fi
-source .env.deploy
+if [ ! -f "$ENV_FILE" ]; then
+    err "$ENV_FILE introuvable. Voir l'en-tête de ce script pour le format attendu."
+fi
+source "$ENV_FILE"
 
 [ -z "$FTP_SERVER"     ] && err "FTP_SERVER manquant dans .env.deploy"
 [ -z "$FTP_USER"       ] && err "FTP_USER manquant dans .env.deploy"
@@ -49,12 +73,12 @@ command -v lftp >/dev/null 2>&1 || err "lftp non installé. Lance : brew install
 
 echo ""
 echo -e "${BOLD}════════════════════════════════════════════════${NC}"
-echo -e "${BOLD}  DÉPLOIEMENT PREPROD — OVH${NC}"
+echo -e "${BOLD}  DÉPLOIEMENT PREPROD — OVH — commerce : ${TENANT}${NC}"
 echo -e "${BOLD}  Front : ${URL_FRONT}${NC}"
 if [ "$WITH_DB" = "1" ]; then
-    echo -e "${YELLOW}  ⚠️  --with-db : brocante.db du serveur va être ÉCRASÉ par la version locale${NC}"
+    echo -e "${YELLOW}  ⚠️  --with-db : ${DB_REL} du serveur va être ÉCRASÉ par la version locale${NC}"
 else
-    echo -e "${BLUE}  brocante.db non touché sur le serveur (utilisez --with-db pour l'envoyer)${NC}"
+    echo -e "${BLUE}  ${DB_REL} non touché sur le serveur (utilisez --with-db pour l'envoyer)${NC}"
 fi
 echo -e "${BOLD}════════════════════════════════════════════════${NC}"
 echo ""
@@ -64,6 +88,12 @@ echo ""
 # ─────────────────────────────────────────────────────────────────────────────
 deploy_front() {
     log "Déploiement vers ${FTP_PATH_FRONT}..."
+
+    local uploads_exclude=""
+    [ "$DEPLOY_UPLOADS" = "1" ] || uploads_exclude="--exclude-glob uploads/"
+    local tenant_file
+    tenant_file="$(mktemp)"
+    printf '%s\n' "$TENANT" > "$tenant_file"
 
     lftp -c "
 set ftp:ssl-allow yes
@@ -92,8 +122,17 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob '*.db' \
   --exclude-glob '*.db.bak-*' \
   --exclude-glob .DS_Store \
+  --exclude-glob .tenant \
+  --exclude-glob data/ \
+  --exclude-glob tenants/ \
+  --exclude-glob assets/tenants/ \
+  $uploads_exclude \
   --verbose \
   . ${FTP_PATH_FRONT}
+mirror --reverse --no-perms --no-umask --verbose tenants/$TENANT ${FTP_PATH_FRONT}tenants/$TENANT
+put tenants/.htaccess -o ${FTP_PATH_FRONT}tenants/.htaccess
+$( [ -d "assets/tenants/$TENANT" ] && echo "mirror --reverse --no-perms --no-umask --verbose assets/tenants/$TENANT ${FTP_PATH_FRONT}assets/tenants/$TENANT" )
+put $tenant_file -o ${FTP_PATH_FRONT}.tenant
 
 quit
 " 2>&1 | grep -v "^$" | while read line; do
@@ -109,24 +148,26 @@ chmod 755 ${FTP_PATH_FRONT}var
 quit
 " 2>/dev/null || true
 
+    rm -f "$tenant_file"
     ok "Frontend déployé → ${URL_FRONT}"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ENVOYER brocante.db (uniquement avec --with-db — écrase la base du serveur)
+# ENVOYER la base (uniquement avec --with-db — écrase la base du serveur)
 # ─────────────────────────────────────────────────────────────────────────────
 deploy_db() {
-    [ ! -f "brocante.db" ] && err "brocante.db introuvable en local."
-    warn "Envoi de brocante.db — la base du serveur va être remplacée par celle-ci."
+    [ ! -f "$DB_REL" ] && err "$DB_REL introuvable en local."
+    warn "Envoi de $DB_REL — la base du serveur va être remplacée par celle-ci."
     lftp -c "
 set ftp:ssl-allow yes
 set ftp:ssl-force no
 open ftp://$FTP_USER:$FTP_PASS@$FTP_SERVER
-put brocante.db -o ${FTP_PATH_FRONT}brocante.db
-chmod 664 ${FTP_PATH_FRONT}brocante.db
+mkdir -p -f ${FTP_PATH_FRONT}$(dirname "$DB_REL")
+put $DB_REL -o ${FTP_PATH_FRONT}$DB_REL
+chmod 664 ${FTP_PATH_FRONT}$DB_REL
 quit
 " 2>/dev/null || true
-    ok "brocante.db envoyé → ${FTP_PATH_FRONT}brocante.db"
+    ok "$DB_REL envoyé → ${FTP_PATH_FRONT}$DB_REL"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -165,8 +206,8 @@ echo -e "${GREEN}${BOLD}  🌐 Front : ${URL_FRONT}${NC}"
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════${NC}"
 echo ""
 if [ "$WITH_DB" = "0" ]; then
-    echo -e "${YELLOW}Rappel : brocante.db n'a pas été envoyé (défaut). Pour le tout premier${NC}"
-    echo -e "${YELLOW}déploiement, relancez avec : ./deploy-brocante.sh --with-db${NC}"
+    echo -e "${YELLOW}Rappel : ${DB_REL} n'a pas été envoyé (défaut). Pour le tout premier${NC}"
+    echo -e "${YELLOW}déploiement, relancez avec : ./deploy-brocante.sh --tenant ${TENANT} --with-db${NC}"
     echo ""
 fi
 echo "À vérifier côté serveur si ce n'est pas déjà fait :"

@@ -5,7 +5,8 @@ require_once __DIR__ . '/../includes/functions.php';
 $content = get_content();
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (hash_equals(ADMIN_PASSWORD, (string) ($_POST['password'] ?? ''))) {
+    // Sans mot de passe configuré, l'administration reste fermée.
+    if (ADMIN_PASSWORD !== '' && hash_equals(ADMIN_PASSWORD, (string) ($_POST['password'] ?? ''))) {
         $_SESSION['is_admin'] = true;
         header('Location: /admin/catalog.php');
         exit;
@@ -20,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <title>Administration — <?= h($content['site_name']) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+<?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>
   .login-wrap { max-width: 380px; margin: 14vh auto 0; padding: 0 24px; }

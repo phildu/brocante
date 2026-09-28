@@ -1,7 +1,9 @@
 <?php
-// Charge les données de démonstration dans la base. À exécuter une fois en CLI :
-//   php seed.php
-// Peut être relancé sans risque : il vide et recrée les données à chaque exécution.
+// Charge les données de démonstration du commerce actif dans sa base. En CLI :
+//   php seed.php                  (commerce actif : TENANT, .tenant ou petit-chalet)
+//   TENANT=mon-commerce php seed.php
+// Crée les tables manquantes (schema.sql) puis vide et recrée le contenu et
+// les produits — peut être relancé sans risque.
 
 if (php_sapi_name() !== 'cli') {
     http_response_code(403);
@@ -10,13 +12,18 @@ if (php_sapi_name() !== 'cli') {
 
 require_once __DIR__ . '/config.php';
 
-$data = json_decode(file_get_contents(__DIR__ . '/seed-data.json'), true, flags: JSON_THROW_ON_ERROR);
+if (!is_dir(dirname(DB_PATH))) {
+    mkdir(dirname(DB_PATH), 0775, true);
+}
 $pdo = db();
+$pdo->exec(file_get_contents(__DIR__ . '/schema.sql'));
+
+$data = json_decode(file_get_contents(tenant_path('seed_file')), true, flags: JSON_THROW_ON_ERROR);
 
 $pdo->exec('DELETE FROM content');
 $pdo->exec('DELETE FROM products');
 
-$b = $data['brand'] ?? ['name' => 'La Brocante du Petit Chalet', 'tagline' => 'Trouvailles chinées & pièces uniques'];
+$b = $data['brand'] ?? ['name' => tenant('name'), 'tagline' => tenant('tagline')];
 $h = $data['hero'];
 $s = $data['story'];
 $c = $data['contact'];
@@ -67,4 +74,4 @@ foreach ($data['products'] as $i => $p) {
     ]);
 }
 
-echo "Contenu et " . count($data['products']) . " pièces importés avec succès.\n";
+echo "« " . $b['name'] . " » : contenu et " . count($data['products']) . " produits importés dans " . DB_PATH . "\n";
