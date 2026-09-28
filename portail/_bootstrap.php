@@ -157,18 +157,6 @@ function php_export($value, int $level = 1): string
     return "[\n" . implode("\n", $lines) . "\n" . str_repeat('    ', $level - 1) . ']';
 }
 
-/** Mélange deux couleurs #rrggbb (t = 0 → a, t = 1 → b). */
-function mix_color(string $a, string $b, float $t): string
-{
-    $ca = sscanf($a, '#%02x%02x%02x');
-    $cb = sscanf($b, '#%02x%02x%02x');
-    $out = '#';
-    for ($i = 0; $i < 3; $i++) {
-        $out .= sprintf('%02x', (int) round($ca[$i] + ($cb[$i] - $ca[$i]) * $t));
-    }
-    return $out;
-}
-
 function valid_color(string $c, string $fallback): string
 {
     return preg_match('/^#[0-9a-fA-F]{6}$/', $c) ? strtolower($c) : $fallback;
@@ -216,6 +204,7 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
     $accent2 = valid_color((string) ($f['accent2'] ?? ''), '#6a6f3a');
     $bg = valid_color((string) ($f['bg'] ?? ''), '#f6f5f1');
     $ink = '#2b2620';
+    $palette = appearance_derive(['bg' => $bg, 'ink' => $ink, 'accent' => $accent, 'accent-2' => $accent2]);
 
     // Logo : fichier envoyé, sinon logo texte au nom du commerce, dans assets/tenants/<slug>/.
     $logoDir = PORTAIL_ROOT . "/assets/tenants/$slug";
@@ -243,18 +232,12 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
         'admin_password' => password_hash(trim((string) $f['admin_password']), PASSWORD_DEFAULT),
         'logo' => $logo,
         'logo_macaron' => $logo,
-        'colors' => [
-            'bg' => $bg,
-            'surface' => mix_color($bg, $ink, 0.06),
-            'surface-2' => mix_color($bg, $ink, 0.11),
-            'line' => mix_color($bg, $ink, 0.24),
-            'accent' => $accent,
-            'accent-2' => $accent2,
-            'sage' => $accent2,
-        ],
-        'colors_dark' => [
-            'accent' => mix_color($accent, '#ffffff', 0.35),
-            'accent-2' => mix_color($accent2, '#ffffff', 0.35),
+        // Palette complète (clair et sombre) calculée comme dans Administration → Apparence.
+        'colors' => $palette['light'],
+        'colors_dark' => $palette['dark'],
+        'fonts' => [
+            'display' => isset(APPEARANCE_FONTS['display'][$f['font_display'] ?? '']) ? $f['font_display'] : APPEARANCE_BASE_FONTS['display'],
+            'body' => isset(APPEARANCE_FONTS['body'][$f['font_body'] ?? '']) ? $f['font_body'] : APPEARANCE_BASE_FONTS['body'],
         ],
         'categories' => array_values($categories),
         'texts' => [

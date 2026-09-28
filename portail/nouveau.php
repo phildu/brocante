@@ -87,6 +87,23 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
           <label class="field">Couleur secondaire<input type="color" name="accent2" id="f-accent2" value="<?= e($v('accent2')) ?>"></label>
           <label class="field">Fond<input type="color" name="bg" id="f-bg" value="<?= e($v('bg')) ?>"></label>
         </div>
+        <div class="two">
+          <label class="field">Police des titres
+            <select name="font_display" id="f-font-display">
+              <?php foreach (APPEARANCE_FONTS['display'] as $font => [, , $style]): ?>
+                <option value="<?= e($font) ?>"<?= ($v('font_display') ?: APPEARANCE_BASE_FONTS['display']) === $font ? ' selected' : '' ?>><?= e("$font — $style") ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label class="field">Police des textes
+            <select name="font_body" id="f-font-body">
+              <?php foreach (APPEARANCE_FONTS['body'] as $font => [, , $style]): ?>
+                <option value="<?= e($font) ?>"<?= ($v('font_body') ?: APPEARANCE_BASE_FONTS['body']) === $font ? ' selected' : '' ?>><?= e("$font — $style") ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+        </div>
+        <p class="hint">Couleurs et polices restent modifiables ensuite dans l'administration du commerce, page « Apparence », avec un aperçu en direct.</p>
         <label class="field">Adresse du site<input name="url" id="f-url" value="<?= e($v('url')) ?>" placeholder="https://www.mon-commerce.fr"></label>
         <div class="two">
           <label class="field">Identifiant de l'administration<input name="admin_user" id="f-admin-user" required pattern="[A-Za-z0-9._@\-]{3,40}" maxlength="40" autocomplete="off" autocapitalize="none" value="<?= e($v('admin_user')) ?>" placeholder="ex. naty"></label>

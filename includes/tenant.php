@@ -159,6 +159,8 @@ function tenant_defaults(string $slug): array
     ];
 }
 
+require_once __DIR__ . '/appearance.php';
+
 /** Chemin absolu d'un fichier déclaré relativement à la racine du projet. */
 function tenant_path(string $key): string
 {
@@ -170,21 +172,47 @@ function tenant_text(string $key): string
     return (string) tenant('texts.' . $key, '');
 }
 
-/** Balises <head> propres au commerce : polices et couleurs. */
+/**
+ * Balises <head> propres au commerce : polices et couleurs. L'apparence
+ * réglée dans l'administration (includes/appearance.php) prime sur les
+ * couleurs et polices du tenant.php.
+ */
 function tenant_head_html(): string
 {
-    $html = '<link href="' . h(tenant('fonts_url')) . '" rel="stylesheet">';
+    $lightColors = tenant('colors', []);
+    $darkColors = tenant('colors_dark', []);
+    $fontsUrl = tenant('fonts_url');
+    $fontVars = [];
+
+    $saved = function_exists('appearance_saved') ? appearance_saved() : null;
+    if ($saved) {
+        $palette = appearance_derive($saved['colors'] ?? []);
+        $lightColors = $palette['light'];
+        $darkColors = $palette['dark'];
+    }
+    $fonts = $saved['fonts'] ?? tenant('fonts', []);
+    if (!empty($fonts['display']) || !empty($fonts['body'])) {
+        $display = $fonts['display'] ?? APPEARANCE_BASE_FONTS['display'];
+        $body = $fonts['body'] ?? APPEARANCE_BASE_FONTS['body'];
+        $fontsUrl = appearance_fonts_url($display, $body);
+        $fontVars = [
+            'font-display' => appearance_font_stack('display', $display),
+            'font-body' => appearance_font_stack('body', $body),
+        ];
+    }
+
+    $html = '<link href="' . h($fontsUrl) . '" rel="stylesheet">';
     $vars = static function (array $colors): string {
         $css = '';
         foreach ($colors as $name => $value) {
-            if (preg_match('/^[a-z0-9-]+$/', $name) && preg_match('/^[#(),.%\w\s-]+$/', $value)) {
+            if (preg_match('/^[a-z0-9-]+$/', $name) && preg_match('/^[#(),.%\w\s"\'-]+$/', (string) $value) && $value !== '') {
                 $css .= "--$name:$value;";
             }
         }
         return $css;
     };
-    $light = $vars(tenant('colors', []));
-    $dark = $vars(tenant('colors_dark', []));
+    $light = $vars($lightColors + $fontVars);
+    $dark = $vars($darkColors);
     $css = '';
     // Sélecteurs « html:root » : plus prioritaires que ceux de style.css,
     // chargé après ces balises.

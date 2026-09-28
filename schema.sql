@@ -143,3 +143,10 @@ CREATE TABLE IF NOT EXISTS orders (
   items TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Réglages divers du commerce (ex. « appearance » : palette et typographie
+-- choisies dans Administration → Apparence), au format JSON.
+CREATE TABLE IF NOT EXISTS settings (
+  name TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

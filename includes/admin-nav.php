@@ -15,6 +15,7 @@ $adminNavItems = [
     'banners' => ['/admin/banners.php', 'Bandeaux de page'],
     'media' => ['/admin/media.php', 'Médiathèque'],
     'shipping' => ['/admin/shipping.php', 'Frais de port'],
+    'apparence' => ['/admin/appearance.php', 'Apparence'],
     'reglages' => ['/admin/index.php', 'Réglages du site'],
 ];
 $adminNav = $adminNav ?? '';

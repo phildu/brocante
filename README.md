@@ -53,6 +53,17 @@ dans le dossier du projet : il ne répond qu'en local (hôte `.test`,
 `localhost` ou `127.0.0.1`) et n'est jamais déployé. Pensez à ajouter à git
 les dossiers `tenants/<slug>` et `assets/tenants/<slug>` qu'il crée.
 
+## Apparence (couleurs et typographie)
+
+Dans l'administration de chaque commerce, page **Apparence** : palettes toutes
+prêtes ou 4 couleurs au choix (fond, texte, principale, secondaire), polices
+des titres et des textes parmi une sélection Google Fonts, aperçu en direct
+(clair et sombre) et indicateur de contraste. Les nuances intermédiaires et le
+thème sombre sont calculés automatiquement (`includes/appearance.php`).
+L'apparence est enregistrée dans la base du commerce (table `settings`) et
+prime sur les couleurs et polices de son `tenant.php` ; « Revenir à
+l'apparence d'origine » l'efface.
+
 ## Connexion à l'administration
 
 `/admin/` demande un **identifiant** et un **mot de passe** :
