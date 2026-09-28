@@ -90,7 +90,12 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
         <label class="field">Adresse du site<input name="url" id="f-url" value="<?= e($v('url')) ?>" placeholder="https://www.mon-commerce.fr"></label>
         <div class="two">
           <label class="field">Identifiant de l'administration<input name="admin_user" id="f-admin-user" required pattern="[a-z0-9._@\-]{3,40}" maxlength="40" autocomplete="off" autocapitalize="none" value="<?= e($v('admin_user')) ?>" placeholder="ex. naty"></label>
-          <label class="field">Mot de passe de l'administration<input type="password" name="admin_password" id="f-admin" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum"></label>
+          <label class="field">Mot de passe de l'administration
+            <span class="password-field">
+              <input type="password" name="admin_password" id="f-admin" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum">
+              <button type="button" class="password-toggle" id="f-admin-toggle" aria-controls="f-admin" aria-pressed="false">Afficher</button>
+            </span>
+          </label>
         </div>
         <p class="hint">Notez-les : le mot de passe est enregistré sous forme chiffrée et ne pourra pas être relu.</p>
       </div>
@@ -195,6 +200,17 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
   }
   document.getElementById('builder').addEventListener('input', function (e) {
     if (/^c\d$/.test(e.target.id)) refreshCats();
+  });
+
+  // Afficher / masquer le mot de passe saisi.
+  var pwd = document.getElementById('f-admin');
+  var pwdToggle = document.getElementById('f-admin-toggle');
+  pwdToggle.addEventListener('click', function () {
+    var show = pwd.type === 'password';
+    pwd.type = show ? 'text' : 'password';
+    pwdToggle.textContent = show ? 'Masquer' : 'Afficher';
+    pwdToggle.setAttribute('aria-pressed', String(show));
+    pwd.focus();
   });
   refreshCats();
 

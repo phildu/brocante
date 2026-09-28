@@ -38,6 +38,14 @@ if (!admin_password_configured()) {
     padding: 12px 14px; font-family: var(--font-body); font-size: 0.95rem; margin-bottom: 16px;
   }
   .login-error { color: var(--accent); font-size: 0.85rem; margin-bottom: 14px; font-family: var(--font-mono); }
+  .password-field { position: relative; margin-bottom: 16px; }
+  .login-box .password-field input { margin-bottom: 0; padding-right: 92px; }
+  .password-toggle {
+    position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+    background: none; border: 0; padding: 6px 8px; cursor: pointer;
+    color: var(--ink-soft); font-family: var(--font-body); font-size: 0.82rem; text-decoration: underline;
+  }
+  .password-toggle:hover, .password-toggle:focus-visible { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -49,9 +57,27 @@ if (!admin_password_configured()) {
     <?php if ($error): ?><p class="login-error"><?= h($error) ?></p><?php endif; ?>
     <form method="post">
       <input type="text" name="username" placeholder="Identifiant" aria-label="Identifiant" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required value="<?= h($_POST['username'] ?? '') ?>">
-      <input type="password" name="password" placeholder="Mot de passe" aria-label="Mot de passe" autocomplete="current-password" required>
+      <div class="password-field">
+        <input type="password" name="password" id="password" placeholder="Mot de passe" aria-label="Mot de passe" autocomplete="current-password" required>
+        <button type="button" class="password-toggle" id="password-toggle" aria-controls="password" aria-pressed="false">Afficher</button>
+      </div>
       <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Se connecter</button>
     </form>
+    <script>
+    (function () {
+      var input = document.getElementById('password');
+      var toggle = document.getElementById('password-toggle');
+      toggle.addEventListener('click', function () {
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        toggle.textContent = show ? 'Masquer' : 'Afficher';
+        toggle.setAttribute('aria-pressed', String(show));
+        input.focus();
+      });
+      // Masque à nouveau avant l'envoi, pour que le navigateur propose d'enregistrer le mot de passe.
+      input.form.addEventListener('submit', function () { input.type = 'password'; });
+    })();
+    </script>
   </div>
 </div>
 </body>

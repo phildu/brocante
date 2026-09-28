@@ -214,3 +214,10 @@
   .toolbar a.btn { color: inherit; }
   .confirm { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--warn); border-radius: 8px; grid-column: 2; font-size: 0.85rem; }
   a.btn:not(.btn-primary) { color: var(--ink); }
+  .password-field { position: relative; display: block; }
+  label.field .password-field input { padding-right: 84px; }
+  .password-toggle {
+    position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+    background: none; border: 0; padding: 4px 8px; cursor: pointer;
+    color: var(--accent); font-size: 0.8rem; font-weight: 600;
+  }
