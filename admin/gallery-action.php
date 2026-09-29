@@ -162,6 +162,10 @@ switch ($action) {
             flash_set('Photo introuvable.', 'error');
             break;
         }
+        if (is_cutout_photo($row)) {
+            flash_set('Photo détourée : utilisez « Format 3:2 + 9:16 » (objet entier, ombre portée, sans IA) — l\'IA inventerait un décor autour.', 'error');
+            break;
+        }
         $kind = queue_format_completion($row);
         $what = match ($kind) {
             'desktop' => 'Ce visuel est en 3:2 : sa version smartphone (9:16) se génère maintenant, décor prolongé en hauteur.',
@@ -193,11 +197,11 @@ switch ($action) {
             break;
         }
         $isPng = str_ends_with($desktop, '.png');
-        $withShadow = $shadow && $isPng;
+        $withShadow = $shadow && ($isPng || is_cutout_photo($row));
         $label = mb_substr(preg_replace('/ — 3:2( avec ombre)?$/u', '', $row['label']) . ' — 3:2' . ($withShadow ? ' avec ombre' : ''), 0, 80);
         add_product_photo($ref, $desktop, $label, (bool) $row['is_illustration'], 'photo', $mobile);
         flash_set("« $label » ajoutée à la galerie : format 3:2 sur ordinateur et 9:16 sur smartphone, photo entière"
-            . ($isPng ? ', fond transparent conservé' . ($withShadow ? ', ombre portée ajoutée.' : '.') : ', fond prolongé autour.'));
+            . ($isPng ? ', fond transparent conservé' : ', fond prolongé autour') . ($withShadow ? ', ombre portée ajoutée.' : '.'));
         break;
     }
 

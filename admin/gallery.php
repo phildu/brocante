@@ -244,7 +244,8 @@ $flash = flash_get();
               </form>
               <button type="button" class="btn-small" data-crop-open data-mode="replace" data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>">Recadrer</button>
               <button type="button" class="btn-small" data-crop-open data-mode="detail" data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>">Créer un détail</button>
-              <?php if ($ph['is_illustration'] && empty($ph['path_mobile']) && empty($ph['mobile_pending'])): ?>
+              <?php $isCutout = is_cutout_photo($ph); ?>
+              <?php if ($ph['is_illustration'] && !$isCutout && empty($ph['path_mobile']) && empty($ph['mobile_pending'])): ?>
               <?php
                 // Le bouton annonce le format manquant, d'après le format réel du visuel.
                 [$missingLabel, $missingTitle] = match (image_format_kind(__DIR__ . '/../' . $ph['path'])) {
@@ -260,12 +261,12 @@ $flash = flash_get();
                 <button type="submit" class="btn-small" style="width:100%;" title="<?= h($missingTitle) ?>"><?= h($missingLabel) ?></button>
               </form>
               <?php endif; ?>
-              <?php if (!$ph['is_illustration'] && empty($ph['path_mobile'])): ?>
+              <?php if ((!$ph['is_illustration'] || $isCutout) && empty($ph['path_mobile'])): ?>
               <form method="post" action="/admin/gallery-action.php">
                 <input type="hidden" name="ref" value="<?= h($ref) ?>">
                 <input type="hidden" name="action" value="fit_formats">
                 <input type="hidden" name="photo_id" value="<?= (int) $ph['id'] ?>">
-                <?php if (str_ends_with(strtolower($ph['path']), '.png')): ?>
+                <?php if ($isCutout): ?>
                   <label class="featured-check" style="font-size:0.78rem;margin-bottom:4px;"><input type="checkbox" name="shadow" value="1" checked> Ombre portée</label>
                 <?php endif; ?>
                 <button type="submit" class="btn-small" style="width:100%;" title="Ajoute à la galerie une copie de cette photo en 3:2 (ordinateur) et 9:16 (smartphone), sans recadrage — transparente si la photo est détourée">▭ Format 3:2 + 9:16 → galerie</button>

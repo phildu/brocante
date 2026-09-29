@@ -552,7 +552,11 @@ function fit_ratio_file(string $srcAbsPath, float $ratio, string $baseName, int 
         [$cw, $ch] = [$w, $h];
     }
     $canvas = pad_image_to_ratio($src, $ratio, $fill, (int) min($maxDim, round(max($cw, $ch))), $transparent);
-    if ($shadow && $transparent) $canvas = add_drop_shadow($canvas);
+    if ($shadow && $transparent) {
+        $canvas = add_drop_shadow($canvas);
+    } elseif ($shadow && ($bg = image_uniform_edge_color($src))) {
+        $canvas = add_drop_shadow_on_color($canvas, $bg);
+    }
     ob_start();
     $transparent ? imagepng($canvas, null, 6) : imagejpeg($canvas, null, $quality);
     $bytes = (string) ob_get_clean();
@@ -830,6 +834,38 @@ function add_drop_shadow(GdImage $canvas, float $opacity = 0.38, float $contact 
     return $out;
 }
 
+/**
+ * Ombre portée pour un objet détouré sur fond uni (repli IA « fond blanc ») :
+ * l'objet est isolé par écart de couleur avec le fond, l'ombre calculée comme
+ * pour un PNG transparent (add_drop_shadow), puis le tout reposé sur le fond.
+ */
+function add_drop_shadow_on_color(GdImage $canvas, array $bg): GdImage
+{
+    $w = imagesx($canvas);
+    $h = imagesy($canvas);
+    $cut = imagecreatetruecolor($w, $h);
+    imagealphablending($cut, false);
+    imagesavealpha($cut, true);
+    for ($y = 0; $y < $h; $y++) {
+        for ($x = 0; $x < $w; $x++) {
+            $c = imagecolorat($canvas, $x, $y);
+            $r = ($c >> 16) & 0xFF; $g = ($c >> 8) & 0xFF; $b = $c & 0xFF;
+            $dist = abs($r - $bg[0]) + abs($g - $bg[1]) + abs($b - $bg[2]);
+            // 0 → fond (transparent), ≥ 36 → objet (opaque), fondu entre les deux.
+            $alpha = 127 - (int) round(min(1, max(0, ($dist - 12) / 24)) * 127);
+            imagesetpixel($cut, $x, $y, imagecolorallocatealpha($cut, $r, $g, $b, $alpha));
+        }
+    }
+    imagedestroy($canvas);
+    $shadowed = add_drop_shadow($cut);
+    $out = imagecreatetruecolor($w, $h);
+    imagefill($out, 0, 0, imagecolorallocate($out, ...$bg));
+    imagealphablending($out, true);
+    imagecopy($out, $shadowed, 0, 0, 0, 0, $w, $h);
+    imagedestroy($shadowed);
+    return $out;
+}
+
 /** Image détourée : quelques points du bord totalement transparents suffisent à le savoir. */
 function image_has_transparent_edge(GdImage $img): bool
 {
@@ -927,6 +963,18 @@ function generate_desktop_image(string $srcAbsPath, string $prompt, string $base
 }
 
 /**
+ * Photo détourée (vrai PNG transparent, ou repli IA sur fond blanc) : ses
+ * formats se font SANS IA (objet posé entier, marge, ombre portée) —
+ * jamais par prolongement du décor, qui inventerait une mise en situation.
+ */
+function is_cutout_photo(array $row): bool
+{
+    return str_starts_with((string) $row['label'], 'Détourée')
+        || (str_ends_with(strtolower((string) $row['path']), '.png')
+            && ($img = @imagecreatefrompng(__DIR__ . '/../' . $row['path'])) && image_has_transparent_edge($img));
+}
+
+/**
  * Format d'une image existante : 'desktop' (≈ 3:2), 'mobile' (≈ 9:16) ou
  * 'other' (carré, 4:3…), à 3 % près. null si illisible.
  */
@@ -1018,7 +1066,9 @@ function run_mobile_variant(int $photoId): array
     $job = json_decode((string) $row['mobile_pending'], true) ?: [];
     $target = ($job['target'] ?? 'mobile') === 'desktop' ? 'desktop' : 'mobile';
     $aspect = GENERATED_IMAGE_FORMATS[$target];
-    $srcRel = (string) ($job['src'] ?? $row['path']);
+    // Toujours le visuel lui-même (jamais la photo d'origine) : les deux
+    // formats montrent ainsi la même image.
+    $srcRel = (string) $row['path'];
     $srcAbs = realpath(__DIR__ . '/../' . $srcRel);
     $baseName = preg_replace('/-(mobile|desktop)(-[0-9a-f]{8})?$/', '', pathinfo($srcRel, PATHINFO_FILENAME)) . '-' . $target;
 
@@ -1050,8 +1100,7 @@ function run_mobile_variant(int $photoId): array
     if (!$srcAbs || !is_file($srcAbs) || !GEMINI_API_KEY) return $fallback();
 
     $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
-    $extend = !isset($job['prompt']); // ancien format de file : source d'origine + prompt complet
-    $bytes = generate_image_for_ratio($small, $extend ? build_extend_prompt($aspect) : (string) $job['prompt'], $aspect, 0, $extend);
+    $bytes = generate_image_for_ratio($small, build_extend_prompt($aspect), $aspect, 0, true);
     if ($small !== $srcAbs) @unlink($small);
     $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
 
