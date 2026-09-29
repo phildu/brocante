@@ -671,7 +671,7 @@
 
   .card-icon {
     width: 100%;
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 3 / 2;
     background: var(--surface-2);
     display: flex;
     align-items: center;
@@ -682,7 +682,8 @@
   .card.accent .card-icon svg { color: var(--accent); }
   .card.sage .card-icon svg { color: var(--sage); }
   .card.blue .card-icon svg { color: var(--accent-2); }
-  .card-icon img { width: 100%; height: 100%; object-fit: cover; }
+  /* contain : la photo n'est jamais recadrée (bandes sur fond --surface-2 si besoin). */
+  .card-icon img { width: 100%; height: 100%; object-fit: contain; }
 
   .quick-preview-overlay {
     position: fixed; inset: 0; z-index: 200;
@@ -718,7 +719,7 @@
   .thumb-autoplay { position: relative; width: 100%; height: 100%; }
   .thumb-slide {
     position: absolute; inset: 0;
-    width: 100%; height: 100%; object-fit: cover;
+    width: 100%; height: 100%; object-fit: contain;
     opacity: 0;
     transition: opacity 0.6s ease;
   }
@@ -1291,8 +1292,12 @@
     position: relative;
     background: var(--surface);
     border: 1px solid var(--line);
-    aspect-ratio: 1;
+    /* Format des visuels générés : 3:2 sur ordinateur, 9:16 sur smartphone. */
+    aspect-ratio: 3 / 2;
     overflow: hidden;
+  }
+  @media (max-width: 780px) {
+    .pg-main { aspect-ratio: 9 / 16; max-height: 82svh; margin-inline: auto; }
   }
 
   .pg-slide {
@@ -1306,6 +1311,7 @@
     transition: opacity 0.35s ease;
   }
   .pg-slide.is-active { opacity: 1; visibility: visible; }
+  .pg-slide picture { display: block; width: 100%; height: 100%; }
   .pg-slide img, .pg-slide video { width: 100%; height: 100%; object-fit: contain; }
   .pg-slide svg { width: 40%; height: 40%; color: var(--ink-soft); }
 

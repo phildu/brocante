@@ -37,7 +37,7 @@ include __DIR__ . '/includes/header.php';
               <?php if ($g['type'] === 'video'): ?>
                 <video src="/<?= h($g['src']) ?>" controls muted loop playsinline></video>
               <?php else: ?>
-                <img src="/<?= h($g['src']) ?>" alt="<?= h($product['name']) ?> — <?= h($g['label']) ?>">
+                <?= responsive_image_html($g['src'], $g['src_mobile'] ?? null, $product['name'] . ' — ' . $g['label']) ?>
               <?php endif; ?>
               <?php if ($g['illustration']): ?>
                 <span class="pg-illustration-tag">Vue d'illustration générée par IA — pas une photo de cette pièce précise</span>

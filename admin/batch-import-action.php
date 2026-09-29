@@ -373,12 +373,15 @@ switch ($action) {
         }
 
         // 2) Mise en situation à partir du détourage.
+        // (en deux cadrages : 3:2 ordinateur et 9:16 smartphone)
         $ambiancePath = null;
+        $ambianceMobile = null;
         if (GEMINI_API_KEY) {
-            $detoureAbs = $root . '/' . $detourePath;
-            $ambianceBytes = gemini_generate_image($detoureAbs, build_ambiance_prompt(''), 1);
-            if ($ambianceBytes) {
-                $ambiancePath = save_binary_photo($ambianceBytes, 'batch-ambiance', 'jpg');
+            @set_time_limit(180);
+            $pair = generate_image_pair($root . '/' . $detourePath, build_ambiance_prompt(''), 'batch-ambiance');
+            if ($pair) {
+                $ambiancePath = $pair['desktop'];
+                $ambianceMobile = $pair['mobile'];
             }
         }
 
@@ -422,7 +425,7 @@ switch ($action) {
         }
         add_product_photo($ref, $detourePath, $detoure['label'], $detoure['illustration']);
         if ($ambiancePath) {
-            add_product_photo($ref, $ambiancePath, 'Ambiance', true);
+            add_product_photo($ref, $ambiancePath, 'Ambiance', true, 'photo', $ambianceMobile);
         }
 
         $batch['groups'][$groupIndex]['status'] = 'done';

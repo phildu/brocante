@@ -122,12 +122,12 @@ switch ($action) {
         }
         $source = $detoure ?? (quick_add_source_photos($product['ref'])[0] ?? null);
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à mettre en situation.']);
-        $bytes = gemini_generate_image($root . '/' . $source['path'], build_ambiance_prompt(trim((string) ($_POST['notes'] ?? ''))), 1);
-        if (!$bytes) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
-        $path = save_binary_photo($bytes, 'product-' . $product['ref'] . '-ambiance', 'jpg');
-        if (!$path) quick_add_reply(['ok' => false, 'error' => 'Échec de l\'enregistrement de la mise en situation.']);
-        add_product_photo($product['ref'], $path, 'Ambiance', true);
-        quick_add_reply(['ok' => true, 'path' => $path, 'label' => 'Ambiance']);
+        @set_time_limit(180);
+        $pair = generate_image_pair($root . '/' . $source['path'], build_ambiance_prompt(trim((string) ($_POST['notes'] ?? ''))), 'product-' . $product['ref'] . '-ambiance');
+        if (!$pair) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
+        add_product_photo($product['ref'], $pair['desktop'], 'Ambiance', true, 'photo', $pair['mobile']);
+        // Le téléphone affiche la version 9:16 quand elle existe.
+        quick_add_reply(['ok' => true, 'path' => $pair['mobile'] ?? $pair['desktop'], 'label' => 'Ambiance']);
     }
 
     case 'sheet': {

@@ -79,6 +79,11 @@ function db(): PDO
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
         $pdo->exec('PRAGMA foreign_keys = ON');
+        // Bases créées avant l'ajout des visuels en deux formats.
+        $photoColumns = $pdo->query('PRAGMA table_info(product_photos)')->fetchAll(PDO::FETCH_COLUMN, 1);
+        if ($photoColumns && !in_array('path_mobile', $photoColumns, true)) {
+            $pdo->exec('ALTER TABLE product_photos ADD COLUMN path_mobile TEXT');
+        }
     }
     return $pdo;
 }

@@ -324,6 +324,7 @@ function product_gallery(array $p): array
     return array_map(fn($r) => [
         'id' => (int) $r['id'],
         'src' => $r['path'],
+        'src_mobile' => $r['path_mobile'] ?? null,
         'label' => $r['label'],
         'illustration' => (bool) $r['is_illustration'],
         'type' => $r['type'] ?? 'photo',
@@ -619,7 +620,11 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
  * with a short backoff since rate limiting (429) and empty responses from
  * this API are common and usually transient.
  */
-function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3): ?string
+/**
+ * @param string|null $aspectRatio Format de l'image produite (« 3:2 », « 9:16 »…),
+ *  demandé au modèle : l'image est composée pour ce cadre, sans recadrage après coup.
+ */
+function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3, ?string $aspectRatio = null): ?string
 {
     if (!GEMINI_API_KEY) return null;
 
@@ -635,6 +640,9 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
             ],
         ]],
     ];
+    if ($aspectRatio !== null) {
+        $payload['generationConfig'] = ['imageConfig' => ['aspectRatio' => $aspectRatio]];
+    }
 
     $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=' . GEMINI_API_KEY;
 
@@ -652,7 +660,12 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
 
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
-            $b64 = $data['candidates'][0]['content']['parts'][0]['inlineData']['data'] ?? null;
+            // L'image n'est pas toujours la première partie (le modèle peut
+            // la faire précéder d'un court texte).
+            $b64 = null;
+            foreach ($data['candidates'][0]['content']['parts'] ?? [] as $part) {
+                if (!empty($part['inlineData']['data'])) { $b64 = $part['inlineData']['data']; break; }
+            }
             if ($b64) return base64_decode($b64);
             $reason = $data['candidates'][0]['finishReason'] ?? $data['promptFeedback']['blockReason'] ?? 'no image in response';
             error_log("gemini_generate_image attempt $attempt: HTTP $status but no image ($reason)");
@@ -676,6 +689,36 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
  * @param string[] $extraAbsPaths Autres photos du même objet (autres angles),
  *  envoyées à la suite de la première dans la même requête.
  */
+/** Formats des visuels générés : ordinateur (3:2) et smartphone (9:16). */
+const GENERATED_IMAGE_FORMATS = ['desktop' => '3:2', 'mobile' => '9:16'];
+
+/**
+ * Génère un visuel dans les deux formats : ['desktop' => chemin, 'mobile' => chemin|null],
+ * ou null si la version ordinateur a échoué (la version smartphone est facultative :
+ * sans elle, la version ordinateur s'affiche en entier sur mobile).
+ */
+function generate_image_pair(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1): ?array
+{
+    $desktop = gemini_generate_image($srcAbsPath, $prompt, $retries, GENERATED_IMAGE_FORMATS['desktop']);
+    if (!$desktop) return null;
+    $desktopPath = save_binary_photo($desktop, $baseName, 'jpg', 1800);
+    if (!$desktopPath) return null;
+    $mobile = gemini_generate_image($srcAbsPath, $prompt, $retries, GENERATED_IMAGE_FORMATS['mobile']);
+    $mobilePath = $mobile ? save_binary_photo($mobile, $baseName . '-mobile', 'jpg', 1800) : null;
+    return ['desktop' => $desktopPath, 'mobile' => $mobilePath];
+}
+
+/**
+ * <img>, ou <picture> servant la version smartphone (9:16) aux écrans étroits
+ * quand elle existe. Chemins relatifs à la racine web.
+ */
+function responsive_image_html(string $src, ?string $srcMobile, string $alt, string $class = ''): string
+{
+    $img = '<img src="/' . h($src) . '" alt="' . h($alt) . '"' . ($class !== '' ? ' class="' . h($class) . '"' : '') . '>';
+    if (!$srcMobile) return $img;
+    return '<picture><source media="(max-width: 780px)" srcset="/' . h($srcMobile) . '">' . $img . '</picture>';
+}
+
 function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1, array $extraAbsPaths = []): ?string
 {
     if (!GEMINI_API_KEY) return null;
@@ -1433,10 +1476,10 @@ function next_photo_sort_order(string $ref): int
     return (int) $stmt->fetchColumn();
 }
 
-function add_product_photo(string $ref, string $path, string $label, bool $illustration = false, string $type = 'photo'): int
+function add_product_photo(string $ref, string $path, string $label, bool $illustration = false, string $type = 'photo', ?string $pathMobile = null): int
 {
-    $stmt = db()->prepare('INSERT INTO product_photos (product_ref, path, label, is_illustration, type, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$ref, $path, $label, $illustration ? 1 : 0, $type, next_photo_sort_order($ref)]);
+    $stmt = db()->prepare('INSERT INTO product_photos (product_ref, path, path_mobile, label, is_illustration, type, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$ref, $path, $pathMobile, $label, $illustration ? 1 : 0, $type, next_photo_sort_order($ref)]);
     $id = (int) db()->lastInsertId();
     sync_cover_photo($ref);
     return $id;
