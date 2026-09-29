@@ -1332,6 +1332,9 @@
   }
   .pg-slide.is-active { opacity: 1; visibility: visible; }
   .pg-slide picture { display: block; width: 100%; height: 100%; }
+  /* Visuels réservés à un type d'écran (3:2 ordinateur, 9:16 smartphone). */
+  @media (min-width: 781px) { .pg-only-mobile { display: none !important; } }
+  @media (max-width: 780px) { .pg-only-desktop { display: none !important; } }
   .pg-slide img, .pg-slide video { width: 100%; height: 100%; object-fit: contain; }
   .pg-slide svg { width: 40%; height: 40%; color: var(--ink-soft); }
 

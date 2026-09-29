@@ -33,7 +33,7 @@ include __DIR__ . '/includes/header.php';
       <?php if ($gallery): ?>
         <div class="pg-main">
           <?php foreach ($gallery as $i => $g): ?>
-            <div class="pg-slide<?= $i === 0 ? ' is-active' : '' ?>" data-slide="<?= $i ?>">
+            <div class="pg-slide<?= $i === 0 ? ' is-active' : '' ?><?= $g['only'] ? ' pg-only-' . $g['only'] : '' ?>" data-slide="<?= $i ?>">
               <?php if ($g['type'] === 'video'): ?>
                 <video src="/<?= h($g['src']) ?>" controls muted loop playsinline></video>
               <?php else: ?>
@@ -52,7 +52,7 @@ include __DIR__ . '/includes/header.php';
         <?php if (count($gallery) > 1): ?>
           <div class="pg-thumbs">
             <?php foreach ($gallery as $i => $g): ?>
-              <button type="button" class="pg-thumb<?= $i === 0 ? ' is-active' : '' ?>" data-goto="<?= $i ?>">
+              <button type="button" class="pg-thumb<?= $i === 0 ? ' is-active' : '' ?><?= $g['only'] ? ' pg-only-' . $g['only'] : '' ?>" data-goto="<?= $i ?>">
                 <?php if ($g['type'] === 'video'): ?>
                   <video src="/<?= h($g['src']) ?>" muted></video>
                 <?php else: ?>
@@ -126,21 +126,38 @@ include __DIR__ . '/includes/header.php';
 (function () {
   var root = document.querySelector('.product-gallery');
   if (!root) return;
-  var slides = root.querySelectorAll('.pg-slide');
-  var thumbs = root.querySelectorAll('.pg-thumb');
-  if (slides.length < 2) return;
-  var current = 0;
+  var allSlides = Array.prototype.slice.call(root.querySelectorAll('.pg-slide'));
+  var allThumbs = Array.prototype.slice.call(root.querySelectorAll('.pg-thumb'));
+  // 3:2 sur ordinateur, 9:16 sur smartphone : seuls les visuels du format de
+  // l'écran (classes pg-only-*, voir product_gallery()) font partie du défilement.
+  var narrow = window.matchMedia('(max-width: 780px)');
+  var slides = [], current = 0;
 
   function show(i) {
+    if (!slides.length) return;
     current = (i + slides.length) % slides.length;
-    slides.forEach(function (s, idx) { s.classList.toggle('is-active', idx === current); });
-    thumbs.forEach(function (t, idx) { t.classList.toggle('is-active', idx === current); });
+    var active = slides[current];
+    allSlides.forEach(function (s) { s.classList.toggle('is-active', s === active); });
+    allThumbs.forEach(function (t) { t.classList.toggle('is-active', t.dataset.goto === active.dataset.slide); });
   }
+  function refresh() {
+    var hidden = narrow.matches ? 'pg-only-desktop' : 'pg-only-mobile';
+    slides = allSlides.filter(function (s) { return !s.classList.contains(hidden); });
+    var multi = slides.length > 1;
+    root.querySelectorAll('.pg-arrow, .pg-thumbs').forEach(function (el) { el.style.display = multi ? '' : 'none'; });
+    show(0);
+  }
+  refresh();
+  (narrow.addEventListener ? narrow.addEventListener('change', refresh) : narrow.addListener(refresh));
+  if (allSlides.length < 2) return;
 
   root.querySelector('.pg-prev')?.addEventListener('click', function () { show(current - 1); });
   root.querySelector('.pg-next')?.addEventListener('click', function () { show(current + 1); });
-  thumbs.forEach(function (t) {
-    t.addEventListener('click', function () { show(parseInt(t.dataset.goto, 10)); });
+  allThumbs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      var idx = slides.findIndex(function (s) { return s.dataset.slide === t.dataset.goto; });
+      if (idx >= 0) show(idx);
+    });
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'ArrowLeft') show(current - 1);

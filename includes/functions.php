@@ -261,6 +261,12 @@ function next_ref(): string
 function product_media_html(array $p, ?array $gallery = null): string
 {
     $gallery ??= product_gallery($p);
+    // Vignettes au format ordinateur : sans les visuels réservés au smartphone.
+    $cardGallery = array_values(array_filter($gallery, fn($g) => $g['only'] !== 'mobile')) ?: $gallery;
+    if (count($cardGallery) === 1 && $cardGallery[0]['type'] !== 'video') {
+        return '<img src="/' . h($cardGallery[0]['src']) . '" alt="' . h($p['name']) . '">';
+    }
+    $gallery = $cardGallery;
     if (count($gallery) > 1) {
         $slides = '';
         foreach ($gallery as $i => $g) {
@@ -321,14 +327,38 @@ function sync_cover_photo(string $ref): void
 function product_gallery(array $p): array
 {
     $rows = array_values(array_filter(product_photos_list($p['ref']), fn($r) => !$r['is_hidden']));
-    return array_map(fn($r) => [
-        'id' => (int) $r['id'],
-        'src' => $r['path'],
-        'src_mobile' => $r['path_mobile'] ?? null,
-        'label' => $r['label'],
-        'illustration' => (bool) $r['is_illustration'],
-        'type' => $r['type'] ?? 'photo',
-    ], $rows);
+    $gallery = array_map(function ($r) {
+        $isVideo = ($r['type'] ?? 'photo') === 'video';
+        $kind = $isVideo ? null : image_format_kind(__DIR__ . '/../' . $r['path']);
+        // Règle d'affichage : 3:2 sur ordinateur, 9:16 sur smartphone.
+        // Un visuel qui n'existe qu'en 3:2 n'est montré que sur ordinateur,
+        // qu'en 9:16 que sur smartphone ; les autres formats (photos réelles
+        // 4:3, carrées…) restent visibles partout, en entier.
+        $mobile = $r['path_mobile'] ?: ($kind === 'mobile' ? $r['path'] : null);
+        $only = match (true) {
+            $kind === 'mobile' && !$r['path_mobile'] => 'mobile',
+            $kind === 'desktop' && !$r['path_mobile'] => 'desktop',
+            default => null,
+        };
+        return [
+            'id' => (int) $r['id'],
+            'src' => $r['path'],
+            'src_mobile' => $mobile !== $r['path'] ? $mobile : null,
+            'only' => $only,
+            'label' => $r['label'],
+            'illustration' => (bool) $r['is_illustration'],
+            'type' => $r['type'] ?? 'photo',
+        ];
+    }, $rows);
+    // Jamais d'écran sans image : si un type d'écran n'a aucun visuel à son
+    // format, on y montre quand même les autres (en entier).
+    foreach (['desktop' => 'mobile', 'mobile' => 'desktop'] as $screen => $other) {
+        if ($gallery && !array_filter($gallery, fn($g) => $g['only'] !== $other)) {
+            foreach ($gallery as &$g) $g['only'] = null;
+            unset($g);
+        }
+    }
+    return $gallery;
 }
 
 function product_card_html(array $p, int $i = 0): string
@@ -350,7 +380,8 @@ function product_card_html(array $p, int $i = 0): string
     $href = '/produit.php?ref=' . urlencode($p['ref']);
     $gallery = product_gallery($p);
     $preview = $gallery
-        ? ' data-quick-gallery="' . h(json_encode(array_map(fn($g) => ['src' => $g['src'], 'type' => $g['type']], $gallery))) . '" data-quick-name="' . h($p['name']) . '"'
+        // Aperçu au survol (ordinateur) : sans les visuels réservés au smartphone.
+        ? ' data-quick-gallery="' . h(json_encode(array_map(fn($g) => ['src' => $g['src'], 'type' => $g['type']], array_values(array_filter($gallery, fn($g) => $g['only'] !== 'mobile')) ?: $gallery))) . '" data-quick-name="' . h($p['name']) . '"'
         : '';
 
     $priceHtml = has_promo_price($p)
