@@ -69,7 +69,7 @@ switch ($action) {
         if (!$row) { flash_set('Photo introuvable.', 'error'); break; }
         $path = store_uploaded_photo('photo', 'product-' . $ref);
         if (!$path) { flash_set('Impossible de charger cette photo.', 'error'); break; }
-        $stmt = db()->prepare('UPDATE product_photos SET path = ?, path_mobile = NULL, is_illustration = 0 WHERE id = ? AND product_ref = ?');
+        $stmt = db()->prepare('UPDATE product_photos SET path = ?, path_mobile = NULL, mobile_pending = NULL, is_illustration = 0 WHERE id = ? AND product_ref = ?');
         $stmt->execute([$path, $id, $ref]);
         sync_cover_photo($ref);
         flash_set('Photo remplacée.');
@@ -114,7 +114,7 @@ switch ($action) {
         $binary = base64_decode($m[2]);
         $path = save_binary_photo($binary, 'product-' . $ref . '-recadre', 'jpg');
         if (!$path) { flash_set('Recadrage impossible.', 'error'); break; }
-        $stmt = db()->prepare('UPDATE product_photos SET path = ?, path_mobile = NULL WHERE id = ? AND product_ref = ?');
+        $stmt = db()->prepare('UPDATE product_photos SET path = ?, path_mobile = NULL, mobile_pending = NULL WHERE id = ? AND product_ref = ?');
         $stmt->execute([$path, $id, $ref]);
         sync_cover_photo($ref);
         flash_set('Photo recadrée.');
@@ -132,7 +132,7 @@ switch ($action) {
             flash_set('Rotation impossible.', 'error');
             break;
         }
-        db()->prepare('UPDATE product_photos SET path_mobile = NULL WHERE id = ?')->execute([$id]);
+        db()->prepare('UPDATE product_photos SET path_mobile = NULL, mobile_pending = NULL WHERE id = ?')->execute([$id]);
         flash_set('Photo tournée de 90°.');
         break;
     }
@@ -311,20 +311,22 @@ switch ($action) {
             'angle' => build_angle_prompt($anglePreset, $keywords),
             'complete' => build_complete_prompt($keywords),
         };
-        // Deux cadrages composés par l'IA : 3:2 (ordinateur) et 9:16 (smartphone).
-        @set_time_limit(180);
-        $pair = generate_image_pair($small, $prompt, 'product-' . $ref . '-' . $kind);
+        // Version ordinateur (3:2) maintenant ; la version smartphone (9:16)
+        // suit dans une requête séparée (queue_mobile_variant), pour rester
+        // sous le délai du serveur.
+        @set_time_limit(120);
+        $desktop = generate_desktop_image($small, $prompt, 'product-' . $ref . '-' . $kind);
         if ($small !== $srcAbs) @unlink($small);
 
-        if (!$pair) {
+        if (!$desktop) {
             flash_set('La génération a échoué (service IA indisponible ou surchargé) — réessayez dans un instant.', 'error');
             break;
         }
         $label = ['ambiance' => 'Ambiance', 'angle' => 'Autre angle', 'complete' => 'Objet complété'][$kind];
-        add_product_photo($ref, $pair['desktop'], $label, true, 'photo', $pair['mobile']);
+        $photoId = add_product_photo($ref, $desktop, $label, true);
+        queue_mobile_variant($photoId, $sourcePath, $prompt);
         $doneLabel = ['ambiance' => "La photo d'ambiance", 'angle' => 'La vue sous un autre angle', 'complete' => "Le complément de l'objet"][$kind];
-        flash_set("$doneLabel a été générée et ajoutée à la galerie"
-            . ($pair['mobile'] ? ' (format ordinateur 3:2 et smartphone 9:16).' : ' — la version smartphone 9:16 a échoué, la version 3:2 s\'affichera en entier sur mobile.'));
+        flash_set("$doneLabel a été générée et ajoutée à la galerie (format ordinateur 3:2). La version smartphone 9:16 se génère maintenant, sans rien bloquer.");
         break;
     }
 }

@@ -84,6 +84,9 @@ function db(): PDO
         if ($photoColumns && !in_array('path_mobile', $photoColumns, true)) {
             $pdo->exec('ALTER TABLE product_photos ADD COLUMN path_mobile TEXT');
         }
+        if ($photoColumns && !in_array('mobile_pending', $photoColumns, true)) {
+            $pdo->exec('ALTER TABLE product_photos ADD COLUMN mobile_pending TEXT');
+        }
     }
     return $pdo;
 }

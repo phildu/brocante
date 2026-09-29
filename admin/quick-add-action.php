@@ -122,12 +122,12 @@ switch ($action) {
         }
         $source = $detoure ?? (quick_add_source_photos($product['ref'])[0] ?? null);
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à mettre en situation.']);
-        @set_time_limit(180);
-        $pair = generate_image_pair($root . '/' . $source['path'], build_ambiance_prompt(trim((string) ($_POST['notes'] ?? ''))), 'product-' . $product['ref'] . '-ambiance');
-        if (!$pair) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
-        add_product_photo($product['ref'], $pair['desktop'], 'Ambiance', true, 'photo', $pair['mobile']);
-        // Le téléphone affiche la version 9:16 quand elle existe.
-        quick_add_reply(['ok' => true, 'path' => $pair['mobile'] ?? $pair['desktop'], 'label' => 'Ambiance']);
+        // Version 3:2 maintenant ; la 9:16 suit à part (queue_mobile_variant).
+        $prompt = build_ambiance_prompt(trim((string) ($_POST['notes'] ?? '')));
+        $desktop = generate_desktop_image($root . '/' . $source['path'], $prompt, 'product-' . $product['ref'] . '-ambiance');
+        if (!$desktop) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
+        queue_mobile_variant(add_product_photo($product['ref'], $desktop, 'Ambiance', true), $source['path'], $prompt);
+        quick_add_reply(['ok' => true, 'path' => $desktop, 'label' => 'Ambiance']);
     }
 
     case 'sheet': {

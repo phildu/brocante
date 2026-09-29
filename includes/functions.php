@@ -630,7 +630,8 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
             CURLOPT_POSTFIELDS => json_encode($payload),
-            CURLOPT_TIMEOUT => 90,
+            // Sous le délai habituel des serveurs web (60 s), pour ne pas finir en 504.
+            CURLOPT_TIMEOUT => 55,
         ]);
         $body = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -806,20 +807,65 @@ function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $as
     return $bytes ? fit_generated_to_ratio($bytes, $aspectRatio) : null;
 }
 
-/**
- * Génère un visuel dans les deux formats : ['desktop' => chemin, 'mobile' => chemin|null],
- * ou null si la version ordinateur a échoué (la version smartphone est facultative :
- * sans elle, la version ordinateur s'affiche en entier sur mobile).
- */
-function generate_image_pair(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1): ?array
+/** Visuel au format ordinateur (3:2), enregistré dans uploads/ : chemin, ou null. */
+function generate_desktop_image(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1): ?string
 {
-    $desktop = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries);
-    if (!$desktop) return null;
-    $desktopPath = save_binary_photo($desktop, $baseName, 'jpg', 1800);
-    if (!$desktopPath) return null;
-    $mobile = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['mobile'], $retries);
-    $mobilePath = $mobile ? save_binary_photo($mobile, $baseName . '-mobile', 'jpg', 1800) : null;
-    return ['desktop' => $desktopPath, 'mobile' => $mobilePath];
+    $bytes = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries);
+    return $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
+}
+
+/**
+ * Programme la version smartphone (9:16) d'un visuel : elle est générée
+ * ensuite par une requête à part (admin/mobile-variants.php, lancée par
+ * toutes les pages de l'admin), pour qu'aucune requête n'enchaîne deux
+ * générations et ne dépasse le délai du serveur (erreur 504).
+ * $srcRelPath : photo source conservée (chemin relatif à la racine).
+ */
+function queue_mobile_variant(int $photoId, string $srcRelPath, string $prompt): void
+{
+    db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')
+        ->execute([json_encode(['src' => $srcRelPath, 'prompt' => $prompt, 'attempts' => 0], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $photoId]);
+}
+
+/** Visuels dont la version smartphone reste à générer. */
+function pending_mobile_variant_ids(): array
+{
+    return array_map('intval', db()->query('SELECT id FROM product_photos WHERE mobile_pending IS NOT NULL ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/** Génère UNE version smartphone en attente : ['ok' => bool, 'path' => …, 'error' => …]. */
+function run_mobile_variant(int $photoId): array
+{
+    $stmt = db()->prepare('SELECT * FROM product_photos WHERE id = ?');
+    $stmt->execute([$photoId]);
+    $row = $stmt->fetch();
+    if (!$row || $row['mobile_pending'] === null) return ['ok' => true, 'done' => true];
+    $clear = db()->prepare('UPDATE product_photos SET mobile_pending = NULL WHERE id = ?');
+
+    $job = json_decode((string) $row['mobile_pending'], true) ?: [];
+    $srcAbs = realpath(__DIR__ . '/../' . ($job['src'] ?? ''));
+    if (!$srcAbs || !is_file($srcAbs) || empty($job['prompt']) || !GEMINI_API_KEY) {
+        $clear->execute([$photoId]);
+        return ['ok' => false, 'error' => 'Photo source ou clé Gemini introuvable : version smartphone abandonnée.'];
+    }
+
+    $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
+    $bytes = generate_image_for_ratio($small, (string) $job['prompt'], GENERATED_IMAGE_FORMATS['mobile'], 0);
+    if ($small !== $srcAbs) @unlink($small);
+    $path = $bytes ? save_binary_photo($bytes, pathinfo($row['path'], PATHINFO_FILENAME) . '-mobile', 'jpg', 1800) : null;
+
+    if (!$path) {
+        // Trois essais au plus, répartis sur les visites suivantes de l'admin.
+        $job['attempts'] = (int) ($job['attempts'] ?? 0) + 1;
+        if ($job['attempts'] >= 3) {
+            $clear->execute([$photoId]);
+            return ['ok' => false, 'error' => 'Version smartphone abandonnée après 3 essais : la version 3:2 s\'affiche en entier sur mobile.'];
+        }
+        db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')->execute([json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $photoId]);
+        return ['ok' => false, 'error' => 'Génération de la version smartphone échouée, nouvel essai plus tard.'];
+    }
+    db()->prepare('UPDATE product_photos SET path_mobile = ?, mobile_pending = NULL WHERE id = ?')->execute([$path, $photoId]);
+    return ['ok' => true, 'path' => $path];
 }
 
 /**

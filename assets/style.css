@@ -1121,6 +1121,14 @@
 
   .admin-block h2 { font-size: 1.3rem; margin-bottom: 4px; }
 
+  /* Génération des versions smartphone en arrière-plan (includes/admin-nav.php). */
+  .mobile-variants-status {
+    position: fixed; right: 16px; bottom: 16px; z-index: 300; max-width: min(360px, calc(100vw - 32px));
+    background: var(--ink); color: var(--bg); padding: 10px 14px; font-size: 0.82rem;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+  }
+  .mobile-variants-status[data-kind="error"] { background: var(--accent); color: #fff; }
+
   /* Ratio et taille en pixels sur les vignettes de l'admin (includes/admin-nav.php). */
   /* Classes doublées : l'emportent sur les « .xxx span » des pages (ex. sélecteur de médias). */
   .media-dims-wrap.media-dims-wrap { position: relative; display: block; padding: 0; }

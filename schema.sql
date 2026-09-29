@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS product_photos (
   product_ref TEXT NOT NULL,
   path TEXT NOT NULL,
   path_mobile TEXT, -- version smartphone (9:16) des visuels générés, sinon NULL
+  mobile_pending TEXT, -- version smartphone à générer (JSON : source, prompt), sinon NULL
   type TEXT NOT NULL DEFAULT 'photo',
   label TEXT NOT NULL DEFAULT 'Photo',
   is_illustration INTEGER NOT NULL DEFAULT 0,

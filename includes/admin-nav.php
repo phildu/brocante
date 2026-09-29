@@ -183,3 +183,50 @@ $adminIcon = static fn (string $name): string =>
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
 </script>
+<div class="mobile-variants-status" id="mobile-variants-status" hidden></div>
+<script>
+// Versions smartphone (9:16) en attente : générées une par une, chacune dans
+// sa propre requête (admin/mobile-variants.php), pendant qu'on continue à
+// travailler. Reprend automatiquement à la page suivante si on quitte celle-ci.
+(function () {
+  var box = document.getElementById('mobile-variants-status');
+  var running = false;
+  function post(data) {
+    var body = new FormData();
+    Object.keys(data).forEach(function (k) { body.append(k, data[k]); });
+    return fetch('/admin/mobile-variants.php', { method: 'POST', body: body, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { ok: false, error: 'pas de réponse du serveur' }; });
+  }
+  function show(text, kind) {
+    box.hidden = false;
+    box.dataset.kind = kind || '';
+    box.textContent = text;
+  }
+  function run() {
+    if (running) return;
+    running = true;
+    post({ action: 'list' }).then(function (r) {
+      var ids = (r && r.ok && r.ids) || [];
+      if (!ids.length) { running = false; return; }
+      var done = 0, failed = 0;
+      (function next(i) {
+        if (i >= ids.length) {
+          running = false;
+          show(failed
+            ? 'Versions smartphone : ' + done + ' prête(s), ' + failed + ' en échec (réessai automatique, 3 essais au plus).'
+            : '✓ Versions smartphone (9:16) prêtes — actualisez la page pour les voir.', failed ? 'error' : 'ok');
+          setTimeout(function () { box.hidden = true; }, 8000);
+          return;
+        }
+        show('Génération de la version smartphone (9:16)… ' + (i + 1) + ' / ' + ids.length);
+        post({ action: 'run', id: ids[i] }).then(function (res) {
+          if (res && res.ok) done++; else failed++;
+          next(i + 1);
+        });
+      })(0);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+})();
+</script>

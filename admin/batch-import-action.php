@@ -372,17 +372,12 @@ switch ($action) {
             break;
         }
 
-        // 2) Mise en situation à partir du détourage.
-        // (en deux cadrages : 3:2 ordinateur et 9:16 smartphone)
+        // 2) Mise en situation à partir du détourage, format 3:2 ; la version
+        // smartphone 9:16 suit à part (queue_mobile_variant).
         $ambiancePath = null;
-        $ambianceMobile = null;
         if (GEMINI_API_KEY) {
-            @set_time_limit(180);
-            $pair = generate_image_pair($root . '/' . $detourePath, build_ambiance_prompt(''), 'batch-ambiance');
-            if ($pair) {
-                $ambiancePath = $pair['desktop'];
-                $ambianceMobile = $pair['mobile'];
-            }
+            @set_time_limit(120);
+            $ambiancePath = generate_desktop_image($root . '/' . $detourePath, build_ambiance_prompt(''), 'batch-ambiance');
         }
 
         // 3) Fiche produit suggérée par l'IA à partir de la photo choisie —
@@ -425,7 +420,7 @@ switch ($action) {
         }
         add_product_photo($ref, $detourePath, $detoure['label'], $detoure['illustration']);
         if ($ambiancePath) {
-            add_product_photo($ref, $ambiancePath, 'Ambiance', true, 'photo', $ambianceMobile);
+            queue_mobile_variant(add_product_photo($ref, $ambiancePath, 'Ambiance', true), $detourePath, build_ambiance_prompt(''));
         }
 
         $batch['groups'][$groupIndex]['status'] = 'done';
