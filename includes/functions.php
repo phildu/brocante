@@ -679,18 +679,120 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
     return null;
 }
 
-/**
- * Calls Gemini (vision → texte) pour décrire une image : renvoie le texte
- * brut de la réponse, ou null en cas d'échec. Même style de retry que
- * gemini_generate_image() mais sur le modèle texte (bien plus rapide, une
- * requête synchrone reste raisonnable côté admin).
- */
-/**
- * @param string[] $extraAbsPaths Autres photos du même objet (autres angles),
- *  envoyées à la suite de la première dans la même requête.
- */
 /** Formats des visuels générés : ordinateur (3:2) et smartphone (9:16). */
 const GENERATED_IMAGE_FORMATS = ['desktop' => '3:2', 'mobile' => '9:16'];
+
+/** Part maximale du cadre occupée par la photo source posée sur la toile (le reste = marge). */
+const GENERATED_IMAGE_SUBJECT_FILL = 0.82;
+
+/**
+ * Consigne de cadrage ajoutée aux prompts de génération : l'objet reste
+ * entier, le fond est prolongé pour remplir le format — jamais de recadrage.
+ */
+function generated_framing_prompt(string $aspectRatio): string
+{
+    $orientation = $aspectRatio === '9:16' ? 'tall vertical (portrait)' : 'wide horizontal (landscape)';
+    return " FRAMING (mandatory): the output is a $aspectRatio $orientation image. The input image has "
+        . "already been placed on a canvas of that exact format, with the object fully visible and margin "
+        . "around it: keep this framing. The ENTIRE object must stay visible, never cut by any edge of the "
+        . "frame, with clear empty space on every side (at least 8% of the frame). Do not zoom in, do not crop, "
+        . "do not enlarge the object to fill the frame. Fill all the remaining space by extending the "
+        . "background / scene naturally (wall, floor, surface, room) — any flat or blurred area around the "
+        . "photo is empty canvas to replace with a coherent background.";
+}
+
+/** Ratio « 3:2 » → largeur / hauteur. */
+function aspect_ratio_value(string $aspectRatio): float
+{
+    [$w, $h] = array_map('floatval', explode(':', $aspectRatio)) + [1, 1];
+    return $h > 0 ? $w / $h : 1.0;
+}
+
+/**
+ * Pose une image, en entier et centrée, sur une toile au ratio demandé
+ * ($fill = part maximale du cadre qu'elle occupe) — jamais de recadrage.
+ * Fond : gris clair neutre si l'image est détourée (transparence), sinon
+ * la photo elle-même agrandie et très floutée, pour prolonger ses couleurs.
+ */
+function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $longSide = 1536): GdImage
+{
+    if (!imageistruecolor($src)) imagepalettetotruecolor($src);
+    $w = imagesx($src);
+    $h = imagesy($src);
+    [$cw, $ch] = $ratio >= 1 ? [$longSide, (int) round($longSide / $ratio)] : [(int) round($longSide * $ratio), $longSide];
+    $canvas = imagecreatetruecolor($cw, $ch);
+
+    // Transparence : quelques pixels du bord totalement transparents suffisent à le savoir.
+    $transparent = false;
+    foreach ([[0, 0], [$w - 1, 0], [0, $h - 1], [$w - 1, $h - 1], [intdiv($w, 2), 0], [0, intdiv($h, 2)]] as [$x, $y]) {
+        if (((imagecolorat($src, $x, $y) >> 24) & 0x7F) > 100) { $transparent = true; break; }
+    }
+    if ($transparent) {
+        imagefill($canvas, 0, 0, imagecolorallocate($canvas, 236, 234, 230));
+    } else {
+        // Flou : réduction à quelques pixels puis agrandissement (lissage bilinéaire).
+        $tiny = imagecreatetruecolor(16, max(1, (int) round(16 * $ch / $cw)));
+        $cover = max($cw / $w, $ch / $h);
+        $sw = $cw / $cover; $sh = $ch / $cover;
+        imagecopyresampled($tiny, $src, 0, 0, (int) (($w - $sw) / 2), (int) (($h - $sh) / 2), imagesx($tiny), imagesy($tiny), (int) $sw, (int) $sh);
+        // Palier intermédiaire flouté, sinon l'agrandissement laisse des pavés.
+        $mid = imagecreatetruecolor(max(1, intdiv($cw, 8)), max(1, intdiv($ch, 8)));
+        imagecopyresampled($mid, $tiny, 0, 0, 0, 0, imagesx($mid), imagesy($mid), imagesx($tiny), imagesy($tiny));
+        for ($i = 0; $i < 6; $i++) imagefilter($mid, IMG_FILTER_GAUSSIAN_BLUR);
+        imagecopyresampled($canvas, $mid, 0, 0, 0, 0, $cw, $ch, imagesx($mid), imagesy($mid));
+        imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+        imagedestroy($tiny);
+        imagedestroy($mid);
+    }
+
+    $scale = min($cw * $fill / $w, $ch * $fill / $h);
+    $nw = max(1, (int) round($w * $scale));
+    $nh = max(1, (int) round($h * $scale));
+    imagealphablending($canvas, true);
+    imagecopyresampled($canvas, $src, intdiv($cw - $nw, 2), intdiv($ch - $nh, 2), 0, 0, $nw, $nh, $w, $h);
+    return $canvas;
+}
+
+/**
+ * Source d'une génération : copie temporaire de la photo posée sur une toile
+ * au format visé, objet entier avec marge. Chemin temporaire à supprimer, ou null.
+ */
+function prepare_generation_source(string $srcAbsPath, string $aspectRatio): ?string
+{
+    $src = @imagecreatefromstring((string) @file_get_contents($srcAbsPath));
+    if (!$src) return null;
+    $canvas = pad_image_to_ratio($src, aspect_ratio_value($aspectRatio), GENERATED_IMAGE_SUBJECT_FILL);
+    $tmp = tempnam(sys_get_temp_dir(), 'gen') . '.jpg';
+    imagejpeg($canvas, $tmp, 90);
+    imagedestroy($src);
+    imagedestroy($canvas);
+    return $tmp;
+}
+
+/**
+ * Visuel renvoyé par Gemini ramené au ratio visé sans rien couper : s'il
+ * diffère de plus de 1,5 %, on ajoute du fond (image floutée) sur les côtés.
+ */
+function fit_generated_to_ratio(string $binary, string $aspectRatio): string
+{
+    $img = @imagecreatefromstring($binary);
+    if (!$img) return $binary;
+    $target = aspect_ratio_value($aspectRatio);
+    if (abs((imagesx($img) / imagesy($img)) / $target - 1) <= 0.015) return $binary;
+    $canvas = pad_image_to_ratio($img, $target, 1.0, max(imagesx($img), imagesy($img)));
+    ob_start();
+    imagejpeg($canvas, null, 92);
+    return (string) ob_get_clean();
+}
+
+/** Un visuel au format donné : source préparée, consigne de cadrage, format vérifié. */
+function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries): ?string
+{
+    $prepared = prepare_generation_source($srcAbsPath, $aspectRatio);
+    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio), $retries, $aspectRatio);
+    if ($prepared) @unlink($prepared);
+    return $bytes ? fit_generated_to_ratio($bytes, $aspectRatio) : null;
+}
 
 /**
  * Génère un visuel dans les deux formats : ['desktop' => chemin, 'mobile' => chemin|null],
@@ -699,11 +801,11 @@ const GENERATED_IMAGE_FORMATS = ['desktop' => '3:2', 'mobile' => '9:16'];
  */
 function generate_image_pair(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1): ?array
 {
-    $desktop = gemini_generate_image($srcAbsPath, $prompt, $retries, GENERATED_IMAGE_FORMATS['desktop']);
+    $desktop = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries);
     if (!$desktop) return null;
     $desktopPath = save_binary_photo($desktop, $baseName, 'jpg', 1800);
     if (!$desktopPath) return null;
-    $mobile = gemini_generate_image($srcAbsPath, $prompt, $retries, GENERATED_IMAGE_FORMATS['mobile']);
+    $mobile = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['mobile'], $retries);
     $mobilePath = $mobile ? save_binary_photo($mobile, $baseName . '-mobile', 'jpg', 1800) : null;
     return ['desktop' => $desktopPath, 'mobile' => $mobilePath];
 }
@@ -719,6 +821,16 @@ function responsive_image_html(string $src, ?string $srcMobile, string $alt, str
     return '<picture><source media="(max-width: 780px)" srcset="/' . h($srcMobile) . '">' . $img . '</picture>';
 }
 
+/**
+ * Calls Gemini (vision → texte) pour décrire une image : renvoie le texte
+ * brut de la réponse, ou null en cas d'échec. Même style de retry que
+ * gemini_generate_image() mais sur le modèle texte (bien plus rapide, une
+ * requête synchrone reste raisonnable côté admin).
+ */
+/**
+ * @param string[] $extraAbsPaths Autres photos du même objet (autres angles),
+ *  envoyées à la suite de la première dans la même requête.
+ */
 function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1, array $extraAbsPaths = []): ?string
 {
     if (!GEMINI_API_KEY) return null;
