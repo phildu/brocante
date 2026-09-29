@@ -70,8 +70,7 @@ $flash = flash_get();
   }
 
   .formats-preview-wrap { position: relative; max-width: 78vw; max-height: 62vh; }
-  .formats-preview-wrap img { display: block; max-width: 78vw; max-height: 62vh; }
-  .formats-preview-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .formats-preview-wrap svg { display: block; background: var(--surface-2); }
   .formats-preview-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.78rem; }
   .formats-preview-legend span { display: inline-flex; align-items: center; gap: 6px; }
   .formats-preview-legend i { display: inline-block; width: 14px; height: 14px; border: 2px solid; border-radius: 2px; }
@@ -271,10 +270,10 @@ $flash = flash_get();
 
 <div class="cropper-backdrop" id="formats-preview-backdrop">
   <div class="cropper-box">
-    <p class="eyebrow" style="margin:0;">Vérifier le cadrage avant de générer les formats</p>
-    <p class="hint" style="margin:0;">Chaque cadre montre ce que le recadrage automatique (centré) va garder de la photo. Le format réel n'est pas recadré.</p>
+    <p class="eyebrow" style="margin:0;">Aperçu des formats</p>
+    <p class="hint" style="margin:0;">Rien n'est recadré : la photo est gardée en entier et chaque cadre montre le fond ajouté autour pour atteindre le format (couleur du bord de la photo, ou fond flouté). Le format réel reste tel quel.</p>
     <div class="formats-preview-wrap">
-      <img id="formats-preview-img" src="" alt="">
+      <img id="formats-preview-img" src="" alt="" style="display:none">
       <svg id="formats-preview-svg" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
     <div class="formats-preview-legend">
@@ -459,9 +458,10 @@ $flash = flash_get();
 })();
 
 (function () {
-  // Aperçu du cadrage avant "Générer tous les formats" — dessine, par-dessus
-  // la photo, la zone que chaque recadrage centré va garder. Même formule
-  // que center_crop_bytes() côté PHP, pour que l'aperçu soit exact.
+  // Aperçu avant "Générer tous les formats" : la photo entière, entourée du
+  // cadre de chaque format (fond ajouté autour, jamais de recadrage). Même
+  // formule que fit_ratio_bytes() côté PHP, pour que l'aperçu soit exact.
+  var fill = <?= json_encode(EXPORT_SUBJECT_FILL) ?>;
   var backdrop = document.getElementById('formats-preview-backdrop');
   var img = document.getElementById('formats-preview-img');
   var svg = document.getElementById('formats-preview-svg');
@@ -474,19 +474,28 @@ $flash = flash_get();
     { ratio: 9 / 16, color: '#8a4fb0' },
   ];
 
-  function centerCropRect(iw, ih, ratio) {
+  function frameRect(iw, ih, ratio) {
     var cw, ch;
-    if (iw / ih > ratio) { ch = ih; cw = ih * ratio; } else { cw = iw; ch = iw / ratio; }
+    if (iw / ih > ratio) { cw = iw / fill; ch = cw / ratio; } else { ch = ih / fill; cw = ch * ratio; }
     return { x: (iw - cw) / 2, y: (ih - ch) / 2, w: cw, h: ch };
   }
 
   function drawOverlay() {
     var iw = img.naturalWidth, ih = img.naturalHeight;
-    svg.setAttribute('viewBox', '0 0 ' + iw + ' ' + ih);
-    var html = '';
-    ratios.forEach(function (r) {
-      var rect = centerCropRect(iw, ih, r.ratio);
-      var strokeWidth = Math.max(2, Math.round(Math.min(iw, ih) * 0.004));
+    var rects = ratios.map(function (r) { return frameRect(iw, ih, r.ratio); });
+    // Vue englobant tous les cadres, mise à l'échelle de l'écran.
+    var minX = Math.min.apply(null, rects.map(function (r) { return r.x; }));
+    var minY = Math.min.apply(null, rects.map(function (r) { return r.y; }));
+    var vw = iw - 2 * minX, vh = ih - 2 * minY;
+    var pad = Math.max(vw, vh) * 0.01;
+    svg.setAttribute('viewBox', (minX - pad) + ' ' + (minY - pad) + ' ' + (vw + 2 * pad) + ' ' + (vh + 2 * pad));
+    var scale = Math.min(window.innerWidth * 0.78 / (vw + 2 * pad), window.innerHeight * 0.62 / (vh + 2 * pad));
+    svg.setAttribute('width', Math.round((vw + 2 * pad) * scale));
+    svg.setAttribute('height', Math.round((vh + 2 * pad) * scale));
+    var html = '<image href="' + img.src.replace(/"/g, '&quot;') + '" x="0" y="0" width="' + iw + '" height="' + ih + '"></image>';
+    ratios.forEach(function (r, i) {
+      var rect = rects[i];
+      var strokeWidth = Math.max(2, Math.round(Math.max(vw, vh) * 0.004));
       html += '<rect x="' + rect.x + '" y="' + rect.y + '" width="' + rect.w + '" height="' + rect.h + '" '
         + 'fill="none" stroke="' + r.color + '" stroke-width="' + strokeWidth + '" stroke-dasharray="'
         + (strokeWidth * 3) + ',' + (strokeWidth * 2) + '"></rect>';

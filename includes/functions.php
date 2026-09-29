@@ -528,58 +528,35 @@ function rotate_photo_clockwise(string $absPath): bool
     return true;
 }
 
-/**
- * Recadrage centré vers un ratio cible (largeur/hauteur), en conservant le
- * maximum de la photo d'origine plutôt qu'en l'étirant. Retourne les octets
- * JPEG du recadrage, ou null en cas d'échec.
- */
-function center_crop_bytes(string $srcAbsPath, float $ratio, int $maxDim = 1400, int $quality = 85): ?string
-{
-    $info = @getimagesize($srcAbsPath);
-    if (!$info) return null;
-    $src = match ($info[2]) {
-        IMAGETYPE_JPEG => @imagecreatefromjpeg($srcAbsPath),
-        IMAGETYPE_PNG => @imagecreatefrompng($srcAbsPath),
-        IMAGETYPE_WEBP => @imagecreatefromwebp($srcAbsPath),
-        default => null,
-    };
-    if (!$src) return null;
+/** Part maximale du cadre occupée par la photo dans les exports multi-formats (le reste = fond ajouté). */
+const EXPORT_SUBJECT_FILL = 0.9;
 
+/**
+ * Photo mise au ratio cible (largeur/hauteur) SANS recadrage : elle est
+ * gardée en entier, centrée, et du fond est ajouté autour (voir
+ * pad_image_to_ratio). Retourne les octets JPEG, ou null en cas d'échec.
+ */
+function fit_ratio_bytes(string $srcAbsPath, float $ratio, int $maxDim = 1400, int $quality = 85, float $fill = EXPORT_SUBJECT_FILL): ?string
+{
+    $src = @imagecreatefromstring((string) @file_get_contents($srcAbsPath));
+    if (!$src) return null;
     $w = imagesx($src);
     $h = imagesy($src);
-    if (($w / $h) > $ratio) {
-        $cropH = $h;
-        $cropW = (int) round($h * $ratio);
-    } else {
-        $cropW = $w;
-        $cropH = (int) round($w / $ratio);
-    }
-    $srcX = (int) round(($w - $cropW) / 2);
-    $srcY = (int) round(($h - $cropH) / 2);
-
-    $scale = min(1, $maxDim / max($cropW, $cropH));
-    $outW = max(1, (int) round($cropW * $scale));
-    $outH = max(1, (int) round($cropH * $scale));
-
-    $dst = imagecreatetruecolor($outW, $outH);
-    imagecopyresampled($dst, $src, 0, 0, $srcX, $srcY, $outW, $outH, $cropW, $cropH);
+    // Taille de toile nécessaire pour garder la photo à sa résolution, plafonnée à $maxDim.
+    [$cw, $ch] = ($w / $h > $ratio) ? [$w / $fill, $w / $fill / $ratio] : [$h / $fill * $ratio, $h / $fill];
+    $canvas = pad_image_to_ratio($src, $ratio, $fill, (int) min($maxDim, round(max($cw, $ch))));
     ob_start();
-    imagejpeg($dst, null, $quality);
+    imagejpeg($canvas, null, $quality);
     return ob_get_clean() ?: null;
 }
 
-/**
- * Génère les 3 formats standards (carré, horizontal 4:3, vertical 3:4) d'une
- * photo, centrés automatiquement, et les dépose dans la médiathèque — prêts à
- * réutiliser (réseaux sociaux, bannières...) sans surcharger le diaporama de
- * la fiche produit avec des quasi-doublons de la même photo.
- */
 /**
  * Formats d'export proposés par pièce, chacun lié à un usage concret :
  * catalogue, fiche produit, diaporama en boutique, archive non recadrée,
  * et les deux formats standard des réseaux sociaux (dimensions réelles
  * Instagram/Facebook : post carré 1080×1080, story verticale 1080×1920).
- * ratio = null → pas de recadrage, juste un export à bonne résolution.
+ * Aucun format ne recadre : la photo est gardée en entière et du fond est
+ * ajouté autour. ratio = null → export au format d'origine, à bonne résolution.
  */
 function media_export_variants(): array
 {
@@ -604,7 +581,7 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
     foreach (media_export_variants() as $key => $v) {
         $bytes = $v['ratio'] === null
             ? @file_get_contents($srcAbsPath)
-            : center_crop_bytes($srcAbsPath, $v['ratio'], $v['maxDim']);
+            : fit_ratio_bytes($srcAbsPath, $v['ratio'], $v['maxDim']);
         if (!$bytes) continue;
         $path = save_binary_photo($bytes, 'export-' . $key, 'jpg', $v['maxDim'], 88);
         if (!$path) continue;
@@ -711,8 +688,8 @@ function aspect_ratio_value(string $aspectRatio): float
 /**
  * Pose une image, en entier et centrée, sur une toile au ratio demandé
  * ($fill = part maximale du cadre qu'elle occupe) — jamais de recadrage.
- * Fond : gris clair neutre si l'image est détourée (transparence), sinon
- * la photo elle-même agrandie et très floutée, pour prolonger ses couleurs.
+ * Fond : gris clair neutre si l'image est détourée (transparence), la couleur
+ * du pourtour s'il est uni (fond studio), sinon la photo agrandie et très floutée.
  */
 function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $longSide = 1536): GdImage
 {
@@ -727,8 +704,12 @@ function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $
     foreach ([[0, 0], [$w - 1, 0], [0, $h - 1], [$w - 1, $h - 1], [intdiv($w, 2), 0], [0, intdiv($h, 2)]] as [$x, $y]) {
         if (((imagecolorat($src, $x, $y) >> 24) & 0x7F) > 100) { $transparent = true; break; }
     }
+    $edge = $transparent ? null : image_uniform_edge_color($src);
     if ($transparent) {
         imagefill($canvas, 0, 0, imagecolorallocate($canvas, 236, 234, 230));
+    } elseif ($edge) {
+        // Fond uni (studio, mur) : prolongé à l'identique, sans raccord visible.
+        imagefill($canvas, 0, 0, imagecolorallocate($canvas, ...$edge));
     } else {
         // Flou : réduction à quelques pixels puis agrandissement (lissage bilinéaire).
         $tiny = imagecreatetruecolor(16, max(1, (int) round(16 * $ch / $cw)));
@@ -751,6 +732,37 @@ function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $
     imagealphablending($canvas, true);
     imagecopyresampled($canvas, $src, intdiv($cw - $nw, 2), intdiv($ch - $nh, 2), 0, 0, $nw, $nh, $w, $h);
     return $canvas;
+}
+
+/**
+ * Couleur de fond du pourtour de l'image [r, g, b] quand ce pourtour est
+ * quasi uni (fond studio blanc, mur…) — même si l'objet touche un bord par
+ * endroits (70 % des points proches de la couleur médiane) —, sinon null.
+ */
+function image_uniform_edge_color(GdImage $img): ?array
+{
+    $w = imagesx($img);
+    $h = imagesy($img);
+    $samples = [];
+    for ($i = 0; $i < 60; $i++) {
+        $t = $i / 59;
+        foreach ([[(int) ($t * ($w - 1)), 1], [(int) ($t * ($w - 1)), $h - 2], [1, (int) ($t * ($h - 1))], [$w - 2, (int) ($t * ($h - 1))]] as [$x, $y]) {
+            $c = imagecolorat($img, max(0, min($w - 1, $x)), max(0, min($h - 1, $y)));
+            $samples[] = [($c >> 16) & 0xFF, ($c >> 8) & 0xFF, $c & 0xFF];
+        }
+    }
+    $median = [];
+    for ($k = 0; $k < 3; $k++) {
+        $channel = array_column($samples, $k);
+        sort($channel);
+        $median[$k] = $channel[intdiv(count($channel), 2)];
+    }
+    // Couleur retenue : moyenne des points proches de la médiane (le fond).
+    $close = array_filter($samples, static fn ($px) => abs($px[0] - $median[0]) + abs($px[1] - $median[1]) + abs($px[2] - $median[2]) <= 36);
+    if (count($close) < 0.7 * count($samples)) return null;
+    $mean = [0, 0, 0];
+    foreach ($close as $px) for ($k = 0; $k < 3; $k++) $mean[$k] += $px[$k] / count($close);
+    return array_map(static fn ($v) => (int) round($v), $mean);
 }
 
 /**
