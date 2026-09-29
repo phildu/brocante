@@ -23,13 +23,7 @@ $flash = flash_get();
   .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
   .media-item { background: var(--surface); border: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
   .media-thumb { width: 100%; aspect-ratio: 4/3; background: var(--surface-2); overflow: hidden; position: relative; }
-  .media-thumb img, .media-thumb video { width: 100%; height: 100%; object-fit: cover; }
-  .media-dims {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(20,15,8,0.6); color: #fff; font-family: var(--font-mono); font-size: 0.85rem;
-    letter-spacing: 0.02em; opacity: 0; transition: opacity 0.15s ease; pointer-events: none;
-  }
-  .media-thumb:hover .media-dims { opacity: 1; }
+  .media-thumb img, .media-thumb video { width: 100%; height: 100%; object-fit: contain; }
   .media-origin { font-family: var(--font-mono); font-size: 0.65rem; color: var(--accent); text-transform: uppercase; }
   .media-item input[type="text"] {
     background: var(--bg); border: 1px solid var(--line); color: var(--ink);
@@ -96,8 +90,6 @@ $flash = flash_get();
               <?php else: ?>
                 <img src="/<?= h($m['path']) ?>" alt="<?= h($m['label']) ?>">
               <?php endif; ?>
-              <?php $dims = media_item_dimensions($m); ?>
-              <?php if ($dims): ?><span class="media-dims"><?= h($dims) ?></span><?php endif; ?>
             </div>
             <?php if ($m['origin_name']): ?>
               <?php $stillLive = $m['origin_ref'] && get_product($m['origin_ref']); ?>

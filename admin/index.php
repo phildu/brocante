@@ -28,7 +28,7 @@ $flash = flash_get();
   }
   .media-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; overflow-y: auto; max-height: 60vh; }
   .media-pick-item { border: 1px solid var(--line); background: var(--surface); cursor: pointer; padding: 0; }
-  .media-pick-item img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
+  .media-pick-item img { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--surface-2); display: block; }
   .media-pick-item span { display: block; font-size: 0.68rem; padding: 4px 6px; color: var(--ink-soft); }
   .media-pick-item:hover { outline: 2px solid var(--accent); }
 </style>

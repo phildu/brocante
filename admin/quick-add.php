@@ -89,7 +89,7 @@ $angles = [
   /* Étape 3 : visuels et fiche. */
   .qa-visuals { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
   .qa-visuals figure { margin: 0; flex: 0 0 72%; scroll-snap-align: start; background: var(--surface); border: 1px solid var(--line); }
-  .qa-visuals img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #fff; }
+  .qa-visuals img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; background: var(--surface-2); }
   .qa-visuals figcaption { font-size: 0.75rem; color: var(--ink-soft); padding: 6px 8px; font-family: var(--font-mono); }
   .qa-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .qa-switch { display: flex; gap: 10px; align-items: flex-start; font-size: 0.95rem; padding: 12px; background: var(--surface); border: 1px solid var(--line); }

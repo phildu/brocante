@@ -37,7 +37,7 @@ $uploadLimits = [
   .bi-photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
   .bi-photo-item { position: relative; border: 2px solid var(--line); background: var(--bg); cursor: pointer; padding: 0; }
   .bi-photo-item.is-chosen { border-color: var(--accent); }
-  .bi-photo-item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .bi-photo-item img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--surface-2); display: block; }
   .bi-photo-item .bi-score { position: absolute; top: 4px; right: 4px; background: var(--bg); border: 1px solid var(--line); font-family: var(--font-mono); font-size: 0.68rem; padding: 1px 5px; }
   .bi-photo-item .bi-group-select { width: 100%; margin-top: 4px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); font-size: 0.75rem; padding: 3px; }
   .bi-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
@@ -47,7 +47,7 @@ $uploadLimits = [
   .bi-drop-actions label { cursor: pointer; }
   .bi-picked { font-size: 0.9rem; color: var(--ink); margin: 0; }
   .bi-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; width: 100%; max-height: 220px; overflow-y: auto; }
-  .bi-thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; border: 1px solid var(--line); }
+  .bi-thumbs img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--surface-2); display: block; border: 1px solid var(--line); }
   .bi-progress { width: 100%; height: 8px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
   .bi-progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
   .bi-or { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.08em; margin: 18px 0 0; }

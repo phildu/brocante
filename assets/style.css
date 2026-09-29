@@ -1120,6 +1120,18 @@
   }
 
   .admin-block h2 { font-size: 1.3rem; margin-bottom: 4px; }
+
+  /* Ratio et taille en pixels sur les vignettes de l'admin (includes/admin-nav.php). */
+  /* Classes doublées : l'emportent sur les « .xxx span » des pages (ex. sélecteur de médias). */
+  .media-dims-wrap.media-dims-wrap { position: relative; display: block; padding: 0; }
+  .media-dims-badge.media-dims-badge {
+    display: block;
+    position: absolute; left: 4px; bottom: 4px; z-index: 2;
+    background: rgba(20, 15, 8, 0.74); color: #fff;
+    font-family: var(--font-mono); font-size: 0.64rem; line-height: 1.35; letter-spacing: 0.01em;
+    padding: 1px 5px; white-space: nowrap; pointer-events: none;
+  }
+  .media-dims-badge.media-dims-badge b { font-weight: 700; }
   .admin-block > p.hint { margin: 0 0 22px; color: var(--ink-soft); font-size: 0.88rem; }
 
   .res-warning {

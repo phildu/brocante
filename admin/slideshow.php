@@ -27,7 +27,7 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
     padding: 16px; background: var(--surface); border: 1px solid var(--line);
   }
   .gm-thumb { width: 120px; height: 90px; background: var(--surface-2); overflow: hidden; display:flex; align-items:center; justify-content:center; }
-  .gm-thumb img, .gm-thumb video { width: 100%; height: 100%; object-fit: cover; }
+  .gm-thumb img, .gm-thumb video { width: 100%; height: 100%; object-fit: contain; }
   .gm-thumb-empty { font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-soft); text-transform: uppercase; }
   .gm-kind-label { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 8px; }
   .gm-fields input[type="text"] {
@@ -54,7 +54,7 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
   }
   .media-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; overflow-y: auto; max-height: 60vh; }
   .media-pick-item { border: 1px solid var(--line); background: var(--surface); cursor: pointer; padding: 0; }
-  .media-pick-item img, .media-pick-item video { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
+  .media-pick-item img, .media-pick-item video { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--surface-2); display: block; }
   .media-pick-item span { display: block; font-size: 0.68rem; padding: 4px 6px; color: var(--ink-soft); }
   .media-pick-item:hover { outline: 2px solid var(--accent); }
 </style>

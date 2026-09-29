@@ -25,7 +25,7 @@ $flash = flash_get();
     padding: 16px; background: var(--surface); border: 1px solid var(--line);
   }
   .banner-thumb { width: 160px; height: 90px; background: var(--surface-2); overflow: hidden; display: flex; align-items: center; justify-content: center; }
-  .banner-thumb img, .banner-thumb video { width: 100%; height: 100%; object-fit: cover; }
+  .banner-thumb img, .banner-thumb video { width: 100%; height: 100%; object-fit: contain; }
   .banner-thumb-empty { font-family: var(--font-mono); font-size: 0.66rem; color: var(--ink-soft); text-transform: uppercase; text-align: center; padding: 0 8px; }
   .banner-page-label { font-weight: 600; margin: 0 0 10px; }
   .banner-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 120px; }
@@ -41,7 +41,7 @@ $flash = flash_get();
   }
   .media-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; overflow-y: auto; max-height: 60vh; }
   .media-pick-item { border: 1px solid var(--line); background: var(--surface); cursor: pointer; padding: 0; }
-  .media-pick-item img, .media-pick-item video { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
+  .media-pick-item img, .media-pick-item video { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--surface-2); display: block; }
   .media-pick-item span { display: block; font-size: 0.68rem; padding: 4px 6px; color: var(--ink-soft); }
   .media-pick-item:hover { outline: 2px solid var(--accent); }
 </style>

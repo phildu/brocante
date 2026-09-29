@@ -115,3 +115,71 @@ $adminIcon = static fn (string $name): string =>
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
 })();
 </script>
+<script>
+// Ratio et taille en pixels (ex. « 3:2 · 1800×1200 ») sur les vignettes des
+// sélecteurs d'images, de la médiathèque et des galeries — y compris celles
+// ajoutées plus tard par script (import par lot, prise de photos).
+(function () {
+  var HOSTS = '.media-thumb, .media-pick-item, .gm-thumb, .banner-thumb, .bi-photo-item, .bi-thumbs, .qa-visuals figure';
+  var RATIOS = [[1, 1], [5, 4], [4, 5], [4, 3], [3, 4], [3, 2], [2, 3], [16, 9], [9, 16], [2, 1], [1, 2], [21, 9]];
+
+  function ratioLabel(w, h) {
+    var r = w / h, best = null, gap = 1;
+    RATIOS.forEach(function (x) {
+      var e = Math.abs(r / (x[0] / x[1]) - 1);
+      if (e < gap) { gap = e; best = x; }
+    });
+    if (gap <= 0.02) return best[0] + ':' + best[1];
+    return r >= 1 ? r.toFixed(2).replace('.', ',') + ':1' : '1:' + (1 / r).toFixed(2).replace('.', ',');
+  }
+
+  function show(el) {
+    var w = el.naturalWidth || el.videoWidth, h = el.naturalHeight || el.videoHeight;
+    if (!w || !h) return;
+    var host = el.parentElement;
+    // Parent partagé avec d'autres éléments (libellé, grille…) : l'image reçoit
+    // son propre cadre, pour que l'étiquette reste posée sur elle.
+    var others = Array.prototype.filter.call(host.children, function (c) { return c !== el && !c.classList.contains('media-dims-badge'); });
+    if (others.length) {
+      var wrap = document.createElement('span');
+      wrap.className = 'media-dims-wrap';
+      host.insertBefore(wrap, el);
+      wrap.appendChild(el);
+      host = wrap;
+    } else if (getComputedStyle(host).position === 'static') {
+      host.style.position = 'relative';
+    }
+    var badge = host.querySelector(':scope > .media-dims-badge') || host.appendChild(document.createElement('span'));
+    badge.className = 'media-dims-badge';
+    var ratio = ratioLabel(w, h), size = w + '×' + h;
+    badge.title = ratio + ' — ' + size + ' px';
+    badge.innerHTML = '';
+    var b = document.createElement('b');
+    b.textContent = ratio;
+    badge.appendChild(b);
+    if (el.clientWidth === 0 || el.clientWidth >= 100) badge.appendChild(document.createTextNode(' · ' + size));
+  }
+
+  function bind(el) {
+    if (el.dataset.dimsBound) return;
+    el.dataset.dimsBound = '1';
+    el.addEventListener(el.tagName === 'VIDEO' ? 'loadedmetadata' : 'load', function () { show(el); });
+    if ((el.tagName === 'IMG' && el.complete) || el.readyState >= 1) show(el);
+  }
+
+  function scan(root) {
+    if (!root.querySelectorAll) return;
+    if (root.matches && root.matches('img, video') && root.closest(HOSTS)) bind(root);
+    root.querySelectorAll(HOSTS).forEach(function (h) { h.querySelectorAll('img, video').forEach(bind); });
+    if (root.closest && root.closest(HOSTS)) root.querySelectorAll('img, video').forEach(bind);
+  }
+
+  function start() {
+    scan(document);
+    new MutationObserver(function (list) {
+      list.forEach(function (m) { m.addedNodes.forEach(scan); });
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+</script>

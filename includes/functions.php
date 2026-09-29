@@ -1486,28 +1486,6 @@ function add_product_photo(string $ref, string $path, string $label, bool $illus
 }
 
 /**
- * Dimensions réelles (largeur × hauteur) d'une ressource média, affichées au
- * survol de sa vignette dans la médiathèque — pour les vidéos, passe par
- * ffprobe puisque getimagesize() ne lit pas ce format.
- */
-function media_item_dimensions(array $m): ?string
-{
-    $abs = __DIR__ . '/../' . $m['path'];
-    if (!is_file($abs)) return null;
-
-    if ($m['type'] === 'video') {
-        if (!FFPROBE_BIN || !shell_exec_available()) return null;
-        $cmd = escapeshellarg(FFPROBE_BIN) . ' -v error -select_streams v:0'
-            . ' -show_entries stream=width,height -of csv=s=x:p=0 ' . escapeshellarg($abs);
-        $out = trim((string) shell_exec($cmd));
-        return $out !== '' ? str_replace('x', ' × ', $out) . ' px' : null;
-    }
-
-    $size = @getimagesize($abs);
-    return $size ? "{$size[0]} × {$size[1]} px" : null;
-}
-
-/**
  * Médiathèque : dépôt central de ressources (photos, vidéos) indépendant des
  * fiches produit — sert notamment à conserver les photos d'une pièce (ex :
  * une photo d'ambiance réussie) après suppression de sa fiche.
