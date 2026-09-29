@@ -9,6 +9,8 @@ $type = in_array($type, ['photo', 'video'], true) ? $type : null;
 $q = trim((string) ($_GET['q'] ?? ''));
 $items = get_media_items($type, $q !== '' ? $q : null);
 $flash = flash_get();
+$view = ($_GET['vue'] ?? '') === 'liste' ? 'liste' : 'grille';
+$viewUrl = static fn (string $v): string => '/admin/media.php?' . http_build_query(array_filter(['type' => $type, 'q' => $q, 'vue' => $v === 'liste' ? 'liste' : null]));
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -34,6 +36,25 @@ $flash = flash_get();
     background: var(--bg); border: 1px solid var(--line); color: var(--ink);
     padding: 8px 10px; font-family: var(--font-body); font-size: 0.9rem;
   }
+  .media-view-toggle { display: inline-flex; border: 1px solid var(--line); margin-left: auto; }
+  .media-view-toggle a { padding: 7px 12px; font-size: 0.82rem; color: var(--ink-soft); text-decoration: none; }
+  .media-view-toggle a[aria-current] { background: var(--ink); color: var(--bg); }
+  .media-bulk-bar {
+    position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    background: var(--bg); border: 1px solid var(--line); padding: 10px 14px; margin-bottom: 10px; font-size: 0.88rem;
+  }
+  .media-bulk-bar label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .media-list { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  .media-list th, .media-list td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  .media-list th { color: var(--ink-soft); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .media-list tr.is-checked td { background: var(--surface); }
+  .media-list td.col-check { width: 32px; }
+  .media-list input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+  .media-list-thumb { width: 112px; height: 76px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
+  .media-list-thumb img, .media-list-thumb video { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  .media-list .muted { color: var(--ink-soft); font-size: 0.78rem; }
+  .media-list .tags { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); word-break: break-word; }
+  @media (max-width: 780px) { .media-list .col-source, .media-list .col-date { display: none; } }
 </style>
 </head>
 <body>
@@ -58,7 +79,12 @@ $flash = flash_get();
       </select>
       <input type="search" name="q" value="<?= h($q) ?>" placeholder="Rechercher (libellé, source, tags, article d'origine)...">
       <button type="submit" class="btn-small">Filtrer</button>
-      <?php if ($type || $q !== ''): ?><a class="btn-small" href="/admin/media.php">Réinitialiser</a><?php endif; ?>
+      <?php if ($type || $q !== ''): ?><a class="btn-small" href="<?= h($view === 'liste' ? '/admin/media.php?vue=liste' : '/admin/media.php') ?>">Réinitialiser</a><?php endif; ?>
+      <?php if ($view === 'liste'): ?><input type="hidden" name="vue" value="liste"><?php endif; ?>
+      <span class="media-view-toggle" role="group" aria-label="Affichage">
+        <a href="<?= h($viewUrl('grille')) ?>"<?= $view === 'grille' ? ' aria-current="page"' : '' ?>>▦ Grille</a>
+        <a href="<?= h($viewUrl('liste')) ?>"<?= $view === 'liste' ? ' aria-current="page"' : '' ?>>☰ Liste</a>
+      </span>
     </form>
 
     <div class="admin-block" style="margin-bottom:28px;">
@@ -80,6 +106,89 @@ $flash = flash_get();
 
     <?php if (!$items): ?>
       <p class="empty-state">Aucune ressource pour l'instant.</p>
+    <?php elseif ($view === 'liste'): ?>
+      <form method="post" action="/admin/media-action.php" id="media-bulk-form">
+        <input type="hidden" name="action" value="bulk_delete">
+        <input type="hidden" name="back" value="<?= h($viewUrl('liste')) ?>">
+        <div class="media-bulk-bar">
+          <label><input type="checkbox" id="media-check-all"> Tout cocher</label>
+          <span id="media-check-count" class="muted">Aucune ressource cochée</span>
+          <button type="submit" class="admin-delete" id="media-bulk-delete" disabled>Supprimer la sélection</button>
+          <span class="muted">Astuce : Maj + clic coche toute une plage.</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="media-list">
+            <thead><tr><th></th><th>Aperçu</th><th>Libellé</th><th class="col-source">Source / tags</th><th>Article d'origine</th><th class="col-date">Ajout</th></tr></thead>
+            <tbody>
+              <?php foreach ($items as $m): ?>
+                <tr>
+                  <td class="col-check"><input type="checkbox" name="ids[]" value="<?= (int) $m['id'] ?>" class="media-check" aria-label="Cocher <?= h($m['label']) ?>"></td>
+                  <td>
+                    <div class="media-list-thumb"<?= $m['type'] !== 'video' ? ' data-quick-preview="/' . h($m['path']) . '" data-quick-name="' . h($m['label']) . '"' : '' ?>>
+                      <?php if ($m['type'] === 'video'): ?>
+                        <video src="/<?= h($m['path']) ?>" preload="metadata" muted></video>
+                      <?php else: ?>
+                        <img src="/<?= h($m['path']) ?>" alt="" loading="lazy">
+                      <?php endif; ?>
+                    </div>
+                  </td>
+                  <td><?= h($m['label']) ?: '<span class="muted">(sans libellé)</span>' ?><?= $m['type'] === 'video' ? ' <span class="muted">· vidéo</span>' : '' ?></td>
+                  <td class="col-source"><?= h($m['source']) ?><?php if ($m['tags'] !== ''): ?><br><span class="tags"><?= h($m['tags']) ?></span><?php endif; ?></td>
+                  <td><?php if ($m['origin_name']): ?><?= h($m['origin_name']) ?><?= $m['origin_ref'] ? ' <span class="muted">(Réf ' . h($m['origin_ref']) . ')</span>' : '' ?><?php else: ?><span class="muted">—</span><?php endif; ?></td>
+                  <td class="col-date muted"><?= h(date('d/m/Y', strtotime($m['created_at']) ?: time())) ?></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      </form>
+      <script>
+      (function () {
+        var form = document.getElementById('media-bulk-form');
+        var boxes = Array.prototype.slice.call(form.querySelectorAll('.media-check'));
+        var all = document.getElementById('media-check-all');
+        var count = document.getElementById('media-check-count');
+        var del = document.getElementById('media-bulk-delete');
+        var last = null;
+
+        function refresh() {
+          var n = boxes.filter(function (b) { return b.checked; }).length;
+          boxes.forEach(function (b) { b.closest('tr').classList.toggle('is-checked', b.checked); });
+          all.checked = n === boxes.length;
+          all.indeterminate = n > 0 && n < boxes.length;
+          count.textContent = n ? n + ' ressource' + (n > 1 ? 's' : '') + ' cochée' + (n > 1 ? 's' : '') : 'Aucune ressource cochée';
+          del.disabled = n === 0;
+          del.textContent = n ? 'Supprimer la sélection (' + n + ')' : 'Supprimer la sélection';
+        }
+        boxes.forEach(function (b, i) {
+          b.addEventListener('click', function (e) {
+            // Maj + clic : applique l'état à toute la plage depuis la dernière case cliquée.
+            if (e.shiftKey && last !== null) {
+              var from = Math.min(last, i), to = Math.max(last, i);
+              for (var k = from; k <= to; k++) boxes[k].checked = b.checked;
+            }
+            last = i;
+            refresh();
+          });
+        });
+        // Clic sur la ligne (hors aperçu) = cocher.
+        form.querySelectorAll('tbody tr').forEach(function (tr, i) {
+          tr.addEventListener('click', function (e) {
+            if (e.target.closest('input, a, video, .media-list-thumb')) return;
+            boxes[i].click();
+          });
+        });
+        all.addEventListener('change', function () {
+          boxes.forEach(function (b) { b.checked = all.checked; });
+          refresh();
+        });
+        form.addEventListener('submit', function (e) {
+          var n = boxes.filter(function (b) { return b.checked; }).length;
+          if (!n || !confirm('Retirer ' + n + ' ressource' + (n > 1 ? 's' : '') + ' de la médiathèque ?')) e.preventDefault();
+        });
+        refresh();
+      })();
+      </script>
     <?php else: ?>
       <div class="media-grid">
         <?php foreach ($items as $m): ?>
