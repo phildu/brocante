@@ -214,14 +214,15 @@ $adminIcon = static fn (string $name): string =>
         if (i >= ids.length) {
           running = false;
           show(failed
-            ? 'Versions smartphone : ' + done + ' prête(s), ' + failed + ' en échec (réessai automatique, 3 essais au plus).'
-            : '✓ Versions smartphone (9:16) prêtes — actualisez la page pour les voir.', failed ? 'error' : 'ok');
+            ? 'Formats : ' + done + ' prêt(s), ' + failed + ' en échec (réessai automatique, 3 essais au plus).'
+            : '✓ Formats 3:2 / 9:16 prêts — actualisez la page pour les voir.', failed ? 'error' : 'ok');
           setTimeout(function () { box.hidden = true; }, 8000);
           return;
         }
-        show('Génération de la version smartphone (9:16)… ' + (i + 1) + ' / ' + ids.length);
+        show('Génération des formats 3:2 / 9:16… ' + (i + 1) + ' / ' + ids.length);
         post({ action: 'run', id: ids[i] }).then(function (res) {
           if (res && res.ok) done++; else failed++;
+          if (res && res.next) ids.push(ids[i]); // deuxième format du même visuel
           next(i + 1);
         });
       })(0);

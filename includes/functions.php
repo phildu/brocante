@@ -546,6 +546,11 @@ function fit_ratio_file(string $srcAbsPath, float $ratio, string $baseName, int 
     // Taille de toile nécessaire pour garder la photo à sa résolution, plafonnée à $maxDim.
     [$cw, $ch] = ($w / $h > $ratio) ? [$w / $fill, $w / $fill / $ratio] : [$h / $fill * $ratio, $h / $fill];
     $transparent = image_has_transparent_edge($src);
+    // Photo déjà au bon format : gardée telle quelle, sans marge ajoutée.
+    if (!$transparent && abs(($w / $h) / $ratio - 1) <= 0.015) {
+        $fill = 1.0;
+        [$cw, $ch] = [$w, $h];
+    }
     $canvas = pad_image_to_ratio($src, $ratio, $fill, (int) min($maxDim, round(max($cw, $ch))), $transparent);
     if ($shadow && $transparent) $canvas = add_drop_shadow($canvas);
     ob_start();
@@ -922,41 +927,88 @@ function generate_desktop_image(string $srcAbsPath, string $prompt, string $base
 }
 
 /**
- * Consigne pour obtenir la version smartphone (9:16) À PARTIR de la version
- * 3:2 déjà générée : même scène, même objet, décor simplement prolongé en
- * haut et en bas — les deux versions montrent ainsi la même image.
+ * Format d'une image existante : 'desktop' (≈ 3:2), 'mobile' (≈ 9:16) ou
+ * 'other' (carré, 4:3…), à 3 % près. null si illisible.
  */
-function build_extend_prompt(): string
+function image_format_kind(string $absPath): ?string
 {
-    return "This is a finished product photo for an online antiques shop, placed across the full width of a tall "
-        . "9:16 (portrait) canvas: the blurred bands above and below it are EMPTY canvas. Extend the SAME scene "
-        . "upward and downward (wall, ceiling, shelf above; floor, table, surface below) so that it fills the whole "
-        . "9:16 frame naturally and seamlessly. Keep everything visible in the original photo EXACTLY identical — the "
+    $size = @getimagesize($absPath);
+    if (!$size || !$size[1]) return null;
+    $r = $size[0] / $size[1];
+    foreach (GENERATED_IMAGE_FORMATS as $kind => $ratio) {
+        if (abs($r / aspect_ratio_value($ratio) - 1) <= 0.03) return $kind;
+    }
+    return 'other';
+}
+
+/**
+ * Consigne pour prolonger un visuel fini jusqu'à un autre format : même
+ * scène, même objet, décor simplement étendu — les deux versions montrent
+ * ainsi la même image.
+ */
+function build_extend_prompt(string $aspectRatio): string
+{
+    [$shape, $bands, $where] = aspect_ratio_value($aspectRatio) < 1
+        ? ['tall portrait', 'above and below', 'upward and downward (wall, ceiling, shelf above; floor, table, surface below)']
+        : ['wide landscape', 'on the left and right', 'sideways to the left and right (more of the room, wall, furniture, surface)'];
+    return "This is a finished product photo for an online antiques shop, placed on a $shape $aspectRatio canvas: "
+        . "the blurred bands $bands it are EMPTY canvas. Extend the SAME scene $where so that it fills the whole "
+        . "$aspectRatio frame naturally and seamlessly. Keep everything visible in the original photo EXACTLY identical — the "
         . "object, its shape, size, position, colors, lighting and the surrounding decor: do not crop, zoom, move, "
         . "restyle or redraw it, only add scenery around it. The object must remain entirely visible. "
         . "Photorealistic, no text, no watermark, no people. Respond with the generated image only, no text in your reply.";
 }
 
 /**
- * Programme la version smartphone (9:16) d'un visuel généré : elle est
- * produite ensuite par une requête à part (admin/mobile-variants.php, lancée
- * par toutes les pages de l'admin), pour qu'aucune requête n'enchaîne deux
- * générations et ne dépasse le délai du serveur (erreur 504). Elle part de
- * la version 3:2 elle-même, prolongée en hauteur (build_extend_prompt).
+ * Programme l'autre format d'un visuel, produit ensuite par une requête à
+ * part (admin/mobile-variants.php, lancée par toutes les pages de l'admin)
+ * pour qu'aucune requête n'enchaîne deux générations et ne dépasse le délai
+ * du serveur (erreur 504). Le visuel est prolongé tel quel (build_extend_prompt).
+ * $target : 'mobile' (fabriquer la 9:16 depuis la 3:2) ou 'desktop'
+ * (fabriquer la 3:2 depuis une image 9:16 ou d'un autre format) ; $then :
+ * format à fabriquer ensuite, depuis le résultat.
  */
-function queue_mobile_variant(int $photoId, string $desktopRelPath): void
+function queue_format_job(int $photoId, string $srcRelPath, string $target, ?string $then = null): void
 {
     db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')
-        ->execute([json_encode(['src' => $desktopRelPath, 'extend' => true, 'attempts' => 0], JSON_UNESCAPED_SLASHES), $photoId]);
+        ->execute([json_encode(['src' => $srcRelPath, 'target' => $target, 'then' => $then, 'attempts' => 0], JSON_UNESCAPED_SLASHES), $photoId]);
 }
 
-/** Visuels dont la version smartphone reste à générer. */
+/** Version smartphone (9:16) d'un visuel 3:2 tout juste généré. */
+function queue_mobile_variant(int $photoId, string $desktopRelPath): void
+{
+    queue_format_job($photoId, $desktopRelPath, 'mobile');
+}
+
+/**
+ * Complète les formats d'un visuel existant selon SON format réel :
+ * 3:2 → on fabrique la 9:16 ; 9:16 → on fabrique la 3:2 (l'image actuelle
+ * devient la version smartphone) ; autre format → la 3:2, puis la 9:16.
+ * Renvoie le format détecté, ou null si rien à faire / image illisible.
+ */
+function queue_format_completion(array $row): ?string
+{
+    if (!empty($row['path_mobile'])) return null;
+    $kind = image_format_kind(__DIR__ . '/../' . $row['path']);
+    match ($kind) {
+        'desktop' => queue_format_job((int) $row['id'], $row['path'], 'mobile'),
+        'mobile' => queue_format_job((int) $row['id'], $row['path'], 'desktop'),
+        'other' => queue_format_job((int) $row['id'], $row['path'], 'desktop', 'mobile'),
+        default => null,
+    };
+    return $kind;
+}
+
+/** Visuels dont un format reste à générer. */
 function pending_mobile_variant_ids(): array
 {
     return array_map('intval', db()->query('SELECT id FROM product_photos WHERE mobile_pending IS NOT NULL ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
 }
 
-/** Génère UNE version smartphone en attente : ['ok' => bool, 'path' => …, 'error' => …]. */
+/**
+ * Exécute UNE tâche de format en attente : ['ok' => bool, 'path' => …,
+ * 'next' => true si une autre étape suit pour ce visuel, 'error' => …].
+ */
 function run_mobile_variant(int $photoId): array
 {
     $stmt = db()->prepare('SELECT * FROM product_photos WHERE id = ?');
@@ -964,34 +1016,54 @@ function run_mobile_variant(int $photoId): array
     $row = $stmt->fetch();
     if (!$row || $row['mobile_pending'] === null) return ['ok' => true, 'done' => true];
     $job = json_decode((string) $row['mobile_pending'], true) ?: [];
-    $extend = !empty($job['extend']) || empty($job['prompt']); // ancien format de file : source + prompt
-    $srcAbs = realpath(__DIR__ . '/../' . ($job['src'] ?? $row['path']));
-    $baseName = pathinfo($row['path'], PATHINFO_FILENAME) . '-mobile';
-    $setMobile = db()->prepare('UPDATE product_photos SET path_mobile = ?, mobile_pending = NULL WHERE id = ?');
-    // Repli sans IA : la version 3:2 posée en entier sur une toile 9:16, fond prolongé.
-    $fallback = static function () use ($row, $baseName, $setMobile, $photoId): array {
-        $path = fit_ratio_file(__DIR__ . '/../' . $row['path'], aspect_ratio_value(GENERATED_IMAGE_FORMATS['mobile']), $baseName, fill: 1.0);
-        $setMobile->execute([$path, $photoId]); // file vidée dans tous les cas
-        return ['ok' => (bool) $path, 'path' => $path, 'fallback' => true,
-            'error' => $path ? null : 'Version smartphone impossible.'];
+    $target = ($job['target'] ?? 'mobile') === 'desktop' ? 'desktop' : 'mobile';
+    $aspect = GENERATED_IMAGE_FORMATS[$target];
+    $srcRel = (string) ($job['src'] ?? $row['path']);
+    $srcAbs = realpath(__DIR__ . '/../' . $srcRel);
+    $baseName = preg_replace('/-(mobile|desktop)(-[0-9a-f]{8})?$/', '', pathinfo($srcRel, PATHINFO_FILENAME)) . '-' . $target;
+
+    // Résultat enregistré : la 9:16 va dans path_mobile ; la 3:2 devient
+    // l'image principale (l'ancienne, si elle était en 9:16, passe en
+    // version smartphone), puis l'étape suivante éventuelle est programmée.
+    $store = static function (?string $path) use ($row, $photoId, $target, $srcRel, $job): array {
+        if (!$path) {
+            db()->prepare('UPDATE product_photos SET mobile_pending = NULL WHERE id = ?')->execute([$photoId]);
+            return ['ok' => false, 'error' => 'Format impossible à produire.'];
+        }
+        if ($target === 'mobile') {
+            db()->prepare('UPDATE product_photos SET path_mobile = ?, mobile_pending = NULL WHERE id = ?')->execute([$path, $photoId]);
+            return ['ok' => true, 'path' => $path];
+        }
+        $srcWasMobile = image_format_kind(__DIR__ . '/../' . $srcRel) === 'mobile';
+        db()->prepare('UPDATE product_photos SET path = ?, path_mobile = ?, mobile_pending = NULL WHERE id = ?')
+            ->execute([$path, $srcWasMobile ? $srcRel : null, $photoId]);
+        sync_cover_photo($row['product_ref']);
+        if (!$srcWasMobile && ($job['then'] ?? null) === 'mobile') {
+            queue_format_job($photoId, $path, 'mobile');
+            return ['ok' => true, 'path' => $path, 'next' => true];
+        }
+        return ['ok' => true, 'path' => $path];
     };
+    // Repli sans IA : l'image posée en entière sur une toile au bon format, fond prolongé.
+    $fallback = static fn (): array => $store($srcAbs ? fit_ratio_file($srcAbs, aspect_ratio_value($aspect), $baseName, fill: 1.0) : null)
+        + ['fallback' => true];
     if (!$srcAbs || !is_file($srcAbs) || !GEMINI_API_KEY) return $fallback();
 
     $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
-    $bytes = generate_image_for_ratio($small, $extend ? build_extend_prompt() : (string) $job['prompt'], GENERATED_IMAGE_FORMATS['mobile'], 0, $extend);
+    $extend = !isset($job['prompt']); // ancien format de file : source d'origine + prompt complet
+    $bytes = generate_image_for_ratio($small, $extend ? build_extend_prompt($aspect) : (string) $job['prompt'], $aspect, 0, $extend);
     if ($small !== $srcAbs) @unlink($small);
     $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
 
     if (!$path) {
         // Trois essais au plus, répartis sur les visites suivantes de l'admin,
-        // puis repli sans IA : il y a toujours une version 9:16 au bout.
+        // puis repli sans IA : le format manquant existe toujours au bout.
         $job['attempts'] = (int) ($job['attempts'] ?? 0) + 1;
         if ($job['attempts'] >= 3) return $fallback();
         db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')->execute([json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $photoId]);
-        return ['ok' => false, 'error' => 'Génération de la version smartphone échouée, nouvel essai plus tard.'];
+        return ['ok' => false, 'error' => 'Génération échouée, nouvel essai plus tard.'];
     }
-    $setMobile->execute([$path, $photoId]);
-    return ['ok' => true, 'path' => $path];
+    return $store($path);
 }
 
 /**

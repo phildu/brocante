@@ -152,8 +152,9 @@ switch ($action) {
         break;
     }
 
-    // Visuel IA sans version smartphone (généré avant, ou échec) : mise en
-    // file de sa version 9:16, prolongée à partir du visuel lui-même.
+    // Visuel IA à un seul format (généré avant, ou échec) : fabrique le
+    // format manquant selon SON format réel (3:2 → 9:16, 9:16 → 3:2,
+    // autre → les deux), en prolongeant le visuel lui-même.
     case 'mobile_variant': {
         $id = (int) ($_POST['photo_id'] ?? 0);
         $row = get_photo_row($ref, $id);
@@ -161,8 +162,14 @@ switch ($action) {
             flash_set('Photo introuvable.', 'error');
             break;
         }
-        queue_mobile_variant($id, $row['path']);
-        flash_set('La version smartphone (9:16) de « ' . $row['label'] . ' » se génère maintenant (encadré en bas à droite) — même scène, prolongée en hauteur.');
+        $kind = queue_format_completion($row);
+        $what = match ($kind) {
+            'desktop' => 'Ce visuel est en 3:2 : sa version smartphone (9:16) se génère maintenant, décor prolongé en hauteur.',
+            'mobile' => 'Ce visuel est en 9:16 : il devient la version smartphone, et sa version ordinateur (3:2) se génère maintenant, décor prolongé sur les côtés.',
+            'other' => 'Ce visuel n\'est ni en 3:2 ni en 9:16 : ses deux versions se génèrent maintenant, l\'une après l\'autre.',
+            default => null,
+        };
+        flash_set($what ? "« {$row['label']} » — $what (encadré en bas à droite)" : 'Ce visuel a déjà ses deux formats.', $what ? 'ok' : 'error');
         break;
     }
 

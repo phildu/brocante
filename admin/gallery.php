@@ -204,7 +204,7 @@ $flash = flash_get();
             <?php if (!empty($ph['path_mobile'])): ?>
               <div class="gm-thumb-mobile" title="Version smartphone (9:16)"><img src="/<?= h($ph['path_mobile']) ?>" alt=""></div>
             <?php elseif (!empty($ph['mobile_pending'])): ?>
-              <div class="gm-thumb-mobile is-pending" title="Version smartphone (9:16) en cours de génération">9:16<br>en cours…</div>
+              <div class="gm-thumb-mobile is-pending" title="Format manquant en cours de génération">format<br>en cours…</div>
             <?php endif; ?>
           </div>
           <div class="gm-fields">
@@ -245,11 +245,19 @@ $flash = flash_get();
               <button type="button" class="btn-small" data-crop-open data-mode="replace" data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>">Recadrer</button>
               <button type="button" class="btn-small" data-crop-open data-mode="detail" data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>">Créer un détail</button>
               <?php if ($ph['is_illustration'] && empty($ph['path_mobile']) && empty($ph['mobile_pending'])): ?>
+              <?php
+                // Le bouton annonce le format manquant, d'après le format réel du visuel.
+                [$missingLabel, $missingTitle] = match (image_format_kind(__DIR__ . '/../' . $ph['path'])) {
+                    'mobile' => ['🖥 Créer la version 3:2 (IA)', 'Ce visuel est en 9:16 (smartphone) : prolonge le décor sur les côtés pour la version ordinateur'],
+                    'other' => ['▭ Créer les versions 3:2 + 9:16 (IA)', 'Ce visuel n\'est ni en 3:2 ni en 9:16 : prolonge le décor pour obtenir les deux formats'],
+                    default => ['📱 Créer la version 9:16 (IA)', 'Ce visuel est en 3:2 (ordinateur) : prolonge le décor en hauteur pour la version smartphone'],
+                };
+              ?>
               <form method="post" action="/admin/gallery-action.php">
                 <input type="hidden" name="ref" value="<?= h($ref) ?>">
                 <input type="hidden" name="action" value="mobile_variant">
                 <input type="hidden" name="photo_id" value="<?= (int) $ph['id'] ?>">
-                <button type="submit" class="btn-small" style="width:100%;" title="Prolonge ce visuel en hauteur (même scène, même objet) pour l'affichage smartphone">📱 Créer la version 9:16 (IA)</button>
+                <button type="submit" class="btn-small" style="width:100%;" title="<?= h($missingTitle) ?>"><?= h($missingLabel) ?></button>
               </form>
               <?php endif; ?>
               <?php if (!$ph['is_illustration'] && empty($ph['path_mobile'])): ?>
