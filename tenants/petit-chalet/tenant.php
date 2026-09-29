@@ -11,7 +11,7 @@ return [
     // Compte de l'administration — mot de passe à changer avant toute mise en
     // ligne réelle (ou variables d'environnement ADMIN_USER / ADMIN_PASSWORD).
     'admin_user' => 'admin',
-    'admin_password' => 'armoire2026',
+    'admin_password' => '$2y$12$gzLISpefevBonlEruf2Oc.yKWidJOV.bZdH.fO.G2feomoUcD/aWy',
 
     'db_file' => 'brocante.db',
     'secrets_dir' => '.secrets',
