@@ -21,6 +21,7 @@ $adminNavItems = [
     'media' => ['/admin/media.php', 'Médiathèque', 'folder'],
     'shipping' => ['/admin/shipping.php', 'Frais de port', 'truck'],
     'apparence' => ['/admin/appearance.php', 'Apparence', 'palette'],
+    'sync' => ['/admin/sync.php', 'Envoyer en préprod', 'cloud'],
     'reglages' => ['/admin/index.php', 'Réglages du site', 'gear'],
 ];
 $adminNav = $adminNav ?? '';
@@ -40,6 +41,7 @@ $adminIcons = [
     'external' => '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     'logout' => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
     'camera' => '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
+    'cloud' => '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1-.5 9.5z"/><path d="M12 16v-5M9.5 13.5 12 11l2.5 2.5"/>',
     'collapse' => '<path d="m15 18-6-6 6-6"/>',
     'menu' => '<path d="M4 6h16M4 12h16M4 18h16"/>',
 ];

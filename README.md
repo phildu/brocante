@@ -155,3 +155,24 @@ Chaque commerce a son propre fichier d'identifiants FTP `.env.deploy.<slug>`
 envoyée sur son serveur, avec un fichier `.tenant` qui le désigne. Le dossier
 `uploads/` n'est envoyé que si `deploy_uploads` vaut `true` dans son `tenant.php`
 (c'est le cas du Petit Chalet), pour ne pas copier ses photos chez les autres.
+
+## Envoyer des pièces du Mac vers la préprod
+
+Administration → **Envoyer en préprod** : les pièces créées en local partent
+vers la préprod avec leurs photos, visuels (3:2 et 9:16) et vidéos, sans FTP
+et sans écraser la base distante (commandes, réglages et autres pièces restent
+intacts).
+
+1. Déployer une fois cette version sur la préprod (`./deploy-brocante.sh`).
+2. **Sur la préprod** : Administration → Envoyer en préprod → section 3,
+   « Générer une clé », puis la copier (elle n'est affichée qu'une fois).
+3. **Sur le Mac** : même page, section 1, saisir l'adresse de la préprod et
+   coller la clé.
+4. Cocher les pièces, puis « Envoyer la sélection ».
+
+Une pièce présente là-bas sous le même numéro est mise à jour. Si ce numéro y
+désigne une autre pièce, elle est envoyée sous un nouveau numéro, retenu pour
+les envois suivants. Les fichiers déjà présents ne sont pas renvoyés ; un
+fichier modifié est rangé à côté de l'ancien, jamais par-dessus. La clé n'est
+stockée que sous forme d'empreinte dans `.secrets/` ; « Désactiver la
+réception » coupe tout envoi.
