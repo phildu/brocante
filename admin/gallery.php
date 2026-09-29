@@ -232,7 +232,13 @@ $flash = flash_get();
               </form>
               <button type="button" class="btn-small" data-crop-open data-mode="replace" data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>">Recadrer</button>
               <button type="button" class="btn-small" data-crop-open data-mode="detail" data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>">Créer un détail</button>
-              <button type="button" class="btn-small" style="width:100%;" data-formats-preview-open data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>" title="Vignette catalogue, fiche produit horizontale, diaporama plein écran, format réel, post et story réseaux sociaux">📐 Générer tous les formats → médiathèque</button>
+              <form method="post" action="/admin/gallery-action.php">
+                <input type="hidden" name="ref" value="<?= h($ref) ?>">
+                <input type="hidden" name="action" value="fit_formats">
+                <input type="hidden" name="photo_id" value="<?= (int) $ph['id'] ?>">
+                <button type="submit" class="btn-small" style="width:100%;" title="Ajoute à la galerie une copie de cette photo en 3:2 (ordinateur) et 9:16 (smartphone), sans recadrage — transparente si la photo est détourée">▭ Format 3:2 + 9:16 → galerie</button>
+              </form>
+              <button type="button" class="btn-small" style="width:100%;" data-formats-preview-open data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>" title="Vignette catalogue et fiche produit (3:2), diaporama plein écran, format réel, post et story réseaux sociaux">📐 Générer tous les formats → médiathèque</button>
             <?php endif; ?>
             <form method="post" action="/admin/gallery-action.php" onsubmit="return confirm('Retirer cette photo de la galerie ?');">
               <input type="hidden" name="ref" value="<?= h($ref) ?>">
@@ -277,7 +283,7 @@ $flash = flash_get();
       <svg id="formats-preview-svg" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
     <div class="formats-preview-legend">
-      <span><i style="border-color:#b5502e;"></i> 4:3 — catalogue &amp; fiche produit</span>
+      <span><i style="border-color:#b5502e;"></i> 3:2 — catalogue &amp; fiche produit</span>
       <span><i style="border-color:#46647a;"></i> 16:9 — diaporama point de vente</span>
       <span><i style="border-color:#6e7c57;"></i> 1:1 — post réseaux sociaux</span>
       <span><i style="border-color:#8a4fb0;"></i> 9:16 — story réseaux sociaux</span>
@@ -460,7 +466,7 @@ $flash = flash_get();
 (function () {
   // Aperçu avant "Générer tous les formats" : la photo entière, entourée du
   // cadre de chaque format (fond ajouté autour, jamais de recadrage). Même
-  // formule que fit_ratio_bytes() côté PHP, pour que l'aperçu soit exact.
+  // formule que fit_ratio_file() côté PHP, pour que l'aperçu soit exact.
   var fill = <?= json_encode(EXPORT_SUBJECT_FILL) ?>;
   var backdrop = document.getElementById('formats-preview-backdrop');
   var img = document.getElementById('formats-preview-img');
@@ -468,7 +474,7 @@ $flash = flash_get();
   var photoIdInput = document.getElementById('formats-preview-photo-id');
 
   var ratios = [
-    { ratio: 4 / 3, color: '#b5502e' },
+    { ratio: 3 / 2, color: '#b5502e' },
     { ratio: 16 / 9, color: '#46647a' },
     { ratio: 1, color: '#6e7c57' },
     { ratio: 9 / 16, color: '#8a4fb0' },

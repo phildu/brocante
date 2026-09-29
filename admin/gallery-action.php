@@ -152,6 +152,30 @@ switch ($action) {
         break;
     }
 
+    // Version 3:2 (ordinateur) + 9:16 (smartphone) d'une photo, ajoutée à la
+    // galerie : photo entière, fond ajouté autour (transparent si détourée).
+    case 'fit_formats': {
+        $id = (int) ($_POST['photo_id'] ?? 0);
+        $row = get_photo_row($ref, $id);
+        if (!$row || ($row['type'] ?? 'photo') !== 'photo') {
+            flash_set('Photo introuvable.', 'error');
+            break;
+        }
+        $srcAbs = __DIR__ . '/../' . $row['path'];
+        $base = 'product-' . $ref . '-format';
+        $desktop = fit_ratio_file($srcAbs, aspect_ratio_value(GENERATED_IMAGE_FORMATS['desktop']), $base);
+        $mobile = fit_ratio_file($srcAbs, aspect_ratio_value(GENERATED_IMAGE_FORMATS['mobile']), $base . '-mobile');
+        if (!$desktop) {
+            flash_set('Mise au format impossible.', 'error');
+            break;
+        }
+        $label = mb_substr(preg_replace('/ — 3:2$/u', '', $row['label']) . ' — 3:2', 0, 80);
+        add_product_photo($ref, $desktop, $label, (bool) $row['is_illustration'], 'photo', $mobile);
+        flash_set("« $label » ajoutée à la galerie : format 3:2 sur ordinateur et 9:16 sur smartphone, photo entière"
+            . (str_ends_with($desktop, '.png') ? ', fond transparent conservé.' : ', fond prolongé autour.'));
+        break;
+    }
+
     case 'detail': {
         $dataUrl = (string) ($_POST['image_data'] ?? '');
         if (!preg_match('/^data:image\/(jpeg|png);base64,(.+)$/', $dataUrl, $m)) {

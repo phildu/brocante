@@ -532,11 +532,12 @@ function rotate_photo_clockwise(string $absPath): bool
 const EXPORT_SUBJECT_FILL = 0.9;
 
 /**
- * Photo mise au ratio cible (largeur/hauteur) SANS recadrage : elle est
- * gardée en entier, centrée, et du fond est ajouté autour (voir
- * pad_image_to_ratio). Retourne les octets JPEG, ou null en cas d'échec.
+ * Photo mise au ratio cible (largeur/hauteur) SANS recadrage, enregistrée
+ * dans uploads/ : elle est gardée en entier, centrée, et du fond est ajouté
+ * autour (voir pad_image_to_ratio). Une photo détourée reste un PNG à fond
+ * transparent (marge transparente). Retourne le chemin relatif, ou null.
  */
-function fit_ratio_bytes(string $srcAbsPath, float $ratio, int $maxDim = 1400, int $quality = 85, float $fill = EXPORT_SUBJECT_FILL): ?string
+function fit_ratio_file(string $srcAbsPath, float $ratio, string $baseName, int $maxDim = 1800, int $quality = 88, float $fill = EXPORT_SUBJECT_FILL): ?string
 {
     $src = @imagecreatefromstring((string) @file_get_contents($srcAbsPath));
     if (!$src) return null;
@@ -544,10 +545,12 @@ function fit_ratio_bytes(string $srcAbsPath, float $ratio, int $maxDim = 1400, i
     $h = imagesy($src);
     // Taille de toile nécessaire pour garder la photo à sa résolution, plafonnée à $maxDim.
     [$cw, $ch] = ($w / $h > $ratio) ? [$w / $fill, $w / $fill / $ratio] : [$h / $fill * $ratio, $h / $fill];
-    $canvas = pad_image_to_ratio($src, $ratio, $fill, (int) min($maxDim, round(max($cw, $ch))));
+    $transparent = image_has_transparent_edge($src);
+    $canvas = pad_image_to_ratio($src, $ratio, $fill, (int) min($maxDim, round(max($cw, $ch))), $transparent);
     ob_start();
-    imagejpeg($canvas, null, $quality);
-    return ob_get_clean() ?: null;
+    $transparent ? imagepng($canvas, null, 6) : imagejpeg($canvas, null, $quality);
+    $bytes = (string) ob_get_clean();
+    return $bytes !== '' ? save_binary_photo($bytes, $baseName, $transparent ? 'png' : 'jpg', $maxDim, $quality) : null;
 }
 
 /**
@@ -561,8 +564,8 @@ function fit_ratio_bytes(string $srcAbsPath, float $ratio, int $maxDim = 1400, i
 function media_export_variants(): array
 {
     return [
-        'vignette_catalogue' => ['label' => 'Vignette catalogue', 'ratio' => 4 / 3, 'maxDim' => 480],
-        'produit_horizontal' => ['label' => 'Fiche produit (horizontal)', 'ratio' => 4 / 3, 'maxDim' => 1600],
+        'vignette_catalogue' => ['label' => 'Vignette catalogue (3:2)', 'ratio' => 3 / 2, 'maxDim' => 480],
+        'produit_horizontal' => ['label' => 'Fiche produit (horizontal 3:2)', 'ratio' => 3 / 2, 'maxDim' => 1800],
         'diaporama_vente' => ['label' => 'Diaporama plein écran (point de vente)', 'ratio' => 16 / 9, 'maxDim' => 2400],
         'format_reel' => ['label' => 'Format réel (non recadré)', 'ratio' => null, 'maxDim' => 2000],
         'reseaux_post' => ['label' => 'Réseaux sociaux — post (1080×1080)', 'ratio' => 1.0, 'maxDim' => 1080],
@@ -579,11 +582,13 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
 {
     $count = 0;
     foreach (media_export_variants() as $key => $v) {
-        $bytes = $v['ratio'] === null
-            ? @file_get_contents($srcAbsPath)
-            : fit_ratio_bytes($srcAbsPath, $v['ratio'], $v['maxDim']);
-        if (!$bytes) continue;
-        $path = save_binary_photo($bytes, 'export-' . $key, 'jpg', $v['maxDim'], 88);
+        if ($v['ratio'] === null) {
+            $bytes = @file_get_contents($srcAbsPath);
+            $isPng = strtolower(pathinfo($srcAbsPath, PATHINFO_EXTENSION)) === 'png';
+            $path = $bytes ? save_binary_photo($bytes, 'export-' . $key, $isPng ? 'png' : 'jpg', $v['maxDim'], 88) : null;
+        } else {
+            $path = fit_ratio_file($srcAbsPath, $v['ratio'], 'export-' . $key, $v['maxDim']);
+        }
         if (!$path) continue;
         add_media_item('photo', $path, "$baseLabel — {$v['label']}", 'Export multi-formats', 'export,' . $key, $originRef, $originName);
         $count++;
@@ -692,7 +697,7 @@ function aspect_ratio_value(string $aspectRatio): float
  * Fond : gris clair neutre si l'image est détourée (transparence), la couleur
  * du pourtour s'il est uni (fond studio), sinon la photo agrandie et très floutée.
  */
-function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $longSide = 1536): GdImage
+function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $longSide = 1536, bool $keepTransparency = false): GdImage
 {
     if (!imageistruecolor($src)) imagepalettetotruecolor($src);
     $w = imagesx($src);
@@ -700,10 +705,17 @@ function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $
     [$cw, $ch] = $ratio >= 1 ? [$longSide, (int) round($longSide / $ratio)] : [(int) round($longSide * $ratio), $longSide];
     $canvas = imagecreatetruecolor($cw, $ch);
 
-    // Transparence : quelques pixels du bord totalement transparents suffisent à le savoir.
-    $transparent = false;
-    foreach ([[0, 0], [$w - 1, 0], [0, $h - 1], [$w - 1, $h - 1], [intdiv($w, 2), 0], [0, intdiv($h, 2)]] as [$x, $y]) {
-        if (((imagecolorat($src, $x, $y) >> 24) & 0x7F) > 100) { $transparent = true; break; }
+    $transparent = image_has_transparent_edge($src);
+    if ($transparent && $keepTransparency) {
+        // Détourage : marge transparente, l'objet garde son fond transparent.
+        imagealphablending($canvas, false);
+        imagesavealpha($canvas, true);
+        imagefill($canvas, 0, 0, imagecolorallocatealpha($canvas, 0, 0, 0, 127));
+        $scale = min($cw * $fill / $w, $ch * $fill / $h);
+        $nw = max(1, (int) round($w * $scale));
+        $nh = max(1, (int) round($h * $scale));
+        imagecopyresampled($canvas, $src, intdiv($cw - $nw, 2), intdiv($ch - $nh, 2), 0, 0, $nw, $nh, $w, $h);
+        return $canvas;
     }
     $edge = $transparent ? null : image_uniform_edge_color($src);
     if ($transparent) {
@@ -733,6 +745,18 @@ function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $
     imagealphablending($canvas, true);
     imagecopyresampled($canvas, $src, intdiv($cw - $nw, 2), intdiv($ch - $nh, 2), 0, 0, $nw, $nh, $w, $h);
     return $canvas;
+}
+
+/** Image détourée : quelques points du bord totalement transparents suffisent à le savoir. */
+function image_has_transparent_edge(GdImage $img): bool
+{
+    if (!imageistruecolor($img)) imagepalettetotruecolor($img);
+    $w = imagesx($img);
+    $h = imagesy($img);
+    foreach ([[0, 0], [$w - 1, 0], [0, $h - 1], [$w - 1, $h - 1], [intdiv($w, 2), 0], [0, intdiv($h, 2)], [intdiv($w, 2), $h - 1], [$w - 1, intdiv($h, 2)]] as [$x, $y]) {
+        if (((imagecolorat($img, $x, $y) >> 24) & 0x7F) > 100) return true;
+    }
+    return false;
 }
 
 /**
