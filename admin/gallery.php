@@ -28,7 +28,7 @@ $flash = flash_get();
   .gm-list { display: flex; flex-direction: column; gap: 16px; }
   .gm-item {
     display: grid;
-    grid-template-columns: 120px 1fr auto;
+    grid-template-columns: auto 1fr auto;
     gap: 16px;
     align-items: center;
     padding: 16px;
@@ -39,6 +39,11 @@ $flash = flash_get();
   .gm-item.is-hidden-photo { opacity: 0.5; }
   .gm-item.is-hidden-photo .gm-thumb { filter: grayscale(1); }
   .gm-thumb img, .gm-thumb video { width: 100%; height: 100%; object-fit: contain; }
+  /* Version ordinateur (3:2) et, à côté, sa version smartphone (9:16). */
+  .gm-thumbs { display: flex; gap: 6px; align-items: center; }
+  .gm-thumb-mobile { width: 51px; height: 90px; background: var(--surface-2); overflow: hidden; }
+  .gm-thumb-mobile img { width: 100%; height: 100%; object-fit: contain; }
+  .gm-thumb-mobile.is-pending { display: flex; align-items: center; justify-content: center; text-align: center; font-family: var(--font-mono); font-size: 0.6rem; color: var(--ink-soft); border: 1px dashed var(--line); }
   .gm-fields { display: flex; flex-direction: column; gap: 8px; }
   .gm-fields input[type="text"] {
     background: var(--bg); border: 1px solid var(--line); color: var(--ink);
@@ -188,11 +193,18 @@ $flash = flash_get();
       <?php foreach ($photos as $i => $ph): ?>
         <?php $isVideo = ($ph['type'] ?? 'photo') === 'video'; ?>
         <div class="gm-item<?= $ph['is_hidden'] ? ' is-hidden-photo' : '' ?>" id="photo-<?= (int) $ph['id'] ?>">
-          <div class="gm-thumb">
-            <?php if ($isVideo): ?>
-              <video src="/<?= h($ph['path']) ?>" muted></video>
-            <?php else: ?>
-              <img src="/<?= h($ph['path']) ?>" alt="">
+          <div class="gm-thumbs">
+            <div class="gm-thumb">
+              <?php if ($isVideo): ?>
+                <video src="/<?= h($ph['path']) ?>" muted></video>
+              <?php else: ?>
+                <img src="/<?= h($ph['path']) ?>" alt="">
+              <?php endif; ?>
+            </div>
+            <?php if (!empty($ph['path_mobile'])): ?>
+              <div class="gm-thumb-mobile" title="Version smartphone (9:16)"><img src="/<?= h($ph['path_mobile']) ?>" alt=""></div>
+            <?php elseif (!empty($ph['mobile_pending'])): ?>
+              <div class="gm-thumb-mobile is-pending" title="Version smartphone (9:16) en cours de génération">9:16<br>en cours…</div>
             <?php endif; ?>
           </div>
           <div class="gm-fields">
@@ -232,12 +244,25 @@ $flash = flash_get();
               </form>
               <button type="button" class="btn-small" data-crop-open data-mode="replace" data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>">Recadrer</button>
               <button type="button" class="btn-small" data-crop-open data-mode="detail" data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>">Créer un détail</button>
+              <?php if ($ph['is_illustration'] && empty($ph['path_mobile']) && empty($ph['mobile_pending'])): ?>
+              <form method="post" action="/admin/gallery-action.php">
+                <input type="hidden" name="ref" value="<?= h($ref) ?>">
+                <input type="hidden" name="action" value="mobile_variant">
+                <input type="hidden" name="photo_id" value="<?= (int) $ph['id'] ?>">
+                <button type="submit" class="btn-small" style="width:100%;" title="Prolonge ce visuel en hauteur (même scène, même objet) pour l'affichage smartphone">📱 Créer la version 9:16 (IA)</button>
+              </form>
+              <?php endif; ?>
+              <?php if (!$ph['is_illustration'] && empty($ph['path_mobile'])): ?>
               <form method="post" action="/admin/gallery-action.php">
                 <input type="hidden" name="ref" value="<?= h($ref) ?>">
                 <input type="hidden" name="action" value="fit_formats">
                 <input type="hidden" name="photo_id" value="<?= (int) $ph['id'] ?>">
+                <?php if (str_ends_with(strtolower($ph['path']), '.png')): ?>
+                  <label class="featured-check" style="font-size:0.78rem;margin-bottom:4px;"><input type="checkbox" name="shadow" value="1" checked> Ombre portée</label>
+                <?php endif; ?>
                 <button type="submit" class="btn-small" style="width:100%;" title="Ajoute à la galerie une copie de cette photo en 3:2 (ordinateur) et 9:16 (smartphone), sans recadrage — transparente si la photo est détourée">▭ Format 3:2 + 9:16 → galerie</button>
               </form>
+              <?php endif; ?>
               <button type="button" class="btn-small" style="width:100%;" data-formats-preview-open data-photo-id="<?= (int) $ph['id'] ?>" data-src="/<?= h($ph['path']) ?>" title="Vignette catalogue et fiche produit (3:2), diaporama plein écran, format réel, post et story réseaux sociaux">📐 Générer tous les formats → médiathèque</button>
             <?php endif; ?>
             <form method="post" action="/admin/gallery-action.php" onsubmit="return confirm('Retirer cette photo de la galerie ?');">

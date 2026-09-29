@@ -537,7 +537,7 @@ const EXPORT_SUBJECT_FILL = 0.9;
  * autour (voir pad_image_to_ratio). Une photo détourée reste un PNG à fond
  * transparent (marge transparente). Retourne le chemin relatif, ou null.
  */
-function fit_ratio_file(string $srcAbsPath, float $ratio, string $baseName, int $maxDim = 1800, int $quality = 88, float $fill = EXPORT_SUBJECT_FILL): ?string
+function fit_ratio_file(string $srcAbsPath, float $ratio, string $baseName, int $maxDim = 1800, int $quality = 88, float $fill = EXPORT_SUBJECT_FILL, bool $shadow = false): ?string
 {
     $src = @imagecreatefromstring((string) @file_get_contents($srcAbsPath));
     if (!$src) return null;
@@ -547,6 +547,7 @@ function fit_ratio_file(string $srcAbsPath, float $ratio, string $baseName, int 
     [$cw, $ch] = ($w / $h > $ratio) ? [$w / $fill, $w / $fill / $ratio] : [$h / $fill * $ratio, $h / $fill];
     $transparent = image_has_transparent_edge($src);
     $canvas = pad_image_to_ratio($src, $ratio, $fill, (int) min($maxDim, round(max($cw, $ch))), $transparent);
+    if ($shadow && $transparent) $canvas = add_drop_shadow($canvas);
     ob_start();
     $transparent ? imagepng($canvas, null, 6) : imagejpeg($canvas, null, $quality);
     $bytes = (string) ob_get_clean();
@@ -747,6 +748,83 @@ function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $
     return $canvas;
 }
 
+/**
+ * Ombre portée sous un objet détouré (toile transparente, voir
+ * pad_image_to_ratio) : silhouette décalée vers le bas et floutée, plus une
+ * ombre de contact elliptique au pied de l'objet. Calculée à ¼ de la
+ * résolution (rapide), puis agrandie : une ombre floue n'a pas besoin de détail.
+ * Le résultat reste transparent autour (ombre semi-transparente).
+ */
+function add_drop_shadow(GdImage $canvas, float $opacity = 0.38, float $contact = 0.5): GdImage
+{
+    $w = imagesx($canvas);
+    $h = imagesy($canvas);
+    $sw = max(8, intdiv($w, 4));
+    $sh = max(8, intdiv($h, 4));
+
+    $small = imagecreatetruecolor($sw, $sh);
+    imagealphablending($small, false);
+    imagesavealpha($small, true);
+    imagefill($small, 0, 0, imagecolorallocatealpha($small, 0, 0, 0, 127));
+    imagecopyresampled($small, $canvas, 0, 0, 0, 0, $sw, $sh, $w, $h);
+
+    // Couverture de l'objet (0 = vide, 1 = plein) et son cadre.
+    $cover = [];
+    $minX = $sw; $maxX = -1; $maxY = -1; $minY = $sh;
+    for ($y = 0; $y < $sh; $y++) {
+        for ($x = 0; $x < $sw; $x++) {
+            $c = 1 - ((imagecolorat($small, $x, $y) >> 24) & 0x7F) / 127;
+            $cover[$y * $sw + $x] = $c;
+            if ($c > 0.5) {
+                $minX = min($minX, $x); $maxX = max($maxX, $x);
+                $minY = min($minY, $y); $maxY = max($maxY, $y);
+            }
+        }
+    }
+    if ($maxX < 0) return $canvas; // rien de visible
+
+    // Ombre en niveaux de gris (blanc = pas d'ombre) : silhouette décalée…
+    $gray = imagecreatetruecolor($sw, $sh);
+    imagefill($gray, 0, 0, imagecolorallocate($gray, 255, 255, 255));
+    $dy = max(1, (int) round(($maxY - $minY) * 0.03));
+    for ($y = $dy; $y < $sh; $y++) {
+        for ($x = 0; $x < $sw; $x++) {
+            $c = $cover[($y - $dy) * $sw + $x];
+            if ($c > 0) {
+                $v = (int) round(255 * (1 - $c * $opacity));
+                imagesetpixel($gray, $x, $y, imagecolorallocate($gray, $v, $v, $v));
+            }
+        }
+    }
+    // … et ombre de contact au pied de l'objet.
+    $v = (int) round(255 * (1 - $contact));
+    imagefilledellipse($gray, intdiv($minX + $maxX, 2), $maxY, (int) round(($maxX - $minX) * 0.8), max(2, (int) round(($maxY - $minY) * 0.06)), imagecolorallocate($gray, $v, $v, $v));
+    for ($i = 0; $i < 10; $i++) imagefilter($gray, IMG_FILTER_GAUSSIAN_BLUR);
+
+    // Niveaux de gris → calque brun très sombre semi-transparent.
+    $shadowSmall = imagecreatetruecolor($sw, $sh);
+    imagealphablending($shadowSmall, false);
+    imagesavealpha($shadowSmall, true);
+    for ($y = 0; $y < $sh; $y++) {
+        for ($x = 0; $x < $sw; $x++) {
+            $darkness = (255 - (imagecolorat($gray, $x, $y) & 0xFF)) / 255;
+            imagesetpixel($shadowSmall, $x, $y, imagecolorallocatealpha($shadowSmall, 30, 24, 18, 127 - (int) round($darkness * 127)));
+        }
+    }
+
+    // Ombre agrandie, puis l'objet par-dessus.
+    $out = imagecreatetruecolor($w, $h);
+    imagealphablending($out, false);
+    imagesavealpha($out, true);
+    imagefill($out, 0, 0, imagecolorallocatealpha($out, 0, 0, 0, 127));
+    imagecopyresampled($out, $shadowSmall, 0, 0, 0, 0, $w, $h, $sw, $sh);
+    imagealphablending($out, true);
+    imagecopy($out, $canvas, 0, 0, 0, 0, $w, $h);
+    imagesavealpha($out, true);
+    foreach ([$small, $gray, $shadowSmall, $canvas] as $im) imagedestroy($im);
+    return $out;
+}
+
 /** Image détourée : quelques points du bord totalement transparents suffisent à le savoir. */
 function image_has_transparent_edge(GdImage $img): bool
 {
@@ -794,11 +872,11 @@ function image_uniform_edge_color(GdImage $img): ?array
  * Source d'une génération : copie temporaire de la photo posée sur une toile
  * au format visé, objet entier avec marge. Chemin temporaire à supprimer, ou null.
  */
-function prepare_generation_source(string $srcAbsPath, string $aspectRatio): ?string
+function prepare_generation_source(string $srcAbsPath, string $aspectRatio, float $fill = GENERATED_IMAGE_SUBJECT_FILL): ?string
 {
     $src = @imagecreatefromstring((string) @file_get_contents($srcAbsPath));
     if (!$src) return null;
-    $canvas = pad_image_to_ratio($src, aspect_ratio_value($aspectRatio), GENERATED_IMAGE_SUBJECT_FILL);
+    $canvas = pad_image_to_ratio($src, aspect_ratio_value($aspectRatio), $fill);
     $tmp = tempnam(sys_get_temp_dir(), 'gen') . '.jpg';
     imagejpeg($canvas, $tmp, 90);
     imagedestroy($src);
@@ -822,11 +900,16 @@ function fit_generated_to_ratio(string $binary, string $aspectRatio): string
     return (string) ob_get_clean();
 }
 
-/** Un visuel au format donné : source préparée, consigne de cadrage, format vérifié. */
-function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries): ?string
+/**
+ * Un visuel au format donné : source préparée, consigne de cadrage, format vérifié.
+ * $extend : la source est déjà un visuel fini (la version 3:2) à prolonger
+ * tel quel jusqu'au nouveau format — pas de marge ajoutée, pas de consigne
+ * de recomposition.
+ */
+function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries, bool $extend = false): ?string
 {
-    $prepared = prepare_generation_source($srcAbsPath, $aspectRatio);
-    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio), $retries, $aspectRatio);
+    $prepared = prepare_generation_source($srcAbsPath, $aspectRatio, $extend ? 1.0 : GENERATED_IMAGE_SUBJECT_FILL);
+    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $extend ? $prompt : $prompt . generated_framing_prompt($aspectRatio), $retries, $aspectRatio);
     if ($prepared) @unlink($prepared);
     return $bytes ? fit_generated_to_ratio($bytes, $aspectRatio) : null;
 }
@@ -839,16 +922,32 @@ function generate_desktop_image(string $srcAbsPath, string $prompt, string $base
 }
 
 /**
- * Programme la version smartphone (9:16) d'un visuel : elle est générée
- * ensuite par une requête à part (admin/mobile-variants.php, lancée par
- * toutes les pages de l'admin), pour qu'aucune requête n'enchaîne deux
- * générations et ne dépasse le délai du serveur (erreur 504).
- * $srcRelPath : photo source conservée (chemin relatif à la racine).
+ * Consigne pour obtenir la version smartphone (9:16) À PARTIR de la version
+ * 3:2 déjà générée : même scène, même objet, décor simplement prolongé en
+ * haut et en bas — les deux versions montrent ainsi la même image.
  */
-function queue_mobile_variant(int $photoId, string $srcRelPath, string $prompt): void
+function build_extend_prompt(): string
+{
+    return "This is a finished product photo for an online antiques shop, placed across the full width of a tall "
+        . "9:16 (portrait) canvas: the blurred bands above and below it are EMPTY canvas. Extend the SAME scene "
+        . "upward and downward (wall, ceiling, shelf above; floor, table, surface below) so that it fills the whole "
+        . "9:16 frame naturally and seamlessly. Keep everything visible in the original photo EXACTLY identical — the "
+        . "object, its shape, size, position, colors, lighting and the surrounding decor: do not crop, zoom, move, "
+        . "restyle or redraw it, only add scenery around it. The object must remain entirely visible. "
+        . "Photorealistic, no text, no watermark, no people. Respond with the generated image only, no text in your reply.";
+}
+
+/**
+ * Programme la version smartphone (9:16) d'un visuel généré : elle est
+ * produite ensuite par une requête à part (admin/mobile-variants.php, lancée
+ * par toutes les pages de l'admin), pour qu'aucune requête n'enchaîne deux
+ * générations et ne dépasse le délai du serveur (erreur 504). Elle part de
+ * la version 3:2 elle-même, prolongée en hauteur (build_extend_prompt).
+ */
+function queue_mobile_variant(int $photoId, string $desktopRelPath): void
 {
     db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')
-        ->execute([json_encode(['src' => $srcRelPath, 'prompt' => $prompt, 'attempts' => 0], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $photoId]);
+        ->execute([json_encode(['src' => $desktopRelPath, 'extend' => true, 'attempts' => 0], JSON_UNESCAPED_SLASHES), $photoId]);
 }
 
 /** Visuels dont la version smartphone reste à générer. */
@@ -864,31 +963,34 @@ function run_mobile_variant(int $photoId): array
     $stmt->execute([$photoId]);
     $row = $stmt->fetch();
     if (!$row || $row['mobile_pending'] === null) return ['ok' => true, 'done' => true];
-    $clear = db()->prepare('UPDATE product_photos SET mobile_pending = NULL WHERE id = ?');
-
     $job = json_decode((string) $row['mobile_pending'], true) ?: [];
-    $srcAbs = realpath(__DIR__ . '/../' . ($job['src'] ?? ''));
-    if (!$srcAbs || !is_file($srcAbs) || empty($job['prompt']) || !GEMINI_API_KEY) {
-        $clear->execute([$photoId]);
-        return ['ok' => false, 'error' => 'Photo source ou clé Gemini introuvable : version smartphone abandonnée.'];
-    }
+    $extend = !empty($job['extend']) || empty($job['prompt']); // ancien format de file : source + prompt
+    $srcAbs = realpath(__DIR__ . '/../' . ($job['src'] ?? $row['path']));
+    $baseName = pathinfo($row['path'], PATHINFO_FILENAME) . '-mobile';
+    $setMobile = db()->prepare('UPDATE product_photos SET path_mobile = ?, mobile_pending = NULL WHERE id = ?');
+    // Repli sans IA : la version 3:2 posée en entier sur une toile 9:16, fond prolongé.
+    $fallback = static function () use ($row, $baseName, $setMobile, $photoId): array {
+        $path = fit_ratio_file(__DIR__ . '/../' . $row['path'], aspect_ratio_value(GENERATED_IMAGE_FORMATS['mobile']), $baseName, fill: 1.0);
+        $setMobile->execute([$path, $photoId]); // file vidée dans tous les cas
+        return ['ok' => (bool) $path, 'path' => $path, 'fallback' => true,
+            'error' => $path ? null : 'Version smartphone impossible.'];
+    };
+    if (!$srcAbs || !is_file($srcAbs) || !GEMINI_API_KEY) return $fallback();
 
     $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
-    $bytes = generate_image_for_ratio($small, (string) $job['prompt'], GENERATED_IMAGE_FORMATS['mobile'], 0);
+    $bytes = generate_image_for_ratio($small, $extend ? build_extend_prompt() : (string) $job['prompt'], GENERATED_IMAGE_FORMATS['mobile'], 0, $extend);
     if ($small !== $srcAbs) @unlink($small);
-    $path = $bytes ? save_binary_photo($bytes, pathinfo($row['path'], PATHINFO_FILENAME) . '-mobile', 'jpg', 1800) : null;
+    $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
 
     if (!$path) {
-        // Trois essais au plus, répartis sur les visites suivantes de l'admin.
+        // Trois essais au plus, répartis sur les visites suivantes de l'admin,
+        // puis repli sans IA : il y a toujours une version 9:16 au bout.
         $job['attempts'] = (int) ($job['attempts'] ?? 0) + 1;
-        if ($job['attempts'] >= 3) {
-            $clear->execute([$photoId]);
-            return ['ok' => false, 'error' => 'Version smartphone abandonnée après 3 essais : la version 3:2 s\'affiche en entier sur mobile.'];
-        }
+        if ($job['attempts'] >= 3) return $fallback();
         db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')->execute([json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $photoId]);
         return ['ok' => false, 'error' => 'Génération de la version smartphone échouée, nouvel essai plus tard.'];
     }
-    db()->prepare('UPDATE product_photos SET path_mobile = ?, mobile_pending = NULL WHERE id = ?')->execute([$path, $photoId]);
+    $setMobile->execute([$path, $photoId]);
     return ['ok' => true, 'path' => $path];
 }
 

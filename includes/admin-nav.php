@@ -120,7 +120,7 @@ $adminIcon = static fn (string $name): string =>
 // sélecteurs d'images, de la médiathèque et des galeries — y compris celles
 // ajoutées plus tard par script (import par lot, prise de photos).
 (function () {
-  var HOSTS = '.media-thumb, .media-list-thumb, .media-pick-item, .gm-thumb, .banner-thumb, .bi-photo-item, .bi-thumbs, .qa-visuals figure';
+  var HOSTS = '.media-thumb, .media-list-thumb, .gm-thumb-mobile, .media-pick-item, .gm-thumb, .banner-thumb, .bi-photo-item, .bi-thumbs, .qa-visuals figure';
   var RATIOS = [[1, 1], [5, 4], [4, 5], [4, 3], [3, 4], [3, 2], [2, 3], [16, 9], [9, 16], [2, 1], [1, 2], [21, 9]];
 
   function ratioLabel(w, h) {

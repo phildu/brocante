@@ -152,6 +152,20 @@ switch ($action) {
         break;
     }
 
+    // Visuel IA sans version smartphone (généré avant, ou échec) : mise en
+    // file de sa version 9:16, prolongée à partir du visuel lui-même.
+    case 'mobile_variant': {
+        $id = (int) ($_POST['photo_id'] ?? 0);
+        $row = get_photo_row($ref, $id);
+        if (!$row || ($row['type'] ?? 'photo') !== 'photo') {
+            flash_set('Photo introuvable.', 'error');
+            break;
+        }
+        queue_mobile_variant($id, $row['path']);
+        flash_set('La version smartphone (9:16) de « ' . $row['label'] . ' » se génère maintenant (encadré en bas à droite) — même scène, prolongée en hauteur.');
+        break;
+    }
+
     // Version 3:2 (ordinateur) + 9:16 (smartphone) d'une photo, ajoutée à la
     // galerie : photo entière, fond ajouté autour (transparent si détourée).
     case 'fit_formats': {
@@ -163,16 +177,20 @@ switch ($action) {
         }
         $srcAbs = __DIR__ . '/../' . $row['path'];
         $base = 'product-' . $ref . '-format';
-        $desktop = fit_ratio_file($srcAbs, aspect_ratio_value(GENERATED_IMAGE_FORMATS['desktop']), $base);
-        $mobile = fit_ratio_file($srcAbs, aspect_ratio_value(GENERATED_IMAGE_FORMATS['mobile']), $base . '-mobile');
+        $shadow = !empty($_POST['shadow']);
+        @set_time_limit(60);
+        $desktop = fit_ratio_file($srcAbs, aspect_ratio_value(GENERATED_IMAGE_FORMATS['desktop']), $base, shadow: $shadow);
+        $mobile = fit_ratio_file($srcAbs, aspect_ratio_value(GENERATED_IMAGE_FORMATS['mobile']), $base . '-mobile', shadow: $shadow);
         if (!$desktop) {
             flash_set('Mise au format impossible.', 'error');
             break;
         }
-        $label = mb_substr(preg_replace('/ — 3:2$/u', '', $row['label']) . ' — 3:2', 0, 80);
+        $isPng = str_ends_with($desktop, '.png');
+        $withShadow = $shadow && $isPng;
+        $label = mb_substr(preg_replace('/ — 3:2( avec ombre)?$/u', '', $row['label']) . ' — 3:2' . ($withShadow ? ' avec ombre' : ''), 0, 80);
         add_product_photo($ref, $desktop, $label, (bool) $row['is_illustration'], 'photo', $mobile);
         flash_set("« $label » ajoutée à la galerie : format 3:2 sur ordinateur et 9:16 sur smartphone, photo entière"
-            . (str_ends_with($desktop, '.png') ? ', fond transparent conservé.' : ', fond prolongé autour.'));
+            . ($isPng ? ', fond transparent conservé' . ($withShadow ? ', ombre portée ajoutée.' : '.') : ', fond prolongé autour.'));
         break;
     }
 
@@ -348,7 +366,7 @@ switch ($action) {
         }
         $label = ['ambiance' => 'Ambiance', 'angle' => 'Autre angle', 'complete' => 'Objet complété'][$kind];
         $photoId = add_product_photo($ref, $desktop, $label, true);
-        queue_mobile_variant($photoId, $sourcePath, $prompt);
+        queue_mobile_variant($photoId, $desktop);
         $doneLabel = ['ambiance' => "La photo d'ambiance", 'angle' => 'La vue sous un autre angle', 'complete' => "Le complément de l'objet"][$kind];
         flash_set("$doneLabel a été générée et ajoutée à la galerie (format ordinateur 3:2). La version smartphone 9:16 se génère maintenant, sans rien bloquer.");
         break;

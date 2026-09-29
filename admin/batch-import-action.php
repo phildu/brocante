@@ -420,7 +420,7 @@ switch ($action) {
         }
         add_product_photo($ref, $detourePath, $detoure['label'], $detoure['illustration']);
         if ($ambiancePath) {
-            queue_mobile_variant(add_product_photo($ref, $ambiancePath, 'Ambiance', true), $detourePath, build_ambiance_prompt(''));
+            queue_mobile_variant(add_product_photo($ref, $ambiancePath, 'Ambiance', true), $ambiancePath);
         }
 
         $batch['groups'][$groupIndex]['status'] = 'done';

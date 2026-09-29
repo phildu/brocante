@@ -126,7 +126,7 @@ switch ($action) {
         $prompt = build_ambiance_prompt(trim((string) ($_POST['notes'] ?? '')));
         $desktop = generate_desktop_image($root . '/' . $source['path'], $prompt, 'product-' . $product['ref'] . '-ambiance');
         if (!$desktop) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
-        queue_mobile_variant(add_product_photo($product['ref'], $desktop, 'Ambiance', true), $source['path'], $prompt);
+        queue_mobile_variant(add_product_photo($product['ref'], $desktop, 'Ambiance', true), $desktop);
         quick_add_reply(['ok' => true, 'path' => $desktop, 'label' => 'Ambiance']);
     }
 
