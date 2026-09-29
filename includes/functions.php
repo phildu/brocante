@@ -1047,10 +1047,52 @@ function build_extend_prompt(string $aspectRatio): string
  * (fabriquer la 3:2 depuis une image 9:16 ou d'un autre format) ; $then :
  * format à fabriquer ensuite, depuis le résultat.
  */
-function queue_format_job(int $photoId, string $srcRelPath, string $target, ?string $then = null): void
+function queue_format_job(int $photoId, string $srcRelPath, string $target, ?string $then = null, ?string $mode = null): void
 {
     db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')
-        ->execute([json_encode(['src' => $srcRelPath, 'target' => $target, 'then' => $then, 'attempts' => 0], JSON_UNESCAPED_SLASHES), $photoId]);
+        ->execute([json_encode(['src' => $srcRelPath, 'target' => $target, 'then' => $then, 'mode' => $mode, 'attempts' => 0], JSON_UNESCAPED_SLASHES), $photoId]);
+}
+
+/**
+ * Consigne d'ombre portée (IA) pour un objet détouré posé sur fond blanc :
+ * l'objet reste identique, seule une ombre réaliste de studio est ajoutée.
+ */
+function build_shadow_prompt(string $aspectRatio): string
+{
+    return "This is a cut-out photo of a real secondhand/vintage object for an online antiques shop, placed on a plain "
+        . "white $aspectRatio canvas. Add a realistic, soft, natural drop shadow and contact shadow beneath and slightly "
+        . "behind the object, exactly like a professional e-commerce studio photo lit from above and slightly in front, "
+        . "so the object looks naturally resting on a white seamless surface. Keep the object EXACTLY identical — shape, "
+        . "colors, materials, details, size and position in the frame: do not redraw, restyle, move, crop or resize it. "
+        . "Keep the background plain pure white, seamless, with no other objects, no texture, no visible floor line or "
+        . "horizon. The whole object must stay entirely visible with its margins. No text, no watermark. "
+        . "Respond with the generated image only, no text in your reply.";
+}
+
+/**
+ * Version avec ombre portée générée par l'IA d'une photo détourée, au format
+ * donné : l'objet est posé entier (avec marge) sur une toile blanche au bon
+ * format, puis Gemini ajoute l'ombre. Chemin du JPEG enregistré, ou null.
+ */
+function generate_shadow_image(string $cutoutAbsPath, string $aspectRatio, string $baseName, int $retries = 1): ?string
+{
+    if (!GEMINI_API_KEY) return null;
+    $src = @imagecreatefromstring((string) @file_get_contents($cutoutAbsPath));
+    if (!$src) return null;
+    $ratio = aspect_ratio_value($aspectRatio);
+    $padded = pad_image_to_ratio($src, $ratio, GENERATED_IMAGE_SUBJECT_FILL, 1536, image_has_transparent_edge($src));
+    // Toile blanche (un détourage PNG est transparent autour de l'objet).
+    $canvas = imagecreatetruecolor(imagesx($padded), imagesy($padded));
+    imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
+    imagealphablending($canvas, true);
+    imagecopy($canvas, $padded, 0, 0, 0, 0, imagesx($padded), imagesy($padded));
+    $tmp = tempnam(sys_get_temp_dir(), 'shd') . '.jpg';
+    imagejpeg($canvas, $tmp, 92);
+    foreach ([$src, $padded, $canvas] as $im) imagedestroy($im);
+
+    $bytes = gemini_generate_image($tmp, build_shadow_prompt($aspectRatio), $retries, $aspectRatio);
+    @unlink($tmp);
+    return $bytes ? save_binary_photo(fit_generated_to_ratio($bytes, $aspectRatio), $baseName, 'jpg', 1800) : null;
 }
 
 /** Version smartphone (9:16) d'un visuel 3:2 tout juste généré. */
@@ -1098,8 +1140,10 @@ function run_mobile_variant(int $photoId): array
     $target = ($job['target'] ?? 'mobile') === 'desktop' ? 'desktop' : 'mobile';
     $aspect = GENERATED_IMAGE_FORMATS[$target];
     // Toujours le visuel lui-même (jamais la photo d'origine) : les deux
-    // formats montrent ainsi la même image.
-    $srcRel = (string) $row['path'];
+    // formats montrent ainsi la même image — sauf l'ombre portée IA, qui
+    // repart du détourage d'origine.
+    $isShadow = ($job['mode'] ?? null) === 'shadow' && !empty($job['src']);
+    $srcRel = $isShadow ? (string) $job['src'] : (string) $row['path'];
     $srcAbs = realpath(__DIR__ . '/../' . $srcRel);
     $baseName = preg_replace('/-(mobile|desktop)(-[0-9a-f]{8})?$/', '', pathinfo($srcRel, PATHINFO_FILENAME)) . '-' . $target;
 
@@ -1126,14 +1170,21 @@ function run_mobile_variant(int $photoId): array
         return ['ok' => true, 'path' => $path];
     };
     // Repli sans IA : l'image posée en entière sur une toile au bon format, fond prolongé.
-    $fallback = static fn (): array => $store($srcAbs ? fit_ratio_file($srcAbs, aspect_ratio_value($aspect), $baseName, fill: 1.0) : null)
-        + ['fallback' => true];
+    $fallback = static fn (): array => $store($srcAbs
+        ? ($isShadow
+            ? fit_ratio_file($srcAbs, aspect_ratio_value($aspect), $baseName, shadow: true)
+            : fit_ratio_file($srcAbs, aspect_ratio_value($aspect), $baseName, fill: 1.0))
+        : null) + ['fallback' => true];
     if (!$srcAbs || !is_file($srcAbs) || !GEMINI_API_KEY) return $fallback();
 
-    $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
-    $bytes = generate_image_for_ratio($small, build_extend_prompt($aspect), $aspect, 0, true);
-    if ($small !== $srcAbs) @unlink($small);
-    $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
+    if ($isShadow) {
+        $path = generate_shadow_image($srcAbs, $aspect, $baseName, 0);
+    } else {
+        $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
+        $bytes = generate_image_for_ratio($small, build_extend_prompt($aspect), $aspect, 0, true);
+        if ($small !== $srcAbs) @unlink($small);
+        $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
+    }
 
     if (!$path) {
         // Trois essais au plus, répartis sur les visites suivantes de l'admin,

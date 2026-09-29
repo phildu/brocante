@@ -261,13 +261,13 @@ $flash = flash_get();
                 <button type="submit" class="btn-small" style="width:100%;" title="<?= h($missingTitle) ?>"><?= h($missingLabel) ?></button>
               </form>
               <?php endif; ?>
-              <?php if ((!$ph['is_illustration'] || $isCutout) && empty($ph['path_mobile'])): ?>
+              <?php if ((!$ph['is_illustration'] || $isCutout) && empty($ph['path_mobile']) && empty($ph['mobile_pending'])): ?>
               <form method="post" action="/admin/gallery-action.php">
                 <input type="hidden" name="ref" value="<?= h($ref) ?>">
                 <input type="hidden" name="action" value="fit_formats">
                 <input type="hidden" name="photo_id" value="<?= (int) $ph['id'] ?>">
                 <?php if ($isCutout): ?>
-                  <label class="featured-check" style="font-size:0.78rem;margin-bottom:4px;"><input type="checkbox" name="shadow" value="1" checked> Ombre portée</label>
+                  <label class="featured-check" style="font-size:0.78rem;margin-bottom:4px;"><input type="checkbox" name="shadow" value="1" checked> Ombre portée (IA)</label>
                 <?php endif; ?>
                 <button type="submit" class="btn-small" style="width:100%;" title="Ajoute à la galerie une copie de cette photo en 3:2 (ordinateur) et 9:16 (smartphone), sans recadrage — transparente si la photo est détourée">▭ Format 3:2 + 9:16 → galerie</button>
               </form>

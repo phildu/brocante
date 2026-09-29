@@ -163,7 +163,7 @@ switch ($action) {
             break;
         }
         if (is_cutout_photo($row)) {
-            flash_set('Photo détourée : utilisez « Format 3:2 + 9:16 » (objet entier, ombre portée, sans IA) — l\'IA inventerait un décor autour.', 'error');
+            flash_set('Photo détourée : utilisez « Format 3:2 + 9:16 » (objet entier, ombre portée par l\'IA en option) — prolonger le décor inventerait une mise en situation.', 'error');
             break;
         }
         $kind = queue_format_completion($row);
@@ -188,8 +188,24 @@ switch ($action) {
         }
         $srcAbs = __DIR__ . '/../' . $row['path'];
         $base = 'product-' . $ref . '-format';
-        $shadow = !empty($_POST['shadow']);
-        @set_time_limit(60);
+        $shadow = !empty($_POST['shadow']) && is_cutout_photo($row);
+        @set_time_limit(120);
+        $aiNote = '';
+
+        // Ombre portée par l'IA : 3:2 maintenant, 9:16 ensuite en arrière-plan
+        // (même consigne, depuis le même détourage). Repli sans IA si échec.
+        if ($shadow && GEMINI_API_KEY) {
+            $desktop = generate_shadow_image($srcAbs, GENERATED_IMAGE_FORMATS['desktop'], $base . '-ombre');
+            if ($desktop) {
+                $label = mb_substr(preg_replace('/ — 3:2( avec ombre)?$/u', '', $row['label']) . ' — 3:2 avec ombre', 0, 80);
+                $newId = add_product_photo($ref, $desktop, $label, true);
+                queue_format_job($newId, $row['path'], 'mobile', null, 'shadow');
+                flash_set("« $label » ajoutée à la galerie : ombre portée ajoutée par l'IA, objet entier sur fond blanc (format ordinateur 3:2). La version smartphone 9:16 se génère maintenant (encadré en bas à droite).");
+                break;
+            }
+            $aiNote = " — L'IA n'a pas pu ajouter l'ombre (service indisponible ou surchargé) : ombre calculée sans IA à la place, réessayez plus tard pour la version IA.";
+        }
+
         $desktop = fit_ratio_file($srcAbs, aspect_ratio_value(GENERATED_IMAGE_FORMATS['desktop']), $base, shadow: $shadow);
         $mobile = fit_ratio_file($srcAbs, aspect_ratio_value(GENERATED_IMAGE_FORMATS['mobile']), $base . '-mobile', shadow: $shadow);
         if (!$desktop) {
@@ -201,7 +217,7 @@ switch ($action) {
         $label = mb_substr(preg_replace('/ — 3:2( avec ombre)?$/u', '', $row['label']) . ' — 3:2' . ($withShadow ? ' avec ombre' : ''), 0, 80);
         add_product_photo($ref, $desktop, $label, (bool) $row['is_illustration'], 'photo', $mobile);
         flash_set("« $label » ajoutée à la galerie : format 3:2 sur ordinateur et 9:16 sur smartphone, photo entière"
-            . ($isPng ? ', fond transparent conservé' : ', fond prolongé autour') . ($withShadow ? ', ombre portée ajoutée.' : '.'));
+            . ($isPng ? ', fond transparent conservé' : ', fond prolongé autour') . ($withShadow ? ', ombre portée ajoutée.' : '.') . $aiNote, $aiNote ? 'error' : 'ok');
         break;
     }
 
