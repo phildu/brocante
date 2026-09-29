@@ -56,7 +56,150 @@ function batch_import_rebuild_groups(array $batch, string $root): array
     return $groups;
 }
 
+/**
+ * Démarre un lot à partir de photos déjà copiées dans uploads/batch-import/<id>/ :
+ * tri chronologique, premier lot analysé par IA, groupes. Retourne le message
+ * à afficher (null si aucune photo exploitable).
+ */
+function batch_import_start(string $batchId, array $photoAbsPaths, array $skipped, string $root): ?string
+{
+    if (!$photoAbsPaths) return null;
+
+    // L'heure de prise de vue seule ne suffit pas (deux pièces
+    // photographiées à la suite sans pause, ou reprises plus tard) —
+    // Gemini compare visuellement les photos entre elles, mais un seul
+    // lot borné à la fois (voir BATCH_IMPORT_AI_CHUNK_SIZE) : le premier
+    // lot (chronologique) est traité tout de suite, le reste démarre groupé
+    // par heure et se corrige lot par lot via "Analyser un lot par IA".
+    $sortedRel = array_map(
+        fn($abs) => 'uploads/batch-import/' . $batchId . '/' . basename($abs),
+        batch_import_sort_by_capture_time($photoAbsPaths)
+    );
+
+    $aiChunkGroups = [];
+    $aiProcessedCount = 0;
+    if (GEMINI_API_KEY) {
+        $firstChunkRel = array_slice($sortedRel, 0, BATCH_IMPORT_AI_CHUNK_SIZE);
+        $firstChunkAbs = array_map(fn($r) => $root . '/' . $r, $firstChunkRel);
+        $chunkGroupsAbs = gemini_group_photos_chunk($firstChunkAbs);
+        if ($chunkGroupsAbs !== null) {
+            $absToRel = array_combine($firstChunkAbs, $firstChunkRel);
+            foreach ($chunkGroupsAbs as $groupAbs) {
+                $aiChunkGroups[] = array_map(fn($abs) => $absToRel[$abs], $groupAbs);
+            }
+            $aiProcessedCount = count($firstChunkRel);
+        }
+    }
+
+    $batch = [
+        'dir' => 'uploads/batch-import/' . $batchId,
+        'confirmed' => false,
+        'sorted_paths' => $sortedRel,
+        'ai_chunk_groups' => $aiChunkGroups,
+        'ai_processed_count' => $aiProcessedCount,
+        'skipped_files' => $skipped,
+    ];
+    $batch['groups'] = batch_import_rebuild_groups($batch, $root);
+    $_SESSION['batch_import'] = $batch;
+
+    $total = count($sortedRel);
+    $msg = "$total photo(s) réparties en " . count($batch['groups']) . ' groupe(s) détecté(s)';
+    if ($aiProcessedCount >= $total && $total > 0) {
+        $msg .= ' — regroupement entièrement par reconnaissance visuelle IA.';
+    } elseif ($aiProcessedCount > 0) {
+        $msg .= " — IA appliquée aux $aiProcessedCount premières photos (par ordre chronologique), le reste par heure ; cliquez « Analyser le lot suivant par IA » pour continuer.";
+    } else {
+        $msg .= GEMINI_API_KEY
+            ? ' par heure de prise de vue (l\'analyse IA du premier lot a échoué — réessayez ci-dessous).'
+            : ' par heure de prise de vue (clé Gemini absente — IA indisponible).';
+    }
+    if ($skipped) {
+        $msg .= ' (' . count($skipped) . ' fichier(s) ignoré(s) : format non pris en charge.)';
+    }
+    return $msg;
+}
+
+/** Nouveau dossier de lot ; supprime le lot inachevé de cette session et les lots abandonnés. */
+function batch_import_new_dir(?array $previousBatch, string $root): array
+{
+    if ($previousBatch) {
+        batch_import_delete_dir($root . '/' . $previousBatch['dir']);
+    }
+    unset($_SESSION['batch_import']);
+    $batchId = 'lot-' . date('Ymd-His') . '-' . substr(bin2hex(random_bytes(3)), 0, 6);
+    $destDirAbs = $root . '/uploads/batch-import/' . $batchId;
+    // Lots abandonnés d'AUTRES sessions (onglet fermé, session expirée sans
+    // jamais cliquer "Terminer l'import") — balayage à chaque nouveau lot
+    // plutôt qu'une tâche planifiée, indisponible sur cet hébergement.
+    batch_import_cleanup_stale($destDirAbs);
+    if (!is_dir($destDirAbs)) mkdir($destDirAbs, 0755, true);
+    return [$batchId, $destDirAbs];
+}
+
+function batch_import_json(array $data, int $status = 200): never
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 switch ($action) {
+
+    // ── Photos choisies une par une ou dossier entier (envoi par paquets) ──
+    case 'files_begin': {
+        [$batchId, $destDirAbs] = batch_import_new_dir($batch, $root);
+        $_SESSION['batch_upload'] = ['id' => $batchId, 'skipped' => []];
+        batch_import_json(['ok' => true]);
+    }
+
+    case 'files_chunk': {
+        $upload = $_SESSION['batch_upload'] ?? null;
+        if (!$upload) batch_import_json(['ok' => false, 'error' => 'Envoi expiré : recommencez la sélection.'], 409);
+        $destDirAbs = $root . '/uploads/batch-import/' . $upload['id'];
+        $files = $_FILES['photos'] ?? null;
+        $mtimes = (array) ($_POST['mtimes'] ?? []);
+        $saved = 0;
+        if ($files && is_array($files['name'])) {
+            foreach ($files['name'] as $i => $name) {
+                $base = basename((string) $name);
+                $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
+                if (($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+                    || !in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)
+                    || !@getimagesize($files['tmp_name'][$i])) {
+                    $upload['skipped'][] = $base;
+                    continue;
+                }
+                $dest = $destDirAbs . '/' . substr(bin2hex(random_bytes(4)), 0, 8) . '-' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $base);
+                if (!move_uploaded_file($files['tmp_name'][$i], $dest)) {
+                    $upload['skipped'][] = $base;
+                    continue;
+                }
+                // Date d'origine du fichier (repli du tri quand la photo n'a pas d'EXIF).
+                $mtime = (int) floor(((float) ($mtimes[$i] ?? 0)) / 1000);
+                if ($mtime > 0) @touch($dest, $mtime);
+                $saved++;
+            }
+        }
+        $_SESSION['batch_upload'] = $upload;
+        batch_import_json(['ok' => true, 'saved' => $saved, 'skipped' => count($upload['skipped'])]);
+    }
+
+    case 'files_done': {
+        $upload = $_SESSION['batch_upload'] ?? null;
+        unset($_SESSION['batch_upload']);
+        if (!$upload) batch_import_json(['ok' => false, 'error' => 'Envoi expiré : recommencez la sélection.'], 409);
+        $destDirAbs = $root . '/uploads/batch-import/' . $upload['id'];
+        $paths = array_values(array_filter(glob($destDirAbs . '/*') ?: [], 'is_file'));
+        $msg = batch_import_start($upload['id'], $paths, $upload['skipped'], $root);
+        if ($msg === null) {
+            batch_import_delete_dir($destDirAbs);
+            flash_set("Aucune photo exploitable (JPEG/PNG/WEBP attendus — les photos HEIC d'iPhone doivent être exportées en JPEG).", 'error');
+        } else {
+            flash_set($msg);
+        }
+        batch_import_json(['ok' => true]);
+    }
 
     case 'upload': {
         if (empty($_FILES['zip']['tmp_name']) || $_FILES['zip']['error'] !== UPLOAD_ERR_OK) {
@@ -68,77 +211,13 @@ switch ($action) {
             break;
         }
 
-        // Un nouvel import remplace silencieusement un lot précédent resté
-        // inachevé dans CETTE session (photos jamais nettoyées).
-        if ($batch) {
-            batch_import_delete_dir($root . '/' . $batch['dir']);
-        }
-
-        $batchId = 'lot-' . date('Ymd-His') . '-' . substr(bin2hex(random_bytes(3)), 0, 6);
-        $destDirAbs = $root . '/uploads/batch-import/' . $batchId;
-
-        // Lots abandonnés d'AUTRES sessions (onglet fermé, session expirée
-        // sans jamais cliquer "Terminer l'import") — balayage à chaque upload
-        // plutôt qu'une tâche planifiée, indisponible sur cet hébergement.
-        batch_import_cleanup_stale($destDirAbs);
+        [$batchId, $destDirAbs] = batch_import_new_dir($batch, $root);
         $extracted = batch_import_extract_zip($_FILES['zip']['tmp_name'], $destDirAbs);
-
-        if (!$extracted['paths']) {
+        $msg = batch_import_start($batchId, $extracted['paths'], $extracted['skipped'], $root);
+        if ($msg === null) {
+            batch_import_delete_dir($destDirAbs);
             flash_set("Aucune photo exploitable trouvée dans ce zip (JPEG/PNG/WEBP attendus — les formats HEIC/HEIF d'iPhone doivent être exportés en JPEG au préalable).", 'error');
             break;
-        }
-
-        // L'heure de prise de vue seule ne suffit pas (deux pièces
-        // photographiées à la suite sans pause, ou reprises plus tard) —
-        // Gemini compare visuellement les photos entre elles, mais un seul
-        // lot borné à la fois (voir BATCH_IMPORT_AI_CHUNK_SIZE ci-dessus) :
-        // celui-ci traite tout de suite le premier lot (chronologique), le
-        // reste démarre groupé par heure et se corrige lot par lot via
-        // "Analyser un lot par IA" sur l'écran suivant.
-        $sortedRel = array_map(
-            fn($abs) => 'uploads/batch-import/' . $batchId . '/' . basename($abs),
-            batch_import_sort_by_capture_time($extracted['paths'])
-        );
-
-        $aiChunkGroups = [];
-        $aiProcessedCount = 0;
-        if (GEMINI_API_KEY) {
-            $firstChunkRel = array_slice($sortedRel, 0, BATCH_IMPORT_AI_CHUNK_SIZE);
-            $firstChunkAbs = array_map(fn($r) => $root . '/' . $r, $firstChunkRel);
-            $chunkGroupsAbs = gemini_group_photos_chunk($firstChunkAbs);
-            if ($chunkGroupsAbs !== null) {
-                $absToRel = array_combine($firstChunkAbs, $firstChunkRel);
-                foreach ($chunkGroupsAbs as $groupAbs) {
-                    $aiChunkGroups[] = array_map(fn($abs) => $absToRel[$abs], $groupAbs);
-                }
-                $aiProcessedCount = count($firstChunkRel);
-            }
-        }
-
-        $batch = [
-            'dir' => 'uploads/batch-import/' . $batchId,
-            'confirmed' => false,
-            'sorted_paths' => $sortedRel,
-            'ai_chunk_groups' => $aiChunkGroups,
-            'ai_processed_count' => $aiProcessedCount,
-            'skipped_files' => $extracted['skipped'],
-        ];
-        $batch['groups'] = batch_import_rebuild_groups($batch, $root);
-        $_SESSION['batch_import'] = $batch;
-
-        $total = count($sortedRel);
-        $msg = "$total photo(s) réparties en " . count($batch['groups']) . ' groupe(s) détecté(s)';
-        if ($aiProcessedCount >= $total && $total > 0) {
-            $msg .= ' — regroupement entièrement par reconnaissance visuelle IA.';
-        } elseif ($aiProcessedCount > 0) {
-            $msg .= " — IA appliquée aux $aiProcessedCount premières photos (par ordre chronologique), le reste par heure ; cliquez « Analyser le lot suivant par IA » pour continuer.";
-        } else {
-            $msg .= GEMINI_API_KEY
-                ? ' par heure de prise de vue (l\'analyse IA du premier lot a échoué — réessayez ci-dessous).'
-                : ' par heure de prise de vue (clé Gemini absente — IA indisponible).';
-        }
-        if ($extracted['skipped']) {
-            $msg .= ' (' . count($extracted['skipped']) . ' fichier(s) ignoré(s) : format non pris en charge.)';
         }
         flash_set($msg);
         break;
