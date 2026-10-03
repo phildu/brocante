@@ -227,3 +227,7 @@
   .look-colors span { width: 16px; }
   .shop > :not(.swatch) { grid-column: 2; }
   .shop .swatch { grid-column: 1; grid-row: 1 / span 3; }
+  .btn.danger { color: var(--warn); border-color: var(--warn); }
+  a.btn.danger:not(.btn-primary) { color: var(--warn); }
+  .btn.danger-solid { background: var(--warn); color: #fff; border-color: var(--warn); }
+  .confirm.danger-zone input { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; box-sizing: border-box; }

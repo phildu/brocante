@@ -9,7 +9,7 @@
 //   save     → corrections du vendeur et publication éventuelle
 // Réponses JSON : {ok: true, ...} ou {ok: false, error: "..."}.
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -21,7 +21,7 @@ function quick_add_reply(array $data, int $status = 200): never
     exit;
 }
 
-if (!is_admin_logged_in()) {
+if (!admin_access_ok()) {
     quick_add_reply(['ok' => false, 'error' => 'Session expirée : reconnectez-vous.'], 401);
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

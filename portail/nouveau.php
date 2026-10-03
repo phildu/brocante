@@ -7,7 +7,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     try {
         $slug = create_tenant_from_form($f, $_FILES['logo'] ?? null);
-        portail_flash('Commerce « ' . trim($f['name']) . " » créé dans tenants/$slug, à l'adresse $slug." . tenant_base_host() . '.');
+        portail_flash('Commerce « ' . trim($f['name']) . " » créé dans tenants/$slug, à l'adresse " . portail_shop_label($slug, tenant_load($slug)) . '.');
         header('Location: /portail/?voir=' . rawurlencode($slug));
         exit;
     } catch (InvalidArgumentException $ex) {
@@ -107,6 +107,11 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
   .pv-card .badge { align-self: flex-start; font-family: "Special Elite", "Courier New", monospace; font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--s-line); padding: 2px 6px; color: var(--s-ink-soft); }
   .pv-foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 14px 18px; border-top: 1px solid var(--s-line); background: var(--s-surface); font-size: 0.78rem; color: var(--s-ink-soft); }
   .pv-foot span:first-child { font-family: var(--s-font-display); font-weight: 600; color: var(--s-ink); }
+  .ai-box { border-style: dashed; }
+  .ai-box textarea { width: 100%; box-sizing: border-box; }
+  .ai-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .ai-actions input { flex: 1 1 220px; }
+  #ai-status[data-kind="error"] { color: #b3261e; }
 </style>
 </head>
 <body>
@@ -131,11 +136,34 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
       <button type="button" class="chip" data-preset="vide">Page blanche</button>
     </div>
 
+    <div class="box ai-box" id="ai-box">
+      <div class="box-body">
+        <label class="field"><strong>Générer le contenu avec l'IA</strong>
+          <textarea id="ai-desc" maxlength="1200" rows="3" placeholder="Décrivez votre commerce : ce que vous vendez, pour qui, le ton souhaité… ex. « Une cave à vins nature à Bordeaux, petits producteurs, ambiance conviviale »"></textarea>
+        </label>
+        <div class="ai-actions">
+          <button type="button" class="btn btn-primary" id="ai-go">Générer le contenu</button>
+          <span id="ai-status" role="status"></span>
+        </div>
+        <p class="hint">Remplit le slogan, les catégories, les textes de l'accueil, les premiers produits, la palette et les polices d'après cette description. Le nom déjà saisi est conservé ; l'identifiant et le mot de passe d'administration, le logo et l'adresse du site ne sont jamais touchés ; l'adresse postale et les horaires sont laissés vides (l'IA ne les invente pas). Tout reste modifiable avant de créer le commerce.</p>
+        <div id="ai-key" hidden>
+          <p class="hint"><strong>Clé Gemini requise.</strong> Collez-la ici une fois (elle est enregistrée sur ce portail, dans <code>.secrets/gemini.key</code>). Clé gratuite : <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
+          <div class="ai-actions">
+            <input type="password" id="ai-key-input" autocomplete="off" placeholder="Clé API Gemini" aria-label="Clé API Gemini">
+            <button type="button" class="btn" id="ai-key-save">Enregistrer et générer</button>
+          </div>
+        </div>
+        <input type="hidden" name="ai_shop" id="f-ai-shop" value="">
+        <input type="hidden" name="ai_item" id="f-ai-item" value="">
+        <input type="hidden" name="ai_examples" id="f-ai-examples" value="">
+      </div>
+    </div>
+
     <details class="box" open>
       <summary>Identité</summary>
       <div class="box-body">
         <label class="field">Nom du commerce<input name="name" id="f-name" required maxlength="60" value="<?= e($v('name')) ?>"></label>
-        <label class="field">Identifiant — adresse &lt;identifiant&gt;.<?= e(tenant_base_host()) ?> (facultatif)<input name="slug" id="f-slug" maxlength="40" pattern="[a-z0-9][a-z0-9_-]*" placeholder="calculé à partir du nom, ex. naty" value="<?= e($v('slug')) ?>"></label>
+        <label class="field">Identifiant — adresse <?= e(portail_address_pattern()) ?> (facultatif)<input name="slug" id="f-slug" maxlength="40" pattern="[a-z0-9][a-z0-9_-]*" placeholder="calculé à partir du nom, ex. naty" value="<?= e($v('slug')) ?>"></label>
         <label class="field">Slogan<input name="tagline" id="f-tagline" maxlength="80" value="<?= e($v('tagline')) ?>"></label>
         <label class="field">Logo (PNG, JPG, WebP ou SVG — facultatif)<input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label>
         <label class="field">Adresse du site<input name="url" id="f-url" value="<?= e($v('url')) ?>" placeholder="https://www.mon-commerce.fr"></label>
@@ -270,7 +298,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
 
     <div class="send">
       <h2>Créer le commerce</h2>
-      <p class="hint">Crée <code>tenants/&lt;identifiant&gt;/</code> (configuration et contenu de départ), sa base de données et son logo, puis l'ouvre à son adresse <code>&lt;identifiant&gt;.<?= e(tenant_base_host()) ?></code>. Pensez à ajouter le nouveau dossier à git pour le conserver.</p>
+      <p class="hint">Crée <code>tenants/&lt;identifiant&gt;/</code> (configuration et contenu de départ), sa base de données et son logo, puis l'ouvre à son adresse <code><?= e(portail_address_pattern()) ?></code>. Pensez à ajouter le nouveau dossier à git pour le conserver.</p>
       <div class="send-actions"><button class="btn btn-primary" type="submit">Créer et afficher</button></div>
     </div>
   </form>
@@ -391,6 +419,81 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
       document.getElementById('f-slug').value = '';
       refreshCats();
     });
+  });
+
+  // ── Génération du contenu par l'IA (portail/generer.php) ──
+  var aiGo = document.getElementById('ai-go');
+  var aiStatus = document.getElementById('ai-status');
+  var aiKeyBox = document.getElementById('ai-key');
+  var builder = document.getElementById('builder');
+  function aiSay(msg, kind) { aiStatus.textContent = msg; aiStatus.dataset.kind = kind || ''; }
+  function aiPost(fields) {
+    var fd = new FormData();
+    fd.append('csrf', builder.querySelector('[name=csrf]').value);
+    Object.keys(fields).forEach(function (k) { fd.append(k, fields[k]); });
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, 65000);
+    return fetch('/portail/generer.php', { method: 'POST', body: fd, signal: ctl.signal, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .finally(function () { clearTimeout(timer); });
+  }
+  function aiFill(c) {
+    function set(id, v) { var el = document.getElementById(id); if (el && typeof v === 'string' && v !== '') el.value = v; }
+    var nameTyped = document.getElementById('f-name').value.trim() !== '' && document.getElementById('f-name').value !== initial['f-name'];
+    if (!nameTyped) set('f-name', c.name);
+    set('f-tagline', c.tagline); set('f-item1', c.item1); set('f-item2', c.item2); set('f-cattitle', c.cat_title);
+    set('f-hero-eyebrow', c.hero_eyebrow); set('f-hero-title', c.hero_title); set('f-hero-sub', c.hero_sub);
+    set('f-story-title', c.story_title); set('f-story-text', c.story_text);
+    set('f-nl-title', c.nl_title); set('f-nl-text', c.nl_text); set('f-pickup', c.pickup); set('f-delivery', c.delivery);
+    for (var n = 0; n < 3; n++) { var pr = (c.pr || [])[n] || {}; set('f-pr' + n, pr.title); set('f-pr' + n + 't', pr.text); }
+    for (var i = 0; i < 6; i++) {
+      var cat = (c.cats || [])[i];
+      document.getElementById('c' + i).value = cat ? cat.label : '';
+      document.getElementById('ci' + i).value = cat ? cat.icon : 'ic-vase';
+    }
+    for (var j = 0; j < 6; j++) {
+      var p = (c.products || [])[j];
+      document.getElementById('p' + j + '-name').value = p ? p.name : '';
+      document.getElementById('p' + j + '-price').value = p ? p.price : '';
+      document.getElementById('p' + j + '-cat').value = p ? String(p.cat) : '0';
+      document.getElementById('p' + j + '-desc').value = p ? p.desc : '';
+      document.getElementById('p' + j + '-badge').value = p ? p.badge : '';
+    }
+    if (c.colors) { set('f-bg', c.colors.bg); set('f-ink', c.colors.ink); set('f-accent', c.colors.accent); set('f-accent2', c.colors.accent2); }
+    if (c.font_display) set('f-font-display', c.font_display);
+    if (c.font_body) set('f-font-body', c.font_body);
+    set('f-ai-shop', c.ai_shop); set('f-ai-item', c.ai_item); set('f-ai-examples', c.ai_examples);
+    // Les données propres à l'exemple (boulangerie) ne doivent pas rester : l'IA n'invente pas d'adresse ni d'horaires.
+    document.getElementById('f-address').value = '';
+    document.getElementById('f-hours').value = '';
+    if (document.getElementById('f-url').value === initial['f-url']) document.getElementById('f-url').value = '';
+    document.getElementById('f-slug').value = '';
+    refreshCats();
+    builder.querySelectorAll('details.box').forEach(function (d) { d.open = true; });
+    builder.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function aiGenerate() {
+    var desc = document.getElementById('ai-desc').value.trim();
+    if (desc.length < 10) { aiSay('Décrivez votre commerce en une ou deux phrases.', 'error'); return; }
+    var name = document.getElementById('f-name').value.trim();
+    aiGo.disabled = true;
+    aiSay('Génération en cours… (10 à 30 secondes)');
+    aiPost({ action: 'generate', description: desc, name: name === initial['f-name'] ? '' : name })
+      .then(function (data) {
+        if (data.ok) { aiKeyBox.hidden = true; aiFill(data.content); aiSay('Contenu généré : relisez-le, puis créez le commerce.'); return; }
+        if (data.code === 'no_key') { aiKeyBox.hidden = false; aiSay(data.error, 'error'); return; }
+        aiSay(data.error || 'La génération a échoué.', 'error');
+      })
+      .catch(function () { aiSay("La génération a pris trop de temps ou a échoué : réessayez.", 'error'); })
+      .finally(function () { aiGo.disabled = false; });
+  }
+  aiGo.addEventListener('click', aiGenerate);
+  document.getElementById('ai-key-save').addEventListener('click', function () {
+    var key = document.getElementById('ai-key-input').value.trim();
+    aiPost({ action: 'save_key', key: key }).then(function (data) {
+      if (data.ok) { document.getElementById('ai-key-input').value = ''; aiKeyBox.hidden = true; aiGenerate(); }
+      else aiSay(data.error || "La clé n'a pas pu être enregistrée.", 'error');
+    }).catch(function () { aiSay("La clé n'a pas pu être enregistrée.", 'error'); });
   });
 })();
 

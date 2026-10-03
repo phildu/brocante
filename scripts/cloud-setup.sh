@@ -39,4 +39,4 @@ fi
 
 echo "▶ Boutique « $TENANT » sur http://127.0.0.1:$PORT (Ctrl+C pour arrêter)"
 export SITE_URL="${SITE_URL:-http://127.0.0.1:$PORT}"
-exec php -S "127.0.0.1:$PORT" -t "$ROOT"
+exec php -S "127.0.0.1:$PORT" -t "$ROOT" "$ROOT/router.php"

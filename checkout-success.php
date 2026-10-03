@@ -1,5 +1,5 @@
 <?php
-session_start();
+require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
 
 $sessionId = (string) ($_GET['session_id'] ?? '');
@@ -37,6 +37,13 @@ if ($sessionId === '') {
                 $addressText,
                 $sessionId,
             ]);
+            // Le client rejoint la liste des comptes (Administration → Comptes) ; un prospect inscrit à la newsletter passe en client.
+            account_upsert_contact(
+                (string) ($session['customer_details']['email'] ?? ''),
+                (string) ($session['customer_details']['name'] ?? $session['shipping_details']['name'] ?? ''),
+                'client',
+                'commande'
+            );
             $order['status'] = 'paid';
             $order['email'] = $session['customer_details']['email'] ?? null;
             $order['amount_total'] = (int) ($session['amount_total'] ?? $order['amount_total']);

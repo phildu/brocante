@@ -1,5 +1,5 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_admin();
 
@@ -62,6 +62,6 @@ switch ($action) {
 }
 
 // Retour à la vue d'où vient l'action (liste, filtres), jamais vers un autre site.
-$back = (string) ($_POST['back'] ?? '');
+$back = app_unprefix((string) ($_POST['back'] ?? ''));
 header('Location: ' . (str_starts_with($back, '/admin/media.php') ? $back : '/admin/media.php'));
 exit;

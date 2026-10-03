@@ -5,6 +5,11 @@
 // includes/tenant.php.
 require_once __DIR__ . '/includes/tenant.php';
 
+// Commerce servi sous un préfixe (brocs.arrimage.com/<slug>/) : liens,
+// formulaires et redirections vers les pages dynamiques reçoivent ce préfixe
+// — voir tenant_rewrite_output() et tenant_rewrite_location().
+tenant_enable_base_path();
+
 // La base est un simple fichier SQLite (comme le projet Louxor) — aucun
 // serveur de base de données à provisionner, ni en local ni sur OVH. Un
 // fichier par commerce (tenant.php → db_file ; brocante.db pour le Petit Chalet).
@@ -79,6 +84,12 @@ function db(): PDO
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
         $pdo->exec('PRAGMA foreign_keys = ON');
+        // Comptes (équipe, clients, prospects) : table créée si la base date d'avant.
+        require_once __DIR__ . '/includes/accounts.php';
+        accounts_ensure_schema($pdo);
+        // Prise de vue depuis un téléphone proche (codes QR) : tables créées si besoin.
+        require_once __DIR__ . '/includes/capture.php';
+        capture_ensure_schema($pdo);
         // Bases créées avant l'ajout des visuels en deux formats.
         $photoColumns = $pdo->query('PRAGMA table_info(product_photos)')->fetchAll(PDO::FETCH_COLUMN, 1);
         if ($photoColumns && !in_array('path_mobile', $photoColumns, true)) {

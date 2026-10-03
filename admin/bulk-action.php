@@ -1,5 +1,5 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_admin();
 
@@ -14,7 +14,7 @@ $action = (string) ($_POST['action'] ?? '');
 // Le formulaire fournit sa propre page de retour (catalogue en vue liste ou
 // administration complète) — on n'accepte qu'un chemin /admin/ local, jamais
 // une redirection externe fournie par le client.
-$redirect = (string) ($_POST['redirect'] ?? '/admin/catalog.php');
+$redirect = app_unprefix((string) ($_POST['redirect'] ?? '/admin/catalog.php'));
 if (!str_starts_with($redirect, '/admin/')) $redirect = '/admin/catalog.php';
 
 if (!$refs) {

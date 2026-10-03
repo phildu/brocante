@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/accounts.php';
+require_once __DIR__ . '/capture.php';
 
 function h($s): string
 {
@@ -2124,21 +2126,117 @@ function admin_password_configured(): bool
             return true;
         }
     }
-    return false;
+    try {
+        return (bool) db()->query("SELECT 1 FROM accounts WHERE role IN ('admin', 'community_manager') AND is_active = 1 AND password_hash IS NOT NULL")->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
 }
 
 /** Connecté à l'administration de ce commerce ? (une connexion ne vaut que pour un commerce) */
+/**
+ * Compte connecté à l'administration de ce commerce : ['role' => …, 'id' => id du
+ * compte ou null pour le compte principal, 'name' => …], ou null. Pour un compte
+ * de l'équipe, le rôle est relu en base à chaque requête : une désactivation ou un
+ * changement de rôle prend effet immédiatement, sans attendre la déconnexion.
+ */
+function admin_session(): ?array
+{
+    if (($_SESSION['is_admin'] ?? null) !== tenant_slug()) {
+        return null;
+    }
+    $id = $_SESSION['admin_account_id'] ?? null;
+    if ($id === null) {
+        return ['role' => 'admin', 'id' => null, 'name' => ''];
+    }
+    static $checked = [];
+    if (!array_key_exists($id, $checked)) {
+        $account = account_find((int) $id);
+        $checked[$id] = $account && (int) $account['is_active'] === 1 && account_is_staff($account['role'])
+            ? ['role' => $account['role'], 'id' => (int) $account['id'], 'name' => $account['name'] !== '' ? $account['name'] : $account['email']]
+            : null;
+    }
+    return $checked[$id];
+}
+
 function is_admin_logged_in(): bool
 {
-    return ($_SESSION['is_admin'] ?? null) === tenant_slug();
+    return admin_session() !== null;
+}
+
+function admin_role(): string
+{
+    return admin_session()['role'] ?? '';
+}
+
+/** Connecté ET autorisé à ouvrir la page courante (pour les réponses JSON qui n'appellent pas require_admin()). */
+function admin_access_ok(): bool
+{
+    $session = admin_session();
+    return $session !== null && admin_role_can_access($session['role'], $_SERVER['SCRIPT_NAME'] ?? '');
 }
 
 function require_admin(): void
 {
-    if (!is_admin_logged_in()) {
+    $session = admin_session();
+    if ($session === null) {
         header('Location: /admin/login.php');
         exit;
     }
+    if (!admin_role_can_access($session['role'], $_SERVER['SCRIPT_NAME'] ?? '')) {
+        admin_forbidden($session['role']);
+    }
+}
+
+/** Page d'accès refusé (compte connecté, mais rôle sans droit sur cette page). */
+function admin_forbidden(string $role): never
+{
+    http_response_code(403);
+    $content = get_content();
+    ?><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Accès refusé — <?= h($content['site_name']) ?></title>
+<?= tenant_head_html() ?>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<main><section class="tight"><div class="wrap" style="max-width:560px;">
+  <p class="eyebrow">Administration</p>
+  <h1 style="font-size:1.6rem;margin:12px 0;">Accès refusé</h1>
+  <p class="lede">Votre compte (<?= h(account_role_label($role)) ?>) n'a pas accès à cette page. Elle est réservée aux administrateurs.</p>
+  <p style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;">
+    <a class="btn btn-primary" href="<?= h(admin_home_for_role($role)) ?>">Retour à l'administration</a>
+    <a class="btn" href="/admin/logout.php">Se déconnecter</a>
+  </p>
+</div></section></main>
+</body>
+</html>
+<?php
+    exit;
+}
+
+/**
+ * Identifie un compte à partir de l'identifiant et du mot de passe saisis :
+ * d'abord le compte principal du commerce (tenant.php / configuration), puis
+ * les comptes de l'équipe en base. Retourne ['role' => …, 'id' => …] ou null.
+ */
+function admin_login(string $user, string $password): ?array
+{
+    if (admin_login_matches($user, $password)) {
+        return ['role' => 'admin', 'id' => null];
+    }
+    $account = account_staff_by_login($user);
+    // Vérification factice quand le compte n'existe pas : même durée de réponse, pas d'indice sur les identifiants valides.
+    $hash = $account['password_hash'] ?? '$2y$12$z1UVcc1AoYyQPd3h9tNn8.gcPzUCtAceZH7qkzjYKYhBfeDzC4Y.S';
+    if (password_verify($password, $hash) && $account) {
+        account_touch_login((int) $account['id']);
+        return ['role' => $account['role'], 'id' => (int) $account['id']];
+    }
+    return null;
 }
 
 /* ---------- prix & panier ---------- */

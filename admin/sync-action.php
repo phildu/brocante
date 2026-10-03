@@ -5,14 +5,14 @@
 //   status  → état du site distant (JSON)
 //   push    → envoie une pièce (JSON)
 
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/sync.php';
 
 $action = (string) ($_POST['action'] ?? '');
 $isJson = in_array($action, ['status', 'push'], true);
 
-if (!is_admin_logged_in()) {
+if (!admin_access_ok()) {
     if ($isJson) {
         header('Content-Type: application/json; charset=utf-8');
         http_response_code(401);

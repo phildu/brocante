@@ -10,7 +10,7 @@
 # Mode portail (--portail) : déploie TOUS les commerces et le portail de
 # gestion dans un même dossier (ex. brocs.arrimage.com, chaque commerce sur
 # <slug>.brocs.arrimage.com). Identifiants dans .env.deploy.portail :
-#   FTP_SERVER, FTP_USER, FTP_PASS, FTP_PATH_FRONT (ex. /brocs/),
+#   FTP_SERVER, FTP_USER, FTP_PASS, FTP_PATH_FRONT (ex. /www/brocs/),
 #   URL_FRONT (ex. https://brocs.arrimage.com),
 #   PORTAIL_USER, PORTAIL_PASSWORD (compte de connexion au portail en ligne).
 #
@@ -136,6 +136,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .secrets/ \
   --exclude-glob var/log/ \
   --exclude-glob uploads/import/ \
+  --exclude-glob uploads/batch-import/ \
   --exclude-glob node_modules/ \
   --exclude-glob db-backup/ \
   --exclude-glob '*.log' \
@@ -212,6 +213,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .secrets/ \
   --exclude-glob var/log/ \
   --exclude-glob uploads/import/ \
+  --exclude-glob uploads/batch-import/ \
   --exclude-glob node_modules/ \
   --exclude-glob db-backup/ \
   --exclude-glob '*.log' \
@@ -310,8 +312,8 @@ echo -e "${GREEN}${BOLD}══════════════════�
 echo ""
 if [ "$PORTAIL" = "1" ]; then
     echo "Portail : ${URL_FRONT}/portail/ (identifiant ${PORTAIL_USER})"
-    echo "Chaque commerce : https://<identifiant>.${URL_FRONT#*://} — à ajouter dans OVH"
-    echo "  (Hébergement → Multisite → Ajouter un domaine, dossier racine ${FTP_PATH_FRONT#/}, SSL activé)."
+    echo "Chaque commerce : ${URL_FRONT}/<identifiant>/ — aucun domaine ni sous-domaine à ajouter chez OVH"
+    echo "  (seul ${URL_FRONT#*://} doit exister : Hébergement → Multisite, dossier racine ${FTP_PATH_FRONT#/}, SSL activé)."
     echo "Les bases absentes du serveur sont créées automatiquement à la première visite."
     echo ""
 elif [ "$WITH_DB" = "0" ]; then

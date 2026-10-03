@@ -44,6 +44,27 @@ switch ($_POST['action'] ?? '') {
         }
         break;
 
+    case 'supprimer':
+        if (($why = tenant_delete_blocker($slug)) !== null) {
+            portail_flash($why, 'error');
+            break;
+        }
+        // Confirmation : l'identifiant doit être retapé tel quel.
+        if (!hash_equals($slug, trim((string) ($_POST['confirm_slug'] ?? '')))) {
+            portail_flash("Suppression annulée : l'identifiant saisi (« " . trim((string) ($_POST['confirm_slug'] ?? '')) . " ») ne correspond pas à « $slug ».", 'error');
+            header('Location: /portail/?supprimer=' . rawurlencode($slug));
+            exit;
+        }
+        try {
+            $trash = delete_tenant($slug);
+            portail_flash('« ' . $shops[$slug]['name'] . " » supprimé de ce serveur. Ses fichiers sont conservés dans $trash (déplacés, pas effacés).");
+            header('Location: /portail/');
+            exit;
+        } catch (RuntimeException | InvalidArgumentException $ex) {
+            portail_flash($ex->getMessage(), 'error');
+        }
+        break;
+
     default:
         portail_flash('Action inconnue.', 'error');
 }

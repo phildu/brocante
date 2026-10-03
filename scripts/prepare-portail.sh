@@ -54,7 +54,7 @@ umask 077
   echo "FTP_SERVER=$(quote "$FTP_SERVER")"
   echo "FTP_USER=$(quote "$FTP_USER")"
   echo "FTP_PASS=$(quote "$FTP_PASS")"
-  echo "FTP_PATH_FRONT=$(quote "/$FOLDER/")"
+  echo "FTP_PATH_FRONT=$(quote "/www/$FOLDER/")"
   echo "URL_FRONT=$(quote "$URL")"
   echo "PORTAIL_USER=$(quote "$PORTAIL_USER")"
   echo "PORTAIL_PASSWORD=$(quote "$PORTAIL_PASSWORD")"

@@ -152,3 +152,23 @@ CREATE TABLE IF NOT EXISTS settings (
   name TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Comptes : équipe (admin, community_manager) et contacts (client, prospect).
+-- Voir includes/accounts.php (créée aussi automatiquement à l'ouverture d'une base ancienne).
+CREATE TABLE IF NOT EXISTS accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  role TEXT NOT NULL DEFAULT 'prospect',
+  name TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL,
+  username TEXT,
+  phone TEXT NOT NULL DEFAULT '',
+  password_hash TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  source TEXT NOT NULL DEFAULT 'manuel',
+  notes TEXT NOT NULL DEFAULT '',
+  last_login_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email COLLATE NOCASE);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username COLLATE NOCASE) WHERE username IS NOT NULL;

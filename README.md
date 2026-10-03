@@ -23,8 +23,28 @@ Commerces fournis :
 
 1. la variable d'environnement `TENANT` ;
 2. sinon le sous-domaine, s'il porte le nom d'un commerce (`naty.brocenstock.test` → `tenants/naty`) ;
-3. sinon le fichier `.tenant` à la racine (écrit sur le serveur par le déploiement) ;
-4. sinon `petit-chalet`.
+3. sinon le premier segment de l'adresse, s'il porte le nom d'un commerce
+   (`brocs.arrimage.com/naty/boutique.php` → `tenants/naty`) ;
+4. sinon le fichier `.tenant` à la racine (écrit sur le serveur par le déploiement) ;
+5. sinon `petit-chalet`.
+
+### Adresses en ligne
+
+| Adresse                                | Affiche                                                      |
+|----------------------------------------|--------------------------------------------------------------|
+| `brocs.arrimage.com`                   | le portail (redirigé vers `/portail/`, connexion exigée)     |
+| `brocs.arrimage.com/<identifiant>/`    | le commerce `tenants/<identifiant>` (aucun sous-domaine à créer chez OVH) |
+| `brocante.arrimage.com`                | le Petit Chalet, déployé à part avec son propre sous-domaine |
+
+Un commerce servi sous `/<identifiant>/` voit ses liens, formulaires et
+redirections préfixés automatiquement (`includes/tenant.php` :
+`tenant_rewrite_output()`, `tenant_rewrite_location()`) ; `assets/` et `uploads/`
+restent partagés à la racine du domaine. Son panier et sa connexion admin ont leur
+propre cookie de session, limité à son chemin (`includes/session.php`). Les règles
+d'adresses sont dans le `.htaccess` ; en local sans Apache, `php -S 127.0.0.1:8000 router.php`
+les reproduit. L'adresse d'un commerce se déclare par `site_url` dans son `tenant.php`
+(`https://brocs.arrimage.com/<identifiant>` pour un commerce sous le portail ; elle sert
+notamment aux retours de paiement Stripe).
 
 Le Petit Chalet garde ses emplacements historiques (`brocante.db`, `.secrets/`,
 `assets/logo.png`) : le site en ligne et `config.local.php` fonctionnent comme avant.
@@ -52,6 +72,27 @@ données de démonstration et crée un nouveau commerce depuis un formulaire
 dans le dossier du projet : il ne répond qu'en local (hôte `.test`,
 `localhost` ou `127.0.0.1`) et n'est jamais déployé. Pensez à ajouter à git
 les dossiers `tenants/<slug>` et `assets/tenants/<slug>` qu'il crée.
+
+**Supprimer un commerce.** Sur la carte de chaque commerce du portail, « Supprimer »
+demande de retaper son identifiant. Rien n'est effacé : `tenants/<slug>`,
+`assets/tenants/<slug>`, sa base SQLite et ses clés (`.secrets/<slug>/`) sont déplacés
+dans `data/corbeille/<slug>-<date>/` (jamais servi en HTTP) ; pour le restaurer, remettre
+les dossiers à leur place. Les photos de `uploads/` (partagées) restent en place. Le
+Petit Chalet et les modèles (`_modele`) ne se suppriment pas depuis le portail. La
+suppression ne vaut que pour le serveur où elle est faite : un commerce supprimé en
+ligne mais présent dans `tenants/` sur le Mac est recréé, vide, au prochain
+`./deploy-brocante.sh --portail` — le supprimer aussi en local (et dans git).
+
+**Contenu généré par l'IA.** En haut du formulaire de création, le champ « Générer
+le contenu avec l'IA » prend une description du commerce (thématique, ce qui se
+vend, ton) et remplit slogan, catégories, textes de l'accueil, premiers produits,
+palette (assombrie si elle manque de contraste) et polices, ainsi que le contexte
+donné à l'IA pour décrire les photos (`ai` du `tenant.php`). Le nom saisi est
+conservé ; identifiants d'administration, logo et adresse du site ne sont jamais
+touchés ; adresse postale et horaires restent vides. Tout est relisible avant de
+créer. Il faut une clé Gemini : `.secrets/gemini.key` à la racine du portail (le
+formulaire propose de la coller et l'enregistre s'il n'y en a pas), ou la variable
+`GEMINI_API_KEY`.
 
 ## Apparence (couleurs et typographie)
 
@@ -92,7 +133,7 @@ connexion (compte défini dans `.env.deploy.portail`, stocké haché dans
    FTP_SERVER=ftp.clusterXXX.hosting.ovh.net
    FTP_USER=…
    FTP_PASS=…
-   FTP_PATH_FRONT=/brocs/
+   FTP_PATH_FRONT=/www/brocs/
    URL_FRONT=https://brocs.arrimage.com
    PORTAIL_USER=phil
    PORTAIL_PASSWORD=un-mot-de-passe-long
@@ -102,12 +143,71 @@ connexion (compte défini dans `.env.deploy.portail`, stocké haché dans
    bases du serveur ne sont plus touchées). Une base absente du serveur est
    créée automatiquement à la première visite du commerce.
 3. Dans l'espace client OVH : **Hébergement → Multisite → Ajouter un
-   domaine** pour `brocs.arrimage.com` puis pour chaque commerce
-   (`naty.brocs.arrimage.com`…), dossier racine `brocs`, SSL activé.
+   domaine** pour `brocs.arrimage.com` uniquement, dossier racine `www/brocs`
+   (comme `www/brocante`), SSL activé. Les commerces sont servis sous
+   `brocs.arrimage.com/<identifiant>/` : aucun autre domaine à créer.
 
 Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
 dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
 `tenants/`, `includes/`…).
+
+## Photos et vidéos depuis un téléphone proche
+
+Administration → **Médiathèque** → « Utiliser mon téléphone » : l'ordinateur affiche un code
+QR ; le téléphone qui le scanne ouvre `capture.php` (sans connexion) avec trois boutons —
+prendre une photo, filmer, choisir dans la galerie. Chaque fichier arrive dans la médiathèque
+(source « Téléphone (code QR) ») et s'affiche en direct sur l'ordinateur (suivi par requêtes
+toutes les 2 s, `admin/capture-session.php`).
+
+- Le lien porte un jeton aléatoire de 128 bits, stocké **haché** (tables `capture_sessions` /
+  `capture_uploads`, créées automatiquement) : il n'autorise que l'envoi vers la médiathèque
+  de CE commerce, expire après 30 minutes d'inactivité, se ferme avec « Terminer » et accepte
+  au plus 60 fichiers. Il n'existe pas de lecture possible avec ce lien.
+- Photos réduites sur le téléphone (1600 px) puis à 1400 px par le serveur. Vidéos : 30 s
+  maximum (vérifié sur le téléphone), 200 Mo au plus. OVH coupe la connexion dès ~16 Mo par requête
+  (mesuré, sans erreur lisible) : le téléphone découpe donc chaque vidéo en morceaux de 5 Mo
+  (`CAPTURE_CHUNK_BYTES`, moins si PHP accepte moins), envoyés l'un après l'autre (3 essais par
+  morceau) et recollés par `capture-upload.php` dans `data/capture-tmp/` (jamais servi ; les
+  assemblages abandonnés sont purgés après 24 h). Un morceau rejoué n'est pas dupliqué. Les photos
+  restent en un seul envoi. Formats mp4, mov, webm, copiés tels quels. Le contenu
+  réel des fichiers est contrôlé, pas seulement l'extension.
+- En local (`.test`, `localhost`), le téléphone ne peut pas joindre l'ordinateur : la page le
+  signale. Pour un essai réel en local, ouvrir l'administration par l'adresse IP du Mac
+  (`php -S 0.0.0.0:8000 router.php`, même Wi-Fi).
+- Le community manager peut l'utiliser (page `capture-session.php` ouverte à son rôle).
+- Générateur de code QR : `assets/vendor/qrcode-generator.js` (Kazuhiko Arase, licence MIT).
+
+## Comptes : équipe, clients, prospects
+
+Administration → **Comptes** (`admin/accounts.php`, réservée aux administrateurs). Table
+`accounts` dans la base de chaque commerce (créée automatiquement à l'ouverture d'une
+base ancienne, voir `includes/accounts.php`), une fiche par adresse e-mail.
+
+| Rôle               | Connexion à l'administration | Accès                                                                 |
+|--------------------|------------------------------|-----------------------------------------------------------------------|
+| Administrateur     | oui                          | tout                                                                  |
+| Community manager  | oui                          | diaporamas, bandeaux, médiathèque, galerie photo ; rien d'autre       |
+| Client             | non                          | fiche de contact (commandes rapprochées par e-mail)                   |
+| Prospect           | non                          | fiche de contact                                                      |
+
+- Connexion par identifiant **ou** e-mail (`/admin/login.php`). Le compte principal du
+  commerce (`admin_user` / `admin_password` du `tenant.php`) reste valable et n'est pas
+  dans la liste : on ne peut donc pas se verrouiller dehors ; sans compte principal, le
+  dernier administrateur de la liste ne peut être ni supprimé, ni désactivé, ni rétrogradé.
+- Les droits se contrôlent à chaque requête, par page (`admin_role_can_access()`) : une
+  nouvelle page d'administration est **réservée aux administrateurs** tant qu'elle n'est
+  pas ajoutée à `ACCOUNT_COMMUNITY_MANAGER_PAGES`. Désactiver un compte coupe sa session
+  immédiatement. Mots de passe hachés, formulaires protégés par jeton CSRF.
+- **Mon profil** (`admin/profile.php`, menu du bas, tous les comptes de l'équipe) : chacun
+  modifie son nom, son téléphone, son e-mail, son identifiant et son mot de passe. E-mail,
+  identifiant et mot de passe exigent le **mot de passe actuel**. Le compte modifié est
+  toujours celui de la session (jamais un identifiant du formulaire) ; le rôle, l'état et les
+  notes restent réservés aux administrateurs. Le compte principal du `tenant.php` n'est pas
+  modifiable ici (portail : « Changer l'accès admin »).
+- Création automatique : une commande payée crée un client, une inscription à la
+  newsletter un prospect (un prospect qui commande devient client).
+  « Importer les clients depuis les commandes » rattrape les commandes déjà passées ;
+  « Exporter les contacts (CSV) » ne contient jamais les comptes de l'équipe.
 
 ## Connexion à l'administration
 

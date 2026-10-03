@@ -15,6 +15,7 @@ $adminNavItems = [
     'prise' => ['/admin/quick-add.php', 'Nouvelle pièce (photo)', 'camera'],
     'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
     'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
+    'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
     'hero' => ['/admin/hero.php', 'Diaporama hero', 'image'],
     'slideshow' => ['/admin/slideshow.php', 'Diaporama boutique', 'play'],
     'banners' => ['/admin/banners.php', 'Bandeaux de page', 'banner'],
@@ -23,11 +24,16 @@ $adminNavItems = [
     'apparence' => ['/admin/appearance.php', 'Apparence', 'palette'],
     'sync' => ['/admin/sync.php', 'Envoyer en préprod', 'cloud'],
     'reglages' => ['/admin/index.php', 'Réglages du site', 'gear'],
+    'profil' => ['/admin/profile.php', 'Mon profil', 'user'],
 ];
+// Chaque rôle ne voit que les pages qu'il peut ouvrir (voir admin_role_can_access()).
+$adminNavItems = array_filter($adminNavItems, static fn (array $item): bool => admin_role_can_access(admin_role(), $item[0]));
 $adminNav = $adminNav ?? '';
 
 // Pictogrammes (traits 24×24, couleur du texte).
 $adminIcons = [
+    'user' => '<circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+    'users' => '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16 14.2A5.5 5.5 0 0 1 21.5 20"/>',
     'grid' => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
     'upload' => '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
     'receipt' => '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/>',
@@ -75,6 +81,10 @@ $adminIcon = static fn (string $name): string =>
     <?php endforeach; ?>
   </nav>
   <div class="admin-sidebar-foot">
+    <?php $adminWho = admin_session(); ?>
+    <?php if ($adminWho): ?>
+      <span class="admin-whoami admin-label"><?= h($adminWho['name'] !== '' ? $adminWho['name'] : 'Compte principal') ?> · <?= h(account_role_label($adminWho['role'])) ?></span>
+    <?php endif; ?>
     <a href="/index.php" target="_blank" title="Voir le site"><?= $adminIcon('external') ?><span class="admin-label">Voir le site</span></a>
     <a href="/admin/logout.php" title="Se déconnecter"><?= $adminIcon('logout') ?><span class="admin-label">Se déconnecter</span></a>
     <button type="button" class="admin-collapse" id="admin-sidebar-collapse" aria-pressed="false" title="Réduire le menu">

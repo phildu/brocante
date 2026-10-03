@@ -1,23 +1,30 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 
 // Déjà connecté (bouton « Connexion » du site) : direction l'administration.
 if (is_admin_logged_in()) {
-    header('Location: /admin/catalog.php');
+    header('Location: ' . admin_home_for_role(admin_role()));
     exit;
 }
 
 $content = get_content();
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Sans mot de passe configuré, l'administration reste fermée.
-    if (admin_login_matches((string) ($_POST['username'] ?? ''), (string) ($_POST['password'] ?? ''))) {
+    // Sans compte configuré, l'administration reste fermée.
+    $login = admin_login((string) ($_POST['username'] ?? ''), (string) ($_POST['password'] ?? ''));
+    if ($login) {
         session_regenerate_id(true);
         $_SESSION['is_admin'] = tenant_slug();
-        header('Location: /admin/catalog.php');
+        if ($login['id'] === null) {
+            unset($_SESSION['admin_account_id']);
+        } else {
+            $_SESSION['admin_account_id'] = $login['id'];
+        }
+        header('Location: ' . admin_home_for_role($login['role']));
         exit;
     }
+    sleep(1); // freine les essais en série
     $error = 'Identifiant ou mot de passe incorrect.';
 }
 if (!admin_password_configured()) {
@@ -62,7 +69,7 @@ if (!admin_password_configured()) {
     <p class="lede">Connectez-vous pour gérer les contenus et le catalogue.</p>
     <?php if ($error): ?><p class="login-error"><?= h($error) ?></p><?php endif; ?>
     <form method="post">
-      <input type="text" name="username" placeholder="Identifiant" aria-label="Identifiant" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required value="<?= h($_POST['username'] ?? '') ?>">
+      <input type="text" name="username" placeholder="Identifiant ou e-mail" aria-label="Identifiant ou e-mail" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required value="<?= h($_POST['username'] ?? '') ?>">
       <div class="password-field">
         <input type="password" name="password" id="password" placeholder="Mot de passe" aria-label="Mot de passe" autocomplete="current-password" required>
         <button type="button" class="password-toggle" id="password-toggle" aria-controls="password" aria-pressed="false">Afficher</button>

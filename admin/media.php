@@ -1,5 +1,5 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_admin();
 
@@ -55,6 +55,17 @@ $viewUrl = static fn (string $v): string => '/admin/media.php?' . http_build_que
   .media-list .muted { color: var(--ink-soft); font-size: 0.78rem; }
   .media-list .tags { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); word-break: break-word; }
   @media (max-width: 780px) { .media-list .col-source, .media-list .col-date { display: none; } }
+  #phone-box [hidden] { display: none !important; }
+  .phone-live { display: grid; grid-template-columns: 220px 1fr; gap: 24px; margin-top: 16px; align-items: start; }
+  .phone-qr { background: #fff; padding: 10px; border: 1px solid var(--line); line-height: 0; }
+  .phone-qr svg { width: 100%; height: auto; display: block; }
+  .phone-status { font-weight: 600; margin: 0 0 6px; }
+  .phone-status[data-state="active"]::before { content: "● "; color: #2e9e5b; }
+  .phone-status[data-state="off"]::before { content: "● "; color: #b3261e; }
+  .phone-received { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; margin: 12px 0; }
+  .phone-received img, .phone-received video { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; border: 1px solid var(--line); background: var(--surface); }
+  .phone-link { word-break: break-all; font-size: 0.82rem; }
+  @media (max-width: 640px) { .phone-live { grid-template-columns: 1fr; } .phone-qr { max-width: 220px; } }
 </style>
 </head>
 <body>
@@ -86,6 +97,26 @@ $viewUrl = static fn (string $v): string => '/admin/media.php?' . http_build_que
         <a href="<?= h($viewUrl('liste')) ?>"<?= $view === 'liste' ? ' aria-current="page"' : '' ?>>☰ Liste</a>
       </span>
     </form>
+
+    <div class="admin-block" id="phone-box" style="margin-bottom:28px;" data-csrf="<?= h(admin_csrf_token()) ?>">
+      <h2 style="font-size:1.1rem;">Utiliser mon téléphone</h2>
+      <p class="hint">Scannez un code avec l'appareil photo du téléphone : une page s'ouvre pour prendre des photos ou filmer de courtes vidéos. Elles arrivent ici et dans la médiathèque, sans rien saisir sur le téléphone.</p>
+      <button type="button" class="btn btn-primary" id="phone-start">Afficher le code</button>
+      <div class="phone-live" id="phone-live" hidden>
+        <div class="phone-qr" id="phone-qr" role="img" aria-label="Code QR à scanner avec le téléphone"></div>
+        <div>
+          <p class="phone-status" id="phone-status" data-state="active" aria-live="polite">En attente du téléphone…</p>
+          <p class="hint phone-link" style="margin:0 0 6px;">Ou ouvrez ce lien sur le téléphone : <a id="phone-link" href="#" target="_blank" rel="noopener"></a></p>
+          <p class="hint" id="phone-limits" style="margin:0 0 6px;"></p>
+          <p class="publish-status" data-kind="error" id="phone-warn" hidden style="margin:8px 0;"></p>
+          <div class="phone-received" id="phone-received"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" id="phone-done">Terminer</button>
+            <button type="button" class="btn" id="phone-renew" hidden>Nouveau code</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="admin-block" style="margin-bottom:28px;">
       <h2 style="font-size:1.1rem;">Ajouter une ressource</h2>
@@ -299,6 +330,106 @@ $viewUrl = static fn (string $v): string => '/admin/media.php?' . http_build_que
       .catch(function (err) {
         status.textContent = 'Erreur réseau lors de la suggestion IA (' + err.message + ').';
       });
+  });
+})();
+</script>
+<script src="/assets/vendor/qrcode-generator.js"></script>
+<script>
+(function () {
+  var box = document.getElementById('phone-box');
+  var live = document.getElementById('phone-live');
+  var startBtn = document.getElementById('phone-start');
+  var renewBtn = document.getElementById('phone-renew');
+  var doneBtn = document.getElementById('phone-done');
+  var statusEl = document.getElementById('phone-status');
+  var received = document.getElementById('phone-received');
+  var csrf = box.dataset.csrf;
+  var session = null;   // { id, after, total }
+  var timer = null;
+
+  function stopPolling() { clearInterval(timer); timer = null; }
+  function setStatus(text, state) { statusEl.textContent = text; statusEl.dataset.state = state; }
+
+  function api(fields) {
+    var fd = new FormData();
+    fd.append('csrf', csrf);
+    Object.keys(fields).forEach(function (k) { fd.append(k, fields[k]); });
+    return fetch('/admin/capture-session.php', { method: 'POST', body: fd, credentials: 'same-origin' }).then(function (r) { return r.json(); });
+  }
+
+  function addThumb(u) {
+    var el;
+    if (u.type === 'video') {
+      el = document.createElement('video');
+      el.src = '/' + u.path + '#t=0.1';
+      el.muted = true; el.preload = 'metadata'; el.playsInline = true;
+      el.setAttribute('controls', '');
+    } else {
+      el = document.createElement('img');
+      el.src = '/' + u.path; el.alt = u.label; el.loading = 'lazy';
+    }
+    el.title = u.label;
+    received.insertBefore(el, received.firstChild);
+  }
+
+  function poll() {
+    if (!session) return;
+    fetch('/admin/capture-session.php?action=status&id=' + session.id + '&after=' + session.after, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        d.uploads.forEach(function (u) { addThumb(u); session.after = u.id; });
+        session.total = d.total;
+        if (!d.active) {
+          stopPolling();
+          setStatus(d.total + ' fichier' + (d.total > 1 ? 's' : '') + ' reçu' + (d.total > 1 ? 's' : '') + ' — code expiré ou fermé.', 'off');
+          renewBtn.hidden = false;
+          return;
+        }
+        var minutes = Math.max(1, Math.round(d.expires_in / 60));
+        setStatus(d.total === 0 ? 'En attente du téléphone… (code valable encore ' + minutes + ' min)'
+                                : d.total + ' fichier' + (d.total > 1 ? 's' : '') + ' reçu' + (d.total > 1 ? 's' : '') + ' — ' + minutes + ' min restantes', 'active');
+      })
+      .catch(function () {});
+  }
+
+  function start() {
+    startBtn.disabled = true;
+    renewBtn.hidden = true;
+    api({ action: 'create' }).then(function (d) {
+      startBtn.disabled = false;
+      if (!d.ok) { alert(d.error || 'Impossible de créer le code.'); return; }
+      session = { id: d.id, after: 0, total: 0 };
+      var qr = qrcode(0, 'M');
+      qr.addData(d.url);
+      qr.make();
+      document.getElementById('phone-qr').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+      var link = document.getElementById('phone-link');
+      link.href = d.url; link.textContent = d.url;
+      document.getElementById('phone-limits').textContent =
+        'Photos réduites automatiquement. Vidéos : ' + d.max_video_seconds + ' secondes et ' + d.max_mb + ' Mo maximum chacune.';
+      var warn = document.getElementById('phone-warn');
+      if (!d.reachable) {
+        warn.hidden = false;
+        warn.textContent = "Ce code pointe vers une adresse locale (" + new URL(d.url).host + ") que le téléphone ne peut pas joindre. En ligne, ça fonctionne ; en local, ouvrez l'administration avec l'adresse IP de votre ordinateur, sur le même Wi-Fi.";
+      } else { warn.hidden = true; }
+      received.innerHTML = '';
+      setStatus('En attente du téléphone…', 'active');
+      live.hidden = false;
+      startBtn.hidden = true;
+      stopPolling();
+      timer = setInterval(poll, 2000);
+    }).catch(function () { startBtn.disabled = false; alert('Impossible de créer le code (connexion).'); });
+  }
+
+  startBtn.addEventListener('click', start);
+  renewBtn.addEventListener('click', start);
+  doneBtn.addEventListener('click', function () {
+    stopPolling();
+    var receivedCount = session ? session.total : 0;
+    var finish = function () { if (receivedCount > 0) { location.reload(); } else { live.hidden = true; startBtn.hidden = false; } };
+    if (session) { api({ action: 'close', id: session.id }).then(finish, finish); } else { finish(); }
+    session = null;
   });
 })();
 </script>

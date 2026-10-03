@@ -1,3 +1,22 @@
+# Routage des adresses (Apache / OVH).
+RewriteEngine On
+
+# Déploiement « portail » : la racine du domaine ouvre le portail des commerces
+# (absent d'un déploiement à un seul commerce, dont la racine est la boutique).
+RewriteCond %{DOCUMENT_ROOT}/portail/index.php -f
+RewriteRule ^$ /portail/ [R=302,L]
+
+# Un commerce servi sous le domaine du portail : /<identifiant>/… affiche la
+# boutique de tenants/<identifiant>/ (le PHP reconnaît le commerce à l'adresse
+# demandée, voir tenant_from_path() dans includes/tenant.php). Un dossier réel
+# de même nom (admin/, assets/…) n'a pas de tenant.php : il n'est pas touché.
+RewriteCond %{DOCUMENT_ROOT}/tenants/$1/tenant.php -f
+RewriteRule ^([a-z0-9][a-z0-9_-]*)$ /$1/ [R=301,L]
+RewriteCond %{DOCUMENT_ROOT}/tenants/$1/tenant.php -f
+RewriteRule ^([a-z0-9][a-z0-9_-]*)/$ index.php [L]
+RewriteCond %{DOCUMENT_ROOT}/tenants/$1/tenant.php -f
+RewriteRule ^([a-z0-9][a-z0-9_-]*)/(.+)$ $2 [L,QSA]
+
 # Protection des fichiers sensibles (Apache / OVH).
 # Bases SQLite, sauvegardes, schéma, journaux : jamais servis en HTTP.
 <FilesMatch "\.(db|sqlite|sqlite3|sql|log|bak)$|\.db\.bak-">

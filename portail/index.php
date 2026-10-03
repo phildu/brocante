@@ -4,9 +4,10 @@ require __DIR__ . '/_bootstrap.php';
 $shops = tenant_list();
 $flash = portail_flash();
 $confirmReset = $_GET['reinitialiser'] ?? '';
+$confirmDelete = $_GET['supprimer'] ?? '';
 $editAccess = $_GET['acces'] ?? '';
 
-// Chaque commerce a sa propre adresse : <slug>.brocenstock.test.
+// Adresse d'un commerce : <slug>.brocenstock.test en local, <portail>/<slug> en ligne (voir portail_shop_url()).
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $base = tenant_base_host();
 $viewing = (string) ($_GET['voir'] ?? active_slug());
@@ -17,7 +18,8 @@ if (!isset($shops[$viewing])) {
 if (!is_file(tenant_file($shops[$viewing], 'db_file'))) {
     seed_tenant($shops[$viewing]);
 }
-$shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
+$shopUrl = static fn (string $slug): string => portail_shop_url($slug, $shops[$slug]);
+$shopLabel = static fn (string $slug): string => portail_shop_label($slug, $shops[$slug]);
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -58,7 +60,7 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
               <span class="meta">Titres <?= e($look['fonts']['display']) ?> · textes <?= e($look['fonts']['body']) ?></span>
             </span>
             <span class="meta">admin : <?= e($shop['admin_user']) ?></span>
-            <a class="meta" href="<?= e($shopUrl($slug)) ?>/" target="_blank" rel="noopener"><?= e("$slug.$base") ?> ↗</a>
+            <a class="meta" href="<?= e($shopUrl($slug)) ?>/" target="_blank" rel="noopener"><?= e($shopLabel($slug)) ?> ↗</a>
             <div class="actions">
               <?php if (!$isActive): ?>
                 <a class="btn small btn-primary" href="/portail/?voir=<?= e($slug) ?>">Voir</a>
@@ -67,10 +69,13 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
               <?php if ($slug !== TENANT_DEFAULT): ?>
                 <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>&amp;reinitialiser=<?= e($slug) ?>">Réinitialiser les données</a>
               <?php endif; ?>
+              <?php if (tenant_delete_blocker($slug) === null): ?>
+                <a class="btn small danger" href="/portail/?voir=<?= e($viewing) ?>&amp;supprimer=<?= e($slug) ?>">Supprimer</a>
+              <?php endif; ?>
             </div>
             <?php if ($editAccess === $slug): ?>
               <form class="confirm access" method="post" action="/portail/action.php" autocomplete="off">
-                <span>Nouvel accès à l'administration de <strong><?= e($shop['name']) ?></strong> (<?= e("$slug.$base") ?>/admin/) :</span>
+                <span>Nouvel accès à l'administration de <strong><?= e($shop['name']) ?></strong> (<?= e($shopLabel($slug)) ?>/admin/) :</span>
                 <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="action" value="acces">
                 <input type="hidden" name="slug" value="<?= e($slug) ?>">
@@ -99,10 +104,27 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
                 </span>
               </form>
             <?php endif; ?>
+            <?php if ($confirmDelete === $slug && tenant_delete_blocker($slug) === null): ?>
+              <form class="confirm danger-zone" method="post" action="/portail/action.php" autocomplete="off">
+                <span>Supprimer <strong><?= e($shop['name']) ?></strong> de ce serveur ? Sa boutique, ses produits, ses commandes et son administration deviennent inaccessibles.
+                  Les fichiers (configuration, logo, base de données, clés) sont <strong>déplacés dans <code>data/corbeille/</code></strong>, pas effacés : ils peuvent être remis en place à la main. Les photos de <code>uploads/</code> ne sont pas touchées.</span>
+                <span class="hint">Cela ne concerne que ce serveur. Si ce commerce existe aussi ailleurs (votre Mac, le portail en ligne), supprimez-le là-bas aussi : sinon un prochain déploiement le recréera, vide.</span>
+                <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="supprimer">
+                <input type="hidden" name="slug" value="<?= e($slug) ?>">
+                <label class="field">Pour confirmer, tapez l'identifiant <code><?= e($slug) ?></code>
+                  <input name="confirm_slug" required autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="<?= e($slug) ?>">
+                </label>
+                <span class="actions" style="margin:0;">
+                  <button class="btn small danger-solid" type="submit">Supprimer définitivement ce commerce</button>
+                  <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>">Annuler</a>
+                </span>
+              </form>
+            <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </div>
-      <p class="hint">Chaque commerce s'ouvre à l'adresse <code>&lt;identifiant&gt;.<?= e($base) ?></code>. Sans sous-domaine, <code><?= e($base) ?></code> affiche <?= e($shops[active_slug()]['name'] ?? '') ?>. Le Petit Chalet utilise toujours sa base <code>brocante.db</code>, jamais réinitialisée depuis ce portail.</p>
+      <p class="hint">Chaque commerce s'ouvre à l'adresse <code><?= e(portail_address_pattern()) ?></code> (ou à celle que déclare son <code>tenant.php</code>).<?php if ($portailLocal): ?> Sans sous-domaine, <code><?= e($base) ?></code> affiche <?= e($shops[active_slug()]['name'] ?? '') ?>.<?php endif; ?> Le Petit Chalet utilise toujours sa base <code>brocante.db</code> : il n'est jamais réinitialisé ni supprimé depuis ce portail.</p>
     </aside>
 
     <section class="main-stage">
@@ -117,7 +139,7 @@ $shopUrl = static fn (string $slug): string => "$scheme://$slug.$base";
           <button type="button" data-device="desktop" aria-pressed="true">Ordinateur</button>
           <button type="button" data-device="mobile" aria-pressed="false">Mobile</button>
         </div>
-        <a class="btn" href="<?= e($shopUrl($viewing)) ?>/" target="_blank" rel="noopener">Ouvrir <?= e("$viewing.$base") ?> ↗</a>
+        <a class="btn" href="<?= e($shopUrl($viewing)) ?>/" target="_blank" rel="noopener">Ouvrir <?= e($shopLabel($viewing)) ?> ↗</a>
       </div>
       <div class="stage" id="stage">
         <iframe id="frame" src="<?= e($shopUrl($viewing)) ?>/" data-origin="<?= e($shopUrl($viewing)) ?>" title="Boutique <?= e($shops[$viewing]['name']) ?>"></iframe>

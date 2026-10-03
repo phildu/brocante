@@ -5,7 +5,7 @@
 return [
     'name' => 'La "fripe"  a naty',
     'tagline' => 'couleur et tissus',
-    'site_url' => 'https://naty.arrimage.com',
+    'site_url' => 'https://brocs.arrimage.com/la-fripe-a-naty',
     'admin_user' => 'admin',
     'admin_password' => '$2y$12$LVOf4eGEsspM2J3eWb6Gm.GKziPvV5YOpl6V5thbGKNT5i6Lzs34G',
     'logo' => 'assets/tenants/la-fripe-a-naty/logo.svg',

@@ -1506,3 +1506,5 @@
     html.admin-sidebar-collapsed .admin-sidebar-logo .logo-full { display: block; }
     html.admin-sidebar-collapsed .admin-sidebar-logo .logo-mini { display: none; }
   }
+
+  .admin-whoami { display: block; padding: 4px 14px 8px; font-size: 0.72rem; color: var(--ink-soft); line-height: 1.3; }
