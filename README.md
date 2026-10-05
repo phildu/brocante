@@ -121,6 +121,26 @@ angles** (+ indications facultatives du vendeur). La fiche se relit et se
 corrige sur le téléphone, puis s'enregistre masquée ou publiée. Sans clé
 Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main.
 
+## Univers (rayons) modifiables, taille et poids estimés par l'IA
+
+**Univers.** Les univers d'une boutique (filtres de « La boutique », accueil, champ « Univers » des fiches) venaient
+uniquement de `tenants/<slug>/tenant.php` : une boutique créée sur un modèle de boulangerie gardait « Pains,
+Viennoiseries… » même pour vendre des vêtements, et l'IA, qui choisit l'univers parmi cette liste, ne pouvait que se
+tromper. La page **Univers** de l'administration (`admin/universes.php`, `includes/universes.php`) les rend modifiables
+sans toucher au serveur : renommer (les pièces restent rattachées, la clé est conservée), ajouter, réordonner, retirer,
+choisir le pictogramme. La liste enregistrée (table `settings`, clé `universes`) remplace celle du fichier ;
+« Rétablir les univers d'origine » l'efface. **Proposer des univers (IA)** en suggère 4 à 8 d'après le nom de la
+boutique, son accroche, les natures et les noms des pièces en vente. **Reclasser par l'IA** (pièces sans univers valide,
+ou toutes) rejoue le choix de l'univers pièce par pièce, enregistré aussitôt, arrêtable. Les prompts de l'IA citent
+désormais les univers enregistrés (`ai_shop_examples()`), et l'IA peut ne choisir aucun univers s'ils ne conviennent
+pas (message : « adaptez-les dans Univers »).
+
+**Taille et poids.** Boutons « ↻ IA » sur Taille et Poids (catalogue, relectures du Studio et de l'ajout rapide),
+champs inclus dans « Tout (re)générer » et dans la génération de fiche (Studio, lot, ajout rapide) : taille lue sur
+l'étiquette d'un vêtement ou dimensions estimées d'un objet (« env. 22 cm de haut, Ø 11 cm »), poids estimé en grammes
+d'après la nature, les matières et la taille apparente (`weight_grams` pour les frais de port ; `weight_text` « env.
+900 g » écrit pour la fiche). Ce sont des **estimations** : l'interface le rappelle pour le poids (à peser).
+
 ## Nature du produit et sous-catégories, détectées par l'IA
 
 Indépendante de l'« univers » du commerce (ses rayons), la **nature** dit ce que l'objet est : 15 natures et 119

@@ -396,8 +396,8 @@ switch ($action) {
         // l'admin (nom/description/prix suggérés par l'IA à corriger).
         $ref = next_ref();
         $coverPhoto = $ambiancePath ?? $detourePath;
-        $stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, etat, nature, sous_categorie, price, badge, is_hidden, featured, sort_order)
-                                VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :etat, :nature, :sous_categorie, :price, :badge, 1, 0, :sort_order)');
+        $stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, etat, nature, sous_categorie, size_text, weight_text, weight_grams, price, badge, is_hidden, featured, sort_order)
+                                VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :price, :badge, 1, 0, :sort_order)');
         $stmt->execute([
             'ref' => $ref,
             'name' => $sheet['name'],
@@ -408,6 +408,9 @@ switch ($action) {
             'etat' => ($sheet['etat'] ?? '') ?: null,
             'nature' => ($sheet['nature'] ?? '') ?: null,
             'sous_categorie' => ($sheet['sous_categorie'] ?? '') ?: null,
+            'size_text' => (string) ($sheet['size_text'] ?? ''),
+            'weight_grams' => (int) ($sheet['weight_grams'] ?? 0),
+            'weight_text' => product_weight_text((int) ($sheet['weight_grams'] ?? 0)),
             'price' => $sheet['price_hint'] ?: '0 €',
             'badge' => 'Chiné',
             'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),

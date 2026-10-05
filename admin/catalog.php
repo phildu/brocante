@@ -170,9 +170,9 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                           <div></div>
                         </div>
                         <div class="field-row-3">
-                          <div class="field"><label>Taille</label><input type="text" name="size_text" value="<?= h($p['size_text']) ?>" placeholder="ex : 20 × 15 × 30 cm"></div>
+                          <div class="field"><label>Taille <?= $aiBtn('size', 'Lire la taille sur l\'étiquette ou estimer les dimensions') ?></label><input type="text" name="size_text" value="<?= h($p['size_text']) ?>" placeholder="ex : 20 × 15 × 30 cm"></div>
                           <div class="field">
-                            <label>Poids</label>
+                            <label>Poids <?= $aiBtn('weight', 'Estimer le poids (à vérifier avec une balance)') ?></label>
                             <input type="text" name="weight_text" value="<?= h($p['weight_text']) ?>" placeholder="ex : 1,2 kg">
                             <input type="number" name="weight_grams" min="0" step="1" value="<?= (int) $p['weight_grams'] ?>" placeholder="poids en g (frais de port)" style="margin-top:6px;">
                           </div>
@@ -261,9 +261,9 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
             <div></div>
           </div>
           <div class="field-row-3">
+            <div class="field"><label>Taille <?= $aiBtn('size', 'Lire la taille sur l\'étiquette ou estimer les dimensions') ?></label><input type="text" name="size_text" placeholder="ex : 20 × 15 × 30 cm, M, 38"></div>
+            <div class="field"><label>Poids (g) <?= $aiBtn('weight', 'Estimer le poids (à vérifier avec une balance)') ?></label><input type="number" name="weight_grams" min="0" step="1" placeholder="poids en g (frais de port)"><input type="hidden" name="weight_text" value=""></div>
             <div class="field"><label>Mention</label><input type="text" name="badge" value="Chiné" list="badge-options"></div>
-            <div></div>
-            <div></div>
           </div>
           <button type="submit" class="btn btn-primary">Ajouter cette pièce</button>
         </form>

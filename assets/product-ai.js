@@ -6,9 +6,9 @@
 (function () {
   'use strict';
   var URL = (window.APP_BASE || '') + '/admin/product-ai.php';
-  var ALL = 'name,description,category,nature,materials,etat,price';
-  var LABEL = { name: 'nom', description: 'description', category: 'catégorie', materials: 'matières', etat: 'état', nature: 'nature', sous_categorie: 'sous-catégorie', price: 'prix' };
-  var INPUT = { name: 'name', description: 'description', category: 'cat', materials: 'materials', etat: 'etat', nature: 'nature', sous_categorie: 'sous_categorie', price: 'price' };
+  var ALL = 'name,description,category,nature,materials,etat,size,weight,price';
+  var LABEL = { name: 'nom', description: 'description', category: 'catégorie', materials: 'matières', etat: 'état', nature: 'nature', sous_categorie: 'sous-catégorie', size: 'taille', size_text: 'taille', weight: 'poids', weight_grams: 'poids', weight_text: 'poids', price: 'prix' };
+  var INPUT = { name: 'name', description: 'description', category: 'cat', materials: 'materials', etat: 'etat', nature: 'nature', sous_categorie: 'sous_categorie', size_text: 'size_text', weight_grams: 'weight_grams', weight_text: 'weight_text', price: 'price' };
 
   // Photo choisie dans le formulaire d'ajout, réduite à 1280 px avant l'envoi (limite d'envoi de l'hébergement).
   function shrink(file) {
@@ -59,7 +59,7 @@
     var refInput = form.querySelector('[name="ref"]');
     var ref = (refInput && refInput.value) || form.dataset.aiRef || '';
     if (ref) fd.append('ref', ref);
-    ['name', 'description', 'cat', 'materials', 'etat', 'nature', 'sous_categorie', 'price', 'size_text'].forEach(function (n) {
+    ['name', 'description', 'cat', 'materials', 'etat', 'nature', 'sous_categorie', 'price', 'size_text', 'weight_text', 'weight_grams'].forEach(function (n) {
       var c = form.querySelector('[name="' + n + '"]') || form.querySelector('[data-ai-input="' + n + '"]');
       if (c && c.value) fd.append(n, c.value);
     });
@@ -88,7 +88,11 @@
         c.classList.remove('ai-filled'); void c.offsetWidth; c.classList.add('ai-filled');
         done.push(LABEL[field]);
       });
-      setStatus(form, done.length ? 'Proposé par l\'IA : ' + done.join(', ') + '. Relisez, puis enregistrez.' : 'L\'IA n\'a rien proposé.', done.length ? 'ok' : 'error');
+      var shown = done.filter(function (l, i) { return done.indexOf(l) === i; });
+      var notes = [];
+      if (res.values.weight_grams) notes.push('le poids est une estimation : pesez la pièce si possible (il sert au calcul des frais de port)');
+      if (fields.indexOf('category') > -1 && !res.values.category) notes.push('aucun univers de la boutique ne convient à cette pièce : adaptez-les dans « Univers »');
+      setStatus(form, done.length ? 'Proposé par l\'IA : ' + shown.join(', ') + '. Relisez, puis enregistrez.' + (notes.length ? ' À noter : ' + notes.join(' ; ') + '.' : '') : 'L\'IA n\'a rien proposé.', done.length ? 'ok' : 'error');
     });
   }
 

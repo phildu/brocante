@@ -5,6 +5,7 @@ require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/capture.php';
 require_once __DIR__ . '/studio.php';
 require_once __DIR__ . '/prompts.php';
+require_once __DIR__ . '/universes.php';
 
 function h($s): string
 {
@@ -14,7 +15,8 @@ function h($s): string
 /** Catégories du commerce actif (tenants/<slug>/tenant.php → categories). */
 function category_list(): array
 {
-    return tenant('categories');
+    // Univers adaptés depuis l'administration (page Univers) ; sinon ceux du fichier du commerce.
+    return universes_saved() ?? tenant('categories');
 }
 
 /** Catégorie par défaut du commerce (« curiosites » pour la brocante, sinon la première). */
@@ -1622,7 +1624,7 @@ function gemini_score_cutout_simplicity(string $srcAbsPath): ?int
 function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): string
 {
     $cats = implode(', ', array_column(category_list(), 'key'));
-    $examples = tenant('ai.examples') ? ' (' . tenant('ai.examples') . ')' : '';
+    $examples = ai_shop_examples() ? ' (' . ai_shop_examples() . ')' : '';
     $seen = $photoCount > 1
         ? "Tu regardes " . $photoCount . " photos du MÊME objet, sous différents angles : " . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". Sers-toi de tous les angles (marques, signatures, état, dessous). "
         : "Tu regardes la photo d'" . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". ";
@@ -1631,7 +1633,7 @@ function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): st
         . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "size_text": "taille lisible sur l\'étiquette ou dimensions estimées, très courte, vide si impossible", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1652,6 +1654,8 @@ function parse_product_sheet_response(string $text): ?array
         'category' => $cat,
         'materials' => mb_substr(trim((string) (is_array($data['materials'] ?? null) ? implode(', ', $data['materials']) : ($data['materials'] ?? ''))), 0, 200),
         'etat' => product_condition_key((string) ($data['etat'] ?? '')),
+        'size_text' => mb_substr(trim((string) ($data['size_text'] ?? '')), 0, 60),
+        'weight_grams' => max(0, min(300000, (int) preg_replace('/\D/', '', (string) ($data['weight_grams'] ?? '')))),
         'nature' => product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['nature'],
         'sous_categorie' => product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['sous_categorie'],
         'price_hint' => trim((string) ($data['price_hint'] ?? '')),
@@ -1883,7 +1887,7 @@ function product_nature_prompt_list(): string
 }
 
 /** Champs d'une fiche que l'IA sait (re)générer, dans l'ordre du formulaire. */
-const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'nature', 'materials', 'etat', 'price'];
+const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'nature', 'materials', 'etat', 'size', 'weight', 'price'];
 
 /**
  * Photos d'origine d'une pièce (hors détourage et illustrations IA), principale
@@ -1906,7 +1910,7 @@ function product_source_photos(string $ref): array
 function build_product_fields_prompt(array $fields, array $current, int $photoCount, string $notes = ''): string
 {
     $cats = implode(' ; ', array_map(static fn ($c) => $c['key'] . ' = ' . $c['label'], category_list()));
-    $examples = tenant('ai.examples') ? ' (' . tenant('ai.examples') . ')' : '';
+    $examples = ai_shop_examples() ? ' (' . ai_shop_examples() . ')' : '';
     $seen = match (true) {
         $photoCount > 1 => 'Tu regardes ' . $photoCount . ' photos du MÊME objet, sous différents angles : ' . tenant('ai.item') . ' pour ' . tenant('ai.shop') . $examples . '. ',
         $photoCount === 1 => "Tu regardes la photo d'" . tenant('ai.item') . ' pour ' . tenant('ai.shop') . $examples . '. ',
@@ -1915,19 +1919,23 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
     $spec = [
         'name' => '"name": "nom court et vendeur (4-8 mots)"',
         'description' => '"description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible"',
-        'category' => '"category": "la clé exacte (avant le signe =) parmi : ' . $cats . '"',
+        'category' => '"category": "la clé exacte (avant le signe =) parmi : ' . $cats . ' ; si aucune ne convient vraiment à cet objet, laisse une chaîne vide"',
         'materials' => '"materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne) ; chaîne vide si elles ne se voient pas"',
         'nature' => '"nature": "la clé de la NATURE de l\'objet (ce qu\'il EST) et, dans le même objet JSON, "sous_categorie": "la clé de sa sous-catégorie, qui doit appartenir à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '"',
         'etat' => '"etat": "' . product_condition_prompt_list() . '"',
+        'size' => '"size_text": "taille ou dimensions, COURTES : pour un objet ses dimensions estimées (ex : « env. 20 × 15 × 30 cm », hauteur ou diamètre selon la forme) ; pour un vêtement, une chaussure ou un accessoire la TAILLE si l\'étiquette est lisible (ex : « M », « 38 », « 42 FR »), sinon une estimation marquée « env. » ; chaîne vide si aucune estimation sérieuse n\'est possible"',
+        'weight' => '"weight_grams": "nombre entier : poids estimé en grammes de l\'objet seul, sans emballage, d\'après sa nature, ses matières et sa taille apparente (ordres de grandeur : sweat 600, robe 450, pichet en grès 900, chaise en bois 4500) ; 0 si impossible à estimer"',
         'price' => '"price": "prix de vente indicatif : UN SEUL montant en euros, ex : 30 €"',
     ];
-    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'nature' => 'Nature', 'materials' => 'Matières', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille'];
+    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'nature' => 'Nature', 'materials' => 'Matières', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille', 'weight_text' => 'Poids'];
     $known = [];
     $vary = [];
+    // Taille et poids se régénèrent par les champs « size » et « weight ».
+    $fieldOf = ['size_text' => 'size', 'weight_text' => 'weight'];
     foreach ($labels as $field => $label) {
         $value = trim((string) ($current[$field] ?? ''));
         if ($value === '') continue;
-        if (in_array($field, $fields, true)) {
+        if (in_array($fieldOf[$field] ?? $field, $fields, true)) {
             if ($field !== 'category') $vary[] = $label . ' actuel(le) : « ' . $value . ' »';
         } else {
             $known[] = $label . ' : ' . $value;
@@ -1942,6 +1950,14 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
         . '{' . implode(', ', array_map(static fn ($f) => $spec[$f], $fields)) . '}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que tu ne peux pas déterminer visuellement. "
         . 'Le prix est une simple estimation à titre indicatif, le vendeur l\'ajustera.';
+}
+
+/** « env. 600 g » / « env. 1,2 kg » : poids estimé en grammes, écrit pour la fiche. */
+function product_weight_text(int $grams): string
+{
+    if ($grams <= 0) return '';
+    if ($grams < 1000) return 'env. ' . (int) (round($grams / 10) * 10 ?: $grams) . ' g';
+    return 'env. ' . str_replace('.', ',', rtrim(rtrim(number_format($grams / 1000, 1, '.', ''), '0'), '.')) . ' kg';
 }
 
 /** Consigne donnée à l'IA pour choisir un état : la liste des clés avec leur sens, et la prudence attendue. */
@@ -1971,6 +1987,15 @@ function parse_product_fields_response(string $text, array $fields): array
             case 'description': $value = mb_substr($value, 0, 1200); break;
             case 'materials': $value = mb_substr($value, 0, 200); break;
             case 'etat': $value = product_condition_key($value); break;
+            case 'size':
+                $size = mb_substr($str($data['size_text'] ?? ''), 0, 60);
+                if ($size !== '') $out['size_text'] = $size;
+                continue 2;
+            case 'weight':
+                // Poids estimé en grammes (jamais au-delà de 300 kg) ; weight_text en est la version écrite pour la fiche.
+                $grams = (int) preg_replace('/\D/', '', $str($data['weight_grams'] ?? ''));
+                if ($grams > 0 && $grams <= 300000) { $out['weight_grams'] = $grams; $out['weight_text'] = product_weight_text($grams); }
+                continue 2;
             case 'nature':
                 // Deux clés d'un coup : la nature, et sa sous-catégorie (gardée seulement si elle lui appartient).
                 $pair = product_nature_resolve($value, $str($data['sous_categorie'] ?? ''));

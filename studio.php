@@ -227,8 +227,9 @@ $siteName = (string) $content['site_name'];
       <label class="qa-field">Nom <button type="button" class="ai-btn" data-ai-field="name" title="Générer / régénérer le nom">↻ IA</button><input type="text" id="sr-name" data-ai-input="name" maxlength="120"></label>
       <div class="qa-two">
         <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button><input type="text" id="sr-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
-        <label class="qa-field">Poids (g)<input type="number" id="sr-weight" min="0" step="10" inputmode="numeric" placeholder="500"></label>
+        <label class="qa-field">Poids (g) <button type="button" class="ai-btn" data-ai-field="weight" title="Estimer le poids (à vérifier avec une balance)">↻ IA</button><input type="number" id="sr-weight" data-ai-input="weight_grams" min="0" step="10" inputmode="numeric" placeholder="500"></label>
       </div>
+      <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button><input type="text" id="sr-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>
       <label class="qa-field">Catégorie <button type="button" class="ai-btn" data-ai-field="category" title="Choisir la catégorie d'après la pièce">↻ IA</button>
         <select id="sr-cat" data-ai-input="cat">
           <?php foreach (category_list() as $c): ?>

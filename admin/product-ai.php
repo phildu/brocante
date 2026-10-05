@@ -39,6 +39,9 @@ $current = [];
 foreach (['name', 'description', 'materials', 'price', 'size_text'] as $key) {
     $current[$key] = mb_substr(trim((string) ($_POST[$key] ?? '')), 0, 1200);
 }
+$weightG = (int) ($_POST['weight_grams'] ?? 0);
+$weightText = trim((string) ($_POST['weight_text'] ?? '')) ?: product_weight_text($weightG);
+if ($weightText !== '') $current['weight_text'] = mb_substr($weightText, 0, 60);
 $pair = product_nature_resolve($_POST['nature'] ?? '', $_POST['sous_categorie'] ?? '');
 if ($pair['nature'] !== '') $current['nature'] = product_nature_text($pair['nature'], $pair['sous_categorie']);
 $etat = product_condition(product_condition_key($_POST['etat'] ?? ''));
@@ -83,11 +86,20 @@ foreach ($smalls as $i => $small) {
 }
 $values = $text ? parse_product_fields_response($text, $fields) : [];
 if (!$values) {
+    // L'IA a répondu, mais rien d'exploitable : pour l'univers, c'est qu'aucun de ceux du commerce ne convient.
+    if ($text && $fields === ['category']) {
+        product_ai_reply(['ok' => false, 'error' => "Aucun univers de cette boutique ne convient à cette pièce : adaptez-les dans la page « Univers » de l'administration."]);
+    }
+    if ($text && $fields === ['size']) product_ai_reply(['ok' => false, 'error' => "La taille ne peut pas être estimée d'après ces photos : saisissez-la à la main."]);
+    if ($text && $fields === ['weight']) product_ai_reply(['ok' => false, 'error' => "Le poids ne peut pas être estimé d'après ces photos : pesez la pièce."]);
     product_ai_reply(['ok' => false, 'error' => "L'IA n'a pas pu répondre (service surchargé ?) : réessayez dans un instant."]);
 }
-// Détection en série depuis le catalogue (save=1, nature seule, pièce existante) : la nature est enregistrée tout de suite.
-if (!empty($_POST['save']) && $ref !== '' && $fields === ['nature'] && !empty($values['nature'])) {
-    db()->prepare('UPDATE products SET nature = ?, sous_categorie = ? WHERE ref = ?')
-        ->execute([$values['nature'], $values['sous_categorie'] ?? null, $ref]);
+// Détection en série depuis le catalogue ou la page Univers (save=1, un seul champ, pièce existante) : enregistrée tout de suite.
+if (!empty($_POST['save']) && $ref !== '') {
+    if ($fields === ['nature'] && !empty($values['nature'])) {
+        db()->prepare('UPDATE products SET nature = ?, sous_categorie = ? WHERE ref = ?')->execute([$values['nature'], $values['sous_categorie'] ?? null, $ref]);
+    } elseif ($fields === ['category'] && !empty($values['category'])) {
+        db()->prepare('UPDATE products SET cat = ? WHERE ref = ?')->execute([$values['category'], $ref]);
+    }
 }
 product_ai_reply(['ok' => true, 'values' => $values, 'fields' => $fields]);

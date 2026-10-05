@@ -1,0 +1,45 @@
+<?php
+// Univers (rayons) de la boutique : enregistrement, retour aux univers d'origine, propositions de l'IA.
+//   POST save    → key[], label[], icon[] (le formulaire de admin/universes.php)
+//   POST reset   → revient aux univers du fichier du commerce
+//   POST suggest → JSON : univers proposés par l'IA d'après la boutique et son catalogue
+require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_admin();
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: /admin/universes.php');
+    exit;
+}
+$action = (string) ($_POST['action'] ?? '');
+
+if ($action === 'suggest') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!GEMINI_API_KEY) {
+        echo json_encode(['ok' => false, 'error' => 'Clé Gemini non configurée (Réglages du site).']);
+        exit;
+    }
+    session_write_close();
+    @set_time_limit(90);
+    $ideas = universes_suggest();
+    echo json_encode($ideas
+        ? ['ok' => true, 'universes' => $ideas]
+        : ['ok' => false, 'error' => "L'IA n'a pas pu proposer d'univers (service surchargé ?) : réessayez dans un instant."], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+try {
+    if ($action === 'save') {
+        $rows = universes_normalize((array) ($_POST['key'] ?? []), (array) ($_POST['label'] ?? []), (array) ($_POST['icon'] ?? []));
+        universes_save($rows);
+        $orphans = count(universes_orphan_refs());
+        flash_set('Univers enregistrés (' . count($rows) . ').' . ($orphans ? " $orphans pièce(s) ont un univers qui n'existe plus : reclassez-les ci-dessous." : ''));
+    } elseif ($action === 'reset') {
+        universes_reset();
+        flash_set("Univers d'origine rétablis.");
+    }
+} catch (InvalidArgumentException $e) {
+    flash_set($e->getMessage(), 'error');
+}
+header('Location: /admin/universes.php');
+exit;

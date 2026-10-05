@@ -196,6 +196,8 @@
       $('f-desc').value = sheet.description;
       $('f-materials').value = sheet.materials || '';
       $('f-etat').value = sheet.etat || '';
+      $('f-size').value = sheet.size_text || '';
+      if (sheet.weight_grams) $('f-weight').value = sheet.weight_grams;
       $('f-nature').value = sheet.nature || '';
       $('f-nature').dispatchEvent(new Event('change'));
       $('f-sous').value = sheet.sous_categorie || '';
@@ -222,6 +224,7 @@
     fd.append('description', $('f-desc').value);
     fd.append('materials', $('f-materials').value);
     fd.append('etat', $('f-etat').value);
+    fd.append('size_text', $('f-size').value);
     fd.append('nature', $('f-nature').value);
     fd.append('sous_categorie', $('f-sous').value);
     fd.append('badge', $('f-badge').value);

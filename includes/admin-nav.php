@@ -12,6 +12,7 @@
  */
 $adminNavItems = [
     'catalogue' => ['/admin/catalog.php', 'Catalogue', 'grid'],
+    'univers' => ['/admin/universes.php', 'Univers', 'folder'],
     'prise' => ['/admin/quick-add.php', 'Nouvelle pièce (photo)', 'camera'],
     'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
     'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
