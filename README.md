@@ -157,10 +157,13 @@ directement depuis la photo de départ avec la même consigne — scène semblab
 
 Sous le champ « Mots-clés / précisions » (galerie) et les « Indications pour l'IA » (ajout rapide, lot du
 Studio), `assets/prompt-helper.js` affiche : des **idées cliquables** — décors, situations, lumière et style
-(un clic les ajoute au texte, sans doublon) ; pour une pièce existante, un bouton « Idées pour cette pièce
+(un clic les ajoute au texte, sans doublon) — dont des **cadrages** (plan large, gros plan sur le détail, vue de dessus, plongée, contre-plongée, arrière-plan flou…) ; pour une pièce existante, un bouton « Idées pour cette pièce
 (IA) » qui en propose huit d'après sa photo (`suggest`, adaptées à l'objet : un vêtement est proposé porté) —
 et le **prompt réellement envoyé à l'IA**, mis à jour à la frappe, avec la consigne surlignée et le cadrage
-ajouté automatiquement. L'aperçu est construit par le serveur avec les mêmes fonctions que la génération
+ajouté automatiquement. L'aperçu est **en français** par défaut (case « Voir le texte exact envoyé (en anglais) » pour basculer) : le
+modèle reçoit les prompts anglais de `includes/functions.php`, dont `includes/prompts.php` tient la traduction
+fidèle phrase à phrase (`build_*_prompt_fr()`, `generated_framing_prompt_fr()`, `owner_direction_prompt_fr()` —
+**à modifier en même temps que les prompts anglais**). Il est construit par le serveur
 (`prompt_preview_parts()`, action `preview`), donc fidèle ; pour les indications de fiche il montre la mise en
 situation et la rédaction de la fiche. Il est replié par défaut sur téléphone. Un attribut
 `data-prompt-helper="<type>"` suffit à activer l'aide sur un champ.
@@ -204,6 +207,19 @@ comme la galerie. Code : `includes/prompts.php`, `admin/prompts-action.php`, `as
   `finish`, `jobs`, `get`, `discard`, `save`) ; chaque étape est une requête séparée (limite de durée
   OVH) et reprend où elle s'est arrêtée si le réseau coupe.
 - La caméra en direct exige HTTPS (ou localhost) : en ligne, pas de souci.
+
+## Médiathèque : toutes les photos, classées par produit
+
+`admin/media.php` réunit (`get_media_overview()`) les **photos des fiches produit** — originales, visuels IA,
+détourages, versions 9:16, et la photo de couverture des fiches créées à la main —, lues en place (rien n'est
+dupliqué : elles se gèrent dans la galerie de chaque pièce, lien « Gérer dans la galerie »), et les ressources
+propres de la table `media_library` (téléphone, imports, photos conservées après suppression d'une fiche,
+ajouts manuels), seules modifiables ici. Classées **par produit** par défaut (une rubrique par fiche, puis
+« Ancien article : … » et « Sans produit ») ; « Classer par » propose aussi source, type et mois ; un filtre
+« Produit » (tous, sans produit, ou une fiche) s'ajoute à la recherche et au type ; la recherche couvre le nom et
+la référence du produit. Pastilles : Visuel IA, Détourage, 9:16, photo ou fiche masquée. Les panneaux « Utiliser
+mon téléphone » et « Ajouter une ressource » sont repliés pour voir les photos tout de suite. La vue liste ne
+coche que les ressources propres.
 
 ## Visuels IA : version ordinateur (3:2) et smartphone (9:16)
 
@@ -372,3 +388,4 @@ les envois suivants. Les fichiers déjà présents ne sont pas renvoyés ; un
 fichier modifié est rangé à côté de l'ancien, jamais par-dessus. La clé n'est
 stockée que sous forme d'empreinte dans `.secrets/` ; « Désactiver la
 réception » coupe tout envoi.
+

@@ -13,12 +13,13 @@
   var SCENES = [
     ['Décors', ['salon cosy avec cheminée', 'cuisine de campagne en bois', 'entrée avec console ancienne', 'chambre lumineuse et lin', 'bureau d\'artiste', 'terrasse en pierre au soleil', 'jardin fleuri', 'marché en plein air', 'rue pavée d\'une vieille ville', 'atelier de brocanteur']],
     ['Situations', ['portée par une femme en mouvement', 'portée par un homme, debout', 'posée sur une table dressée', 'accrochée à un cintre en bois', 'rangée sur une étagère', 'tenue à la main', 'sur un buffet, mise en valeur']],
+    ['Cadrages', ['plan large, décor visible', 'plan moyen', 'gros plan sur le détail', 'portrait en pied', 'vue de dessus, à plat', 'légère plongée', 'contre-plongée', 'objet décentré, règle des tiers', 'arrière-plan flou, faible profondeur de champ']],
     ['Lumière et style', ['lumière dorée de fin de journée', 'lumière douce du matin', 'ambiance hivernale', 'ambiance estivale', 'style scandinave épuré', 'style bohème', 'fond neutre minimaliste', 'photo de magazine']]
   ];
   var IDEAS = {
     ambiance: SCENES,
     notes: SCENES.concat([['Précisions pour la fiche', ['années 70', 'excellent état', 'petite usure visible', 'léger éclat', 'pièce rare', 'fait main', 'pièce unique']]]),
-    angle: [['Prise de vue', ['vue très rapprochée du détail', 'fond gris clair uni', 'sans les accessoires', 'éclairage doux de studio', 'objet légèrement incliné', 'on voit bien la signature']]],
+    angle: [['Cadrages', ['gros plan sur le détail', 'plan moyen', 'plan large', 'vue de dessus, à plat', 'légère plongée', 'contre-plongée', 'objet décentré']], ['Prise de vue', ['fond gris clair uni', 'sans les accessoires', 'éclairage doux de studio', 'objet légèrement incliné', 'on voit bien la signature']]],
     complete: [['Précisions', ['garder exactement les mêmes motifs', 'compléter la base symétriquement', 'même matière et même couleur', 'sans rien ajouter d\'autre']]]
   };
 
@@ -102,9 +103,11 @@
     // ── Prompt envoyé ──
     var prev = el('details', 'ph-prev');
     prev.open = window.innerWidth >= 700;
-    var sum = el('summary', '', 'Prompt envoyé à l\'IA');
+    var sum = el('summary', '', 'Prompt envoyé à l\'IA (en français)');
     var body = el('div', 'ph-body');
     prev.appendChild(sum); prev.appendChild(body);
+    var english = false;   // false : traduction française ; true : texte exact envoyé, en anglais
+    var last = null;       // dernière réponse du serveur, pour basculer sans la redemander
     var saved = anchor.parentNode.querySelector('.sp');
     (saved || sug).parentNode.insertBefore(prev, (saved || sug).nextSibling);
 
@@ -117,20 +120,34 @@
       });
     }
 
+    function draw() {
+      body.textContent = '';
+      if (!last) return;
+      if (!last.ok) { body.appendChild(el('p', 'ph-note', last.error || 'Aperçu indisponible.')); return; }
+      var tog = el('label', 'ph-toggle');
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = english;
+      cb.addEventListener('change', function () { english = cb.checked; sum.textContent = english ? 'Prompt envoyé à l\'IA (texte exact, en anglais)' : 'Prompt envoyé à l\'IA (en français)'; draw(); });
+      tog.appendChild(cb); tog.appendChild(document.createTextNode(' Voir le texte exact envoyé (en anglais)'));
+      body.appendChild(tog);
+      var kw = input.value.trim();
+      body.appendChild(el('p', 'ph-note', english
+        ? 'Texte exact reçu par l\'IA, en anglais (langue que le modèle comprend le mieux)' + (kw ? ' ; votre consigne y est surlignée.' : '.')
+        : 'Traduction française fidèle du texte envoyé : l\'IA en reçoit l\'équivalent anglais, phrase pour phrase' + (kw ? ' ; votre consigne y est surlignée.' : '.')));
+      last.parts.forEach(function (part) {
+        body.appendChild(el('p', 'ph-label', part.label));
+        var pre = el('pre', 'ph-text');
+        highlight(pre, english ? part.text : part.text_fr, kw);
+        body.appendChild(pre);
+      });
+    }
+
     var seq = 0, timer = null;
     function refresh() {
       var my = ++seq;
       call({ action: 'preview', kind: kind(), text: input.value, angle: angleSelect ? angleSelect.value : 'auto' }).then(function (res) {
         if (my !== seq) return;
-        body.textContent = '';
-        if (!res.ok) { body.appendChild(el('p', 'ph-note', res.error || 'Aperçu indisponible.')); return; }
-        body.appendChild(el('p', 'ph-note', 'Ce texte, en anglais (langue que le modèle comprend le mieux), est exactement ce que reçoit l\'IA' + (input.value.trim() ? ' ; votre consigne y est surlignée.' : '.')));
-        res.parts.forEach(function (part) {
-          body.appendChild(el('p', 'ph-label', part.label));
-          var pre = el('pre', 'ph-text');
-          highlight(pre, part.text, input.value.trim());
-          body.appendChild(pre);
-        });
+        last = res;
+        draw();
       });
     }
     function later() { clearTimeout(timer); timer = setTimeout(refresh, 350); }

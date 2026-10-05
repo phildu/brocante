@@ -726,9 +726,14 @@ function generated_framing_prompt(string $aspectRatio, bool $directed = false): 
             . "direction — any flat or blurred area around the photo is empty canvas to replace."
         : "Fill all the remaining space by extending the background / scene naturally (wall, floor, surface, room) — "
             . "any flat or blurred area around the photo is empty canvas to replace with a coherent background.";
+    // Cadrage demandé par le vendeur (gros plan, plan large, angle…) : il prime sur « objet entier avec marge ».
+    $unless = $directed
+        ? "Unless the owner's direction explicitly asks for a different framing (e.g. close-up, wide shot, low or high angle, "
+            . "off-center composition), in which case follow it, keep this framing: "
+        : "Keep this framing: ";
     return " FRAMING (mandatory): the output is a $aspectRatio $orientation image. The input image has "
         . "already been placed on a canvas of that exact format, with the object fully visible and margin "
-        . "around it: keep this framing. The ENTIRE object must stay visible, never cut by any edge of the "
+        . "around it. " . $unless . "the ENTIRE object must stay visible, never cut by any edge of the "
         . "frame, with clear empty space on every side (at least 8% of the frame). Do not zoom in, do not crop, "
         . "do not enlarge the object to fill the frame. " . $fill;
 }
@@ -1832,7 +1837,7 @@ function generated_photo_basename(string $prefix, string $keywords): string
 function owner_direction_prompt(string $keywords): string
 {
     return $keywords === '' ? '' : " OWNER'S DIRECTION (mandatory, it takes priority over any default above that contradicts it): « "
-        . $keywords . " ». Follow it faithfully — setting, light, action, and any person it mentions — while keeping the object itself identical.";
+        . $keywords . " ». Follow it faithfully — setting, light, framing (close-up, wide shot, angle), action, and any person it mentions — while keeping the object itself identical.";
 }
 
 function build_angle_prompt(string $anglePreset, string $keywords): string
@@ -2184,6 +2189,108 @@ function get_media_items(?string $type = null, ?string $q = null): array
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetchAll();
+}
+
+/**
+ * Vue d'ensemble de la médiathèque : les ressources propres (media_library) ET les photos des fiches produit
+ * (product_photos, plus la photo de couverture des fiches qui n'en ont pas dans la galerie), lues en place — rien
+ * n'est dupliqué. Chaque élément : kind (« media » : modifiable ici ; « fiche » : se gère dans la galerie du produit),
+ * type, path, label, source, tags, origin_ref, origin_name, created_at, live (la fiche existe encore), badges.
+ * $product : '' (tous), '-' (sans produit) ou la référence d'un produit.
+ */
+function get_media_overview(?string $type = null, ?string $q = null, string $product = ''): array
+{
+    $items = [];
+    foreach (get_media_items($type, $q) as $m) {
+        $m['kind'] = 'media';
+        $m['live'] = $m['origin_ref'] && get_product($m['origin_ref']);
+        $m['badges'] = [];
+        $items[] = $m;
+    }
+
+    $products = [];
+    foreach (db()->query('SELECT ref, name, photo, is_hidden FROM products')->fetchAll() as $p) $products[$p['ref']] = $p;
+    $fiche = static function (array $row, string $path, string $label, array $badges, string $createdAt) use ($products): array {
+        $p = $products[$row['product_ref'] ?? $row['ref']];
+        return [
+            'kind' => 'fiche', 'id' => (int) ($row['id'] ?? 0), 'type' => $row['type'] ?? 'photo', 'path' => $path, 'label' => $label,
+            'source' => 'Fiche produit', 'tags' => '', 'origin_ref' => $p['ref'], 'origin_name' => $p['name'], 'created_at' => $createdAt,
+            'live' => true, 'badges' => array_values(array_filter(array_merge($badges, [$p['is_hidden'] ? 'Fiche masquée' : '']))),
+        ];
+    };
+    $known = [];
+    foreach (db()->query('SELECT * FROM product_photos ORDER BY id')->fetchAll() as $row) {
+        if (!isset($products[$row['product_ref']])) continue;
+        $known[$row['path']] = true;
+        $badges = [];
+        if (str_starts_with((string) $row['label'], 'Détourée')) $badges[] = 'Détourage';
+        elseif ($row['is_illustration']) $badges[] = 'Visuel IA';
+        if ($row['is_hidden']) $badges[] = 'Photo masquée';
+        $items[] = $fiche($row, $row['path'], (string) $row['label'], $badges, (string) $row['created_at']);
+        if (!empty($row['path_mobile'])) {
+            $known[$row['path_mobile']] = true;
+            $items[] = $fiche($row, $row['path_mobile'], $row['label'] . ' (9:16 smartphone)', array_merge($badges, ['9:16']), (string) $row['created_at']);
+        }
+    }
+    foreach ($products as $p) {
+        // Photo de couverture d'une fiche créée à la main : elle n'a pas de ligne dans la galerie.
+        if ($p['photo'] && !isset($known[$p['photo']])) {
+            $items[] = $fiche($p, $p['photo'], 'Photo de la fiche', [], date('Y-m-d H:i:s', @filemtime(__DIR__ . '/../' . $p['photo']) ?: time()));
+        }
+    }
+
+    return array_values(array_filter($items, static function (array $m) use ($type, $q, $product): bool {
+        if ($m['kind'] === 'fiche') {
+            if ($type && $m['type'] !== $type) return false;
+            if ($q) {
+                $hay = mb_strtolower($m['label'] . ' ' . $m['source'] . ' ' . $m['origin_name'] . ' ' . $m['origin_ref'] . ' ' . implode(' ', $m['badges']));
+                if (!str_contains($hay, mb_strtolower($q))) return false;
+            }
+        }
+        if ($product === '-') return !$m['origin_ref'] && !$m['origin_name'];
+        return $product === '' || $m['origin_ref'] === $product;
+    }));
+}
+
+/**
+ * Regroupe les éléments de get_media_overview() : par produit (une rubrique par fiche, puis « Anciens articles » et
+ * « Sans produit »), par source, par type, ou par mois. Rend [[titre, lien galerie|null, éléments], …].
+ */
+function group_media_overview(array $items, string $by): array
+{
+    $dateOf = static fn (array $m): int => strtotime((string) $m['created_at']) ?: 0;
+    usort($items, static fn ($a, $b) => $dateOf($b) <=> $dateOf($a));
+    $groups = [];
+    foreach ($items as $m) {
+        switch ($by) {
+            case 'produit':
+                if ($m['live'] && $m['origin_ref']) { $key = 'p:' . $m['origin_ref']; $title = 'Réf. N°' . $m['origin_ref'] . ' — ' . $m['origin_name']; $link = $m['origin_ref']; $order = 0; }
+                elseif ($m['origin_name']) { $key = 'x:' . $m['origin_name']; $title = 'Ancien article : ' . $m['origin_name']; $link = null; $order = 1; }
+                else { $key = 'z'; $title = 'Sans produit'; $link = null; $order = 2; }
+                break;
+            case 'source':
+                $src = trim((string) $m['source']) ?: 'Sans source'; $key = 's:' . $src; $title = $src; $link = null; $order = $m['kind'] === 'fiche' ? 0 : 1;
+                break;
+            case 'type':
+                $key = 't:' . $m['type']; $title = $m['type'] === 'video' ? 'Vidéos' : 'Photos'; $link = null; $order = $m['type'] === 'video' ? 1 : 0;
+                break;
+            default:
+                $month = $dateOf($m) ? strftime_fr($dateOf($m)) : 'Sans date'; $key = 'd:' . $month; $title = $month; $link = null; $order = 0;
+        }
+        $groups[$key] ??= ['title' => $title, 'link' => $link, 'items' => [], 'order' => $order];
+        $groups[$key]['items'][] = $m;
+    }
+    if ($by === 'produit' || $by === 'source' || $by === 'type') {
+        uasort($groups, static fn ($a, $b) => $a['order'] <=> $b['order'] ?: 0);
+    }
+    return array_values(array_map(static fn ($g) => [$g['title'], $g['link'], $g['items']], $groups));
+}
+
+/** « octobre 2026 » pour un horodatage (sans dépendre des locales du serveur). */
+function strftime_fr(int $timestamp): string
+{
+    static $months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    return $months[(int) date('n', $timestamp) - 1] . ' ' . date('Y', $timestamp);
 }
 
 function get_media_item(int $id): ?array

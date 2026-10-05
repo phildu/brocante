@@ -1561,3 +1561,5 @@
 .ph-label { margin: 8px 0 3px; font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
 .ph-text { margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line); font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.5; color: var(--ink); }
 .ph-text mark { background: var(--accent); color: var(--accent-ink); padding: 0 2px; }
+.ph-toggle { display: inline-flex; align-items: center; gap: 4px; margin: 2px 0 6px; font-size: 0.78rem; color: var(--ink); cursor: pointer; }
+.ph-toggle input { accent-color: var(--accent); }

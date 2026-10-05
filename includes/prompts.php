@@ -63,28 +63,117 @@ function saved_prompt_delete(int $id): void
 }
 
 /**
- * Prompt réellement envoyé à l'IA pour une génération, en blocs [label, text] : celui que construit le serveur
- * au moment de générer (mêmes fonctions), plus le cadrage ajouté automatiquement. Sert à l'aperçu affiché sous
- * le champ « Mots-clés / précisions ». $kind : ambiance, angle, complete ou notes (indications de fiche : la
- * mise en situation ET la rédaction de la fiche).
+ * VERSION FRANÇAISE des prompts de génération, pour l'aperçu sous le champ « Mots-clés / précisions » : le
+ * modèle reçoit les prompts anglais de includes/functions.php (build_*_prompt, generated_framing_prompt,
+ * owner_direction_prompt) ; ces fonctions en sont la traduction fidèle, phrase à phrase. À MODIFIER EN MÊME TEMPS
+ * qu'eux, sinon l'aperçu ne dirait plus ce qui est envoyé.
+ */
+function owner_direction_prompt_fr(string $keywords): string
+{
+    return $keywords === '' ? '' : " CONSIGNE DU VENDEUR (impérative, elle prime sur tout réglage par défaut ci-dessus qui la contredit) : « "
+        . $keywords . " ». Suis-la fidèlement — décor, lumière, cadrage (gros plan, plan large, angle), action, et toute personne qu'elle mentionne — en gardant l'objet lui-même identique.";
+}
+
+function build_ambiance_prompt_fr(string $keywords): string
+{
+    if ($keywords === '') {
+        return "Voici une vraie photo d'un objet d'occasion / vintage pour une boutique d'antiquités en ligne. "
+            . "Génère une photo mise en scène montrant exactement le MÊME objet, placé naturellement dans un intérieur "
+            . "français chaleureux (un salon ou une cuisine aux tons de bois chauds), comme pour une photo de produit "
+            . "lifestyle, photoréaliste, lumière naturelle du jour, sans texte, sans filigrane, sans personne. "
+            . "Réponds uniquement avec l'image générée, sans texte dans ta réponse.";
+    }
+    return "Voici une vraie photo d'un objet d'occasion / vintage pour une boutique d'antiquités en ligne. "
+        . "Génère une photo lifestyle mise en scène, photoréaliste, montrant exactement le MÊME objet (forme, couleurs, "
+        . "matières, motifs et détails identiques — ne jamais le redessiner), comme pour une photo de produit lifestyle, "
+        . "lumière naturelle, sans texte, sans filigrane. Décor par défaut, à utiliser UNIQUEMENT si la consigne du vendeur "
+        . "ci-dessous ne décrit ni décor, ni action, ni personne : un intérieur français chaleureux (salon ou cuisine aux "
+        . "tons de bois chauds), sans personne. Si la consigne décrit une scène, une action ou une personne, cette scène "
+        . "remplace le décor par défaut — pour un vêtement ou un accessoire, l'article peut alors être porté ou tenu, "
+        . "en portant exactement cet article."
+        . owner_direction_prompt_fr($keywords)
+        . " Réponds uniquement avec l'image générée, sans texte dans ta réponse.";
+}
+
+function build_angle_prompt_fr(string $anglePreset, string $keywords): string
+{
+    $angles = [
+        'auto' => 'sous un angle différent de la photo d\'origine',
+        'dessus' => 'directement du dessus, en vue plongeante verticale',
+        'dessous' => 'd\'en dessous, en contre-plongée',
+        'trois-quarts' => 'de trois quarts',
+        'face' => 'de face, face à l\'objet',
+        'profil' => 'de côté, en vue de profil',
+        'arriere' => 'de l\'arrière de l\'objet',
+    ];
+    return "Voici une vraie photo d'un objet d'occasion / vintage pour une boutique d'antiquités en ligne. "
+        . "Génère une photo du MÊME objet exactement (ou des mêmes objets), photographié " . ($angles[$anglePreset] ?? $angles['auto']) . ", "
+        . "sur un fond de studio gris clair neutre, simple et uni, avec un éclairage naturel doux, "
+        . "photoréaliste, sans texte, sans filigrane, sans personne. "
+        . "Réponds uniquement avec l'image générée, sans texte dans ta réponse."
+        . owner_direction_prompt_fr($keywords);
+}
+
+function build_complete_prompt_fr(string $keywords): string
+{
+    return "Voici une vraie photo d'un objet d'occasion / vintage pour une boutique d'antiquités en ligne, mais "
+        . "l'objet est coupé par le bord du cadre — une partie manque sur l'image. "
+        . "Génère exactement le MÊME objet montré en entier, en prolongeant / complétant les parties coupées "
+        . "de façon cohérente avec son style, ses matières, ses proportions et sa construction visibles, "
+        . "sur un fond de studio gris clair neutre, simple et uni, avec un éclairage naturel doux, "
+        . "photoréaliste, sans texte, sans filigrane, sans personne. "
+        . "Réponds uniquement avec l'image générée, sans texte dans ta réponse."
+        . owner_direction_prompt_fr($keywords);
+}
+
+function generated_framing_prompt_fr(string $aspectRatio, bool $directed = false): string
+{
+    $orientation = $aspectRatio === '9:16' ? 'vertical (portrait)' : 'horizontal (paysage)';
+    $fill = $directed
+        ? "Remplis tout l'espace restant en prolongeant naturellement la scène, de façon cohérente avec le décor demandé dans la "
+            . "consigne du vendeur — toute zone unie ou floue autour de la photo est de la toile vide à remplacer."
+        : "Remplis tout l'espace restant en prolongeant naturellement le décor (mur, sol, surface, pièce) — "
+            . "toute zone unie ou floue autour de la photo est de la toile vide à remplacer par un décor cohérent.";
+    $unless = $directed
+        ? "Sauf si la consigne du vendeur demande explicitement un autre cadrage (gros plan, plan large, plongée ou contre-plongée, "
+            . "composition décentrée), auquel cas suis-la, garde ce cadrage : "
+        : "Garde ce cadrage : ";
+    return "CADRAGE (impératif) : l'image produite est une image $aspectRatio $orientation. L'image d'entrée a déjà été posée "
+        . "sur une toile de ce format exact, avec l'objet entièrement visible et une marge autour de lui. " . $unless
+        . "l'objet ENTIER doit rester visible, jamais coupé par un bord du cadre, avec de l'espace vide de chaque côté "
+        . "(au moins 8 % du cadre). Ne zoome pas, ne recadre pas, n'agrandis pas l'objet pour remplir le cadre. " . $fill;
+}
+
+/**
+ * Prompt réellement envoyé à l'IA pour une génération, en blocs [label, text, text_fr] : `text` est celui que
+ * construit le serveur au moment de générer (mêmes fonctions), `text_fr` sa traduction fidèle, plus le cadrage ajouté
+ * automatiquement. Sert à l'aperçu affiché sous le champ « Mots-clés / précisions ». $kind : ambiance, angle,
+ * complete ou notes (indications de fiche : la mise en situation ET la rédaction de la fiche).
  */
 function prompt_preview_parts(string $kind, string $text, string $anglePreset = 'auto'): ?array
 {
     $text = trim($text);
     $directed = $text !== '';
-    $framing = static fn (bool $d): array => ['label' => 'Cadrage ajouté automatiquement (format 3:2)', 'text' => trim(generated_framing_prompt(GENERATED_IMAGE_FORMATS['desktop'], $d))];
+    $label = "Prompt envoyé à l'IA";
+    $framing = static fn (bool $d): array => [
+        'label' => 'Cadrage ajouté automatiquement (format 3:2)',
+        'text' => trim(generated_framing_prompt(GENERATED_IMAGE_FORMATS['desktop'], $d)),
+        'text_fr' => generated_framing_prompt_fr(GENERATED_IMAGE_FORMATS['desktop'], $d),
+    ];
     switch ($kind) {
         case 'ambiance':
-            return [['label' => "Prompt envoyé à l'IA", 'text' => build_ambiance_prompt($text)], $framing($directed)];
+            return [['label' => $label, 'text' => build_ambiance_prompt($text), 'text_fr' => build_ambiance_prompt_fr($text)], $framing($directed)];
         case 'angle':
-            return [['label' => "Prompt envoyé à l'IA", 'text' => build_angle_prompt($anglePreset, $text)], $framing(false)];
+            return [['label' => $label, 'text' => build_angle_prompt($anglePreset, $text), 'text_fr' => build_angle_prompt_fr($anglePreset, $text)], $framing(false)];
         case 'complete':
-            return [['label' => "Prompt envoyé à l'IA", 'text' => build_complete_prompt($text)], $framing(false)];
+            return [['label' => $label, 'text' => build_complete_prompt($text), 'text_fr' => build_complete_prompt_fr($text)], $framing(false)];
         case 'notes':
+            // Le prompt de la fiche est déjà rédigé en français.
+            $sheet = build_product_sheet_prompt(1, $text);
             return [
-                ['label' => 'Mise en situation', 'text' => build_ambiance_prompt($text)],
+                ['label' => 'Mise en situation', 'text' => build_ambiance_prompt($text), 'text_fr' => build_ambiance_prompt_fr($text)],
                 $framing($directed),
-                ['label' => 'Fiche (nom, description, catégorie, prix)', 'text' => build_product_sheet_prompt(1, $text)],
+                ['label' => 'Fiche (nom, description, catégorie, prix)', 'text' => $sheet, 'text_fr' => $sheet],
             ];
     }
     return null;
