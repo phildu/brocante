@@ -121,6 +121,19 @@ angles** (+ indications facultatives du vendeur). La fiche se relit et se
 corrige sur le téléphone, puis s'enregistre masquée ou publiée. Sans clé
 Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main.
 
+## Prix du marché : le même article, neuf et d'occasion
+
+Le bouton **Marché** à côté du champ Prix (catalogue, relectures du Studio et de l'ajout rapide) lance une vraie recherche
+web (`admin/price-research.php`, `includes/price-research.php`) : Gemini avec l'outil « Google Search » cherche le prix du
+MÊME article — ou du plus proche —, neuf et d'occasion, en France, en s'aidant des photos de la pièce pour reconnaître marque
+et modèle, de son nom, de ses matières, de sa nature, de sa taille et de son état. Le résultat s'affiche sous le champ :
+l'article reconnu, un tableau **votre catalogue** (pièces similaires déjà enregistrées : fourchette et médiane) /
+**neuf (web)** / **occasion (web)**, un **prix conseillé** pour CET exemplaire dans son état avec sa justification, la
+fiabilité de la recherche (« faible » quand peu de prix comparables existent : l'IA doit le dire plutôt qu'inventer) et les
+sources et recherches effectuées. « Utiliser » écrit le prix dans le champ, sans rien enregistrer. Une recherche prend 20 à
+40 secondes ; les recherches web de l'API Gemini peuvent être facturées au-delà du quota gratuit. Sans clé Gemini, seul le
+tableau du catalogue est disponible.
+
 ## Le catalogue d'abord, l'IA ensuite
 
 Avant d'estimer un prix, un poids ou des dimensions, l'IA regarde ce que la boutique sait déjà
@@ -236,7 +249,9 @@ situation et la rédaction de la fiche. Il est replié par défaut sur télépho
 Sous le champ « Mots-clés / précisions » de la galerie d'une pièce (génération d'une mise en situation,
 d'un autre angle, ou d'un objet complété) et sous les « Indications pour l'IA » du parcours « une pièce »
 et du lot du Studio, un bouton **Enregistrer ce prompt** garde le texte pour plus tard ; les prompts
-enregistrés apparaissent en pastilles dessous, un clic les remet dans le champ, « × » les supprime.
+enregistrés apparaissent en pastilles dessous : un clic les **ajoute** au texte déjà saisi (séparé par une virgule, sans
+doublon, dans la limite de 300 caractères — ce qu'on avait composé n'est plus écrasé), Maj + clic remplace tout le texte,
+« × » supprime la pastille.
 Chaque type de génération a sa liste (mise en situation, autre angle, compléter, fiche), partagée par
 toute l'équipe du commerce (table `saved_prompts`, créée automatiquement ; 300 caractères et 40 prompts
 par type au plus ; un prompt déjà enregistré n'est pas dupliqué). Le community manager peut les utiliser

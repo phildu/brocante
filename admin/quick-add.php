@@ -75,6 +75,7 @@ $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/admin/quick-a
 </script>
 <script src="/assets/product-ai.js"></script>
 <script src="/assets/nature-select.js"></script>
+<script src="/assets/price-research.js"></script>
 <script src="/assets/saved-prompts.js"></script>
 <script src="/assets/prompt-helper.js"></script>
 <script src="/assets/quick-add.js"></script>

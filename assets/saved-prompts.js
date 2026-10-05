@@ -1,5 +1,5 @@
 // Prompts enregistrés : sous un champ « Mots-clés / précisions » ou « Indications pour l'IA », un bouton
-// pour garder le texte saisi, et la liste des prompts déjà enregistrés (un clic les remet dans le champ).
+// pour garder le texte saisi, et la liste des prompts déjà enregistrés (un clic les ajoute au texte, Maj + clic le remplace).
 // S'active tout seul sur les champs portant data-saved-prompts :
 //   data-saved-prompts="notes"        type fixe (ambiance, angle, complete, notes)
 //   data-saved-prompts="@gen-kind"    type = valeur du <select id="gen-kind"> (la liste suit le choix)
@@ -47,6 +47,22 @@
 
     function say(text, error) { msg.textContent = text; msg.dataset.kind = error ? 'error' : 'ok'; }
 
+    // Ajoute le prompt au texte déjà saisi (séparé par une virgule, sans doublon) : il n'écrase plus ce qu'on avait
+    // composé ; Maj + clic remplace tout le texte.
+    function insert(text, replace) {
+      var current = input.value.trim();
+      var next;
+      if (replace || !current) next = text;
+      else if (current.toLowerCase().indexOf(text.toLowerCase()) !== -1) { say('Déjà dans le texte.'); return; }
+      else next = current.replace(/[\s,;.]+$/, '') + ', ' + text;
+      var max = parseInt(input.getAttribute('maxlength'), 10) || 300;
+      if (next.length > max) { say('Trop long (' + max + ' caractères au plus) : raccourcissez le texte.', true); return; }
+      input.value = next;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      say(replace && current ? 'Texte remplacé.' : '');
+    }
+
     function render() {
       var k = kind();
       var items = all.filter(function (p) { return p.kind === k; });
@@ -54,8 +70,8 @@
       items.forEach(function (p) {
         var li = document.createElement('li');
         var use = document.createElement('button');
-        use.type = 'button'; use.className = 'sp-use'; use.textContent = p.text; use.title = p.text;
-        use.addEventListener('click', function () { input.value = p.text; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); say(''); });
+        use.type = 'button'; use.className = 'sp-use'; use.textContent = p.text; use.title = 'Ajouter au texte : ' + p.text + ' (Maj + clic : remplacer tout le texte)';
+        use.addEventListener('click', function (e) { insert(p.text, e.shiftKey); });
         var del = document.createElement('button');
         del.type = 'button'; del.className = 'sp-del'; del.textContent = '×';
         del.setAttribute('aria-label', 'Supprimer le prompt « ' + p.text + ' »');

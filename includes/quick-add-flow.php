@@ -75,7 +75,7 @@
     </div>
     <label class="qa-field">Nom <button type="button" class="ai-btn" data-ai-field="name" title="Générer / régénérer le nom">↻ IA</button><input type="text" id="f-name" data-ai-input="name" maxlength="120"></label>
     <div class="qa-two">
-      <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button><input type="text" id="f-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
+      <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion">Marché</button><input type="text" id="f-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
       <label class="qa-field">Poids (g) <button type="button" class="ai-btn" data-ai-field="weight" title="Estimer le poids (à vérifier avec une balance)">↻ IA</button><input type="number" id="f-weight" data-ai-input="weight_grams" min="0" step="10" inputmode="numeric" placeholder="500"></label>
     </div>
     <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button><input type="text" id="f-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>

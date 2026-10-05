@@ -1600,3 +1600,21 @@
 .nature-clear { font-size: 0.85rem; color: var(--ink-soft); }
 .nature-link { color: inherit; }
 .nature-link:hover { color: var(--accent); }
+
+/* « Prix du marché » : panneau sous le champ Prix (assets/price-research.js). */
+.pr-panel { margin: 10px 0 16px; padding: 12px 14px; border: 1px solid var(--accent); background: var(--surface); font-size: 0.88rem; }
+.pr-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.pr-close { background: none; border: 0; padding: 4px; color: var(--ink-soft); text-decoration: underline; font-family: var(--font-body); font-size: 0.8rem; cursor: pointer; }
+.pr-ident { margin: 0 0 8px; color: var(--ink-soft); }
+.pr-table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 0.84rem; }
+.pr-table th, .pr-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; font-weight: 400; }
+.pr-table tr:first-child th { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.pr-table td:last-child, .pr-table th:last-child { text-align: right; font-family: var(--font-mono); }
+.pr-advice { margin: 6px 0; }
+.pr-use { margin: 2px 0 8px; }
+.pr-reliab, .pr-note { margin: 6px 0 0; font-size: 0.78rem; color: var(--ink-soft); }
+.pr-sources { margin-top: 8px; font-size: 0.8rem; }
+.pr-sources ul { margin: 6px 0; padding-left: 18px; }
+.pr-sources a { color: var(--accent); }
+.pr-q { margin: 4px 0; color: var(--ink-soft); }
+.pr-table th:first-child { width: 38%; }

@@ -7,6 +7,7 @@ require_once __DIR__ . '/studio.php';
 require_once __DIR__ . '/prompts.php';
 require_once __DIR__ . '/universes.php';
 require_once __DIR__ . '/comparables.php';
+require_once __DIR__ . '/price-research.php';
 
 function h($s): string
 {
