@@ -182,7 +182,7 @@
     // La pièce passe « à relire » côté serveur (liste « Mes pièces » du Studio) ; sans effet pour l'administration.
     var done = new FormData();
     done.append('action', 'finish'); done.append('ref', ref); done.append('failed', failedSteps.join(','));
-    post(done);
+    post(done).then(function () { if (window.studioRunVariants) window.studioRunVariants(); });
     var box = $('visuals'); box.textContent = '';
     visuals.forEach(function (v) {
       var fig = document.createElement('figure');

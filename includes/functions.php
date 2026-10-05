@@ -960,31 +960,45 @@ function prepare_generation_source(string $srcAbsPath, string $aspectRatio, floa
 }
 
 /**
- * Visuel renvoyé par Gemini ramené au ratio visé sans rien couper : s'il
- * diffère de plus de 1,5 %, on ajoute du fond (image floutée) sur les côtés.
+ * Visuel renvoyé par Gemini ramené au ratio visé. Écart de moins de 1,5 % :
+ * tel quel. Jusqu'à 8 % (le modèle rend p. ex. 768×1344 pour du 9:16) : léger
+ * recadrage centré, qui ne touche pas à l'objet. Au-delà : du fond flouté est
+ * ajouté sur les côtés — ou null si $allowPad est faux (on préfère alors
+ * refuser l'image plutôt que de livrer des bandes floutées).
  */
-function fit_generated_to_ratio(string $binary, string $aspectRatio): string
+function fit_generated_to_ratio(string $binary, string $aspectRatio, bool $allowPad = true): ?string
 {
     $img = @imagecreatefromstring($binary);
-    if (!$img) return $binary;
+    if (!$img) return $allowPad ? $binary : null;
     $target = aspect_ratio_value($aspectRatio);
-    if (abs((imagesx($img) / imagesy($img)) / $target - 1) <= 0.015) return $binary;
-    $canvas = pad_image_to_ratio($img, $target, 1.0, max(imagesx($img), imagesy($img)));
+    $w = imagesx($img);
+    $h = imagesy($img);
+    $gap = abs(($w / $h) / $target - 1);
+    if ($gap <= 0.015) return $binary;
+    if ($gap <= 0.08) {
+        [$cw, $ch] = ($w / $h > $target) ? [(int) round($h * $target), $h] : [$w, (int) round($w / $target)];
+        $cropped = imagecrop($img, ['x' => intdiv($w - $cw, 2), 'y' => intdiv($h - $ch, 2), 'width' => $cw, 'height' => $ch]);
+        if ($cropped) {
+            ob_start();
+            imagejpeg($cropped, null, 92);
+            return (string) ob_get_clean();
+        }
+    }
+    if (!$allowPad) return null;
+    $canvas = pad_image_to_ratio($img, $target, 1.0, max($w, $h));
     ob_start();
     imagejpeg($canvas, null, 92);
     return (string) ob_get_clean();
 }
 
 /**
- * Un visuel au format donné : source préparée, consigne de cadrage, format vérifié.
- * $extend : la source est déjà un visuel fini (la version 3:2) à prolonger
- * tel quel jusqu'au nouveau format — pas de marge ajoutée, pas de consigne
- * de recomposition.
+ * Un visuel au format donné : source préparée (photo posée entière avec marge
+ * sur une toile à ce format), consigne de cadrage, format vérifié.
  */
-function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries, bool $extend = false): ?string
+function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries): ?string
 {
-    $prepared = prepare_generation_source($srcAbsPath, $aspectRatio, $extend ? 1.0 : GENERATED_IMAGE_SUBJECT_FILL);
-    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $extend ? $prompt : $prompt . generated_framing_prompt($aspectRatio), $retries, $aspectRatio);
+    $prepared = prepare_generation_source($srcAbsPath, $aspectRatio);
+    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio), $retries, $aspectRatio);
     if ($prepared) @unlink($prepared);
     return $bytes ? fit_generated_to_ratio($bytes, $aspectRatio) : null;
 }
@@ -1024,28 +1038,29 @@ function image_format_kind(string $absPath): ?string
 }
 
 /**
- * Consigne pour prolonger un visuel fini jusqu'à un autre format : même
- * scène, même objet, décor simplement étendu — les deux versions montrent
- * ainsi la même image.
+ * Consigne pour refaire un visuel fini dans un autre format : même scène, même
+ * objet, même décor, simplement recadré (portrait ou paysage) — une vraie photo
+ * à ce format, jamais l'ancienne image posée sur des bandes floutées.
  */
-function build_extend_prompt(string $aspectRatio): string
+function build_recompose_prompt(string $aspectRatio): string
 {
-    [$shape, $bands, $where] = aspect_ratio_value($aspectRatio) < 1
-        ? ['tall portrait', 'above and below', 'upward and downward (wall, ceiling, shelf above; floor, table, surface below)']
-        : ['wide landscape', 'on the left and right', 'sideways to the left and right (more of the room, wall, furniture, surface)'];
-    return "This is a finished product photo for an online antiques shop, placed on a $shape $aspectRatio canvas: "
-        . "the blurred bands $bands it are EMPTY canvas. Extend the SAME scene $where so that it fills the whole "
-        . "$aspectRatio frame naturally and seamlessly. Keep everything visible in the original photo EXACTLY identical — the "
-        . "object, its shape, size, position, colors, lighting and the surrounding decor: do not crop, zoom, move, "
-        . "restyle or redraw it, only add scenery around it. The object must remain entirely visible. "
-        . "Photorealistic, no text, no watermark, no people. Respond with the generated image only, no text in your reply.";
+    [$shape, $more, $less] = aspect_ratio_value($aspectRatio) < 1
+        ? ['vertical 9:16 portrait photo for a smartphone screen', 'above and below (wall, ceiling, shelf above; floor, table, surface below)', 'on the left and right']
+        : ['horizontal 3:2 landscape photo for a computer screen', 'on the left and right (more of the room, wall, furniture, surface)', 'above and below'];
+    return "This is a finished lifestyle product photo for an online antiques shop. Re-shoot the SAME scene as a $shape: "
+        . "the same object (identical shape, colors, materials, details), the same room, decor, style, lighting and color grading. "
+        . "Only the camera framing changes: show more of the scene $more and less $less if needed. "
+        . "The object must stay entirely visible and well placed, never cut by an edge of the frame. "
+        . "The whole image must be a single sharp, photorealistic photograph — no blurred bands, no borders, no letterboxing, "
+        . "no text, no watermark, and do not add any person or object that is not in the original. "
+        . "Respond with the generated image only, no text in your reply.";
 }
 
 /**
  * Programme l'autre format d'un visuel, produit ensuite par une requête à
  * part (admin/mobile-variants.php, lancée par toutes les pages de l'admin)
  * pour qu'aucune requête n'enchaîne deux générations et ne dépasse le délai
- * du serveur (erreur 504). Le visuel est prolongé tel quel (build_extend_prompt).
+ * du serveur (erreur 504). Le visuel est refait dans le nouveau format (build_recompose_prompt).
  * $target : 'mobile' (fabriquer la 9:16 depuis la 3:2) ou 'desktop'
  * (fabriquer la 3:2 depuis une image 9:16 ou d'un autre format) ; $then :
  * format à fabriquer ensuite, depuis le résultat.
@@ -1172,28 +1187,28 @@ function run_mobile_variant(int $photoId): array
         }
         return ['ok' => true, 'path' => $path];
     };
-    // Repli sans IA : l'image posée en entière sur une toile au bon format, fond prolongé.
-    $fallback = static fn (): array => $store($srcAbs
-        ? ($isShadow
-            ? fit_ratio_file($srcAbs, aspect_ratio_value($aspect), $baseName, shadow: true)
-            : fit_ratio_file($srcAbs, aspect_ratio_value($aspect), $baseName, fill: 1.0))
+    // Repli sans IA, seulement pour l'ombre portée (fond uni, objet détouré) : jamais pour une scène,
+    // dont les bandes floutées ne ressemblent pas à une vraie photo au bon format.
+    $fallback = static fn (): array => $store($srcAbs && $isShadow
+        ? fit_ratio_file($srcAbs, aspect_ratio_value($aspect), $baseName, shadow: true)
         : null) + ['fallback' => true];
-    if (!$srcAbs || !is_file($srcAbs) || !GEMINI_API_KEY) return $fallback();
+    if (!$srcAbs || !is_file($srcAbs) || !GEMINI_API_KEY) return $isShadow ? $fallback() : $store(null);
 
     if ($isShadow) {
         $path = generate_shadow_image($srcAbs, $aspect, $baseName, 0);
     } else {
+        // Le visuel fini, tel quel (sans bandes ajoutées), est refait dans l'autre format.
         $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
-        $bytes = generate_image_for_ratio($small, build_extend_prompt($aspect), $aspect, 0, true);
+        $bytes = gemini_generate_image($small, build_recompose_prompt($aspect), 0, $aspect);
         if ($small !== $srcAbs) @unlink($small);
+        $bytes = $bytes ? fit_generated_to_ratio($bytes, $aspect, false) : null;
         $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
     }
 
     if (!$path) {
-        // Trois essais au plus, répartis sur les visites suivantes de l'admin,
-        // puis repli sans IA : le format manquant existe toujours au bout.
+        // Trois essais au plus, répartis sur les visites suivantes de l'admin.
         $job['attempts'] = (int) ($job['attempts'] ?? 0) + 1;
-        if ($job['attempts'] >= 3) return $fallback();
+        if ($job['attempts'] >= 3) return $isShadow ? $fallback() : $store(null);
         db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')->execute([json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $photoId]);
         return ['ok' => false, 'error' => 'Génération échouée, nouvel essai plus tard.'];
     }

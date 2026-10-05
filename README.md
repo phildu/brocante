@@ -149,6 +149,18 @@ Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main
   OVH) et reprend où elle s'est arrêtée si le réseau coupe.
 - La caméra en direct exige HTTPS (ou localhost) : en ligne, pas de souci.
 
+## Visuels IA : version ordinateur (3:2) et smartphone (9:16)
+
+Une mise en situation est générée en 3:2 ; sa version 9:16 est **refaite par l'IA comme une vraie
+photo verticale de la même scène** (même objet, même décor, même lumière, cadrage portrait : plus de
+plafond et de sol, moins de côtés), dans une requête à part (`admin/mobile-variants.php`, lancée par
+l'administration et par le Studio). Le visuel fini est envoyé tel quel à Gemini, sans bandes ajoutées :
+l'ancienne méthode (3:2 posée sur une toile floutée, à « prolonger ») laissait souvent ces bandes
+floutées. Un écart de ratio ≤ 8 % est corrigé par un léger recadrage centré ; au-delà le résultat est
+refusé. Trois essais au plus ; sans réussite, **aucune version floutée n'est fabriquée** : le site
+sert alors la 3:2. Le repli sans IA ne subsiste que pour l'ombre portée d'un objet détouré (fond uni).
+Une 9:16 déjà ratée se refait depuis la galerie de la pièce : « ↻ Refaire la version 9:16 (IA) ».
+
 ## Déployer le portail en ligne (ex. brocs.arrimage.com)
 
 Le mode `--portail` du script de déploiement envoie **tous les commerces et

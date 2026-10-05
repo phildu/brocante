@@ -261,6 +261,15 @@ $flash = flash_get();
                 <button type="submit" class="btn-small" style="width:100%;" title="<?= h($missingTitle) ?>"><?= h($missingLabel) ?></button>
               </form>
               <?php endif; ?>
+              <?php if ($ph['is_illustration'] && !$isCutout && !empty($ph['path_mobile']) && empty($ph['mobile_pending']) && image_format_kind(__DIR__ . '/../' . $ph['path']) === 'desktop'): ?>
+              <form method="post" action="/admin/gallery-action.php" onsubmit="return confirm('Refaire la version smartphone (9:16) avec l\'IA ? L\'actuelle sera remplacée.');">
+                <input type="hidden" name="ref" value="<?= h($ref) ?>">
+                <input type="hidden" name="action" value="mobile_variant">
+                <input type="hidden" name="force" value="1">
+                <input type="hidden" name="photo_id" value="<?= (int) $ph['id'] ?>">
+                <button type="submit" class="btn-small" style="width:100%;" title="La version smartphone est refaite par l'IA comme une vraie photo verticale de la même scène (pas des bandes floutées autour de la 3:2)">↻ Refaire la version 9:16 (IA)</button>
+              </form>
+              <?php endif; ?>
               <?php if ((!$ph['is_illustration'] || $isCutout) && empty($ph['path_mobile']) && empty($ph['mobile_pending'])): ?>
               <form method="post" action="/admin/gallery-action.php">
                 <input type="hidden" name="ref" value="<?= h($ref) ?>">

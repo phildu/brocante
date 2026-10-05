@@ -166,6 +166,16 @@ switch ($action) {
             flash_set('Photo détourée : utilisez « Format 3:2 + 9:16 » (objet entier, ombre portée par l\'IA en option) — prolonger le décor inventerait une mise en situation.', 'error');
             break;
         }
+        // Version smartphone existante mais ratée (ex. bandes floutées) : l'IA la refait comme une vraie photo verticale.
+        if (!empty($_POST['force']) && !empty($row['path_mobile'])) {
+            if (image_format_kind(__DIR__ . '/../' . $row['path']) !== 'desktop') {
+                flash_set('Seuls les visuels en 3:2 peuvent voir leur version smartphone refaite.', 'error');
+                break;
+            }
+            queue_format_job($id, $row['path'], 'mobile');
+            flash_set("« {$row['label']} » — sa version smartphone (9:16) est refaite par l'IA : une vraie photo verticale de la même scène (encadré en bas à droite). L'ancienne reste affichée jusqu'à la fin.");
+            break;
+        }
         $kind = queue_format_completion($row);
         $what = match ($kind) {
             'desktop' => 'Ce visuel est en 3:2 : sa version smartphone (9:16) se génère maintenant, décor prolongé en hauteur.',

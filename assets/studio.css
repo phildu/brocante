@@ -213,3 +213,4 @@ body.studio { --tabbar-h: 62px; margin: 0; background: var(--bg); color: var(--i
 .studio .sb-piece { padding: 12px; }
 .sr-body > * { flex-shrink: 0; }
 #sl-groups { display: flex; flex-direction: column; gap: 20px; }
+.st-variants { margin: 8px 14px 0; padding: 8px 12px; border: 1px solid var(--line); background: var(--surface); font-size: 0.8rem; font-family: var(--font-mono); }

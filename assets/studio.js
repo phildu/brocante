@@ -5,6 +5,7 @@
   'use strict';
   var script = document.currentScript;
   var ACTION = script.dataset.action;
+  var VARIANTS = script.dataset.variants;
   var MAX_PER_PIECE = 8;          // photos par pièce (le serveur en accepte 10)
   var MAX_REQUEST_BYTES = 9 * 1048576; // OVH coupe les requêtes plus lourdes (~16 Mo mesurés)
 
@@ -77,7 +78,7 @@
       if (b.dataset.go === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
     if (name !== 'batch') stopCamera(); else resumeCameraIfShooting();
-    if (name === 'pieces') loadList();
+    if (name === 'pieces') { loadList(); if (window.studioRunVariants) window.studioRunVariants(); }
     if (location.hash.replace('#', '') !== (name === 'single' ? '' : name)) history.replaceState(null, '', name === 'single' ? location.pathname + location.search : '#' + name);
     window.scrollTo(0, 0);
   }
@@ -413,7 +414,7 @@
       $('sb-finish').hidden = !okCount;
       $('sb-again').hidden = !!errors.length;
       $('sb-retry').onclick = function () { jobs.filter(function (j) { return j.state !== 'ok' && j.state !== 'later'; }).forEach(function (j) { setRow(j, 'wait', 'En attente'); }); $('sb-retry').hidden = $('sb-finish').hidden = $('sb-again').hidden = true; $('sb-stop').hidden = false; runJobs(doProcess); };
-      if (okCount) refreshCount();
+      if (okCount) { refreshCount(); runVariants(); }
     });
   }
 
@@ -518,7 +519,7 @@
     return processPiece(j.ref, function (t) { cardStatus(j.ref, t, true); })
       .then(function () { toast('Fiche prête : à relire.'); })
       .catch(function (err) { toast(err.message === 'auth' ? 'Session expirée : rechargez la page.' : 'Connexion perdue : réessayez.'); })
-      .then(function () { listBusy = false; keepAwake(false); loadList(); });
+      .then(function () { listBusy = false; keepAwake(false); loadList(); runVariants(); });
   }
 
   $('sl-process-all').addEventListener('click', function () {
@@ -535,7 +536,7 @@
           stop = true; toast(err.message === 'auth' ? 'Session expirée : rechargez la page.' : 'Connexion perdue : réessayez.');
         });
       });
-    }, Promise.resolve()).then(function () { listBusy = false; btn.disabled = false; keepAwake(false); loadList(); });
+    }, Promise.resolve()).then(function () { listBusy = false; btn.disabled = false; keepAwake(false); loadList(); runVariants(); });
   });
   $('sl-refresh').addEventListener('click', loadList);
 
@@ -588,6 +589,45 @@
     });
   });
 
+  // ── Versions smartphone (9:16) ────────────────────────────────────────────
+  // Chaque mise en situation 3:2 a sa version verticale, refaite par l'IA dans une requête à part
+  // (admin/mobile-variants.php, comme l'administration le fait en arrière-plan). Jamais pendant un
+  // traitement de pièces, pour ne pas enchaîner deux générations en même temps.
+  var variantsRunning = false;
+  function variantsPost(data) {
+    var fd = new FormData();
+    Object.keys(data).forEach(function (k) { fd.append(k, data[k]); });
+    return fetch(VARIANTS, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { ok: false }; });
+  }
+  function runVariants() {
+    if (variantsRunning || running || listBusy || !VARIANTS) return;
+    variantsRunning = true;
+    var box = $('st-variants');
+    variantsPost({ action: 'list' }).then(function (r) {
+      var ids = (r && r.ok && r.ids) || [];
+      if (!ids.length) { variantsRunning = false; return; }
+      var failed = 0;
+      (function next(i) {
+        if (i >= ids.length) {
+          variantsRunning = false;
+          box.textContent = failed ? 'Versions smartphone : ' + plural(failed, 'échec (nouvel essai plus tard)', 'échecs (nouvel essai plus tard)') + '.' : 'Versions smartphone prêtes.';
+          setTimeout(function () { box.hidden = true; }, 5000);
+          return;
+        }
+        box.hidden = false; box.textContent = 'Versions smartphone (9:16) : ' + (i + 1) + ' / ' + ids.length + '…';
+        if (running || listBusy) { variantsRunning = false; box.hidden = true; return; }
+        variantsPost({ action: 'run', id: ids[i] }).then(function (res) {
+          if (!res || !res.ok) failed++;
+          if (res && res.next) ids.push(ids[i]);
+          next(i + 1);
+        });
+      })(0);
+    });
+  }
+  window.studioRunVariants = runVariants;
+
   // ── Installation sur l'écran d'accueil ────────────────────────────────────
   var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   var deferredInstall = null;
@@ -608,6 +648,7 @@
   // ── Démarrage ─────────────────────────────────────────────────────────────
   go(location.hash.replace('#', '') || 'single');
   refreshCount();
+  runVariants();
   renderShoot();
 
   // Lot interrompu (page fermée, téléphone rebooté) : on le retrouve.

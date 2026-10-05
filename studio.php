@@ -121,6 +121,7 @@ $siteName = (string) $content['site_name'];
       </div>
     </details>
   </header>
+  <p class="st-variants" id="st-variants" role="status" hidden></p>
   <aside class="st-hint" id="st-ios" hidden>
     <span>Pour garder le Studio sur l'écran d'accueil : touchez Partager, puis « Sur l'écran d'accueil ».</span>
     <button type="button" id="st-ios-close" aria-label="Fermer">Fermer</button>
@@ -249,7 +250,7 @@ $siteName = (string) $content['site_name'];
   </nav>
 
   <script src="/assets/quick-add.js"></script>
-  <script src="/assets/studio.js" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php"></script>
+  <script src="/assets/studio.js" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>
 </body>
 </html>
