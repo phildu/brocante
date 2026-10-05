@@ -559,7 +559,7 @@
       $('sr-warn').hidden = !w;
       if (w) $('sr-warn').textContent = 'Génération incomplète (' + w + '). Complétez la fiche à la main ou relancez depuis le catalogue.';
       $('sr-name').value = p.name; $('sr-price').value = p.price; $('sr-weight').value = p.weight_grams || '';
-      $('sr-cat').value = p.cat; $('sr-desc').value = p.description; $('sr-badge').value = p.badge;
+      $('sr-cat').value = p.cat; $('sr-desc').value = p.description; $('sr-materials').value = p.materials || ''; $('sr-badge').value = p.badge;
       $('sr-publish').checked = !p.hidden;
       $('sr-discard').hidden = res.status === 'reviewed';
       $('sr-save').disabled = false; $('sr-save').textContent = 'Enregistrer';
@@ -573,7 +573,7 @@
     fd.append('action', 'save'); fd.append('ref', sheetRef);
     fd.append('name', $('sr-name').value); fd.append('price', $('sr-price').value);
     fd.append('weight_grams', $('sr-weight').value || '0'); fd.append('cat', $('sr-cat').value);
-    fd.append('description', $('sr-desc').value); fd.append('badge', $('sr-badge').value);
+    fd.append('description', $('sr-desc').value); fd.append('materials', $('sr-materials').value); fd.append('badge', $('sr-badge').value);
     if ($('sr-publish').checked) fd.append('publish', '1');
     api(fd).then(function (res) {
       btn.disabled = false; btn.textContent = 'Enregistrer';

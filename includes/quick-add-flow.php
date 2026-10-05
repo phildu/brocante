@@ -82,6 +82,7 @@
       </select>
     </label>
     <label class="qa-field">Description<textarea id="f-desc" rows="5" maxlength="1200"></textarea></label>
+    <label class="qa-field">Matières<input type="text" id="f-materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
     <label class="qa-field">Étiquette<input type="text" id="f-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
     <label class="qa-switch"><input type="checkbox" id="f-publish"> <span>Publier tout de suite<br><small class="qa-note">Sinon la fiche reste masquée, à relire dans le catalogue.</small></span></label>
   </section>

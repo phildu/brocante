@@ -193,6 +193,7 @@
     if (sheet) {
       $('f-name').value = sheet.name;
       $('f-desc').value = sheet.description;
+      $('f-materials').value = sheet.materials || '';
       $('f-price').value = sheet.price_hint;
       $('f-cat').value = sheet.category;
     }
@@ -214,6 +215,7 @@
     fd.append('weight_grams', $('f-weight').value || '0');
     fd.append('cat', $('f-cat').value);
     fd.append('description', $('f-desc').value);
+    fd.append('materials', $('f-materials').value);
     fd.append('badge', $('f-badge').value);
     if ($('f-publish').checked) fd.append('publish', '1');
     post(fd).then(function (res) {

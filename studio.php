@@ -233,6 +233,7 @@ $siteName = (string) $content['site_name'];
         </select>
       </label>
       <label class="qa-field">Description<textarea id="sr-desc" rows="5" maxlength="1200"></textarea></label>
+      <label class="qa-field">Matières<input type="text" id="sr-materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
       <label class="qa-field">Étiquette<input type="text" id="sr-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
       <label class="qa-switch"><input type="checkbox" id="sr-publish"> <span>Visible dans la boutique<br><small class="qa-note">Sinon la fiche reste masquée.</small></span></label>
       <p class="qa-warn" id="sr-error" role="alert" hidden></p>

@@ -46,14 +46,6 @@ function quick_add_product(): array
     return $product;
 }
 
-/** Photos d'origine de la fiche (hors détourage et illustrations IA), principale en premier. */
-function quick_add_source_photos(string $ref): array
-{
-    $photos = array_values(array_filter(product_photos_list($ref), static fn ($p) => $p['type'] === 'photo' && !$p['is_illustration'] && !str_starts_with($p['label'], 'Détourée')));
-    usort($photos, static fn ($a, $b) => ($b['label'] === 'Photo principale' || str_starts_with($b['label'], '★')) <=> ($a['label'] === 'Photo principale' || str_starts_with($a['label'], '★')));
-    return $photos;
-}
-
 /** Indications saisies pour l'IA : celles de la requête, sinon celles mémorisées à la création (traitement différé). */
 function quick_add_notes(string $ref): string
 {
@@ -115,7 +107,7 @@ switch ($action) {
 
     case 'detoure': {
         $product = quick_add_product();
-        $source = quick_add_source_photos($product['ref'])[0] ?? null;
+        $source = product_source_photos($product['ref'])[0] ?? null;
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Photo principale introuvable.']);
         $detoure = detoure_photo_synchronous($root . '/' . $source['path']);
         if (!$detoure) {
@@ -134,7 +126,7 @@ switch ($action) {
         foreach (product_photos_list($product['ref']) as $p) {
             if (str_starts_with($p['label'], 'Détourée')) $detoure = $p;
         }
-        $source = $detoure ?? (quick_add_source_photos($product['ref'])[0] ?? null);
+        $source = $detoure ?? (product_source_photos($product['ref'])[0] ?? null);
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à mettre en situation.']);
         // Version 3:2 maintenant ; la 9:16 suit à part (queue_mobile_variant).
         $prompt = build_ambiance_prompt(quick_add_notes($product['ref']));
@@ -149,7 +141,7 @@ switch ($action) {
         if (!GEMINI_API_KEY) quick_add_reply(['ok' => false, 'error' => 'Rédaction automatique indisponible : clé Gemini manquante (réglages du site).']);
         // Jusqu'à 5 angles, réduits pour l'envoi.
         $smalls = [];
-        foreach (array_slice(quick_add_source_photos($product['ref']), 0, 5) as $p) {
+        foreach (array_slice(product_source_photos($product['ref']), 0, 5) as $p) {
             $abs = $root . '/' . $p['path'];
             $smalls[] = downscale_for_ai($abs, 900) ?? $abs;
         }
@@ -160,8 +152,8 @@ switch ($action) {
         }
         $sheet = $text ? parse_product_sheet_response($text) : null;
         if (!$sheet) quick_add_reply(['ok' => false, 'error' => 'La rédaction automatique a échoué : complétez la fiche à la main.']);
-        db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ? WHERE ref = ?')
-            ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $product['ref']]);
+        db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ?, materials = ? WHERE ref = ?')
+            ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $sheet['materials'], $product['ref']]);
         quick_add_reply(['ok' => true, 'sheet' => $sheet]);
     }
 
@@ -186,7 +178,7 @@ switch ($action) {
         $job = studio_job_get($product['ref']);
         quick_add_reply(['ok' => true, 'product' => [
             'ref' => $product['ref'], 'name' => $product['name'], 'price' => $product['price'], 'cat' => $product['cat'],
-            'description' => $product['description'], 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'],
+            'description' => $product['description'], 'materials' => (string) $product['materials'], 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'],
             'hidden' => (bool) $product['is_hidden'],
         ], 'photos' => $photos, 'status' => $job['status'] ?? 'reviewed', 'note' => $job['note'] ?? '']);
     }
@@ -208,13 +200,14 @@ switch ($action) {
         $product = quick_add_product();
         $validCats = array_column(category_list(), 'key');
         $cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : $product['cat'];
-        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, weight_grams = ?, is_hidden = ? WHERE ref = ?')
+        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, materials = ?, weight_grams = ?, is_hidden = ? WHERE ref = ?')
             ->execute([
                 trim((string) ($_POST['name'] ?? '')) ?: $product['name'],
                 $cat,
                 trim((string) ($_POST['price'] ?? '')) ?: $product['price'],
                 trim((string) ($_POST['badge'] ?? '')),
                 trim((string) ($_POST['description'] ?? '')) ?: $product['description'],
+                trim((string) ($_POST['materials'] ?? $product['materials'])),
                 max(0, (int) ($_POST['weight_grams'] ?? $product['weight_grams'])),
                 empty($_POST['publish']) ? 1 : 0,
                 $product['ref'],

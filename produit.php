@@ -74,8 +74,9 @@ include __DIR__ . '/includes/header.php';
       <span class="badge" style="margin-bottom:16px;display:inline-block;"><?= h($product['badge']) ?></span>
       <p class="lede" style="margin-bottom:24px;"><?= nl2br(h($product['description'])) ?></p>
 
-      <?php if (!empty($product['size_text']) || !empty($product['weight_text'])): ?>
+      <?php if (!empty($product['materials']) || !empty($product['size_text']) || !empty($product['weight_text'])): ?>
         <ul class="info-list" style="margin-bottom:24px;">
+          <?php if (!empty($product['materials'])): ?><li><strong>Matières</strong> <?= h($product['materials']) ?></li><?php endif; ?>
           <?php if (!empty($product['size_text'])): ?><li><strong>Taille</strong> <?= h($product['size_text']) ?></li><?php endif; ?>
           <?php if (!empty($product['weight_text'])): ?><li><strong>Poids</strong> <?= h($product['weight_text']) ?></li><?php endif; ?>
         </ul>

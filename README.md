@@ -121,6 +121,20 @@ angles** (+ indications facultatives du vendeur). La fiche se relit et se
 corrige sur le téléphone, puis s'enregistre masquée ou publiée. Sans clé
 Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main.
 
+## (Re)générer les champs d'une fiche par l'IA
+
+Dans le catalogue, les formulaires d'**ajout** et d'**édition** d'une pièce ont un bouton « ↻ IA » à côté
+de chaque champ — nom, univers (catégorie), prix, description, **matières** — et un bouton « Tout
+(re)générer ». L'IA (`admin/product-ai.php`, script `assets/product-ai.js`) regarde les photos de la pièce
+(ou la photo choisie dans le formulaire d'ajout, réduite avant envoi) et tient compte des autres champs déjà
+saisis pour rester cohérente ; un champ déjà rempli est régénéré en version *différente*. Sans photo, elle
+travaille d'après le texte saisi. Les valeurs proposées sont seulement écrites dans le formulaire : on relit,
+on corrige, puis on enregistre. Le prix proposé est un seul montant indicatif.
+
+Le champ **Matières** (colonne `materials`, ajoutée automatiquement aux bases existantes) est affiché sur la
+fiche produit, rempli par la génération de fiche (Studio, ajout rapide, import par lot) et modifiable à la
+relecture.
+
 ## Studio : l'application smartphone du commerce
 
 `studio.php` (`/<commerce>/studio.php` sous brocs.arrimage.com) est une application

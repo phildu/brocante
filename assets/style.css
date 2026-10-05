@@ -1508,3 +1508,15 @@
   }
 
   .admin-whoami { display: block; padding: 4px 14px 8px; font-size: 0.72rem; color: var(--ink-soft); line-height: 1.3; }
+
+/* Boutons « ↻ IA » des formulaires de fiche produit (assets/product-ai.js). */
+.ai-btn { margin-left: 6px; padding: 1px 7px; background: none; border: 1px solid var(--line); color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.02em; cursor: pointer; vertical-align: middle; }
+.ai-btn:hover:not(:disabled), .ai-btn:focus-visible { border-color: var(--accent); color: var(--accent); }
+.ai-btn:disabled, .ai-all:disabled { opacity: 0.5; cursor: progress; }
+.ai-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ai-status { font-size: 0.82rem; color: var(--ink-soft); }
+.ai-status[data-kind="ok"] { color: var(--ink); }
+.ai-status[data-kind="error"] { color: #b3261e; }
+.ai-filled { animation: ai-filled 1.4s ease-out; }
+@keyframes ai-filled { from { background-color: var(--surface-2); outline: 2px solid var(--accent); } to { outline: 2px solid transparent; } }
+@media (prefers-reduced-motion: reduce) { .ai-filled { animation: none; } }

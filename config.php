@@ -93,6 +93,11 @@ function db(): PDO
         // Application smartphone Studio : suivi des pièces créées.
         require_once __DIR__ . '/includes/studio.php';
         studio_ensure_schema($pdo);
+        // Bases créées avant l'ajout du champ « Matières » des fiches.
+        $productColumns = $pdo->query('PRAGMA table_info(products)')->fetchAll(PDO::FETCH_COLUMN, 1);
+        if ($productColumns && !in_array('materials', $productColumns, true)) {
+            $pdo->exec('ALTER TABLE products ADD COLUMN materials TEXT');
+        }
         // Bases créées avant l'ajout des visuels en deux formats.
         $photoColumns = $pdo->query('PRAGMA table_info(product_photos)')->fetchAll(PDO::FETCH_COLUMN, 1);
         if ($photoColumns && !in_array('path_mobile', $photoColumns, true)) {

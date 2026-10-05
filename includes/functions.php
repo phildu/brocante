@@ -1241,10 +1241,11 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
     if (!GEMINI_API_KEY) return null;
 
     $parts = [['text' => $prompt]];
-    foreach (array_merge([$srcAbsPath], $extraAbsPaths) as $i => $path) {
+    // $srcAbsPath vide : consigne en texte seul (pas d'image).
+    foreach (array_merge($srcAbsPath !== '' ? [$srcAbsPath] : [], $extraAbsPaths) as $i => $path) {
         $imgData = @file_get_contents($path);
         if ($imgData === false) {
-            if ($i === 0) return null;
+            if ($i === 0 && $srcAbsPath !== '') return null;
             continue;
         }
         $mime = @getimagesize($path)['mime'] ?? 'image/jpeg';
@@ -1606,7 +1607,7 @@ function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): st
         . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1625,8 +1626,103 @@ function parse_product_sheet_response(string $text): ?array
         'name' => trim((string) $data['name']),
         'description' => trim((string) ($data['description'] ?? '')),
         'category' => $cat,
+        'materials' => mb_substr(trim((string) (is_array($data['materials'] ?? null) ? implode(', ', $data['materials']) : ($data['materials'] ?? ''))), 0, 200),
         'price_hint' => trim((string) ($data['price_hint'] ?? '')),
     ];
+}
+
+/** Champs d'une fiche que l'IA sait (re)générer, dans l'ordre du formulaire. */
+const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'materials', 'price'];
+
+/**
+ * Photos d'origine d'une pièce (hors détourage et illustrations IA), principale
+ * en premier : ce que l'IA doit regarder pour décrire la pièce.
+ */
+function product_source_photos(string $ref): array
+{
+    $photos = array_values(array_filter(product_photos_list($ref), static fn ($p) => $p['type'] === 'photo' && !$p['is_illustration'] && !str_starts_with($p['label'], 'Détourée')));
+    $isMain = static fn (array $p): bool => $p['label'] === 'Photo principale' || str_starts_with($p['label'], '★');
+    usort($photos, static fn ($a, $b) => $isMain($b) <=> $isMain($a));
+    return $photos;
+}
+
+/**
+ * Consigne pour (re)générer certains champs d'une fiche. $fields : clés de
+ * PRODUCT_AI_FIELDS à produire ; $current : valeurs actuelles du formulaire
+ * (name, description, category, materials, price, size_text) — celles qu'on ne
+ * régénère pas servent de contexte cohérent, celles qu'on régénère sont à varier.
+ */
+function build_product_fields_prompt(array $fields, array $current, int $photoCount, string $notes = ''): string
+{
+    $cats = implode(' ; ', array_map(static fn ($c) => $c['key'] . ' = ' . $c['label'], category_list()));
+    $examples = tenant('ai.examples') ? ' (' . tenant('ai.examples') . ')' : '';
+    $seen = match (true) {
+        $photoCount > 1 => 'Tu regardes ' . $photoCount . ' photos du MÊME objet, sous différents angles : ' . tenant('ai.item') . ' pour ' . tenant('ai.shop') . $examples . '. ',
+        $photoCount === 1 => "Tu regardes la photo d'" . tenant('ai.item') . ' pour ' . tenant('ai.shop') . $examples . '. ',
+        default => "Tu n'as pas de photo : tu travailles d'après le texte déjà saisi, pour " . tenant('ai.shop') . $examples . '. ',
+    };
+    $spec = [
+        'name' => '"name": "nom court et vendeur (4-8 mots)"',
+        'description' => '"description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible"',
+        'category' => '"category": "la clé exacte (avant le signe =) parmi : ' . $cats . '"',
+        'materials' => '"materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne) ; chaîne vide si elles ne se voient pas"',
+        'price' => '"price": "prix de vente indicatif : UN SEUL montant en euros, ex : 30 €"',
+    ];
+    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'materials' => 'Matières', 'price' => 'Prix', 'size_text' => 'Taille'];
+    $known = [];
+    $vary = [];
+    foreach ($labels as $field => $label) {
+        $value = trim((string) ($current[$field] ?? ''));
+        if ($value === '') continue;
+        if (in_array($field, $fields, true)) {
+            if ($field !== 'category') $vary[] = $label . ' actuel(le) : « ' . $value . ' »';
+        } else {
+            $known[] = $label . ' : ' . $value;
+        }
+    }
+    $notes = trim($notes);
+    return $seen
+        . ($notes !== '' ? 'Indications du vendeur, à prendre en compte : « ' . $notes . ' ». ' : '')
+        . ($known ? 'Informations déjà saisies, à respecter et rester cohérent avec : ' . implode(' ; ', $known) . '. ' : '')
+        . ($vary ? 'Propose une version DIFFÉRENTE de ce qui existe déjà (' . implode(' ; ', $vary) . '). ' : '')
+        . 'Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, avec exactement ces clés : '
+        . '{' . implode(', ', array_map(static fn ($f) => $spec[$f], $fields)) . '}. '
+        . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que tu ne peux pas déterminer visuellement. "
+        . 'Le prix est une simple estimation à titre indicatif, le vendeur l\'ajustera.';
+}
+
+/** Réponse JSON de build_product_fields_prompt() : uniquement les champs demandés et exploitables. */
+function parse_product_fields_response(string $text, array $fields): array
+{
+    $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text));
+    $data = json_decode($text, true);
+    if (!is_array($data)) return [];
+    $str = static fn ($v): string => trim((string) (is_array($v) ? implode(', ', $v) : $v));
+    $out = [];
+    foreach ($fields as $field) {
+        $value = $str($data[$field] ?? '');
+        switch ($field) {
+            case 'name': $value = mb_substr($value, 0, 120); break;
+            case 'description': $value = mb_substr($value, 0, 1200); break;
+            case 'materials': $value = mb_substr($value, 0, 200); break;
+            case 'category':
+                // Le modèle répond parfois par le libellé (« Épicerie fine ») plutôt que par la clé : les deux sont acceptés.
+                $wanted = mb_strtolower($value);
+                $value = '';
+                foreach (category_list() as $c) {
+                    if ($wanted === mb_strtolower($c['key']) || $wanted === mb_strtolower($c['label'])) { $value = $c['key']; break; }
+                }
+                break;
+            case 'price':
+                // « 30 € », « 25-35 € » : on garde ce qui ressemble à un prix, sans phrase autour.
+                $value = preg_match('/\d[\d\s.,]*(?:\s*[-–]\s*\d[\d\s.,]*)?\s*€?/u', $value, $m) ? trim($m[0]) : '';
+                if ($value !== '' && !str_contains($value, '€')) $value .= ' €';
+                $value = mb_substr($value, 0, 30);
+                break;
+        }
+        if ($value !== '') $out[$field] = $value;
+    }
+    return $out;
 }
 
 /**

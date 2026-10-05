@@ -26,6 +26,10 @@ $products = $stmt->fetchAll();
 $currentUrl = '/admin/catalog.php?' . http_build_query(array_filter(['sort' => $sortKey, 'dir' => $dir, 'q' => $q]));
 $badgeOptions = ['Chiné', 'Fait main', 'Pièce unique', 'Promo'];
 
+/** Petit bouton « ↻ IA » à côté d'une étiquette de champ (assets/product-ai.js). */
+$aiBtn = static fn (string $field, string $title): string =>
+    '<button type="button" class="ai-btn" data-ai-field="' . h($field) . '" title="' . h($title) . '">↻ IA</button>';
+
 function catalog_sort_link(string $key, string $label, string $sortKey, string $dir, string $q): string
 {
     $nextDir = ($sortKey === $key && $dir === 'asc') ? 'desc' : 'asc';
@@ -129,24 +133,29 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
               <tr class="catalog-edit-row" id="produit-<?= h($p['ref']) ?>" hidden>
                 <td colspan="5">
                   <div class="product-admin-row<?= $p['is_hidden'] ? ' is-hidden-product' : '' ?>">
-                    <form method="post" action="/admin/save-product.php" enctype="multipart/form-data" style="display:contents;">
+                    <form method="post" action="/admin/save-product.php" enctype="multipart/form-data" style="display:contents;" data-ai-form>
                       <input type="hidden" name="ref" value="<?= h($p['ref']) ?>">
                       <div>
                         <div class="admin-photo-preview"><?= product_media_html($p) ?></div>
                       </div>
                       <div class="product-admin-fields">
+                        <div class="ai-bar">
+                          <button type="button" class="btn-small ai-all" data-ai-field="all" title="Propose un nom, une description, une catégorie, des matières et un prix d'après les photos de la pièce">Tout (re)générer par l'IA</button>
+                          <span class="ai-status" data-ai-status role="status"></span>
+                        </div>
                         <div class="field-row-3">
-                          <div class="field"><label>Nom</label><input type="text" name="name" value="<?= h($p['name']) ?>"></div>
-                          <div class="field"><label>Univers</label>
+                          <div class="field"><label>Nom <?= $aiBtn('name', 'Générer / régénérer le nom') ?></label><input type="text" name="name" value="<?= h($p['name']) ?>"></div>
+                          <div class="field"><label>Univers <?= $aiBtn('category', 'Choisir la catégorie d\'après la pièce') ?></label>
                             <select name="cat">
                               <?php foreach (category_list() as $c): ?>
                                 <option value="<?= h($c['key']) ?>"<?= $c['key'] === $p['cat'] ? ' selected' : '' ?>><?= h($c['label']) ?></option>
                               <?php endforeach; ?>
                             </select>
                           </div>
-                          <div class="field"><label>Prix</label><input type="text" name="price" value="<?= h($p['price']) ?>"></div>
+                          <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?></label><input type="text" name="price" value="<?= h($p['price']) ?>"></div>
                         </div>
-                        <div class="field"><label>Description</label><textarea name="description"><?= h($p['description']) ?></textarea></div>
+                        <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"><?= h($p['description']) ?></textarea></div>
+                        <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" value="<?= h($p['materials'] ?? '') ?>" placeholder="ex : grès émaillé, bois de chêne"></div>
                         <div class="field-row-3">
                           <div class="field"><label>Taille</label><input type="text" name="size_text" value="<?= h($p['size_text']) ?>" placeholder="ex : 20 × 15 × 30 cm"></div>
                           <div class="field">
@@ -207,22 +216,31 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
       <p class="hint" style="margin:0 0 12px;">Sur smartphone : <a href="/admin/quick-add.php"><strong>Nouvelle pièce en photos</strong></a> — photos sous plusieurs angles, puis détourage, mise en situation et fiche rédigés automatiquement.</p>
       <details>
         <summary class="add-product-btn" style="cursor:pointer;">+ Ajouter une pièce</summary>
-        <form method="post" action="/admin/add-product.php" enctype="multipart/form-data" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--line);">
+        <form method="post" action="/admin/add-product.php" enctype="multipart/form-data" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--line);" data-ai-form>
           <div class="field-row-3">
-            <div class="field"><label>Nom</label><input type="text" name="name" placeholder="Nom de la pièce"></div>
-            <div class="field"><label>Univers</label>
+            <div class="field"><label>Photo</label><input type="file" name="photo" accept="image/*" data-check-resolution></div>
+            <div class="ai-bar" style="align-self:end;">
+              <button type="button" class="btn-small ai-all" data-ai-field="all" title="Propose un nom, une description, une catégorie, des matières et un prix d'après la photo choisie">Tout générer par l'IA</button>
+              <span class="ai-status" data-ai-status role="status"></span>
+            </div>
+            <div></div>
+          </div>
+          <div class="field-row-3">
+            <div class="field"><label>Nom <?= $aiBtn('name', 'Générer / régénérer le nom') ?></label><input type="text" name="name" placeholder="Nom de la pièce"></div>
+            <div class="field"><label>Univers <?= $aiBtn('category', 'Choisir la catégorie d\'après la pièce') ?></label>
               <select name="cat">
                 <?php foreach (category_list() as $c): ?>
                   <option value="<?= h($c['key']) ?>"><?= h($c['label']) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
-            <div class="field"><label>Prix</label><input type="text" name="price" placeholder="0 €"></div>
+            <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?></label><input type="text" name="price" placeholder="0 €"></div>
           </div>
-          <div class="field"><label>Description</label><textarea name="description"></textarea></div>
+          <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"></textarea></div>
+          <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" placeholder="ex : grès émaillé, bois de chêne"></div>
           <div class="field-row-3">
             <div class="field"><label>Mention</label><input type="text" name="badge" value="Chiné" list="badge-options"></div>
-            <div class="field"><label>Photo</label><input type="file" name="photo" accept="image/*" data-check-resolution></div>
+            <div></div>
             <div></div>
           </div>
           <button type="submit" class="btn btn-primary">Ajouter cette pièce</button>
@@ -319,5 +337,6 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
 })();
 </script>
 <script src="/assets/admin-upload-check.js"></script>
+<script src="/assets/product-ai.js"></script>
 </body>
 </html>
