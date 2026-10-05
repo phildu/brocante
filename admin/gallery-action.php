@@ -394,7 +394,7 @@ switch ($action) {
         // suit dans une requête séparée (queue_mobile_variant), pour rester
         // sous le délai du serveur.
         @set_time_limit(120);
-        $desktop = generate_desktop_image($small, $prompt, 'product-' . $ref . '-' . $kind);
+        $desktop = generate_desktop_image($small, $prompt, 'product-' . $ref . '-' . $kind, 1, $kind === 'ambiance' && $keywords !== '');
         if ($small !== $srcAbs) @unlink($small);
 
         if (!$desktop) {
@@ -403,9 +403,9 @@ switch ($action) {
         }
         $label = ['ambiance' => 'Ambiance', 'angle' => 'Autre angle', 'complete' => 'Objet complété'][$kind];
         $photoId = add_product_photo($ref, $desktop, $label, true);
-        queue_mobile_variant($photoId, $desktop);
+        queue_mobile_variant($photoId, $desktop, $kind === 'ambiance' ? $sourcePath : null, $kind === 'ambiance' ? $keywords : '');
         $doneLabel = ['ambiance' => "La photo d'ambiance", 'angle' => 'La vue sous un autre angle', 'complete' => "Le complément de l'objet"][$kind];
-        flash_set("$doneLabel a été générée et ajoutée à la galerie (format ordinateur 3:2). La version smartphone 9:16 se génère maintenant, sans rien bloquer.");
+        flash_set("$doneLabel a été générée et ajoutée à la galerie (format ordinateur 3:2)" . ($keywords !== '' ? " avec votre consigne : « " . mb_substr($keywords, 0, 120) . ' »' : '') . '. La version smartphone 9:16 se génère maintenant, sans rien bloquer.');
         break;
     }
 }

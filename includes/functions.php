@@ -717,16 +717,20 @@ const GENERATED_IMAGE_SUBJECT_FILL = 0.82;
  * Consigne de cadrage ajoutée aux prompts de génération : l'objet reste
  * entier, le fond est prolongé pour remplir le format — jamais de recadrage.
  */
-function generated_framing_prompt(string $aspectRatio): string
+function generated_framing_prompt(string $aspectRatio, bool $directed = false): string
 {
     $orientation = $aspectRatio === '9:16' ? 'tall vertical (portrait)' : 'wide horizontal (landscape)';
+    // Scène imposée par le vendeur : on ne parle plus de mur ni de pièce, ce serait la contredire.
+    $fill = $directed
+        ? "Fill all the remaining space by extending the scene naturally, coherently with the setting requested in the owner's "
+            . "direction — any flat or blurred area around the photo is empty canvas to replace."
+        : "Fill all the remaining space by extending the background / scene naturally (wall, floor, surface, room) — "
+            . "any flat or blurred area around the photo is empty canvas to replace with a coherent background.";
     return " FRAMING (mandatory): the output is a $aspectRatio $orientation image. The input image has "
         . "already been placed on a canvas of that exact format, with the object fully visible and margin "
         . "around it: keep this framing. The ENTIRE object must stay visible, never cut by any edge of the "
         . "frame, with clear empty space on every side (at least 8% of the frame). Do not zoom in, do not crop, "
-        . "do not enlarge the object to fill the frame. Fill all the remaining space by extending the "
-        . "background / scene naturally (wall, floor, surface, room) — any flat or blurred area around the "
-        . "photo is empty canvas to replace with a coherent background.";
+        . "do not enlarge the object to fill the frame. " . $fill;
 }
 
 /** Ratio « 3:2 » → largeur / hauteur. */
@@ -996,18 +1000,18 @@ function fit_generated_to_ratio(string $binary, string $aspectRatio, bool $allow
  * Un visuel au format donné : source préparée (photo posée entière avec marge
  * sur une toile à ce format), consigne de cadrage, format vérifié.
  */
-function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries): ?string
+function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries, bool $directed = false): ?string
 {
     $prepared = prepare_generation_source($srcAbsPath, $aspectRatio);
-    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio), $retries, $aspectRatio);
+    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio, $directed), $retries, $aspectRatio);
     if ($prepared) @unlink($prepared);
     return $bytes ? fit_generated_to_ratio($bytes, $aspectRatio) : null;
 }
 
 /** Visuel au format ordinateur (3:2), enregistré dans uploads/ : chemin, ou null. */
-function generate_desktop_image(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1): ?string
+function generate_desktop_image(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1, bool $directed = false): ?string
 {
-    $bytes = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries);
+    $bytes = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries, $directed);
     return $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
 }
 
@@ -1066,10 +1070,10 @@ function build_recompose_prompt(string $aspectRatio): string
  * (fabriquer la 3:2 depuis une image 9:16 ou d'un autre format) ; $then :
  * format à fabriquer ensuite, depuis le résultat.
  */
-function queue_format_job(int $photoId, string $srcRelPath, string $target, ?string $then = null, ?string $mode = null): void
+function queue_format_job(int $photoId, string $srcRelPath, string $target, ?string $then = null, ?string $mode = null, ?array $regen = null): void
 {
     db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')
-        ->execute([json_encode(['src' => $srcRelPath, 'target' => $target, 'then' => $then, 'mode' => $mode, 'attempts' => 0], JSON_UNESCAPED_SLASHES), $photoId]);
+        ->execute([json_encode(['src' => $srcRelPath, 'target' => $target, 'then' => $then, 'mode' => $mode, 'regen' => $regen, 'attempts' => 0], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $photoId]);
 }
 
 /**
@@ -1114,10 +1118,14 @@ function generate_shadow_image(string $cutoutAbsPath, string $aspectRatio, strin
     return $bytes ? save_binary_photo(fit_generated_to_ratio($bytes, $aspectRatio), $baseName, 'jpg', 1800) : null;
 }
 
-/** Version smartphone (9:16) d'un visuel 3:2 tout juste généré. */
-function queue_mobile_variant(int $photoId, string $desktopRelPath): void
+/**
+ * Version smartphone (9:16) d'un visuel 3:2 tout juste généré. $regenSrc / $keywords : photo de départ et
+ * consigne du vendeur de la mise en situation, pour la regénérer directement en 9:16 quand le modèle refuse de
+ * recadrer l'image finie (il le fait pour une photo réaliste de personne).
+ */
+function queue_mobile_variant(int $photoId, string $desktopRelPath, ?string $regenSrc = null, string $keywords = ''): void
 {
-    queue_format_job($photoId, $desktopRelPath, 'mobile');
+    queue_format_job($photoId, $desktopRelPath, 'mobile', null, null, $regenSrc ? ['src' => $regenSrc, 'keywords' => $keywords] : null);
 }
 
 /**
@@ -1203,6 +1211,15 @@ function run_mobile_variant(int $photoId): array
         $bytes = gemini_generate_image($small, build_recompose_prompt($aspect), 0, $aspect);
         if ($small !== $srcAbs) @unlink($small);
         $bytes = $bytes ? fit_generated_to_ratio($bytes, $aspect, false) : null;
+        // Refus de recadrer l'image finie (photo réaliste de personne) : la même mise en situation est regénérée
+        // directement en 9:16 depuis la photo de départ, avec la même consigne — scène semblable, pas identique.
+        $regenAbs = $target === 'mobile' && !empty($job['regen']['src']) ? realpath(__DIR__ . '/../' . $job['regen']['src']) : false;
+        if (!$bytes && $regenAbs && is_file($regenAbs)) {
+            $keywords = (string) ($job['regen']['keywords'] ?? '');
+            $smallSrc = downscale_for_ai($regenAbs, 1280, 85) ?? $regenAbs;
+            $bytes = generate_image_for_ratio($smallSrc, build_ambiance_prompt($keywords), $aspect, 0, $keywords !== '');
+            if ($smallSrc !== $regenAbs) @unlink($smallSrc);
+        }
         $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
     }
 
@@ -1781,25 +1798,48 @@ function angle_presets(): array
     ];
 }
 
+/**
+ * Consigne du vendeur (« Mots-clés / précisions »), ajoutée à un prompt de génération : elle PRIME sur les
+ * réglages par défaut du prompt (décor, absence de personnes…) quand ils se contredisent — sans quoi le
+ * modèle garde son décor habituel et ignore, par exemple, « femme dans la rue en mouvement ».
+ */
+function owner_direction_prompt(string $keywords): string
+{
+    return $keywords === '' ? '' : " OWNER'S DIRECTION (mandatory, it takes priority over any default above that contradicts it): « "
+        . $keywords . " ». Follow it faithfully — setting, light, action, and any person it mentions — while keeping the object itself identical.";
+}
+
 function build_angle_prompt(string $anglePreset, string $keywords): string
 {
     $angleText = angle_presets()[$anglePreset] ?? angle_presets()['auto'];
-    $prompt = "This is a real secondhand/vintage product photo for an online antiques shop. "
+    return "This is a real secondhand/vintage product photo for an online antiques shop. "
         . "Generate a photo of the SAME exact object(s), photographed $angleText, "
         . "on a clean simple neutral light-grey studio background, soft natural lighting, "
         . "photorealistic, no text, no watermark, no people. "
-        . "Respond with the generated image only, no text in your reply.";
-    return $keywords !== '' ? $prompt . ' Additional direction from the shop owner: ' . $keywords . '.' : $prompt;
+        . "Respond with the generated image only, no text in your reply."
+        . owner_direction_prompt($keywords);
 }
 
 function build_ambiance_prompt(string $keywords): string
 {
-    $prompt = "This is a real secondhand/vintage product photo for an online antiques shop. "
-        . "Generate a styled photo showing the SAME exact object placed naturally in a cozy "
-        . "French home interior (a living room or kitchen with warm wood tones), as if staged "
-        . "for a lifestyle product photo, photorealistic, natural daylight, no text, no watermark, no people. "
-        . "Respond with the generated image only, no text in your reply.";
-    return $keywords !== '' ? $prompt . ' Additional direction from the shop owner: ' . $keywords . '.' : $prompt;
+    if ($keywords === '') {
+        return "This is a real secondhand/vintage product photo for an online antiques shop. "
+            . "Generate a styled photo showing the SAME exact object placed naturally in a cozy "
+            . "French home interior (a living room or kitchen with warm wood tones), as if staged "
+            . "for a lifestyle product photo, photorealistic, natural daylight, no text, no watermark, no people. "
+            . "Respond with the generated image only, no text in your reply.";
+    }
+    // Avec une consigne : une scène, une action ou une personne qu'elle décrit remplace le décor par défaut ;
+    // une simple précision (époque, défaut, matière…) laisse le décor par défaut en place.
+    return "This is a real secondhand/vintage product photo for an online antiques shop. "
+        . "Generate a styled, photorealistic lifestyle photo showing the SAME exact object (identical shape, colors, "
+        . "materials, patterns and details — never redesign it), as if staged for a lifestyle product photo, natural light, "
+        . "no text, no watermark. Default setting, to use ONLY if the owner's direction below does not describe a setting, "
+        . "an action or a person: a cozy French home interior (living room or kitchen with warm wood tones), no people. "
+        . "If the direction does describe a scene, an action or a person, that scene replaces the default — for a garment or "
+        . "accessory the item may then be worn or carried, wearing exactly this item."
+        . owner_direction_prompt($keywords)
+        . " Respond with the generated image only, no text in your reply.";
 }
 
 /**
@@ -1834,7 +1874,7 @@ function build_complete_prompt(string $keywords): string
         . "construction, on a clean simple neutral light-grey studio background, soft natural lighting, "
         . "photorealistic, no text, no watermark, no people. "
         . "Respond with the generated image only, no text in your reply.";
-    return $keywords !== '' ? $prompt . ' Additional direction from the shop owner: ' . $keywords . '.' : $prompt;
+    return $prompt . owner_direction_prompt($keywords);
 }
 
 /**

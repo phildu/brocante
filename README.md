@@ -138,6 +138,19 @@ Le champ **Matières** (colonne `materials`, ajoutée automatiquement aux bases 
 fiche produit, rempli par la génération de fiche (Studio, ajout rapide, import par lot) et modifiable à la
 relecture.
 
+## La consigne du vendeur prime sur le décor par défaut
+
+Les « Mots-clés / précisions » (galerie) et « Indications pour l'IA » (ajout rapide, lot du Studio) sont
+transmis à Gemini comme **consigne prioritaire** (`owner_direction_prompt()`), pas comme un simple
+complément. Pour une mise en situation, une consigne qui décrit un lieu, une action ou une personne
+(« femme dans la rue en mouvement », vêtement porté) **remplace** l'intérieur français par défaut ; une
+simple précision (« années 70, éclat au pied ») laisse le décor par défaut. Sans consigne, le prompt est
+inchangé. Avant, la consigne n'était qu'une phrase ajoutée à la fin d'un prompt qui imposait « intérieur,
+aucune personne » : le modèle l'ignorait. La galerie rappelle la consigne utilisée dans son message de
+confirmation. La 9:16 d'une mise en situation avec personne ne peut pas être « recadrée » à partir de
+l'image finie (le modèle refuse de retoucher une photo réaliste de personne) : elle est alors regénérée
+directement depuis la photo de départ avec la même consigne — scène semblable, pas identique.
+
 ## Prompts enregistrés (« Mots-clés / précisions »)
 
 Sous le champ « Mots-clés / précisions » de la galerie d'une pièce (génération d'une mise en situation,
