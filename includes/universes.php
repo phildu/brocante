@@ -92,44 +92,88 @@ function universes_orphan_refs(): array
     return $refs;
 }
 
-/** Exemples d'univers donnés à l'IA : ceux enregistrés s'il y en a, sinon la description du fichier du commerce. */
+/** Type de boutique en une phrase (« friperie et mode vintage »), détecté par l'IA ou saisi : il guide l'IA dans tous ses prompts. */
+function shop_profile(): string
+{
+    try {
+        $stmt = db()->prepare("SELECT value FROM settings WHERE name = 'shop_profile'");
+        $stmt->execute();
+        return trim((string) $stmt->fetchColumn());
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
+function shop_profile_save(string $profile): void
+{
+    $profile = mb_substr(trim(preg_replace('/\s+/u', ' ', $profile)), 0, 120);
+    if ($profile === '') db()->prepare("DELETE FROM settings WHERE name = 'shop_profile'")->execute();
+    else db()->prepare("INSERT OR REPLACE INTO settings (name, value) VALUES ('shop_profile', ?)")->execute([$profile]);
+}
+
+/**
+ * Ce que vend la boutique, tel que l'IA doit le comprendre dans ses prompts : le type de boutique enregistré s'il y en a un,
+ * sinon les univers enregistrés, sinon la description du fichier du commerce (souvent un texte d'exemple du modèle).
+ */
 function ai_shop_examples(): string
 {
+    if ($profile = shop_profile()) return $profile;
     $saved = universes_saved();
     return $saved ? implode(', ', array_map(static fn (array $c): string => mb_strtolower($c['label']), $saved)) : (string) tenant('ai.examples');
 }
 
 /**
- * Propose des univers à l'IA d'après l'identité de la boutique et son catalogue (noms des pièces, natures) :
- * liste de ['label' => …, 'icon' => …] (4 à 8), ou [] si l'IA ne répond pas.
+ * Découvre ce que vend la boutique et propose ses univers. Sources, de la plus fiable à la moins fiable : l'indication du
+ * vendeur ($hint), les PHOTOS des pièces en vente et leurs natures, le nom et l'accroche de la boutique ; les textes du site
+ * et la description du fichier du commerce peuvent être des exemples du modèle (« Le bon pain, comme au fournil ») : l'IA est
+ * prévenue de les ignorer s'ils contredisent les photos.
+ * Retourne ['profile' => « friperie et mode vintage », 'universes' => [['label' => …, 'icon' => …], …]] ou [].
  */
-function universes_suggest(): array
+function universes_suggest(string $hint = ''): array
 {
     $content = get_content();
-    $names = db()->query('SELECT name FROM products WHERE name != "" ORDER BY created_at DESC LIMIT 60')->fetchAll(PDO::FETCH_COLUMN);
+    $rows = db()->query("SELECT ref, name, photo FROM products WHERE photo IS NOT NULL AND photo != '' ORDER BY created_at DESC, rowid DESC LIMIT 8")->fetchAll();
+    $root = realpath(__DIR__ . '/..');
+    $smalls = [];
+    $names = [];
+    foreach ($rows as $r) {
+        $abs = $root . '/' . $r['photo'];
+        if (!is_file($abs)) continue;
+        $smalls[] = downscale_for_ai($abs, 512, 70) ?? $abs;
+        $names[] = $r['name'];
+    }
     $natures = [];
     foreach (db()->query("SELECT nature, COUNT(*) AS n FROM products WHERE nature IS NOT NULL AND nature != '' GROUP BY nature ORDER BY n DESC")->fetchAll() as $r) {
         $natures[] = (product_nature_labels($r['nature'])[0] ?? $r['nature']) . ' (' . $r['n'] . ')';
     }
     $icons = implode(', ', array_map(static fn ($k, $l) => "$k = $l", array_keys(UNIVERSE_ICONS), UNIVERSE_ICONS));
-    $prompt = 'Tu aides à organiser une boutique en ligne : ' . ($content['site_name'] ?: tenant('name')) . '. '
-        . ($content['site_tagline'] ?? '' ? 'Accroche : ' . $content['site_tagline'] . '. ' : '')
-        . 'Type de boutique : ' . tenant('ai.shop') . '. '
-        . ($natures ? 'Natures des pièces en vente : ' . implode(', ', $natures) . '. ' : '')
-        . ($names ? 'Exemples de pièces : ' . implode(' ; ', array_slice($names, 0, 60)) . '. ' : '')
-        . "Propose entre 4 et 8 « univers » (rayons) pour classer ces produits sur le site : libellés courts (1 à 3 mots), au pluriel de préférence, "
-        . "en français, qui couvrent l'ensemble du catalogue sans se chevaucher, adaptés à ce que vend VRAIMENT la boutique (ignore tout ce qui "
-        . "ne correspond pas aux pièces citées). Pour chacun, choisis le pictogramme le plus proche parmi : $icons. "
-        . 'Réponds UNIQUEMENT avec un tableau JSON, sans texte autour ni markdown, de la forme [{"label": "…", "icon": "ic-…"}].';
-    $text = gemini_describe_image('', $prompt, 1);
+    $hint = trim($hint);
+    $prompt = 'Tu aides à organiser une boutique en ligne. Découvre ce qu\'elle vend VRAIMENT, puis propose ses univers (rayons). '
+        . ($hint !== '' ? "Indication du vendeur (prioritaire, à suivre) : « $hint ». " : '')
+        . ($smalls ? 'Les ' . count($smalls) . ' photos jointes sont celles de pièces récemment mises en vente (' . implode(' ; ', array_slice($names, 0, 8)) . ') : '
+            . "ce sont les indices les plus fiables. " : '')
+        . ($natures ? 'Natures détectées des pièces, par nombre : ' . implode(', ', $natures) . '. ' : '')
+        . 'Nom de la boutique : ' . ($content['site_name'] ?: tenant('name')) . ($content['site_tagline'] ? ' ; accroche : ' . $content['site_tagline'] : '') . '. '
+        . "ATTENTION : les textes du site (accueil, « notre histoire »…) et la description technique de la boutique viennent parfois d'un modèle d'exemple "
+        . "(par exemple une boulangerie) sans rapport avec ce qui est vendu : ignore-les dès qu'ils contredisent les photos ou les natures. "
+        . "Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour ni markdown : "
+        . '{"profile": "ce que vend la boutique en une courte phrase, ex : friperie et mode vintage pour femme", '
+        . '"universes": [{"label": "…", "icon": "ic-…"}]}. '
+        . 'Entre 4 et 8 univers, libellés courts (1 à 3 mots), au pluriel de préférence, en français, qui couvrent l\'ensemble de ce que vend la boutique sans se chevaucher ; '
+        . "pour chacun, le pictogramme le plus proche parmi : $icons — sans répéter le même pictogramme quand on peut l'éviter (ex. le plaid pour le textile et les vêtements, le miroir pour les bijoux et accessoires).";
+    $text = gemini_describe_image($smalls[0] ?? '', $prompt, 1, array_slice($smalls, 1));
+    foreach ($smalls as $i => $small) {
+        $abs = $root . '/' . ($rows[$i]['photo'] ?? '');
+        if ($small !== $abs && str_starts_with($small, sys_get_temp_dir())) @unlink($small);
+    }
     if (!$text) return [];
-    $list = json_decode(preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)), true);
-    if (!is_array($list)) return [];
+    $data = json_decode(preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)), true);
+    if (!is_array($data)) return [];
     $out = [];
-    foreach ($list as $item) {
+    foreach ((array) ($data['universes'] ?? []) as $item) {
         $label = mb_substr(trim((string) ($item['label'] ?? '')), 0, 40);
         $icon = (string) ($item['icon'] ?? '');
         if ($label !== '') $out[] = ['label' => $label, 'icon' => isset(UNIVERSE_ICONS[$icon]) ? $icon : 'ic-vase'];
     }
-    return array_slice($out, 0, 8);
+    return $out ? ['profile' => mb_substr(trim((string) ($data['profile'] ?? '')), 0, 120), 'universes' => array_slice($out, 0, 8)] : [];
 }

@@ -177,8 +177,15 @@ Viennoiseries… » même pour vendre des vêtements, et l'IA, qui choisit l'uni
 tromper. La page **Univers** de l'administration (`admin/universes.php`, `includes/universes.php`) les rend modifiables
 sans toucher au serveur : renommer (les pièces restent rattachées, la clé est conservée), ajouter, réordonner, retirer,
 choisir le pictogramme. La liste enregistrée (table `settings`, clé `universes`) remplace celle du fichier ;
-« Rétablir les univers d'origine » l'efface. **Proposer des univers (IA)** en suggère 4 à 8 d'après le nom de la
-boutique, son accroche, les natures et les noms des pièces en vente. **Reclasser par l'IA** (pièces sans univers valide,
+« Rétablir les univers d'origine » l'efface. **Détecter ce que vend ma boutique (IA)** et **Proposer des univers (IA)**
+découvrent d'abord ce que vend VRAIMENT la boutique (`universes_suggest()`), puis en suggèrent 4 à 8 univers. Sources, de la
+plus fiable à la moins fiable : l'indication écrite par le vendeur dans le champ « Ce que vend votre boutique », les
+**photos** des pièces récemment mises en vente (jointes à la requête) et leurs natures, le nom et l'accroche de la boutique.
+Les textes du site et la description du fichier du commerce sont déclarés non fiables : ils viennent souvent d'un modèle
+d'exemple (une boulangerie…) et l'IA doit les ignorer quand ils contredisent les photos. Ce que l'IA a compris est écrit dans
+le champ (« friperie de vêtements d'occasion pour hommes et femmes ») : on le relit, on le corrige, et il est enregistré avec
+les univers (`shop_profile()`, table `settings`). **Ce type de boutique remplace ensuite la description d'origine dans tous les
+prompts de l'IA** (fiches, images, prix : `ai_shop_examples()`). **Reclasser par l'IA** (pièces sans univers valide,
 ou toutes) rejoue le choix de l'univers pièce par pièce, enregistré aussitôt, arrêtable. Les prompts de l'IA citent
 désormais les univers enregistrés (`ai_shop_examples()`), et l'IA peut ne choisir aucun univers s'ils ne conviennent
 pas (message : « adaptez-les dans Univers »).

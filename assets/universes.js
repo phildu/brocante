@@ -37,22 +37,31 @@
 
   // ── Propositions de l'IA ──
   var ideas = [];
+  var found = '';
   var suggestBtn = document.getElementById('un-suggest');
+  var detectBtn = document.getElementById('un-detect');
+  var profileInput = document.getElementById('un-profile');
   var ideasBox = document.getElementById('un-ideas');
-  suggestBtn.addEventListener('click', function () {
-    suggestBtn.disabled = true; say(status, "L'IA réfléchit… (10 à 20 secondes)");
-    fetch(base + '/admin/universes-action.php', { method: 'POST', body: (function () { var f = new FormData(); f.append('action', 'suggest'); return f; })(), credentials: 'same-origin' })
+  function suggest(btn) {
+    suggestBtn.disabled = detectBtn.disabled = true; say(status, "L'IA regarde vos photos et vos pièces… (10 à 25 secondes)");
+    // Ce que le vendeur a écrit guide l'IA ; sinon elle décide d'après les photos.
+    fetch(base + '/admin/universes-action.php', { method: 'POST', body: (function () { var f = new FormData(); f.append('action', 'suggest'); f.append('hint', profileInput.value); return f; })(), credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .catch(function () { return { ok: false, error: 'Connexion perdue : réessayez.' }; })
       .then(function (res) {
-        suggestBtn.disabled = false;
+        suggestBtn.disabled = detectBtn.disabled = false;
         if (!res.ok) { say(status, res.error || 'Propositions indisponibles.'); return; }
-        ideas = res.universes; say(status, '');
+        ideas = res.universes; found = res.profile || '';
+        // La boutique détectée est écrite dans le champ : on voit ce que l'IA a compris, et on peut le corriger.
+        if (found && !profileInput.value.trim()) profileInput.value = found;
+        say(status, found ? 'Boutique détectée : ' + found + '.' : '');
         var ul = document.getElementById('un-ideas-list'); ul.textContent = '';
         ideas.forEach(function (u) { var li = document.createElement('li'); li.textContent = u.label; ul.appendChild(li); });
         ideasBox.hidden = false;
       });
-  });
+  }
+  suggestBtn.addEventListener('click', function () { suggest(); });
+  detectBtn.addEventListener('click', function () { profileInput.value = ''; suggest(); });
   document.getElementById('un-apply').addEventListener('click', function () {
     // Les univers repris gardent leur clé (leurs pièces restent rattachées) ; les autres sont retirés, les nouveaux ajoutés.
     var byLabel = {};
