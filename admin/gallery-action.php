@@ -18,6 +18,7 @@ if (!$product) {
     header('Location: /admin/catalog.php');
     exit;
 }
+ai_usage_context($ref); // le coût des générations de cette page est rattaché à la pièce
 
 function get_photo_row(string $ref, int $id): ?array
 {

@@ -54,6 +54,7 @@ $root = realpath(__DIR__ . '/..');
 $sources = [];
 $product = null;
 $ref = (string) ($_POST['ref'] ?? '');
+ai_usage_context($ref !== '' ? $ref : null);
 if ($ref !== '') {
     $product = get_product($ref);
     if (!$product) product_ai_reply(['ok' => false, 'error' => 'Pièce introuvable.'], 404);

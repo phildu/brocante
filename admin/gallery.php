@@ -157,6 +157,10 @@ $flash = flash_get();
           <input type="text" name="keywords" placeholder="ex : fond en bois clair, lumière du matin, sans le couvercle..." maxlength="300" data-saved-prompts="@gen-kind" data-prompt-helper="@gen-kind">
         </div>
         <button type="submit" class="btn btn-primary">Générer</button>
+        <span class="hint" id="gen-cost" style="margin:0 0 0 12px;" data-costs="<?= h(json_encode([
+            'angle' => ai_estimate_label(['image' => 2]), 'ambiance' => ai_estimate_label(['image' => 2]), 'complete' => ai_estimate_label(['image' => 2]),
+            'detoure' => FAL_API_KEY ? ai_estimate_label(['cutout' => 1]) : ai_estimate_label(['image' => 1]), 'video' => '',
+        ])) ?>"></span>
       </form>
     </div>
     <script>
@@ -165,8 +169,12 @@ $flash = flash_get();
         var angleField = document.getElementById('gen-angle-field');
         var videoField = document.getElementById('gen-video-field');
         var keywordsField = document.getElementById('gen-keywords-field');
+        var cost = document.getElementById('gen-cost');
+        var costs = JSON.parse(cost.dataset.costs);
+        var costNote = { angle: ' : image 3:2 + version 9:16', ambiance: ' : image 3:2 + version 9:16', complete: ' : image 3:2 + version 9:16', detoure: '' };
         function sync() {
           var k = kindSelect.value;
+          cost.textContent = costs[k] ? 'Coût estimé ' + costs[k] + costNote[k] : (k === 'video' ? 'Vidéo : gratuite (ffmpeg)' : '');
           angleField.style.display = k === 'angle' ? '' : 'none';
           videoField.style.display = k === 'video' ? '' : 'none';
           keywordsField.style.display = (k === 'detoure' || k === 'video') ? 'none' : '';

@@ -8,6 +8,7 @@ require_once __DIR__ . '/prompts.php';
 require_once __DIR__ . '/universes.php';
 require_once __DIR__ . '/comparables.php';
 require_once __DIR__ . '/price-research.php';
+require_once __DIR__ . '/ai-usage.php';
 
 function h($s): string
 {
@@ -699,7 +700,10 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
             foreach ($data['candidates'][0]['content']['parts'] ?? [] as $part) {
                 if (!empty($part['inlineData']['data'])) { $b64 = $part['inlineData']['data']; break; }
             }
-            if ($b64) return base64_decode($b64);
+            if ($b64) {
+                ai_usage_log_image($data['usageMetadata'] ?? []);
+                return base64_decode($b64);
+            }
             $reason = $data['candidates'][0]['finishReason'] ?? $data['promptFeedback']['blockReason'] ?? 'no image in response';
             error_log("gemini_generate_image attempt $attempt: HTTP $status but no image ($reason)");
         } else {
@@ -1173,6 +1177,7 @@ function run_mobile_variant(int $photoId): array
     $stmt->execute([$photoId]);
     $row = $stmt->fetch();
     if (!$row || $row['mobile_pending'] === null) return ['ok' => true, 'done' => true];
+    ai_usage_context($row['product_ref']);
     $job = json_decode((string) $row['mobile_pending'], true) ?: [];
     $target = ($job['target'] ?? 'mobile') === 'desktop' ? 'desktop' : 'mobile';
     $aspect = GENERATED_IMAGE_FORMATS[$target];
@@ -1303,7 +1308,10 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
             $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
-            if ($text) return $text;
+            if ($text) {
+                ai_usage_log_text($data['usageMetadata'] ?? []);
+                return $text;
+            }
             error_log('gemini_describe_image attempt ' . $attempt . ': HTTP ' . $status . ' but no text in response');
         } else {
             error_log('gemini_describe_image attempt ' . $attempt . ': HTTP ' . $status . ', body: ' . substr((string) $body, 0, 500));
@@ -1540,6 +1548,7 @@ function gemini_group_photos_chunk(array $absPaths): ?array
     $data = json_decode($body, true);
     $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
     if (!$text) return null;
+    ai_usage_log_text($data['usageMetadata'] ?? []);
 
     $text = trim($text);
     $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', $text);
@@ -2268,7 +2277,10 @@ function fal_remove_background(string $srcAbsPath, int $retries = 1): ?string
                 $resultCh = curl_init($imageUrl);
                 curl_setopt_array($resultCh, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30]);
                 $resultBytes = curl_exec($resultCh);
-                if ($resultBytes !== false) return $resultBytes;
+                if ($resultBytes !== false) {
+                    ai_usage_log_cutout();
+                    return $resultBytes;
+                }
                 error_log('fal_remove_background attempt ' . $attempt . ': failed to download result image');
             } else {
                 error_log('fal_remove_background attempt ' . $attempt . ': HTTP ' . $status . ' but no image in response');

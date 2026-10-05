@@ -156,7 +156,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                               <?php endforeach; ?>
                             </select>
                           </div>
-                          <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d\'occasion">Marché</button></label><input type="text" name="price" value="<?= h($p['price']) ?>"></div>
+                          <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button></label><input type="text" name="price" value="<?= h($p['price']) ?>"></div>
                         </div>
                         <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"><?= h($p['description']) ?></textarea></div>
                         <div class="field-row-3">
@@ -247,7 +247,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                 <?php endforeach; ?>
               </select>
             </div>
-            <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d\'occasion">Marché</button></label><input type="text" name="price" placeholder="0 €"></div>
+            <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button></label><input type="text" name="price" placeholder="0 €"></div>
           </div>
           <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"></textarea></div>
           <div class="field-row-3">

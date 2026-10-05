@@ -24,6 +24,7 @@ session_write_close();
 @set_time_limit(90);
 
 $ref = (string) ($_POST['ref'] ?? '');
+ai_usage_context($ref !== '' ? $ref : null);
 $product = $ref !== '' ? get_product($ref) : null;
 if ($ref !== '' && !$product) price_research_reply(['ok' => false, 'error' => 'Pièce introuvable.'], 404);
 

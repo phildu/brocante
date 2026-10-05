@@ -169,6 +169,7 @@ $siteName = (string) $content['site_name'];
         <div class="sb-screen" id="sb-review" hidden>
           <h1>Votre lot</h1>
           <p class="qa-note" id="sb-summary"></p>
+          <p class="qa-note" id="sb-cost" data-piece-eur="<?= h(number_format(ai_eur(ai_estimate_usd(ai_estimate_piece_counts())), 4, '.', '')) ?>"></p>
           <div class="sb-pieces" id="sb-pieces"></div>
           <label class="qa-field">Indications pour l'IA, valables pour tout le lot (facultatif)
             <textarea id="sb-notes" rows="2" maxlength="300" data-saved-prompts="notes" data-prompt-helper="notes" placeholder="Ex. : vaisselle des années 70, ambiance chaleureuse"></textarea>
@@ -226,7 +227,7 @@ $siteName = (string) $content['site_name'];
       </div>
       <label class="qa-field">Nom <button type="button" class="ai-btn" data-ai-field="name" title="Générer / régénérer le nom">↻ IA</button><input type="text" id="sr-name" data-ai-input="name" maxlength="120"></label>
       <div class="qa-two">
-        <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion">Marché</button><input type="text" id="sr-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
+        <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button><input type="text" id="sr-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
         <label class="qa-field">Poids (g) <button type="button" class="ai-btn" data-ai-field="weight" title="Estimer le poids (à vérifier avec une balance)">↻ IA</button><input type="number" id="sr-weight" data-ai-input="weight_grams" min="0" step="10" inputmode="numeric" placeholder="500"></label>
       </div>
       <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button><input type="text" id="sr-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>

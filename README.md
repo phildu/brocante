@@ -121,6 +121,26 @@ angles** (+ indications facultatives du vendeur). La fiche se relit et se
 corrige sur le téléphone, puis s'enregistre masquée ou publiée. Sans clé
 Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main.
 
+## Consommation de l'IA : coûts estimés et solde
+
+Chaque appel payant est consigné dans la table `ai_usage` (`includes/ai-usage.php`) avec son **coût estimé** : image générée
+(Gemini, tarif à l'unité), texte et vision (d'après le nombre réel de tokens renvoyé par l'API, réflexion du modèle
+comprise), recherche web (tarif d'une requête avec recherche, plus les tokens), détourage fal.ai. La page **Consommation IA**
+(`admin/ai-usage.php`, menu de l'administration) donne la dépense d'aujourd'hui, des 7 derniers jours, du mois et le **total
+évalué**, le détail par type, par mois et par pièce, les derniers appels (avec leur origine) et le coût estimé de chaque
+opération. Le menu affiche en permanence « IA ce mois » ou, si vous avez déclaré un crédit, « Solde IA ».
+
+**Solde.** Déclarez le crédit prépayé disponible (Google Cloud, fal.ai) : le solde estimé est ce crédit moins les dépenses
+consignées depuis (barre de progression, alerte sous 15 %). « Recaler le solde » repart d'un nouveau montant — à utiliser
+quand on recharge ou quand on lit le vrai solde chez Google ou fal.ai. **Ce solde est une estimation** : aucune API ne
+donne le solde réel d'un compte, et les quotas gratuits ne sont pas déduits.
+
+**Tarifs.** Ceux des offres publiques à la date de cette version (image 0,039 $, texte 0,30 $ / 2,50 $ le million de tokens,
+recherche web 0,035 $ la requête, détourage fal.ai 0,001 $, dollar à 0,92 €), modifiables dans la page ; les appels déjà
+consignés gardent le coût calculé à l'époque. Les estimations sont annoncées là où l'on déclenche l'IA : galerie (« Coût
+estimé ≈ 0,07 € : image 3:2 + version 9:16 »), Studio (coût du lot, par pièce), ajout rapide, bouton « Marché ». Seuls les appels
+faits depuis la mise en service du suivi sont comptés ; le portail de création de boutiques a son propre appel Gemini, non suivi.
+
 ## Prix du marché : le même article, neuf et d'occasion
 
 Le bouton **Marché** à côté du champ Prix (catalogue, relectures du Studio et de l'ajout rapide) lance une vraie recherche

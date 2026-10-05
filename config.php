@@ -90,6 +90,9 @@ function db(): PDO
         // Prise de vue depuis un téléphone proche (codes QR) : tables créées si besoin.
         require_once __DIR__ . '/includes/capture.php';
         capture_ensure_schema($pdo);
+        // Consommation de l'IA (coûts estimés, solde).
+        require_once __DIR__ . '/includes/ai-usage.php';
+        ai_usage_ensure_schema($pdo);
         // Prompts (mots-clés / précisions) enregistrés pour la génération IA.
         require_once __DIR__ . '/includes/prompts.php';
         prompts_ensure_schema($pdo);

@@ -1618,3 +1618,6 @@
 .pr-sources a { color: var(--accent); }
 .pr-q { margin: 4px 0; color: var(--ink-soft); }
 .pr-table th:first-child { width: 38%; }
+.admin-sidebar-foot .admin-ai-chip { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); padding: 4px 12px; text-decoration: none; }
+.admin-sidebar-foot .admin-ai-chip:hover { color: var(--accent); }
+.admin-sidebar-collapsed .admin-ai-chip { display: none; }

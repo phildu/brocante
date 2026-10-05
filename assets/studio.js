@@ -259,6 +259,9 @@
     var count = pieces.filter(function (p) { return p.length; }).length;
     $('sb-summary').textContent = plural(count, 'pièce', 'pièces') + ' · ' + plural(total(), 'photo', 'photos') + '. La première photo de chaque pièce est la principale (détourée et mise en situation). Corrigez si besoin.';
     $('sb-generate').disabled = $('sb-send-only').disabled = !count;
+    // Coût estimé de la génération complète du lot (détourage, 2 visuels, fiche par pièce), tarifs de la page Consommation IA.
+    var perPiece = parseFloat($('sb-cost').dataset.pieceEur) || 0;
+    $('sb-cost').textContent = count && perPiece ? 'Génération estimée à ' + (count * perPiece < 0.005 ? '< 0,01' : (count * perPiece).toFixed(2).replace('.', ',')) + ' € pour ' + plural(count, 'pièce', 'pièces') + ' (' + perPiece.toFixed(2).replace('.', ',') + ' € la pièce : détourage, deux visuels, fiche).' : '';
     pieces.forEach(function (piece, pi) {
       if (!piece.length) return;
       var card = el('section', 'sb-piece');

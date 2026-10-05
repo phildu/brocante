@@ -41,6 +41,8 @@ function gemini_search_text(string $prompt, array $imagePaths = []): ?array
                     $uri = (string) ($chunk['web']['uri'] ?? '');
                     if ($uri !== '' && !isset($sources[$uri])) $sources[$uri] = ['title' => (string) ($chunk['web']['title'] ?? ''), 'uri' => $uri];
                 }
+                $queries = array_values(array_filter((array) ($candidate['groundingMetadata']['webSearchQueries'] ?? [])));
+                ai_usage_log_search($data['usageMetadata'] ?? [], (bool) $queries);
                 return ['text' => $text, 'sources' => array_values($sources), 'queries' => array_values(array_filter((array) ($candidate['groundingMetadata']['webSearchQueries'] ?? [])))];
             }
             error_log('gemini_search_text attempt ' . $attempt . ': HTTP ' . $status . ' sans texte');

@@ -17,6 +17,7 @@ $adminNavItems = [
     'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
     'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
     'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
+    'ia' => ['/admin/ai-usage.php', 'Consommation IA', 'receipt'],
     'hero' => ['/admin/hero.php', 'Diaporama hero', 'image'],
     'slideshow' => ['/admin/slideshow.php', 'Diaporama boutique', 'play'],
     'banners' => ['/admin/banners.php', 'Bandeaux de page', 'banner'],
@@ -83,6 +84,9 @@ $adminIcon = static fn (string $name): string =>
   </nav>
   <div class="admin-sidebar-foot">
     <?php $adminWho = admin_session(); ?>
+    <?php if ($adminWho && admin_role_can_access($adminWho['role'], '/admin/ai-usage.php')): $aiBalance = ai_balance(); ?>
+      <a class="admin-ai-chip" href="/admin/ai-usage.php" title="Coût estimé de l'IA : voir le détail"><span class="admin-label"><?= $aiBalance ? 'Solde IA : ' . h(ai_format_eur($aiBalance['remaining'])) : 'IA ce mois : ' . h(ai_format_eur(ai_usage_spent(gmdate('Y-m-01 00:00:00')))) ?></span></a>
+    <?php endif; ?>
     <?php if ($adminWho): ?>
       <span class="admin-whoami admin-label"><?= h($adminWho['name'] !== '' ? $adminWho['name'] : 'Compte principal') ?> · <?= h(account_role_label($adminWho['role'])) ?></span>
     <?php endif; ?>

@@ -354,6 +354,7 @@ switch ($action) {
         $group = $batch['groups'][$groupIndex];
         if ($group['status'] !== 'pending') break;
 
+        $usageStart = gmdate('Y-m-d H:i:s');
         $chosenPhoto = $group['photos'][$group['chosen_index']] ?? $group['photos'][0];
         $chosenAbs = $root . '/' . $chosenPhoto;
 
@@ -432,6 +433,8 @@ switch ($action) {
 
         // Le catalogue d'abord : assez de pièces comparables imposent leur poids médian.
         catalog_refine_weight($ref);
+        // Les appels IA de ce traitement (avant la création de la fiche) sont rattachés à la pièce.
+        db()->prepare('UPDATE ai_usage SET ref = ? WHERE ref IS NULL AND at >= ? AND script = ?')->execute([$ref, $usageStart, 'batch-import-action.php']);
         $batch['groups'][$groupIndex]['status'] = 'done';
         $batch['groups'][$groupIndex]['product_ref'] = $ref;
         $_SESSION['batch_import'] = $batch;

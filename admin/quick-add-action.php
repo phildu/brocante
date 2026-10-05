@@ -43,6 +43,7 @@ function quick_add_product(): array
     if (!$product) {
         quick_add_reply(['ok' => false, 'error' => 'Fiche introuvable.'], 404);
     }
+    ai_usage_context($product['ref']);
     return $product;
 }
 
