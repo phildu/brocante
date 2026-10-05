@@ -376,6 +376,7 @@ function product_card_html(array $p, int $i = 0): string
             <input type="hidden" name="ref" value="' . h($p['ref']) . '">
             <input type="hidden" name="redirect" value="' . h($_SERVER['REQUEST_URI'] ?? '/boutique.php') . '">
             <button class="card-cta" type="submit">Ajouter</button>
+            <button class="card-cta card-cta-buy" type="submit" name="redirect" value="/cart.php">Commander</button>
           </form>';
     } else {
         $action = '<a class="card-cta" href="/index.php#contact">Nous contacter</a>';

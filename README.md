@@ -225,7 +225,9 @@ envoyé l'emporte). « Ajouter au panier » reste sur la fiche et sa confirmatio
 boutique) affiche un lien « Commander → » vers le panier (`flash_set(..., $link)`). Sur smartphone (≤ 780 px) une
 **barre collée en haut, sous l'entête**, garde sous les yeux le prix (prix barré et promo compris) et les deux
 boutons pendant tout le défilement ; sur ordinateur elle est masquée. Pièce vendue : « Vendue » ; prix non fixe :
-« Nous contacter », comme avant.
+« Nous contacter », comme avant. Les **cartes de la boutique** (et de l'accueil) ont aussi leur bouton « Commander »,
+plein à côté d'« Ajouter » (en contour) ; sur smartphone « Détails » et « Ajouter » forment une ligne et « Commander »
+prend toute la largeur dessous.
 
 ## Médiathèque : toutes les photos, classées par produit
 

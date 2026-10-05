@@ -815,6 +815,9 @@
   }
   .card-cta:hover { background: var(--ink); color: var(--bg); }
   .card-cta[data-added="true"] { background: var(--sage); border-color: var(--sage); color: var(--accent-ink); }
+  /* « Commander » : ajoute la pièce et ouvre le panier ; le bouton plein, « Ajouter » restant en contour. */
+  .card-cta-buy { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .card-cta-buy:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); filter: brightness(1.08); }
 
   /* featured link row */
 
@@ -1030,6 +1033,7 @@
 
     .card-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
     }
 
@@ -1051,17 +1055,20 @@
       text-align: center;
     }
 
+    /* Deux lignes : « Détails » + « Ajouter » (contours), puis « Commander » pleine largeur. */
     .card-cta {
       flex: 1 1 0;
-      background: var(--accent);
-      color: var(--accent-ink);
+      background: transparent;
+      color: var(--accent);
       border-color: var(--accent);
       padding: 13px 10px;
       font-size: 0.92rem;
       font-weight: 700;
       text-align: center;
     }
-    .card-cta:hover { background: var(--accent); filter: brightness(1.08); }
+    .card-cta:hover { background: transparent; filter: brightness(1.08); }
+    .card-cta-buy { flex: 1 1 100%; background: var(--accent); color: var(--accent-ink); order: 3; }
+    .card-cta-buy:hover { background: var(--accent); }
   }
 
   /* footer */
