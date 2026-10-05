@@ -101,9 +101,10 @@ $buyHtml = static function () use ($product): string {
       <span class="badge" style="margin-bottom:16px;display:inline-block;"><?= h($product['badge']) ?></span>
       <p class="lede" style="margin-bottom:24px;"><?= nl2br(h($product['description'])) ?></p>
 
-      <?php $etat = product_condition($product['etat'] ?? ''); ?>
-      <?php if ($etat || !empty($product['materials']) || !empty($product['size_text']) || !empty($product['weight_text'])): ?>
+      <?php $etat = product_condition($product['etat'] ?? ''); $nature = product_nature_labels($product['nature'] ?? '', $product['sous_categorie'] ?? ''); ?>
+      <?php if ($nature || $etat || !empty($product['materials']) || !empty($product['size_text']) || !empty($product['weight_text'])): ?>
         <ul class="info-list" style="margin-bottom:24px;">
+          <?php if ($nature): ?><li><strong>Type</strong> <a href="/boutique.php?nature=<?= urlencode($product['nature']) ?>" class="nature-link"><?= h($nature[0]) ?></a><?php if ($nature[1]): ?> › <a href="/boutique.php?nature=<?= urlencode($product['nature']) ?>&amp;sous=<?= urlencode($product['sous_categorie']) ?>" class="nature-link"><?= h($nature[1]) ?></a><?php endif; ?></li><?php endif; ?>
           <?php if ($etat): ?><li><strong>État</strong> <?= h($etat[0]) ?> <span class="etat-hint">— <?= h($etat[1]) ?></span></li><?php endif; ?>
           <?php if (!empty($product['materials'])): ?><li><strong>Matières</strong> <?= h($product['materials']) ?></li><?php endif; ?>
           <?php if (!empty($product['size_text'])): ?><li><strong>Taille</strong> <?= h($product['size_text']) ?></li><?php endif; ?>

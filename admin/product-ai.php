@@ -39,6 +39,8 @@ $current = [];
 foreach (['name', 'description', 'materials', 'price', 'size_text'] as $key) {
     $current[$key] = mb_substr(trim((string) ($_POST[$key] ?? '')), 0, 1200);
 }
+$pair = product_nature_resolve($_POST['nature'] ?? '', $_POST['sous_categorie'] ?? '');
+if ($pair['nature'] !== '') $current['nature'] = product_nature_text($pair['nature'], $pair['sous_categorie']);
 $etat = product_condition(product_condition_key($_POST['etat'] ?? ''));
 if ($etat) $current['etat'] = $etat[0];
 $validCats = array_column(category_list(), 'key');
@@ -82,5 +84,10 @@ foreach ($smalls as $i => $small) {
 $values = $text ? parse_product_fields_response($text, $fields) : [];
 if (!$values) {
     product_ai_reply(['ok' => false, 'error' => "L'IA n'a pas pu répondre (service surchargé ?) : réessayez dans un instant."]);
+}
+// Détection en série depuis le catalogue (save=1, nature seule, pièce existante) : la nature est enregistrée tout de suite.
+if (!empty($_POST['save']) && $ref !== '' && $fields === ['nature'] && !empty($values['nature'])) {
+    db()->prepare('UPDATE products SET nature = ?, sous_categorie = ? WHERE ref = ?')
+        ->execute([$values['nature'], $values['sous_categorie'] ?? null, $ref]);
 }
 product_ai_reply(['ok' => true, 'values' => $values, 'fields' => $fields]);

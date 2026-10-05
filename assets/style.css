@@ -1593,3 +1593,10 @@
 .product-info .price-group .price-old { font-size: 1rem; }
 .etat-hint { color: var(--ink-soft); font-size: 0.88em; }
 .product-admin-fields .field select, .admin-block .field select { width: 100%; box-sizing: border-box; }
+
+/* Filtre « type de produit » de la boutique et lien de la fiche (nature › sous-catégorie). */
+.nature-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.nature-filter select { background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 9px 10px; font-family: var(--font-body); font-size: 0.9rem; max-width: 100%; }
+.nature-clear { font-size: 0.85rem; color: var(--ink-soft); }
+.nature-link { color: inherit; }
+.nature-link:hover { color: var(--accent); }

@@ -23,6 +23,7 @@ $stmt = db()->prepare("SELECT * FROM products $where ORDER BY $orderCol $dir, re
 $stmt->execute($params);
 $products = $stmt->fetchAll();
 
+$missingNature = db()->query("SELECT ref FROM products WHERE nature IS NULL OR nature = '' ORDER BY ref")->fetchAll(PDO::FETCH_COLUMN);
 $currentUrl = '/admin/catalog.php?' . http_build_query(array_filter(['sort' => $sortKey, 'dir' => $dir, 'q' => $q]));
 $badgeOptions = ['Chiné', 'Fait main', 'Pièce unique', 'Promo'];
 
@@ -94,6 +95,9 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
       <div class="bulk-toolbar">
         <label class="featured-check"><input type="checkbox" id="bulk-select-all"> Tout sélectionner</label>
         <span id="bulk-count" class="hint" style="margin:0;">0 sélectionnée(s)</span>
+        <button type="button" class="btn-small" id="nature-detect" disabled title="L'IA détecte la nature (vêtement, déco…) et la sous-catégorie des pièces cochées d'après leurs photos">Détecter la nature (IA)</button>
+        <?php if ($missingNature): ?><button type="button" class="btn-small" id="nature-detect-missing" data-refs="<?= h(json_encode($missingNature)) ?>" title="Détecte la nature de toutes les pièces qui n'en ont pas encore">Détecter pour les <?= count($missingNature) ?> pièces sans nature</button><?php endif; ?>
+        <span class="hint" id="nature-detect-status" role="status" style="margin:0;"></span>
         <button type="button" class="btn-small" data-bulk-action="hide" disabled>Masquer</button>
         <button type="button" class="btn-small" data-bulk-action="unhide" disabled>Réafficher</button>
         <button type="button" class="btn-small" data-bulk-action="promo" disabled>Mettre en promo</button>
@@ -158,6 +162,11 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                         <div class="field-row-3">
                           <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" value="<?= h($p['materials'] ?? '') ?>" placeholder="ex : grès émaillé, bois de chêne"></div>
                           <div class="field"><label>État <?= $aiBtn('etat', 'Estimer l\'état d\'après les photos') ?></label><select name="etat"><?= product_condition_select_html($p['etat'] ?? null) ?></select></div>
+                          <div></div>
+                        </div>
+                        <div class="field-row-3">
+                          <div class="field"><label>Nature <?= $aiBtn('nature', 'Détecter la nature (vêtement, déco…) et la sous-catégorie') ?></label><select name="nature"><?= product_nature_select_html($p['nature'] ?? null) ?></select></div>
+                          <div class="field"><label>Sous-catégorie</label><select name="sous_categorie"><?= product_subcategory_select_html($p['sous_categorie'] ?? null) ?></select></div>
                           <div></div>
                         </div>
                         <div class="field-row-3">
@@ -244,6 +253,11 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
           <div class="field-row-3">
             <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" placeholder="ex : grès émaillé, bois de chêne"></div>
             <div class="field"><label>État <?= $aiBtn('etat', 'Estimer l\'état d\'après la photo') ?></label><select name="etat"><?= product_condition_select_html(null) ?></select></div>
+            <div></div>
+          </div>
+          <div class="field-row-3">
+            <div class="field"><label>Nature <?= $aiBtn('nature', 'Détecter la nature (vêtement, déco…) et la sous-catégorie') ?></label><select name="nature"><?= product_nature_select_html(null) ?></select></div>
+            <div class="field"><label>Sous-catégorie</label><select name="sous_categorie"><?= product_subcategory_select_html(null) ?></select></div>
             <div></div>
           </div>
           <div class="field-row-3">
@@ -346,5 +360,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
 </script>
 <script src="/assets/admin-upload-check.js"></script>
 <script src="/assets/product-ai.js"></script>
+<script src="/assets/nature-select.js"></script>
+<script src="/assets/nature-detect.js"></script>
 </body>
 </html>

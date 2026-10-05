@@ -31,19 +31,22 @@ if ($featuredRequested && !$product['featured']) {
 }
 
 $photoPath = store_uploaded_photo('photo', 'product-' . $ref);
+$nature = product_nature_resolve($_POST['nature'] ?? '', $_POST['sous_categorie'] ?? '');
 
 $badge = trim((string) ($_POST['badge'] ?? $product['badge']));
 // Le champ n'est affiché (et donc soumis) que si la mention est "Promo" —
 // hors de ce cas le prix promo n'a pas de sens et repart à vide.
 $promoPrice = $badge === 'Promo' ? trim((string) ($_POST['promo_price'] ?? '')) : '';
 
-$set = 'name = :name, cat = :cat, description = :description, materials = :materials, etat = :etat, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock';
+$set = 'name = :name, cat = :cat, description = :description, materials = :materials, etat = :etat, nature = :nature, sous_categorie = :sous_categorie, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock';
 $params = [
     'name' => trim((string) ($_POST['name'] ?? $product['name'])),
     'cat' => $cat,
     'description' => trim((string) ($_POST['description'] ?? $product['description'])),
     'materials' => trim((string) ($_POST['materials'] ?? $product['materials'])),
     'etat' => isset($_POST['etat']) ? (product_condition_key($_POST['etat']) ?: null) : $product['etat'],
+    'nature' => isset($_POST['nature']) ? ($nature['nature'] ?: null) : $product['nature'],
+    'sous_categorie' => isset($_POST['nature']) ? ($nature['sous_categorie'] ?: null) : $product['sous_categorie'],
     'price' => trim((string) ($_POST['price'] ?? $product['price'])),
     'promo_price' => $promoPrice !== '' ? $promoPrice : null,
     'badge' => $badge,

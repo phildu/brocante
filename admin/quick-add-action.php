@@ -153,8 +153,8 @@ switch ($action) {
         }
         $sheet = $text ? parse_product_sheet_response($text) : null;
         if (!$sheet) quick_add_reply(['ok' => false, 'error' => 'La rédaction automatique a échoué : complétez la fiche à la main.']);
-        db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ?, materials = ?, etat = ? WHERE ref = ?')
-            ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $sheet['materials'], $sheet['etat'] ?: null, $product['ref']]);
+        db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ?, materials = ?, etat = ?, nature = ?, sous_categorie = ? WHERE ref = ?')
+            ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $sheet['materials'], $sheet['etat'] ?: null, $sheet['nature'] ?: null, $sheet['sous_categorie'] ?: null, $product['ref']]);
         quick_add_reply(['ok' => true, 'sheet' => $sheet]);
     }
 
@@ -179,7 +179,7 @@ switch ($action) {
         $job = studio_job_get($product['ref']);
         quick_add_reply(['ok' => true, 'product' => [
             'ref' => $product['ref'], 'name' => $product['name'], 'price' => $product['price'], 'cat' => $product['cat'],
-            'description' => $product['description'], 'materials' => (string) $product['materials'], 'etat' => (string) ($product['etat'] ?? ''), 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'],
+            'description' => $product['description'], 'materials' => (string) $product['materials'], 'etat' => (string) ($product['etat'] ?? ''), 'nature' => (string) ($product['nature'] ?? ''), 'sous_categorie' => (string) ($product['sous_categorie'] ?? ''), 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'],
             'hidden' => (bool) $product['is_hidden'],
         ], 'photos' => $photos, 'status' => $job['status'] ?? 'reviewed', 'note' => $job['note'] ?? '']);
     }
@@ -199,9 +199,10 @@ switch ($action) {
 
     case 'save': {
         $product = quick_add_product();
+        $pair = product_nature_resolve($_POST['nature'] ?? '', $_POST['sous_categorie'] ?? '');
         $validCats = array_column(category_list(), 'key');
         $cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : $product['cat'];
-        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, materials = ?, etat = ?, weight_grams = ?, is_hidden = ? WHERE ref = ?')
+        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, materials = ?, etat = ?, nature = ?, sous_categorie = ?, weight_grams = ?, is_hidden = ? WHERE ref = ?')
             ->execute([
                 trim((string) ($_POST['name'] ?? '')) ?: $product['name'],
                 $cat,
@@ -210,6 +211,8 @@ switch ($action) {
                 trim((string) ($_POST['description'] ?? '')) ?: $product['description'],
                 trim((string) ($_POST['materials'] ?? $product['materials'])),
                 isset($_POST['etat']) ? (product_condition_key($_POST['etat']) ?: null) : $product['etat'],
+                isset($_POST['nature']) ? ($pair['nature'] ?: null) : $product['nature'],
+                isset($_POST['nature']) ? ($pair['sous_categorie'] ?: null) : $product['sous_categorie'],
                 max(0, (int) ($_POST['weight_grams'] ?? $product['weight_grams'])),
                 empty($_POST['publish']) ? 1 : 0,
                 $product['ref'],

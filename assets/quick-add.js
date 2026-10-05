@@ -196,6 +196,9 @@
       $('f-desc').value = sheet.description;
       $('f-materials').value = sheet.materials || '';
       $('f-etat').value = sheet.etat || '';
+      $('f-nature').value = sheet.nature || '';
+      $('f-nature').dispatchEvent(new Event('change'));
+      $('f-sous').value = sheet.sous_categorie || '';
       $('f-price').value = sheet.price_hint;
       $('f-cat').value = sheet.category;
     }
@@ -219,6 +222,8 @@
     fd.append('description', $('f-desc').value);
     fd.append('materials', $('f-materials').value);
     fd.append('etat', $('f-etat').value);
+    fd.append('nature', $('f-nature').value);
+    fd.append('sous_categorie', $('f-sous').value);
     fd.append('badge', $('f-badge').value);
     if ($('f-publish').checked) fd.append('publish', '1');
     post(fd).then(function (res) {

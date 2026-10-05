@@ -1631,7 +1631,7 @@ function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): st
         . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1652,6 +1652,8 @@ function parse_product_sheet_response(string $text): ?array
         'category' => $cat,
         'materials' => mb_substr(trim((string) (is_array($data['materials'] ?? null) ? implode(', ', $data['materials']) : ($data['materials'] ?? ''))), 0, 200),
         'etat' => product_condition_key((string) ($data['etat'] ?? '')),
+        'nature' => product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['nature'],
+        'sous_categorie' => product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['sous_categorie'],
         'price_hint' => trim((string) ($data['price_hint'] ?? '')),
     ];
 }
@@ -1729,8 +1731,159 @@ function product_condition_select_html(?string $selected): string
     return $html;
 }
 
+/**
+ * Nature d'une pièce et sous-catégories : [clé de nature => ['label' => …, 'subs' => [clé => libellé]]]. Indépendant de
+ * l'« univers » du commerce (rayons de la boutique) : c'est ce que l'objet EST, détecté par l'IA d'après les photos.
+ * Les clés sont enregistrées (products.nature, products.sous_categorie) ; une sous-catégorie appartient à une seule nature.
+ */
+function product_nature_options(): array
+{
+    return [
+        'vetements' => ['label' => 'Vêtements', 'subs' => [
+            'hauts' => 'Hauts, t-shirts et chemises', 'pulls' => 'Pulls, gilets et sweats', 'vestes' => 'Vestes et manteaux',
+            'robes' => 'Robes et jupes', 'pantalons' => 'Pantalons, jeans et shorts', 'costumes' => 'Costumes et tailleurs',
+            'combinaisons' => 'Combinaisons et ensembles', 'lingerie' => 'Lingerie et pyjamas', 'maillots' => 'Maillots de bain',
+            'sport' => 'Vêtements de sport', 'enfant' => 'Vêtements enfant et bébé', 'travail' => 'Vêtements de travail et uniformes',
+            'traditionnels' => 'Costumes traditionnels et déguisements', 'autres_vetements' => 'Autres vêtements',
+        ]],
+        'chaussures' => ['label' => 'Chaussures', 'subs' => [
+            'baskets' => 'Baskets', 'bottes' => 'Bottes et bottines', 'escarpins' => 'Escarpins et talons', 'sandales' => 'Sandales et tongs',
+            'mocassins' => 'Mocassins et derbies', 'ballerines' => 'Ballerines', 'chaussons' => 'Chaussons et sabots', 'chaussures_enfant' => 'Chaussures enfant',
+        ]],
+        'accessoires' => ['label' => 'Accessoires de mode', 'subs' => [
+            'sacs' => 'Sacs et sacoches', 'maroquinerie' => 'Maroquinerie et portefeuilles', 'ceintures' => 'Ceintures et bretelles',
+            'foulards' => 'Écharpes, foulards et cravates', 'chapeaux' => 'Chapeaux, casquettes et bonnets', 'gants' => 'Gants et moufles',
+            'lunettes' => 'Lunettes', 'parapluies' => 'Parapluies et éventails', 'autres_accessoires' => 'Autres accessoires',
+        ]],
+        'bijoux' => ['label' => 'Bijoux et montres', 'subs' => [
+            'colliers' => 'Colliers et pendentifs', 'bracelets' => 'Bracelets', 'bagues' => 'Bagues', 'boucles' => "Boucles d'oreilles",
+            'broches' => 'Broches et pins', 'montres' => 'Montres', 'parures' => 'Parures et coffrets', 'bijoux_fantaisie' => 'Bijoux fantaisie',
+        ]],
+        'linge' => ['label' => 'Linge de maison et textiles', 'subs' => [
+            'draps' => 'Draps et housses', 'nappes' => 'Nappes et chemins de table', 'torchons' => 'Torchons et serviettes', 'rideaux' => 'Rideaux et voilages',
+            'plaids' => 'Plaids, couvertures et couvre-lits', 'coussins' => 'Coussins et housses', 'broderies' => 'Broderies, dentelles et napperons',
+            'tapis' => 'Tapis et tentures', 'tissus' => 'Tissus au mètre et passementerie',
+        ]],
+        'decoration' => ['label' => 'Décoration', 'subs' => [
+            'vases' => 'Vases et cache-pots', 'cadres' => 'Cadres et miroirs', 'tableaux' => 'Tableaux, gravures et affiches', 'statuettes' => 'Statuettes et objets décoratifs',
+            'bougeoirs' => 'Bougeoirs et photophores', 'horloges' => 'Horloges, pendules et réveils', 'boites' => 'Boîtes, coffrets et paniers',
+            'globes' => 'Globes, cartes et objets scientifiques', 'religieux' => 'Objets religieux et ex-voto', 'plantes' => 'Pots, jardinières et décors de jardin',
+            'autres_deco' => 'Autres objets de décoration',
+        ]],
+        'arts_table' => ['label' => 'Arts de la table et cuisine', 'subs' => [
+            'assiettes' => 'Assiettes et plats', 'verres' => 'Verres, carafes et service à boire', 'tasses' => 'Tasses, bols et théières', 'pichets' => 'Pichets et soupières',
+            'couverts' => 'Couverts et ménagères', 'casseroles' => 'Casseroles, cocottes et poêles', 'ustensiles' => 'Ustensiles et moules', 'plateaux' => 'Plateaux et dessous de plat',
+            'boites_cuisine' => 'Boîtes, bocaux et pots à épices', 'electromenager' => 'Petit électroménager ancien',
+        ]],
+        'mobilier' => ['label' => 'Mobilier', 'subs' => [
+            'chaises' => 'Chaises, fauteuils et tabourets', 'tables' => 'Tables et bureaux', 'rangements' => 'Buffets, commodes et armoires', 'etageres' => 'Étagères et bibliothèques',
+            'canapes' => 'Canapés et banquettes', 'lits' => 'Lits et chevets', 'consoles' => 'Consoles, sellettes et guéridons', 'meubles_toilette' => 'Meubles de toilette et coiffeuses',
+            'mobilier_exterieur' => 'Mobilier de jardin', 'mobilier_enfant' => 'Mobilier enfant',
+        ]],
+        'luminaires' => ['label' => 'Luminaires', 'subs' => [
+            'lampes' => 'Lampes à poser', 'suspensions' => 'Suspensions et lustres', 'appliques' => 'Appliques', 'lampadaires' => 'Lampadaires', 'lampes_petrole' => 'Lampes à huile et à pétrole',
+        ]],
+        'livres_medias' => ['label' => 'Livres, disques et papeterie', 'subs' => [
+            'livres' => 'Livres et romans', 'bd' => 'BD et mangas', 'livres_enfants' => 'Livres pour enfants', 'livres_cuisine' => 'Livres de cuisine et de loisirs', 'vinyles' => 'Vinyles et disques',
+            'cassettes' => 'Cassettes, CD et DVD', 'cartes_postales' => 'Cartes postales et photos anciennes', 'papeterie' => 'Papeterie, plumes et carnets', 'affiches' => 'Affiches et publicités anciennes',
+        ]],
+        'jeux' => ['label' => 'Jeux et jouets', 'subs' => [
+            'jouets' => 'Jouets anciens', 'poupees' => 'Poupées et peluches', 'jeux_societe' => 'Jeux de société et puzzles', 'jeux_video' => 'Jeux vidéo et consoles',
+            'maquettes' => 'Maquettes et modèles réduits', 'jeux_plein_air' => 'Jeux de plein air',
+        ]],
+        'collection' => ['label' => 'Objets de collection et curiosités', 'subs' => [
+            'monnaies' => 'Monnaies, médailles et timbres', 'militaria' => 'Militaria et souvenirs', 'publicitaire' => 'Objets publicitaires', 'sciences' => 'Instruments scientifiques et de mesure',
+            'photographie' => 'Appareils photo et optique', 'curiosites' => 'Curiosités et objets insolites', 'orfevrerie' => 'Orfèvrerie et argenterie',
+        ]],
+        'musique_electro' => ['label' => 'Musique et électronique vintage', 'subs' => [
+            'instruments' => 'Instruments de musique', 'radios' => 'Radios et tourne-disques', 'audio' => 'Hi-fi et enceintes', 'telephonie' => 'Téléphones et machines à écrire', 'tv_video' => 'Télévisions et caméras',
+        ]],
+        'outils_jardin' => ['label' => 'Outils, jardin et brocante utile', 'subs' => [
+            'outils' => 'Outils à main', 'quincaillerie' => 'Quincaillerie et serrurerie', 'jardinage' => 'Jardinage', 'cuisine_campagne' => 'Objets de campagne et de ferme', 'velos' => 'Vélos et accessoires',
+            'valises' => 'Valises et malles',
+        ]],
+        'autre' => ['label' => 'Autre', 'subs' => [
+            'divers' => 'Divers', 'lots' => 'Lots et assortiments',
+        ]],
+    ];
+}
+
+/** [libellé de nature, libellé de sous-catégorie|null] ou null si la nature est inconnue. */
+function product_nature_labels(?string $nature, ?string $sub = null): ?array
+{
+    $n = product_nature_options()[(string) $nature] ?? null;
+    if (!$n) return null;
+    return [$n['label'], $n['subs'][(string) $sub] ?? null];
+}
+
+/** « Vêtements › Pulls, gilets et sweats », ou chaîne vide. */
+function product_nature_text(?string $nature, ?string $sub = null): string
+{
+    $l = product_nature_labels($nature, $sub);
+    return $l ? $l[0] . ($l[1] ? ' › ' . $l[1] : '') : '';
+}
+
+/**
+ * Nature et sous-catégorie valides à partir de clés ou de libellés (insensible à la casse) :
+ * ['nature' => clé|'', 'sous_categorie' => clé|'']. Une sous-catégorie n'est gardée que si elle appartient à la
+ * nature ; sans nature, elle sert à la retrouver.
+ */
+function product_nature_resolve(?string $nature, ?string $sub = null): array
+{
+    $norm = static fn (?string $v): string => mb_strtolower(trim((string) $v));
+    $wantedN = $norm($nature);
+    $wantedS = $norm($sub);
+    $natureKey = '';
+    foreach (product_nature_options() as $key => $n) {
+        if ($wantedN !== '' && ($wantedN === $key || $wantedN === $norm($n['label']))) { $natureKey = $key; break; }
+    }
+    $subKey = '';
+    foreach (product_nature_options() as $key => $n) {
+        if ($natureKey !== '' && $key !== $natureKey) continue;
+        foreach ($n['subs'] as $sk => $label) {
+            if ($wantedS !== '' && ($wantedS === $sk || $wantedS === $norm($label))) { $subKey = $sk; $natureKey = $natureKey ?: $key; break 2; }
+        }
+    }
+    return ['nature' => $natureKey, 'sous_categorie' => $subKey];
+}
+
+/** <option> des natures, $selected présélectionnée. */
+function product_nature_select_html(?string $selected): string
+{
+    $html = '<option value="">Non précisée</option>';
+    foreach (product_nature_options() as $key => $n) {
+        $html .= '<option value="' . h($key) . '"' . ($key === $selected ? ' selected' : '') . '>' . h($n['label']) . '</option>';
+    }
+    return $html;
+}
+
+/**
+ * <option> des sous-catégories, chacune avec data-nature (assets/nature-select.js ne montre que celles de la nature
+ * choisie).
+ */
+function product_subcategory_select_html(?string $selected): string
+{
+    $html = '<option value="">Non précisée</option>';
+    foreach (product_nature_options() as $nKey => $n) {
+        foreach ($n['subs'] as $key => $label) {
+            $html .= '<option value="' . h($key) . '" data-nature="' . h($nKey) . '"' . ($key === $selected ? ' selected' : '') . '>' . h($label) . '</option>';
+        }
+    }
+    return $html;
+}
+
+/** Liste des natures et sous-catégories (clés) donnée à l'IA pour qu'elle réponde avec des clés valides. */
+function product_nature_prompt_list(): string
+{
+    $items = [];
+    foreach (product_nature_options() as $key => $n) {
+        $items[] = $key . ' = ' . $n['label'] . ' [' . implode(' ; ', array_map(static fn ($k, $l) => $k . ' = ' . $l, array_keys($n['subs']), $n['subs'])) . ']';
+    }
+    return implode(' | ', $items);
+}
+
 /** Champs d'une fiche que l'IA sait (re)générer, dans l'ordre du formulaire. */
-const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'materials', 'etat', 'price'];
+const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'nature', 'materials', 'etat', 'price'];
 
 /**
  * Photos d'origine d'une pièce (hors détourage et illustrations IA), principale
@@ -1764,10 +1917,11 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
         'description' => '"description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible"',
         'category' => '"category": "la clé exacte (avant le signe =) parmi : ' . $cats . '"',
         'materials' => '"materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne) ; chaîne vide si elles ne se voient pas"',
+        'nature' => '"nature": "la clé de la NATURE de l\'objet (ce qu\'il EST) et, dans le même objet JSON, "sous_categorie": "la clé de sa sous-catégorie, qui doit appartenir à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '"',
         'etat' => '"etat": "' . product_condition_prompt_list() . '"',
         'price' => '"price": "prix de vente indicatif : UN SEUL montant en euros, ex : 30 €"',
     ];
-    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'materials' => 'Matières', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille'];
+    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'nature' => 'Nature', 'materials' => 'Matières', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille'];
     $known = [];
     $vary = [];
     foreach ($labels as $field => $label) {
@@ -1817,6 +1971,12 @@ function parse_product_fields_response(string $text, array $fields): array
             case 'description': $value = mb_substr($value, 0, 1200); break;
             case 'materials': $value = mb_substr($value, 0, 200); break;
             case 'etat': $value = product_condition_key($value); break;
+            case 'nature':
+                // Deux clés d'un coup : la nature, et sa sous-catégorie (gardée seulement si elle lui appartient).
+                $pair = product_nature_resolve($value, $str($data['sous_categorie'] ?? ''));
+                if ($pair['nature'] !== '') $out['nature'] = $pair['nature'];
+                if ($pair['sous_categorie'] !== '') $out['sous_categorie'] = $pair['sous_categorie'];
+                continue 2;
             case 'category':
                 // Le modèle répond parfois par le libellé (« Épicerie fine ») plutôt que par la clé : les deux sont acceptés.
                 $wanted = mb_strtolower($value);

@@ -105,6 +105,12 @@ function db(): PDO
         if ($productColumns && !in_array('etat', $productColumns, true)) {
             $pdo->exec('ALTER TABLE products ADD COLUMN etat TEXT');
         }
+        // Nature du produit et sous-catégorie (vêtements › hauts…) : voir product_nature_options().
+        foreach (['nature', 'sous_categorie'] as $col) {
+            if ($productColumns && !in_array($col, $productColumns, true)) {
+                $pdo->exec("ALTER TABLE products ADD COLUMN $col TEXT");
+            }
+        }
         // Bases créées avant l'ajout des visuels en deux formats.
         $photoColumns = $pdo->query('PRAGMA table_info(product_photos)')->fetchAll(PDO::FETCH_COLUMN, 1);
         if ($photoColumns && !in_array('path_mobile', $photoColumns, true)) {
