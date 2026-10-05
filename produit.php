@@ -21,7 +21,34 @@ $related = array_slice(array_values($related), 0, 3);
 $activeNav = 'boutique';
 $pageTitle = $product['name'];
 include __DIR__ . '/includes/header.php';
+
+// Prix et boutons d'achat, rendus deux fois : dans la fiche, et dans la barre collée en haut sur smartphone.
+$priceHtml = has_promo_price($product)
+    ? '<span class="price-old">' . h($product['price']) . '</span> <span class="price price-promo">' . h($product['promo_price']) . '</span>'
+    : '<span class="price">' . h($product['price']) . '</span>';
+$buyHtml = static function () use ($product): string {
+    if (!in_stock($product)) {
+        return '<span class="badge" style="border-color:var(--ink-soft);color:var(--ink-soft);">Vendue</span>';
+    }
+    if (!is_fixed_price(effective_price($product))) {
+        return '<a class="btn btn-primary" href="/index.php#contact">Nous contacter</a>';
+    }
+    // « Ajouter au panier » reste sur la fiche ; « Commander » ajoute puis ouvre le panier (le dernier `redirect` envoyé l'emporte).
+    return '<form method="post" action="/cart-add.php" class="buy-form">'
+        . '<input type="hidden" name="ref" value="' . h($product['ref']) . '">'
+        . '<input type="hidden" name="redirect" value="/produit.php?ref=' . h($product['ref']) . '">'
+        . '<button class="btn btn-primary" type="submit">Ajouter au panier</button>'
+        . '<button class="btn btn-ghost" type="submit" name="redirect" value="/cart.php">Commander</button>'
+        . '</form>';
+};
 ?>
+
+<div class="buybar" id="buybar" aria-label="Achat rapide">
+  <div class="wrap buybar-in">
+    <span class="buybar-price"><?= $priceHtml ?></span>
+    <span class="buybar-actions"><?= $buyHtml() ?></span>
+  </div>
+</div>
 
 <section class="tight">
   <div class="wrap">
@@ -83,25 +110,8 @@ include __DIR__ . '/includes/header.php';
       <?php endif; ?>
 
       <div class="card-foot" style="margin-top:auto;">
-        <?php if (has_promo_price($product)): ?>
-          <span>
-            <span class="price-old" style="font-size:1rem;"><?= h($product['price']) ?></span>
-            <span class="price price-promo" style="font-size:1.4rem;"><?= h($product['promo_price']) ?></span>
-          </span>
-        <?php else: ?>
-          <span class="price" style="font-size:1.4rem;"><?= h($product['price']) ?></span>
-        <?php endif; ?>
-        <?php if (!in_stock($product)): ?>
-          <span class="badge" style="border-color:var(--ink-soft);color:var(--ink-soft);">Vendue</span>
-        <?php elseif (is_fixed_price(effective_price($product))): ?>
-          <form method="post" action="/cart-add.php">
-            <input type="hidden" name="ref" value="<?= h($product['ref']) ?>">
-            <input type="hidden" name="redirect" value="/produit.php?ref=<?= h($product['ref']) ?>">
-            <button class="btn btn-primary" type="submit">Ajouter au panier</button>
-          </form>
-        <?php else: ?>
-          <a class="btn btn-primary" href="/index.php#contact">Nous contacter</a>
-        <?php endif; ?>
+        <span class="price-group"><?= $priceHtml ?></span>
+        <?= $buyHtml() ?>
       </div>
     </div>
   </div>
@@ -125,6 +135,14 @@ include __DIR__ . '/includes/header.php';
 
 <script>
 (function () {
+  // La barre d'achat se colle juste sous l'entête collée : on en mesure la hauteur (elle change avec la police, le logo).
+  var header = document.querySelector('header.site');
+  function setHeaderHeight() { if (header) document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px'); }
+  setHeaderHeight();
+  window.addEventListener('resize', setHeaderHeight);
+  window.addEventListener('load', setHeaderHeight);
+})();
+(function () {
   var root = document.querySelector('.product-gallery');
   if (!root) return;
   var allSlides = Array.prototype.slice.call(root.querySelectorAll('.pg-slide'));
@@ -134,12 +152,39 @@ include __DIR__ . '/includes/header.php';
   var narrow = window.matchMedia('(max-width: 780px)');
   var slides = [], current = 0;
 
+  // Défilement automatique : 4,5 s par photo, 7 s par vidéo (lue en sourdine). Il s'arrête au survol, au doigt,
+  // au clavier, quand la galerie n'est pas à l'écran ou l'onglet masqué, et reprend 12 s après la dernière
+  // action manuelle ; il est coupé pour qui demande moins d'animations.
+  var PHOTO_MS = 4500, VIDEO_MS = 7000, RESUME_MS = 12000;
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var autoTimer = null, resumeTimer = null, hovering = false, onScreen = true, manualPause = false;
+
+  function autoStop() { clearTimeout(autoTimer); autoTimer = null; }
+  function autoSchedule() {
+    autoStop();
+    if (reduceMotion || manualPause || hovering || !onScreen || document.hidden || slides.length < 2) return;
+    var ms = slides[current].querySelector('video') ? VIDEO_MS : PHOTO_MS;
+    autoTimer = setTimeout(function () { show(current + 1); }, ms);
+  }
+  // Action manuelle (flèche, miniature, balayage, clavier) : le défilement attend avant de reprendre.
+  function manual() {
+    manualPause = true; autoStop(); clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(function () { manualPause = false; autoSchedule(); }, RESUME_MS);
+  }
+
   function show(i) {
     if (!slides.length) return;
     current = (i + slides.length) % slides.length;
     var active = slides[current];
     allSlides.forEach(function (s) { s.classList.toggle('is-active', s === active); });
     allThumbs.forEach(function (t) { t.classList.toggle('is-active', t.dataset.goto === active.dataset.slide); });
+    // Une vidéo ne tourne que lorsqu'elle est affichée.
+    allSlides.forEach(function (s) {
+      var v = s.querySelector('video');
+      if (!v) return;
+      if (s === active) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else v.pause();
+    });
+    autoSchedule();
   }
   function refresh() {
     var hidden = narrow.matches ? 'pg-only-desktop' : 'pg-only-mobile';
@@ -152,22 +197,32 @@ include __DIR__ . '/includes/header.php';
   (narrow.addEventListener ? narrow.addEventListener('change', refresh) : narrow.addListener(refresh));
   if (allSlides.length < 2) return;
 
-  root.querySelector('.pg-prev')?.addEventListener('click', function () { show(current - 1); });
-  root.querySelector('.pg-next')?.addEventListener('click', function () { show(current + 1); });
+  root.querySelector('.pg-prev')?.addEventListener('click', function () { manual(); show(current - 1); });
+  root.querySelector('.pg-next')?.addEventListener('click', function () { manual(); show(current + 1); });
   allThumbs.forEach(function (t) {
     t.addEventListener('click', function () {
       var idx = slides.findIndex(function (s) { return s.dataset.slide === t.dataset.goto; });
-      if (idx >= 0) show(idx);
+      if (idx >= 0) { manual(); show(idx); }
     });
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'ArrowLeft') show(current - 1);
-    if (e.key === 'ArrowRight') show(current + 1);
+    if (e.key === 'ArrowLeft') { manual(); show(current - 1); }
+    if (e.key === 'ArrowRight') { manual(); show(current + 1); }
   });
+  // Pause au survol de la galerie, quand elle sort de l'écran, quand l'onglet est masqué.
+  root.addEventListener('mouseenter', function () { hovering = true; autoStop(); });
+  root.addEventListener('mouseleave', function () { hovering = false; autoSchedule(); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) autoStop(); else autoSchedule(); });
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      onScreen = entries[0].isIntersecting;
+      if (onScreen) autoSchedule(); else autoStop();
+    }, { threshold: 0.3 }).observe(root);
+  }
 
   var touchStartX = null;
   var main = root.querySelector('.pg-main');
-  main.addEventListener('touchstart', function (e) { touchStartX = e.touches[0].clientX; }, { passive: true });
+  main.addEventListener('touchstart', function (e) { touchStartX = e.touches[0].clientX; manual(); }, { passive: true });
   main.addEventListener('touchend', function (e) {
     if (touchStartX === null) return;
     var dx = e.changedTouches[0].clientX - touchStartX;

@@ -2355,9 +2355,10 @@ function store_uploaded_media(string $fieldName, string $baseName): ?array
     return ['path' => 'uploads/' . $filename, 'type' => 'video'];
 }
 
-function flash_set(string $message, string $kind = 'ok'): void
+/** $link : bouton d'action ajouté au message, ['label' => 'Commander', 'url' => '/cart.php'] (affiché par le haut de page du site). */
+function flash_set(string $message, string $kind = 'ok', ?array $link = null): void
 {
-    $_SESSION['flash'] = ['message' => $message, 'kind' => $kind];
+    $_SESSION['flash'] = ['message' => $message, 'kind' => $kind, 'link' => $link];
 }
 
 function flash_get(): ?array

@@ -46,6 +46,6 @@ $siteTagline = $siteContent['site_tagline'] ?: tenant('tagline');
 <main>
 <?php $flash = flash_get(); if ($flash): ?>
   <div class="wrap" style="padding-top:24px;">
-    <p class="publish-status" data-kind="<?= h($flash['kind']) ?>"><?= h($flash['message']) ?></p>
+    <p class="publish-status" data-kind="<?= h($flash['kind']) ?>"><?= h($flash['message']) ?><?php if (!empty($flash['link'])): ?> <a class="flash-cta" href="<?= h($flash['link']['url']) ?>"><?= h($flash['link']['label']) ?> →</a><?php endif; ?></p>
   </div>
 <?php endif; ?>

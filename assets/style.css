@@ -1563,3 +1563,24 @@
 .ph-text mark { background: var(--accent); color: var(--accent-ink); padding: 0 2px; }
 .ph-toggle { display: inline-flex; align-items: center; gap: 4px; margin: 2px 0 6px; font-size: 0.78rem; color: var(--ink); cursor: pointer; }
 .ph-toggle input { accent-color: var(--accent); }
+
+/* ---------- fiche produit : barre d'achat collée (smartphone) + boutons ---------- */
+.buy-form { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; }
+.price-group { display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.flash-cta { margin-left: 10px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.buybar { display: none; }
+@media (max-width: 780px) {
+  .buybar {
+    display: block; position: sticky; top: var(--header-h, 64px); z-index: 14;
+    background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 0;
+  }
+  .buybar-in { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .buybar-price { display: flex; flex-direction: column; line-height: 1.15; font-size: 0.95rem; min-width: 0; }
+  .buybar-price .price { font-size: 1.1rem; }
+  .buybar-price .price-old { font-size: 0.78rem; }
+  .buybar-actions { display: flex; min-width: 0; }
+  .buybar .buy-form { flex-wrap: nowrap; gap: 6px; }
+  .buybar .btn { padding: 10px 12px; font-size: 0.82rem; white-space: nowrap; }
+}
+.product-info .price-group .price { font-size: 1.4rem; }
+.product-info .price-group .price-old { font-size: 1rem; }

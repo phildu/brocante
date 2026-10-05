@@ -208,6 +208,25 @@ comme la galerie. Code : `includes/prompts.php`, `admin/prompts-action.php`, `as
   OVH) et reprend où elle s'est arrêtée si le réseau coupe.
 - La caméra en direct exige HTTPS (ou localhost) : en ligne, pas de souci.
 
+## Diaporama de la fiche produit : défilement automatique
+
+La galerie de `produit.php` défile seule : 4,5 s par photo, 7 s par vidéo (lue en sourdine, arrêtée quand elle
+n'est plus affichée), en boucle, sur les seuls visuels du format de l'écran (3:2 ordinateur, 9:16 smartphone).
+Elle s'arrête au survol, quand la galerie sort de l'écran ou que l'onglet est masqué, et **12 s après la dernière
+action manuelle** (flèche, miniature, balayage, clavier) avant de reprendre ; elle est coupée pour les visiteurs
+qui demandent moins d'animations (`prefers-reduced-motion`). Les diaporamas de l'accueil et de la boutique, et les
+vignettes des cartes, défilaient déjà.
+
+## Achat : barre collée sur smartphone et bouton « Commander »
+
+Sur la fiche produit (`produit.php`), un **bouton « Commander »** accompagne « Ajouter au panier », sur ordinateur
+comme sur smartphone : il ajoute la pièce puis ouvre directement le panier (`cart-add.php`, le dernier `redirect`
+envoyé l'emporte). « Ajouter au panier » reste sur la fiche et sa confirmation (aussi après un « Ajouter » depuis la
+boutique) affiche un lien « Commander → » vers le panier (`flash_set(..., $link)`). Sur smartphone (≤ 780 px) une
+**barre collée en haut, sous l'entête**, garde sous les yeux le prix (prix barré et promo compris) et les deux
+boutons pendant tout le défilement ; sur ordinateur elle est masquée. Pièce vendue : « Vendue » ; prix non fixe :
+« Nous contacter », comme avant.
+
 ## Médiathèque : toutes les photos, classées par produit
 
 `admin/media.php` réunit (`get_media_overview()`) les **photos des fiches produit** — originales, visuels IA,
