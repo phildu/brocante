@@ -6,9 +6,9 @@
 (function () {
   'use strict';
   var URL = (window.APP_BASE || '') + '/admin/product-ai.php';
-  var ALL = 'name,description,category,materials,price';
-  var LABEL = { name: 'nom', description: 'description', category: 'catégorie', materials: 'matières', price: 'prix' };
-  var INPUT = { name: 'name', description: 'description', category: 'cat', materials: 'materials', price: 'price' };
+  var ALL = 'name,description,category,materials,etat,price';
+  var LABEL = { name: 'nom', description: 'description', category: 'catégorie', materials: 'matières', etat: 'état', price: 'prix' };
+  var INPUT = { name: 'name', description: 'description', category: 'cat', materials: 'materials', etat: 'etat', price: 'price' };
 
   // Photo choisie dans le formulaire d'ajout, réduite à 1280 px avant l'envoi (limite d'envoi de l'hébergement).
   function shrink(file) {
@@ -59,7 +59,7 @@
     var refInput = form.querySelector('[name="ref"]');
     var ref = (refInput && refInput.value) || form.dataset.aiRef || '';
     if (ref) fd.append('ref', ref);
-    ['name', 'description', 'cat', 'materials', 'price', 'size_text'].forEach(function (n) {
+    ['name', 'description', 'cat', 'materials', 'etat', 'price', 'size_text'].forEach(function (n) {
       var c = form.querySelector('[name="' + n + '"]') || form.querySelector('[data-ai-input="' + n + '"]');
       if (c && c.value) fd.append(n, c.value);
     });

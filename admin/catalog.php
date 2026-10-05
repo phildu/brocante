@@ -155,7 +155,11 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                           <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?></label><input type="text" name="price" value="<?= h($p['price']) ?>"></div>
                         </div>
                         <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"><?= h($p['description']) ?></textarea></div>
-                        <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" value="<?= h($p['materials'] ?? '') ?>" placeholder="ex : grès émaillé, bois de chêne"></div>
+                        <div class="field-row-3">
+                          <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" value="<?= h($p['materials'] ?? '') ?>" placeholder="ex : grès émaillé, bois de chêne"></div>
+                          <div class="field"><label>État <?= $aiBtn('etat', 'Estimer l\'état d\'après les photos') ?></label><select name="etat"><?= product_condition_select_html($p['etat'] ?? null) ?></select></div>
+                          <div></div>
+                        </div>
                         <div class="field-row-3">
                           <div class="field"><label>Taille</label><input type="text" name="size_text" value="<?= h($p['size_text']) ?>" placeholder="ex : 20 × 15 × 30 cm"></div>
                           <div class="field">
@@ -237,7 +241,11 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
             <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?></label><input type="text" name="price" placeholder="0 €"></div>
           </div>
           <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"></textarea></div>
-          <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" placeholder="ex : grès émaillé, bois de chêne"></div>
+          <div class="field-row-3">
+            <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" placeholder="ex : grès émaillé, bois de chêne"></div>
+            <div class="field"><label>État <?= $aiBtn('etat', 'Estimer l\'état d\'après la photo') ?></label><select name="etat"><?= product_condition_select_html(null) ?></select></div>
+            <div></div>
+          </div>
           <div class="field-row-3">
             <div class="field"><label>Mention</label><input type="text" name="badge" value="Chiné" list="badge-options"></div>
             <div></div>

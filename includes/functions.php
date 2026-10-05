@@ -1631,7 +1631,7 @@ function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): st
         . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1651,12 +1651,86 @@ function parse_product_sheet_response(string $text): ?array
         'description' => trim((string) ($data['description'] ?? '')),
         'category' => $cat,
         'materials' => mb_substr(trim((string) (is_array($data['materials'] ?? null) ? implode(', ', $data['materials']) : ($data['materials'] ?? ''))), 0, 200),
+        'etat' => product_condition_key((string) ($data['etat'] ?? '')),
         'price_hint' => trim((string) ($data['price_hint'] ?? '')),
     ];
 }
 
+/**
+ * Barème de l'« État » d'une pièce, du neuf à restaurer, par nuances : [groupe => [clé => [libellé, précision]]].
+ * La clé est ce qui est enregistré (products.etat) ; libellé et précision s'affichent sur la fiche.
+ */
+function product_condition_options(): array
+{
+    return [
+        'Neuf' => [
+            'neuf_etiquette' => ['Neuf avec étiquette', "Jamais porté ni utilisé, étiquette d'origine encore attachée."],
+            'neuf_emballe' => ['Neuf, emballé', "Dans son emballage d'origine fermé (blister, boîte scellée, sachet)."],
+            'neuf_boite' => ['Neuf, avec sa boîte', "Jamais utilisé, avec sa boîte d'origine (ouverte)."],
+            'neuf' => ['Neuf sans étiquette', 'Jamais porté ni utilisé, étiquette ou emballage absents.'],
+        ],
+        'Comme neuf' => [
+            'comme_neuf' => ['Comme neuf', 'Porté ou utilisé une ou deux fois, aucune trace visible.'],
+            'presque_neuf' => ['Presque neuf', "Très légères traces d'utilisation, à peine visibles."],
+            'excellent' => ['Excellent état', 'Aucun défaut notable, entretenu avec soin.'],
+        ],
+        'Bon état' => [
+            'tres_bon' => ['Très bon état', "Quelques légères traces de l'usage, rien de gênant."],
+            'bon' => ['Bon état', "Signes d'usage normaux, pleinement fonctionnel."],
+            'bon_age' => ['Bon état pour son âge', 'Pièce ancienne bien conservée, avec la patine du temps.'],
+            'patine' => ['Belle patine', "Patine d'ancienneté recherchée (cuivre, bois, cuir…)."],
+        ],
+        'État correct' => [
+            'correct' => ['État correct', "Traces d'usage visibles, sans incidence sur l'utilisation."],
+            'usage' => ["Traces d'usage marquées", 'Usure, rayures ou décolorations visibles, montrées en photo.'],
+            'defauts' => ['Petits défauts signalés', 'Éclat, tache, accroc ou léger manque (voir la description).'],
+        ],
+        'À remettre en état' => [
+            'use' => ['Usé', 'Très marqué par l\'usage, encore utilisable.'],
+            'restaurer' => ['À restaurer', 'Demande un nettoyage, une réparation ou une restauration.'],
+            'pieces' => ['Pour pièces ou décoration', 'Ne fonctionne pas ou incomplet : à réparer, ou pour décorer.'],
+        ],
+    ];
+}
+
+/** [libellé, précision] d'une clé d'état, ou null si elle est inconnue / vide. */
+function product_condition(?string $key): ?array
+{
+    foreach (product_condition_options() as $group) {
+        if (isset($group[(string) $key])) return $group[(string) $key];
+    }
+    return null;
+}
+
+/** Clé d'état valide (la clé elle-même ou son libellé, sans tenir compte de la casse), sinon chaîne vide. */
+function product_condition_key(?string $value): string
+{
+    $wanted = mb_strtolower(trim((string) $value));
+    if ($wanted === '') return '';
+    foreach (product_condition_options() as $group) {
+        foreach ($group as $key => [$label]) {
+            if ($wanted === $key || $wanted === mb_strtolower($label)) return $key;
+        }
+    }
+    return '';
+}
+
+/** <option> de tous les états, regroupés par nuance, avec $selected présélectionné ; première option : « Non précisé ». */
+function product_condition_select_html(?string $selected): string
+{
+    $html = '<option value="">Non précisé</option>';
+    foreach (product_condition_options() as $group => $items) {
+        $html .= '<optgroup label="' . h($group) . '">';
+        foreach ($items as $key => [$label]) {
+            $html .= '<option value="' . h($key) . '"' . ($key === $selected ? ' selected' : '') . '>' . h($label) . '</option>';
+        }
+        $html .= '</optgroup>';
+    }
+    return $html;
+}
+
 /** Champs d'une fiche que l'IA sait (re)générer, dans l'ordre du formulaire. */
-const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'materials', 'price'];
+const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'materials', 'etat', 'price'];
 
 /**
  * Photos d'origine d'une pièce (hors détourage et illustrations IA), principale
@@ -1690,9 +1764,10 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
         'description' => '"description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible"',
         'category' => '"category": "la clé exacte (avant le signe =) parmi : ' . $cats . '"',
         'materials' => '"materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne) ; chaîne vide si elles ne se voient pas"',
+        'etat' => '"etat": "' . product_condition_prompt_list() . '"',
         'price' => '"price": "prix de vente indicatif : UN SEUL montant en euros, ex : 30 €"',
     ];
-    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'materials' => 'Matières', 'price' => 'Prix', 'size_text' => 'Taille'];
+    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'materials' => 'Matières', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille'];
     $known = [];
     $vary = [];
     foreach ($labels as $field => $label) {
@@ -1715,6 +1790,18 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
         . 'Le prix est une simple estimation à titre indicatif, le vendeur l\'ajustera.';
 }
 
+/** Consigne donnée à l'IA pour choisir un état : la liste des clés avec leur sens, et la prudence attendue. */
+function product_condition_prompt_list(): string
+{
+    $items = [];
+    foreach (product_condition_options() as $group) {
+        foreach ($group as $key => [$label, $hint]) $items[] = $key . ' = ' . $label . ' (' . $hint . ')';
+    }
+    return "la clé exacte (avant le signe =) de l'état, d'après ce qui est VISIBLE, parmi : " . implode(' ; ', $items)
+        . ". Sois prudent : n'indique un état « neuf », « emballé » ou « avec étiquette » que si l'emballage ou l'étiquette est visible ; "
+        . "si l'état ne peut pas être jugé, laisse une chaîne vide";
+}
+
 /** Réponse JSON de build_product_fields_prompt() : uniquement les champs demandés et exploitables. */
 function parse_product_fields_response(string $text, array $fields): array
 {
@@ -1729,6 +1816,7 @@ function parse_product_fields_response(string $text, array $fields): array
             case 'name': $value = mb_substr($value, 0, 120); break;
             case 'description': $value = mb_substr($value, 0, 1200); break;
             case 'materials': $value = mb_substr($value, 0, 200); break;
+            case 'etat': $value = product_condition_key($value); break;
             case 'category':
                 // Le modèle répond parfois par le libellé (« Épicerie fine ») plutôt que par la clé : les deux sont acceptés.
                 $wanted = mb_strtolower($value);

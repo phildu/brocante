@@ -101,6 +101,10 @@ function db(): PDO
         if ($productColumns && !in_array('materials', $productColumns, true)) {
             $pdo->exec('ALTER TABLE products ADD COLUMN materials TEXT');
         }
+        // Champ « État » (neuf, presque neuf, très bon état…) : voir product_condition_options().
+        if ($productColumns && !in_array('etat', $productColumns, true)) {
+            $pdo->exec('ALTER TABLE products ADD COLUMN etat TEXT');
+        }
         // Bases créées avant l'ajout des visuels en deux formats.
         $photoColumns = $pdo->query('PRAGMA table_info(product_photos)')->fetchAll(PDO::FETCH_COLUMN, 1);
         if ($photoColumns && !in_array('path_mobile', $photoColumns, true)) {

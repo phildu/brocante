@@ -396,8 +396,8 @@ switch ($action) {
         // l'admin (nom/description/prix suggérés par l'IA à corriger).
         $ref = next_ref();
         $coverPhoto = $ambiancePath ?? $detourePath;
-        $stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, price, badge, is_hidden, featured, sort_order)
-                                VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :price, :badge, 1, 0, :sort_order)');
+        $stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, etat, price, badge, is_hidden, featured, sort_order)
+                                VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :etat, :price, :badge, 1, 0, :sort_order)');
         $stmt->execute([
             'ref' => $ref,
             'name' => $sheet['name'],
@@ -405,6 +405,7 @@ switch ($action) {
             'photo' => $coverPhoto,
             'description' => $sheet['description'] ?: 'Description à compléter.',
             'materials' => $sheet['materials'] ?? '',
+            'etat' => ($sheet['etat'] ?? '') ?: null,
             'price' => $sheet['price_hint'] ?: '0 €',
             'badge' => 'Chiné',
             'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),

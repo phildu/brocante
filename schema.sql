@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS products (
   size_text TEXT,
   weight_text TEXT,
   materials TEXT,
+  etat TEXT,
   weight_grams INTEGER NOT NULL DEFAULT 0,
   featured INTEGER NOT NULL DEFAULT 0,
   is_hidden INTEGER NOT NULL DEFAULT 0,

@@ -37,12 +37,13 @@ $badge = trim((string) ($_POST['badge'] ?? $product['badge']));
 // hors de ce cas le prix promo n'a pas de sens et repart à vide.
 $promoPrice = $badge === 'Promo' ? trim((string) ($_POST['promo_price'] ?? '')) : '';
 
-$set = 'name = :name, cat = :cat, description = :description, materials = :materials, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock';
+$set = 'name = :name, cat = :cat, description = :description, materials = :materials, etat = :etat, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock';
 $params = [
     'name' => trim((string) ($_POST['name'] ?? $product['name'])),
     'cat' => $cat,
     'description' => trim((string) ($_POST['description'] ?? $product['description'])),
     'materials' => trim((string) ($_POST['materials'] ?? $product['materials'])),
+    'etat' => isset($_POST['etat']) ? (product_condition_key($_POST['etat']) ?: null) : $product['etat'],
     'price' => trim((string) ($_POST['price'] ?? $product['price'])),
     'promo_price' => $promoPrice !== '' ? $promoPrice : null,
     'badge' => $badge,

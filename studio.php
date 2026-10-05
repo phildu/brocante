@@ -238,6 +238,7 @@ $siteName = (string) $content['site_name'];
       </label>
       <label class="qa-field">Description <button type="button" class="ai-btn" data-ai-field="description" title="Générer / régénérer la description">↻ IA</button><textarea id="sr-desc" data-ai-input="description" rows="5" maxlength="1200"></textarea></label>
       <label class="qa-field">Matières <button type="button" class="ai-btn" data-ai-field="materials" title="Reconnaître les matières visibles">↻ IA</button><input type="text" id="sr-materials" data-ai-input="materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
+      <label class="qa-field">État <button type="button" class="ai-btn" data-ai-field="etat" title="Estimer l'état d'après les photos">↻ IA</button><select id="sr-etat" data-ai-input="etat"><?= product_condition_select_html(null) ?></select></label>
       <label class="qa-field">Étiquette<input type="text" id="sr-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
       <label class="qa-switch"><input type="checkbox" id="sr-publish"> <span>Visible dans la boutique<br><small class="qa-note">Sinon la fiche reste masquée.</small></span></label>
       <p class="qa-warn" id="sr-error" role="alert" hidden></p>

@@ -87,6 +87,7 @@
     </label>
     <label class="qa-field">Description <button type="button" class="ai-btn" data-ai-field="description" title="Générer / régénérer la description">↻ IA</button><textarea id="f-desc" data-ai-input="description" rows="5" maxlength="1200"></textarea></label>
     <label class="qa-field">Matières <button type="button" class="ai-btn" data-ai-field="materials" title="Reconnaître les matières visibles">↻ IA</button><input type="text" id="f-materials" data-ai-input="materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
+    <label class="qa-field">État <button type="button" class="ai-btn" data-ai-field="etat" title="Estimer l'état d'après les photos">↻ IA</button><select id="f-etat" data-ai-input="etat"><?= product_condition_select_html(null) ?></select></label>
     <label class="qa-field">Étiquette<input type="text" id="f-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
     <label class="qa-switch"><input type="checkbox" id="f-publish"> <span>Publier tout de suite<br><small class="qa-note">Sinon la fiche reste masquée, à relire dans le catalogue.</small></span></label>
   </section>

@@ -39,6 +39,8 @@ $current = [];
 foreach (['name', 'description', 'materials', 'price', 'size_text'] as $key) {
     $current[$key] = mb_substr(trim((string) ($_POST[$key] ?? '')), 0, 1200);
 }
+$etat = product_condition(product_condition_key($_POST['etat'] ?? ''));
+if ($etat) $current['etat'] = $etat[0];
 $validCats = array_column(category_list(), 'key');
 $cat = (string) ($_POST['cat'] ?? '');
 foreach (category_list() as $c) {

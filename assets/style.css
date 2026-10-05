@@ -1591,3 +1591,5 @@
 }
 .product-info .price-group .price { font-size: 1.4rem; }
 .product-info .price-group .price-old { font-size: 1rem; }
+.etat-hint { color: var(--ink-soft); font-size: 0.88em; }
+.product-admin-fields .field select, .admin-block .field select { width: 100%; box-sizing: border-box; }
