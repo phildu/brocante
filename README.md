@@ -121,6 +121,21 @@ angles** (+ indications facultatives du vendeur). La fiche se relit et se
 corrige sur le téléphone, puis s'enregistre masquée ou publiée. Sans clé
 Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main.
 
+## Le catalogue d'abord, l'IA ensuite
+
+Avant d'estimer un prix, un poids ou des dimensions, l'IA regarde ce que la boutique sait déjà
+(`includes/comparables.php`). `product_comparables()` cherche dans le catalogue les pièces **similaires** — même
+sous-catégorie (+4) et nature (+2), même univers (+1), mots significatifs communs aux noms (+2 chacun) — et retient
+celles de score ≥ 3. Deux usages : (1) **sans IA** pour le poids, quand au moins 3 pièces de même sous-catégorie ont un
+poids et s'accordent (écart interquartile ≤ 50 % de la médiane) : le poids médian est repris tel quel, instantanément
+(« poids tiré de 4 pièces similaires du catalogue (sans IA) ») ; (2) sinon les pièces similaires, avec leurs prix, poids,
+tailles, matières et états, sont données à l'IA comme **référence prioritaire** (« estimé par l'IA en s'appuyant sur N
+pièces similaires »). L'interface affiche la source de chaque valeur. Après la génération d'une fiche (Studio, lot, ajout
+rapide), le poids du catalogue remplace l'estimation de l'IA quand il est connu (`catalog_refine_weight()`).
+
+**Tailles de vêtements.** Pour un vêtement, une chaussure ou un accessoire porté, l'IA donne toujours une taille : celle de
+l'étiquette si elle est lisible, sinon la taille la plus probable d'après la coupe, écrite « M (probable) ».
+
 ## Univers (rayons) modifiables, taille et poids estimés par l'IA
 
 **Univers.** Les univers d'une boutique (filtres de « La boutique », accueil, champ « Univers » des fiches) venaient

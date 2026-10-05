@@ -25,9 +25,6 @@ if (!admin_access_ok()) {
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     product_ai_reply(['ok' => false, 'error' => 'Méthode non autorisée.'], 405);
 }
-if (!GEMINI_API_KEY) {
-    product_ai_reply(['ok' => false, 'error' => 'Clé Gemini non configurée (Réglages du site).']);
-}
 session_write_close(); // ne bloque pas la navigation pendant l'appel à l'IA
 @set_time_limit(90);
 
@@ -55,6 +52,7 @@ foreach (category_list() as $c) {
 // Photos à regarder : celles de la pièce, sinon la photo choisie dans le formulaire.
 $root = realpath(__DIR__ . '/..');
 $sources = [];
+$product = null;
 $ref = (string) ($_POST['ref'] ?? '');
 if ($ref !== '') {
     $product = get_product($ref);
@@ -70,6 +68,29 @@ if ($ref !== '') {
     $sources[] = $_FILES['photo']['tmp_name'];
 }
 
+// Catalogue d'abord : des pièces similaires déjà enregistrées (même nature et sous-catégorie, noms voisins) donnent le poids
+// sans IA quand elles sont assez nombreuses et s'accordent ; sinon elles servent de référence à l'IA (prix, poids, dimensions).
+$comparables = product_comparables([
+    'name' => $current['name'] !== '' ? $current['name'] : (string) ($product['name'] ?? ''),
+    'nature' => $pair['nature'] ?: (string) ($product['nature'] ?? ''),
+    'sous_categorie' => $pair['nature'] ? $pair['sous_categorie'] : (string) ($product['sous_categorie'] ?? ''),
+    'cat' => $cat !== '' ? $cat : (string) ($product['cat'] ?? ''),
+], $ref);
+$direct = [];
+$sourceNotes = [];
+$aiFields = $fields;
+if (in_array('weight', $fields, true) && ($estimate = comparables_weight_estimate($comparables))) {
+    $direct = ['weight_grams' => $estimate['grams'], 'weight_text' => product_weight_text($estimate['grams'])];
+    $sourceNotes['weight'] = 'poids tiré de ' . $estimate['n'] . ' pièces similaires du catalogue (sans IA)';
+    $aiFields = array_values(array_diff($fields, ['weight']));
+}
+if (!$aiFields) {
+    product_ai_reply(['ok' => true, 'values' => $direct, 'fields' => $fields, 'sources' => $sourceNotes]);
+}
+if (!GEMINI_API_KEY) {
+    product_ai_reply(['ok' => false, 'error' => 'Clé Gemini non configurée (Réglages du site).']);
+}
+
 $smalls = [];
 foreach ($sources as $path) {
     $smalls[] = downscale_for_ai($path, 900) ?? $path;
@@ -79,19 +100,19 @@ if (!$smalls && !$hasText) {
     product_ai_reply(['ok' => false, 'error' => "Rien à analyser : choisissez d'abord une photo, ou saisissez au moins un nom."]);
 }
 
-$prompt = build_product_fields_prompt($fields, $current, count($smalls), (string) ($_POST['notes'] ?? ''));
+$prompt = build_product_fields_prompt($aiFields, $current, count($smalls), (string) ($_POST['notes'] ?? ''), $comparables);
 $text = gemini_describe_image($smalls[0] ?? '', $prompt, 1, array_slice($smalls, 1));
 foreach ($smalls as $i => $small) {
     if (($sources[$i] ?? '') !== $small) @unlink($small);
 }
-$values = $text ? parse_product_fields_response($text, $fields) : [];
-if (!$values) {
+$values = $text ? parse_product_fields_response($text, $aiFields) : [];
+if (!$values && !$direct) {
     // L'IA a répondu, mais rien d'exploitable : pour l'univers, c'est qu'aucun de ceux du commerce ne convient.
-    if ($text && $fields === ['category']) {
+    if ($text && $aiFields === ['category']) {
         product_ai_reply(['ok' => false, 'error' => "Aucun univers de cette boutique ne convient à cette pièce : adaptez-les dans la page « Univers » de l'administration."]);
     }
-    if ($text && $fields === ['size']) product_ai_reply(['ok' => false, 'error' => "La taille ne peut pas être estimée d'après ces photos : saisissez-la à la main."]);
-    if ($text && $fields === ['weight']) product_ai_reply(['ok' => false, 'error' => "Le poids ne peut pas être estimé d'après ces photos : pesez la pièce."]);
+    if ($text && $aiFields === ['size']) product_ai_reply(['ok' => false, 'error' => "La taille ne peut pas être estimée d'après ces photos : saisissez-la à la main."]);
+    if ($text && $aiFields === ['weight']) product_ai_reply(['ok' => false, 'error' => "Le poids ne peut pas être estimé d'après ces photos : pesez la pièce."]);
     product_ai_reply(['ok' => false, 'error' => "L'IA n'a pas pu répondre (service surchargé ?) : réessayez dans un instant."]);
 }
 // Détection en série depuis le catalogue ou la page Univers (save=1, un seul champ, pièce existante) : enregistrée tout de suite.
@@ -102,4 +123,8 @@ if (!empty($_POST['save']) && $ref !== '') {
         db()->prepare('UPDATE products SET cat = ? WHERE ref = ?')->execute([$values['category'], $ref]);
     }
 }
-product_ai_reply(['ok' => true, 'values' => $values, 'fields' => $fields]);
+// Les pièces similaires ont aussi guidé l'IA sur les champs estimés (prix, poids, dimensions).
+if ($comparables && array_intersect($aiFields, ['price', 'weight', 'size'])) {
+    $sourceNotes['ia'] = "estimé par l'IA en s'appuyant sur " . count($comparables) . ' pièce' . (count($comparables) > 1 ? 's' : '') . ' similaire' . (count($comparables) > 1 ? 's' : '') . ' du catalogue';
+}
+product_ai_reply(['ok' => true, 'values' => $direct + $values, 'fields' => $fields, 'sources' => $sourceNotes]);

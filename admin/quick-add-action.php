@@ -155,6 +155,11 @@ switch ($action) {
         if (!$sheet) quick_add_reply(['ok' => false, 'error' => 'La rédaction automatique a échoué : complétez la fiche à la main.']);
         db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ?, materials = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, weight_text = ? WHERE ref = ?')
             ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $sheet['materials'], $sheet['etat'] ?: null, $sheet['nature'] ?: null, $sheet['sous_categorie'] ?: null, $sheet['size_text'], $sheet['weight_grams'], product_weight_text($sheet['weight_grams']), $product['ref']]);
+        // Le catalogue d'abord : assez de pièces comparables (même nature et sous-catégorie) imposent leur poids médian.
+        if (catalog_refine_weight($product['ref'])) {
+            $fresh = get_product($product['ref']);
+            $sheet['weight_grams'] = (int) $fresh['weight_grams'];
+        }
         quick_add_reply(['ok' => true, 'sheet' => $sheet]);
     }
 

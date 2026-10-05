@@ -92,7 +92,8 @@
       var notes = [];
       if (res.values.weight_grams) notes.push('le poids est une estimation : pesez la pièce si possible (il sert au calcul des frais de port)');
       if (fields.indexOf('category') > -1 && !res.values.category) notes.push('aucun univers de la boutique ne convient à cette pièce : adaptez-les dans « Univers »');
-      setStatus(form, done.length ? 'Proposé par l\'IA : ' + shown.join(', ') + '. Relisez, puis enregistrez.' + (notes.length ? ' À noter : ' + notes.join(' ; ') + '.' : '') : 'L\'IA n\'a rien proposé.', done.length ? 'ok' : 'error');
+      var src = res.sources ? Object.keys(res.sources).map(function (k) { return res.sources[k]; }) : [];
+      setStatus(form, done.length ? 'Proposé : ' + shown.join(', ') + '. Relisez, puis enregistrez.' + (src.length ? ' Source : ' + src.join(' ; ') + '.' : '') + (notes.length ? ' À noter : ' + notes.join(' ; ') + '.' : '') : 'L\'IA n\'a rien proposé.', done.length ? 'ok' : 'error');
     });
   }
 

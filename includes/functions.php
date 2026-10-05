@@ -6,6 +6,7 @@ require_once __DIR__ . '/capture.php';
 require_once __DIR__ . '/studio.php';
 require_once __DIR__ . '/prompts.php';
 require_once __DIR__ . '/universes.php';
+require_once __DIR__ . '/comparables.php';
 
 function h($s): string
 {
@@ -1633,7 +1634,7 @@ function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): st
         . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "size_text": "taille lisible sur l\'étiquette ou dimensions estimées, très courte, vide si impossible", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "size_text": "vêtement ou chaussure : taille de l\'étiquette, sinon taille probable écrite « M (probable) » ; objet : dimensions estimées ; très courte", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1907,7 +1908,7 @@ function product_source_photos(string $ref): array
  * (name, description, category, materials, price, size_text) — celles qu'on ne
  * régénère pas servent de contexte cohérent, celles qu'on régénère sont à varier.
  */
-function build_product_fields_prompt(array $fields, array $current, int $photoCount, string $notes = ''): string
+function build_product_fields_prompt(array $fields, array $current, int $photoCount, string $notes = '', array $comparables = []): string
 {
     $cats = implode(' ; ', array_map(static fn ($c) => $c['key'] . ' = ' . $c['label'], category_list()));
     $examples = ai_shop_examples() ? ' (' . ai_shop_examples() . ')' : '';
@@ -1923,7 +1924,7 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
         'materials' => '"materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne) ; chaîne vide si elles ne se voient pas"',
         'nature' => '"nature": "la clé de la NATURE de l\'objet (ce qu\'il EST) et, dans le même objet JSON, "sous_categorie": "la clé de sa sous-catégorie, qui doit appartenir à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '"',
         'etat' => '"etat": "' . product_condition_prompt_list() . '"',
-        'size' => '"size_text": "taille ou dimensions, COURTES : pour un objet ses dimensions estimées (ex : « env. 20 × 15 × 30 cm », hauteur ou diamètre selon la forme) ; pour un vêtement, une chaussure ou un accessoire la TAILLE si l\'étiquette est lisible (ex : « M », « 38 », « 42 FR »), sinon une estimation marquée « env. » ; chaîne vide si aucune estimation sérieuse n\'est possible"',
+        'size' => '"size_text": "taille ou dimensions, COURTES. VÊTEMENT, chaussure ou accessoire porté : donne TOUJOURS une taille — celle de l\'étiquette si elle est lisible (« M », « 38 », « 42 FR »), sinon la taille la plus probable d\'après la coupe et les proportions, écrite avec « (probable) » (ex : « M (probable) », « 40 (probable) »), plus la longueur ou la largeur approximatives si elles se devinent. OBJET : ses dimensions estimées (ex : « env. 20 × 15 × 30 cm », hauteur ou diamètre selon la forme). Chaîne vide seulement si la photo ne permet vraiment aucune estimation"',
         'weight' => '"weight_grams": "nombre entier : poids estimé en grammes de l\'objet seul, sans emballage, d\'après sa nature, ses matières et sa taille apparente (ordres de grandeur : sweat 600, robe 450, pichet en grès 900, chaise en bois 4500) ; 0 si impossible à estimer"',
         'price' => '"price": "prix de vente indicatif : UN SEUL montant en euros, ex : 30 €"',
     ];
@@ -1944,6 +1945,7 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
     $notes = trim($notes);
     return $seen
         . ($notes !== '' ? 'Indications du vendeur, à prendre en compte : « ' . $notes . ' ». ' : '')
+        . comparables_prompt_text($comparables)
         . ($known ? 'Informations déjà saisies, à respecter et rester cohérent avec : ' . implode(' ; ', $known) . '. ' : '')
         . ($vary ? 'Propose une version DIFFÉRENTE de ce qui existe déjà (' . implode(' ; ', $vary) . '). ' : '')
         . 'Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, avec exactement ces clés : '

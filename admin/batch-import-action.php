@@ -430,6 +430,8 @@ switch ($action) {
             queue_mobile_variant(add_product_photo($ref, $ambiancePath, 'Ambiance', true), $ambiancePath, $detourePath);
         }
 
+        // Le catalogue d'abord : assez de pièces comparables imposent leur poids médian.
+        catalog_refine_weight($ref);
         $batch['groups'][$groupIndex]['status'] = 'done';
         $batch['groups'][$groupIndex]['product_ref'] = $ref;
         $_SESSION['batch_import'] = $batch;
