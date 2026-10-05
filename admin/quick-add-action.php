@@ -6,7 +6,10 @@
 //   detoure  → photo principale détourée (fal.ai, sinon Gemini)
 //   ambiance → mise en situation à partir du détourage (Gemini)
 //   sheet    → nom, description, catégorie et prix suggérés d'après tous les angles
+//   finish   → traitement terminé (la fiche passe « à relire »)
 //   save     → corrections du vendeur et publication éventuelle
+//   jobs     → liste « Mes pièces » de l'application smartphone (studio.php)
+//   get      → une pièce, pour la relire ; discard → la jeter avant relecture
 // Réponses JSON : {ok: true, ...} ou {ok: false, error: "..."}.
 
 require_once __DIR__ . '/../includes/session.php';
@@ -51,6 +54,13 @@ function quick_add_source_photos(string $ref): array
     return $photos;
 }
 
+/** Indications saisies pour l'IA : celles de la requête, sinon celles mémorisées à la création (traitement différé). */
+function quick_add_notes(string $ref): string
+{
+    $posted = trim((string) ($_POST['notes'] ?? ''));
+    return $posted !== '' ? $posted : (string) (studio_job_get($ref)['ai_notes'] ?? '');
+}
+
 switch ($action) {
     case 'create': {
         $files = $_FILES['photos'] ?? null;
@@ -59,6 +69,9 @@ switch ($action) {
         }
         $labels = (array) ($_POST['labels'] ?? []);
         $main = (int) ($_POST['main'] ?? 0);
+        if (count(array_filter($files['tmp_name'])) > STUDIO_MAX_PHOTOS) {
+            quick_add_reply(['ok' => false, 'error' => 'Trop de photos pour une pièce (' . STUDIO_MAX_PHOTOS . ' au plus).'], 400);
+        }
 
         $ref = next_ref();
         db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, price, badge, is_hidden, featured, sort_order)
@@ -91,6 +104,7 @@ switch ($action) {
             db()->prepare('DELETE FROM products WHERE ref = ?')->execute([$ref]);
             quick_add_reply(['ok' => false, 'error' => 'Les photos n\'ont pas pu être enregistrées (format non reconnu ?).'], 400);
         }
+        studio_job_create($ref, (string) ($_POST['source'] ?? 'single'), trim((string) ($_POST['notes'] ?? '')));
         quick_add_reply([
             'ok' => true,
             'ref' => $ref,
@@ -123,7 +137,7 @@ switch ($action) {
         $source = $detoure ?? (quick_add_source_photos($product['ref'])[0] ?? null);
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à mettre en situation.']);
         // Version 3:2 maintenant ; la 9:16 suit à part (queue_mobile_variant).
-        $prompt = build_ambiance_prompt(trim((string) ($_POST['notes'] ?? '')));
+        $prompt = build_ambiance_prompt(quick_add_notes($product['ref']));
         $desktop = generate_desktop_image($root . '/' . $source['path'], $prompt, 'product-' . $product['ref'] . '-ambiance');
         if (!$desktop) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
         queue_mobile_variant(add_product_photo($product['ref'], $desktop, 'Ambiance', true), $desktop);
@@ -140,7 +154,7 @@ switch ($action) {
             $smalls[] = downscale_for_ai($abs, 900) ?? $abs;
         }
         if (!$smalls) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à analyser.']);
-        $text = gemini_describe_image($smalls[0], build_product_sheet_prompt(count($smalls), (string) ($_POST['notes'] ?? '')), 1, array_slice($smalls, 1));
+        $text = gemini_describe_image($smalls[0], build_product_sheet_prompt(count($smalls), quick_add_notes($product['ref'])), 1, array_slice($smalls, 1));
         foreach ($smalls as $i => $small) {
             if (str_starts_with($small, sys_get_temp_dir())) @unlink($small);
         }
@@ -149,6 +163,45 @@ switch ($action) {
         db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ? WHERE ref = ?')
             ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $product['ref']]);
         quick_add_reply(['ok' => true, 'sheet' => $sheet]);
+    }
+
+    case 'finish': {
+        $product = quick_add_product();
+        // Étapes échouées (« detoure,ambiance »), gardées pour l'afficher dans la liste.
+        $failed = preg_replace('/[^a-z,]/', '', (string) ($_POST['failed'] ?? ''));
+        studio_job_set($product['ref'], 'ready', $failed);
+        quick_add_reply(['ok' => true]);
+    }
+
+    case 'jobs': {
+        quick_add_reply(['ok' => true, 'jobs' => studio_jobs_list()]);
+    }
+
+    case 'get': {
+        $product = quick_add_product();
+        $photos = [];
+        foreach (product_photos_list($product['ref']) as $p) {
+            if ($p['type'] === 'photo') $photos[] = ['path' => $p['path'], 'label' => $p['label']];
+        }
+        $job = studio_job_get($product['ref']);
+        quick_add_reply(['ok' => true, 'product' => [
+            'ref' => $product['ref'], 'name' => $product['name'], 'price' => $product['price'], 'cat' => $product['cat'],
+            'description' => $product['description'], 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'],
+            'hidden' => (bool) $product['is_hidden'],
+        ], 'photos' => $photos, 'status' => $job['status'] ?? 'reviewed', 'note' => $job['note'] ?? '']);
+    }
+
+    case 'discard': {
+        $product = quick_add_product();
+        $job = studio_job_get($product['ref']);
+        // Seulement une pièce encore masquée et pas relue : une fiche relue se supprime depuis le catalogue.
+        if (!$job || $job['status'] === 'reviewed' || !$product['is_hidden']) {
+            quick_add_reply(['ok' => false, 'error' => 'Cette pièce ne peut plus être jetée ici : utilisez le catalogue.'], 409);
+        }
+        move_product_photos_to_media($product['ref']);
+        db()->prepare('DELETE FROM products WHERE ref = ?')->execute([$product['ref']]);
+        studio_job_delete($product['ref']);
+        quick_add_reply(['ok' => true]);
     }
 
     case 'save': {
@@ -166,6 +219,7 @@ switch ($action) {
                 empty($_POST['publish']) ? 1 : 0,
                 $product['ref'],
             ]);
+        if (studio_job_get($product['ref'])) studio_job_set($product['ref'], 'reviewed');
         quick_add_reply(['ok' => true, 'ref' => $product['ref'], 'published' => !empty($_POST['publish'])]);
     }
 }

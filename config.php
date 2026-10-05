@@ -90,6 +90,9 @@ function db(): PDO
         // Prise de vue depuis un téléphone proche (codes QR) : tables créées si besoin.
         require_once __DIR__ . '/includes/capture.php';
         capture_ensure_schema($pdo);
+        // Application smartphone Studio : suivi des pièces créées.
+        require_once __DIR__ . '/includes/studio.php';
+        studio_ensure_schema($pdo);
         // Bases créées avant l'ajout des visuels en deux formats.
         $photoColumns = $pdo->query('PRAGMA table_info(product_photos)')->fetchAll(PDO::FETCH_COLUMN, 1);
         if ($photoColumns && !in_array('path_mobile', $photoColumns, true)) {

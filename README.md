@@ -121,6 +121,34 @@ angles** (+ indications facultatives du vendeur). La fiche se relit et se
 corrige sur le téléphone, puis s'enregistre masquée ou publiée. Sans clé
 Gemini / fal.ai, les photos sont enregistrées et la fiche se remplit à la main.
 
+## Studio : l'application smartphone du commerce
+
+`studio.php` (`/<commerce>/studio.php` sous brocs.arrimage.com) est une application
+**indépendante de l'administration**, installable sur l'écran d'accueil du téléphone
+(manifeste `studio-manifest.php`, icône `studio-icon.php` aux couleurs du commerce,
+`studio-sw.php` minimal, sans cache). `admin/quick-add.php` affiche un code QR vers elle.
+
+- **Connexion propre** : identifiant ou e-mail + mot de passe d'un compte *administrateur*
+  (un community manager est refusé : le Studio crée des fiches du catalogue). « Rester connecté »
+  garde le cookie 30 jours ; les fichiers de session vivent dans `data/sessions/` (jamais servi,
+  conservés 31 jours — le répertoire système est purgé en ~24 min). Déconnexion dans le menu.
+- **Une pièce** : le parcours de `quick-add.php` (`assets/quick-add.js`, partiel
+  `includes/quick-add-flow.php`, partagé avec l'administration).
+- **En lot** : viseur en direct (`getUserMedia`, appareil photo arrière) avec obturateur ; un bouton
+  « Pièce suivante » sépare les pièces (jusqu'à 8 photos chacune). La relecture permet de choisir la
+  photo principale, de couper ou fusionner des pièces, de retirer des photos. Puis « Générer les
+  fiches » (envoi + détourage + mise en situation + fiche, pièce après pièce, écran maintenu allumé)
+  ou « Envoyer sans traiter ». Sans accès à la caméra, repli sur l'appareil photo du téléphone et la
+  galerie. Le lot en cours est gardé dans IndexedDB : page fermée ou téléphone redémarré, il est retrouvé.
+- **Mes pièces** : toutes les pièces du Studio (table `studio_jobs`, créée automatiquement) en
+  *à traiter* (photos reçues, traitement différé — bouton par pièce ou « tout traiter »), *à relire*
+  et *enregistrées*. Une fiche s'ouvre pour correction, publication ou rejet (tant qu'elle n'est pas
+  relue ; les photos vont alors à la médiathèque). Une étape IA en échec est signalée sur la fiche.
+- Les appels passent par `admin/quick-add-action.php` (actions `create`, `detoure`, `ambiance`, `sheet`,
+  `finish`, `jobs`, `get`, `discard`, `save`) ; chaque étape est une requête séparée (limite de durée
+  OVH) et reprend où elle s'est arrêtée si le réseau coupe.
+- La caméra en direct exige HTTPS (ou localhost) : en ligne, pas de souci.
+
 ## Déployer le portail en ligne (ex. brocs.arrimage.com)
 
 Le mode `--portail` du script de déploiement envoie **tous les commerces et

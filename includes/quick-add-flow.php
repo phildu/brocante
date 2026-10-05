@@ -1,0 +1,96 @@
+<?php
+/**
+ * Parcours « nouvelle pièce » (photos par angle → génération → relecture),
+ * partagé par admin/quick-add.php et l'application smartphone studio.php.
+ * Attend $angles, $aiReady et $qaOpts (action, again, list, list_label, title).
+ * Le script est assets/quick-add.js ; la barre d'action est ensuite placée par la page hôte.
+ */
+?><div class="qa" data-action="<?= h($qaOpts['action']) ?>" data-again="<?= h($qaOpts['again']) ?>" data-list="<?= h($qaOpts['list']) ?>">
+  <?php if (!empty($qaOpts['title'])): ?>
+  <div>
+    <p class="eyebrow" style="margin:0;">Catalogue</p>
+    <h1>Nouvelle pièce</h1>
+  </div>
+  <?php endif; ?>
+  <ol class="qa-steps" aria-label="Étapes">
+    <li id="st-1" aria-current="step">Photos</li>
+    <li id="st-2">Génération</li>
+    <li id="st-3">Vérification</li>
+  </ol>
+
+  <!-- Étape 1 : photos -->
+  <section class="qa-panel" id="panel-photos">
+    <p class="qa-note">Touchez un cadre pour ouvrir l'appareil photo. La photo de face est obligatoire ; les autres angles aident l'IA à décrire la pièce. « Principale » choisit la photo détourée et mise en situation.</p>
+    <div class="qa-shots" id="shots">
+      <?php foreach ($angles as $i => [$key, $title, $tip, $required]): ?>
+        <div class="qa-shot<?= $i === 0 ? ' is-main' : '' ?>" data-index="<?= $i ?>" data-label="<?= h($title) ?>">
+          <input type="file" accept="image/*" capture="environment" id="cam-<?= $i ?>" hidden>
+          <label class="qa-shot-take" for="cam-<?= $i ?>">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>
+            <b><?= h($title) ?><?= $required ? '' : ' <small>(facultatif)</small>' ?></b>
+            <small><?= h($tip) ?></small>
+          </label>
+          <div class="qa-shot-bar">
+            <span><?= h($title) ?></span>
+            <span class="qa-mini">
+              <button type="button" data-act="main" aria-pressed="<?= $i === 0 ? 'true' : 'false' ?>" aria-label="Photo principale"><span aria-hidden="true">★</span><span class="txt"> Principale</span></button>
+              <button type="button" data-act="retake" aria-label="Reprendre la photo"><span aria-hidden="true">↺</span><span class="txt"> Reprendre</span></button>
+              <button type="button" data-act="remove" aria-label="Retirer la photo">✕</button>
+            </span>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <button type="button" class="qa-add" id="add-shot">+ Autre angle</button>
+    <div class="qa-gallery">
+      Photos déjà prises ?
+      <label for="gallery">Choisir dans la galerie</label>
+      <input type="file" accept="image/*" multiple id="gallery" hidden>
+    </div>
+    <label class="qa-field">Indications pour l'IA (facultatif)
+      <textarea id="notes" rows="2" maxlength="300" placeholder="Ex. : années 70, grès, petit éclat au pied, 32 cm de haut"></textarea>
+    </label>
+    <?php if (!$aiReady): ?>
+      <p class="qa-warn">Clé Gemini non configurée (Réglages du site) : les photos seront enregistrées, mais le détourage, la mise en situation et la rédaction automatiques seront sautés.</p>
+    <?php endif; ?>
+  </section>
+
+  <!-- Étape 2 : génération -->
+  <section class="qa-panel" id="panel-progress" hidden>
+    <ol class="qa-progress" id="progress">
+      <li data-step="create"><span class="dot"></span><b>Envoi des photos</b><small>Enregistrement dans le catalogue</small></li>
+      <li data-step="detoure"><span class="dot"></span><b>Détourage</b><small>Photo principale sur fond neutre</small></li>
+      <li data-step="ambiance"><span class="dot"></span><b>Mise en situation</b><small>La pièce dans un intérieur</small></li>
+      <li data-step="sheet"><span class="dot"></span><b>Rédaction de la fiche</b><small>Nom, description, catégorie, prix</small></li>
+    </ol>
+    <p class="qa-note">Comptez 30 secondes à 1 minute. Gardez cette page ouverte.</p>
+  </section>
+
+  <!-- Étape 3 : vérification -->
+  <section class="qa-panel" id="panel-review" hidden>
+    <div class="qa-visuals" id="visuals"></div>
+    <label class="qa-field">Nom<input type="text" id="f-name" maxlength="120"></label>
+    <div class="qa-two">
+      <label class="qa-field">Prix<input type="text" id="f-price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
+      <label class="qa-field">Poids (g)<input type="number" id="f-weight" min="0" step="10" inputmode="numeric" placeholder="500"></label>
+    </div>
+    <label class="qa-field">Catégorie
+      <select id="f-cat">
+        <?php foreach (category_list() as $c): ?>
+          <option value="<?= h($c['key']) ?>"><?= h($c['label']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label class="qa-field">Description<textarea id="f-desc" rows="5" maxlength="1200"></textarea></label>
+    <label class="qa-field">Étiquette<input type="text" id="f-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
+    <label class="qa-switch"><input type="checkbox" id="f-publish"> <span>Publier tout de suite<br><small class="qa-note">Sinon la fiche reste masquée, à relire dans le catalogue.</small></span></label>
+  </section>
+
+  <!-- Terminé -->
+  <section class="qa-panel qa-done" id="panel-done" hidden>
+    <h2 id="done-title" style="margin:0;font-size:1.3rem;"></h2>
+    <p class="qa-note" id="done-text"></p>
+    <a class="btn btn-primary" href="<?= h($qaOpts['again']) ?>">Ajouter une autre pièce</a>
+    <a class="btn btn-ghost" id="done-link" href="<?= h($qaOpts['list']) ?>"><?= h($qaOpts['list_label']) ?></a>
+  </section>
+</div>
