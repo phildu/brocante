@@ -11,6 +11,9 @@ $orphans = universes_orphan_refs();
 $customized = universes_saved() !== null;
 $profile = shop_profile();
 $staleExamples = $profile === '' && trim((string) tenant('ai.examples')) !== '';
+$withPhotos = (int) db()->query("SELECT COUNT(*) FROM products WHERE photo IS NOT NULL AND photo != ''")->fetchColumn();
+// Pas encore de type de boutique et des photos à regarder : l'IA les analyse d'elle-même à l'ouverture de la page.
+$autoDetect = $profile === '' && $withPhotos > 0 && GEMINI_API_KEY;
 $total = (int) db()->query('SELECT COUNT(*) FROM products')->fetchColumn();
 $allRefs = db()->query('SELECT ref FROM products ORDER BY ref')->fetchAll(PDO::FETCH_COLUMN);
 ?><!DOCTYPE html>
@@ -57,7 +60,7 @@ $allRefs = db()->query('SELECT ref FROM products ORDER BY ref')->fetchAll(PDO::F
     <?php if ($staleExamples): ?>
       <p class="publish-status" style="margin:16px 0;">L'IA ne sait pas encore ce que vend votre boutique : elle s'appuie sur la description d'origine (« <?= h(tenant('ai.examples')) ?> »), qui vient peut-être d'un modèle d'exemple. Cliquez sur « Détecter ce que vend ma boutique » : elle regarde vos photos et vos pièces.</p>
     <?php endif; ?>
-    <form method="post" action="/admin/universes-action.php" id="un-form">
+    <form method="post" action="/admin/universes-action.php" id="un-form"<?= $autoDetect ? ' data-auto-detect="1"' : '' ?>>
       <input type="hidden" name="action" value="save">
       <div class="un-profile">
         <label for="un-profile">Ce que vend votre boutique, en une phrase <span class="hint" style="margin:0;">(guide l'IA dans tous ses prompts : fiches, images, prix)</span></label>

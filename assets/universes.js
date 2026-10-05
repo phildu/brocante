@@ -54,13 +54,16 @@
         ideas = res.universes; found = res.profile || '';
         // La boutique détectée est écrite dans le champ : on voit ce que l'IA a compris, et on peut le corriger.
         if (found && !profileInput.value.trim()) profileInput.value = found;
-        say(status, found ? 'Boutique détectée : ' + found + '.' : '');
+        var seen = res.seen || {};
+        say(status, (found ? 'Boutique détectée : ' + found + '.' : '') + (seen.photos ? ' (' + seen.photos + ' photo' + (seen.photos > 1 ? 's' : '') + ' analysée' + (seen.photos > 1 ? 's' : '') + (seen.names && seen.names.length ? ' : ' + seen.names.join(', ') : '') + ')' : ' Aucune photo de pièce à analyser : l\'IA s\'est fiée au nom de la boutique ; décrivez-la dans le champ pour la guider.'));
         var ul = document.getElementById('un-ideas-list'); ul.textContent = '';
         ideas.forEach(function (u) { var li = document.createElement('li'); li.textContent = u.label; ul.appendChild(li); });
         ideasBox.hidden = false;
       });
   }
   suggestBtn.addEventListener('click', function () { suggest(); });
+  // Premier passage, boutique encore inconnue de l'IA : elle regarde les photos sans attendre un clic.
+  if (document.getElementById('un-form').dataset.autoDetect) suggest();
   detectBtn.addEventListener('click', function () { profileInput.value = ''; suggest(); });
   document.getElementById('un-apply').addEventListener('click', function () {
     // Les univers repris gardent leur clé (leurs pièces restent rattachées) ; les autres sont retirés, les nouveaux ajoutés.

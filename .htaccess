@@ -30,4 +30,12 @@ RedirectMatch 404 "(?:^|/)\.(?!well-known)"
 # Dossiers internes : configuration des commerces, bases, scripts, journaux.
 RedirectMatch 404 "^/(?:data|tenants|scripts|includes|var|db-backup)(?:/|$)"
 
+# Scripts et styles : toujours revalidés (ETag / Last-Modified), pour que chaque déploiement soit pris en compte tout de suite
+# au lieu d'attendre l'expiration du cache du navigateur (15 minutes par défaut) avec une ancienne version des scripts.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(js|css)$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>
+
 Options -Indexes

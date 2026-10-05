@@ -169,6 +169,12 @@ rapide), le poids du catalogue remplace l'estimation de l'IA quand il est connu 
 **Tailles de vêtements.** Pour un vêtement, une chaussure ou un accessoire porté, l'IA donne toujours une taille : celle de
 l'étiquette si elle est lisible, sinon la taille la plus probable d'après la coupe, écrite « M (probable) ».
 
+## Scripts et styles : jamais périmés après un déploiement
+
+`.htaccess` impose `Cache-Control: no-cache` aux fichiers `.js` et `.css` : le navigateur les revalide à chaque page (ETag /
+Last-Modified, réponse 304 si rien n'a changé) au lieu de garder pendant 15 minutes — durée par défaut du serveur — l'ancienne
+version d'un script avec la nouvelle page, ce qui laissait des boutons sans effet juste après un déploiement.
+
 ## Univers (rayons) modifiables, taille et poids estimés par l'IA
 
 **Univers.** Les univers d'une boutique (filtres de « La boutique », accueil, champ « Univers » des fiches) venaient
@@ -184,7 +190,9 @@ plus fiable à la moins fiable : l'indication écrite par le vendeur dans le cha
 Les textes du site et la description du fichier du commerce sont déclarés non fiables : ils viennent souvent d'un modèle
 d'exemple (une boulangerie…) et l'IA doit les ignorer quand ils contredisent les photos. Ce que l'IA a compris est écrit dans
 le champ (« friperie de vêtements d'occasion pour hommes et femmes ») : on le relit, on le corrige, et il est enregistré avec
-les univers (`shop_profile()`, table `settings`). **Ce type de boutique remplace ensuite la description d'origine dans tous les
+les univers (`shop_profile()`, table `settings`). À l'ouverture de la page, si la boutique n'a pas encore de type enregistré et que des pièces ont une photo, **l'IA lance la détection
+d'elle-même** (aucun clic) et indique ce qu'elle a analysé (« 2 photos analysées : … ») ; sans photo, elle le dit et invite à décrire la
+boutique dans le champ. **Ce type de boutique remplace ensuite la description d'origine dans tous les
 prompts de l'IA** (fiches, images, prix : `ai_shop_examples()`). **Reclasser par l'IA** (pièces sans univers valide,
 ou toutes) rejoue le choix de l'univers pièce par pièce, enregistré aussitôt, arrêtable. Les prompts de l'IA citent
 désormais les univers enregistrés (`ai_shop_examples()`), et l'IA peut ne choisir aucun univers s'ils ne conviennent

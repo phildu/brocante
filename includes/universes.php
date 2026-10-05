@@ -168,6 +168,8 @@ function universes_suggest(string $hint = ''): array
     }
     if (!$text) return [];
     $data = json_decode(preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)), true);
+    // Le modèle ajoute parfois une phrase autour du JSON : on en extrait l'objet.
+    if (!is_array($data) && preg_match('/\{.*\}/s', $text, $m)) $data = json_decode($m[0], true);
     if (!is_array($data)) return [];
     $out = [];
     foreach ((array) ($data['universes'] ?? []) as $item) {
@@ -175,5 +177,5 @@ function universes_suggest(string $hint = ''): array
         $icon = (string) ($item['icon'] ?? '');
         if ($label !== '') $out[] = ['label' => $label, 'icon' => isset(UNIVERSE_ICONS[$icon]) ? $icon : 'ic-vase'];
     }
-    return $out ? ['profile' => mb_substr(trim((string) ($data['profile'] ?? '')), 0, 120), 'universes' => array_slice($out, 0, 8)] : [];
+    return $out ? ['profile' => mb_substr(trim((string) ($data['profile'] ?? '')), 0, 120), 'universes' => array_slice($out, 0, 8), 'seen' => ['photos' => count($smalls), 'names' => array_slice($names, 0, 4), 'natures' => array_slice($natures, 0, 4)]] : [];
 }

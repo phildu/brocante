@@ -23,8 +23,8 @@ if ($action === 'suggest') {
     @set_time_limit(90);
     $found = universes_suggest(mb_substr((string) ($_POST['hint'] ?? ''), 0, 200));
     echo json_encode($found
-        ? ['ok' => true, 'profile' => $found['profile'], 'universes' => $found['universes']]
-        : ['ok' => false, 'error' => "L'IA n'a pas pu proposer d'univers (service surchargé ?) : réessayez dans un instant."], JSON_UNESCAPED_UNICODE);
+        ? ['ok' => true, 'profile' => $found['profile'], 'universes' => $found['universes'], 'seen' => $found['seen']]
+        : ['ok' => false, 'error' => "L'IA n'a pas pu répondre (service surchargé ?) : réessayez dans un instant. Si cela persiste, décrivez votre boutique dans le champ « Ce que vend votre boutique » puis cliquez sur « Proposer des univers »."], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
