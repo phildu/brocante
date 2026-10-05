@@ -130,10 +130,11 @@ switch ($action) {
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à mettre en situation.']);
         // Version 3:2 maintenant ; la 9:16 suit à part (queue_mobile_variant).
         $notes = quick_add_notes($product['ref']);
-        $desktop = generate_desktop_image($root . '/' . $source['path'], build_ambiance_prompt($notes), 'product-' . $product['ref'] . '-ambiance', 1, $notes !== '');
+        $desktop = generate_desktop_image($root . '/' . $source['path'], build_ambiance_prompt($notes), generated_photo_basename('product-' . $product['ref'] . '-ambiance', $notes), 1, $notes !== '');
         if (!$desktop) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
-        queue_mobile_variant(add_product_photo($product['ref'], $desktop, 'Ambiance', true), $desktop, $source['path'], $notes);
-        quick_add_reply(['ok' => true, 'path' => $desktop, 'label' => 'Ambiance']);
+        $label = generated_photo_label('Ambiance', $notes);
+        queue_mobile_variant(add_product_photo($product['ref'], $desktop, $label, true), $desktop, $source['path'], $notes);
+        quick_add_reply(['ok' => true, 'path' => $desktop, 'label' => $label]);
     }
 
     case 'sheet': {

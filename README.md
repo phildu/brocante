@@ -146,8 +146,10 @@ complément. Pour une mise en situation, une consigne qui décrit un lieu, une a
 (« femme dans la rue en mouvement », vêtement porté) **remplace** l'intérieur français par défaut ; une
 simple précision (« années 70, éclat au pied ») laisse le décor par défaut. Sans consigne, le prompt est
 inchangé. Avant, la consigne n'était qu'une phrase ajoutée à la fin d'un prompt qui imposait « intérieur,
-aucune personne » : le modèle l'ignorait. La galerie rappelle la consigne utilisée dans son message de
-confirmation. La 9:16 d'une mise en situation avec personne ne peut pas être « recadrée » à partir de
+aucune personne » : le modèle l'ignorait. La photo générée **prend le nom de la consigne** (`generated_photo_label()` : « Ambiance — femme dans la rue en
+mouvement », raccourci à un mot entier) et son fichier aussi (`product-001-ambiance-femme-dans-la-rue-en-mouvement-….jpg`,
+version 9:16 comprise) ; elle reste renommable dans la galerie. Sans consigne, le nom est « Ambiance », « Autre angle »
+ou « Objet complété » comme avant. La galerie rappelle le nom donné dans son message de confirmation. La 9:16 d'une mise en situation avec personne ne peut pas être « recadrée » à partir de
 l'image finie (le modèle refuse de retoucher une photo réaliste de personne) : elle est alors regénérée
 directement depuis la photo de départ avec la même consigne — scène semblable, pas identique.
 

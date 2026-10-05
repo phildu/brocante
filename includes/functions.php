@@ -1799,6 +1799,32 @@ function angle_presets(): array
 }
 
 /**
+ * Nom d'une photo générée d'après la consigne du vendeur : « Ambiance — portée par une femme en mouvement ».
+ * La consigne est raccourcie à un mot entier ; sans consigne, le nom de base seul.
+ */
+function generated_photo_label(string $baseLabel, string $keywords, int $maxKeywords = 50): string
+{
+    $kw = trim(preg_replace('/\s+/u', ' ', $keywords), " \t,;.:-");
+    if ($kw === '') return $baseLabel;
+    if (mb_strlen($kw) > $maxKeywords) {
+        $cut = mb_substr($kw, 0, $maxKeywords);
+        $space = mb_strrpos($cut, ' ');
+        $kw = rtrim($space !== false && $space > 15 ? mb_substr($cut, 0, $space) : $cut, " ,;.:-") . '…';
+    }
+    return $baseLabel . ' — ' . $kw;
+}
+
+/** Radical du nom de fichier d'une photo générée : « product-001-ambiance » + la consigne en minuscules sans accents. */
+function generated_photo_basename(string $prefix, string $keywords): string
+{
+    if (trim($keywords) === '') return $prefix; // slugify('') rendrait « media »
+    $slug = trim(slugify(mb_substr($keywords, 0, 60), 40), '-');
+    // Coupé à un mot entier, sans fragment au bout.
+    if (mb_strlen($slug) >= 40 && ($cut = strrpos($slug, '-')) !== false && $cut > 15) $slug = substr($slug, 0, $cut);
+    return $slug !== '' ? $prefix . '-' . $slug : $prefix;
+}
+
+/**
  * Consigne du vendeur (« Mots-clés / précisions »), ajoutée à un prompt de génération : elle PRIME sur les
  * réglages par défaut du prompt (décor, absence de personnes…) quand ils se contredisent — sans quoi le
  * modèle garde son décor habituel et ignore, par exemple, « femme dans la rue en mouvement ».
