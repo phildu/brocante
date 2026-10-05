@@ -1538,3 +1538,26 @@
 .sp-use:hover, .sp-use:focus-visible { background: var(--surface-2); }
 .sp-del { padding: 0 8px; background: none; border: 0; border-left: 1px solid var(--line); color: var(--ink-soft); font-size: 1rem; line-height: 1; cursor: pointer; }
 .sp-del:hover, .sp-del:focus-visible { color: #b3261e; }
+
+/* Aide à la rédaction du prompt : idées cliquables + prompt envoyé (assets/prompt-helper.js). */
+.ph-sug { margin: 8px 0 4px; }
+.ph-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.ph-title { font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); }
+.ph-ai { padding: 3px 9px; background: none; border: 1px solid var(--accent); color: var(--accent); font-family: var(--font-body); font-size: 0.78rem; cursor: pointer; }
+.ph-ai:hover:not(:disabled), .ph-ai:focus-visible { background: var(--accent); color: var(--accent-ink); }
+.ph-ai:disabled { opacity: 0.5; cursor: progress; }
+.ph-msg { font-size: 0.78rem; color: var(--ink-soft); }
+.ph-msg[data-kind="error"] { color: #b3261e; }
+.ph-group { margin-top: 6px; }
+.ph-gtitle { margin: 0 0 3px; font-size: 0.72rem; color: var(--ink-soft); }
+.ph-group.is-ai .ph-gtitle { color: var(--accent); font-weight: 600; }
+.ph-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ph-chip { padding: 3px 9px; background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); font-family: var(--font-body); font-size: 0.78rem; cursor: pointer; }
+.ph-chip:hover, .ph-chip:focus-visible { border-color: var(--accent); color: var(--accent); }
+.ph-prev { margin: 8px 0 14px; border: 1px solid var(--line); background: var(--surface); }
+.ph-prev > summary { padding: 7px 10px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+.ph-body { padding: 0 10px 10px; }
+.ph-note { margin: 0 0 6px; font-size: 0.75rem; color: var(--ink-soft); }
+.ph-label { margin: 8px 0 3px; font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.ph-text { margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line); font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.5; color: var(--ink); }
+.ph-text mark { background: var(--accent); color: var(--accent-ink); padding: 0 2px; }

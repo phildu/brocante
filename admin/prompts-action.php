@@ -3,6 +3,8 @@
 //   list   → tous les prompts du commerce
 //   save   → kind + text
 //   delete → id
+//   preview → kind (+ text, angle) : le prompt réellement envoyé à l'IA, en blocs
+//   suggest → kind + ref (+ photo_id) : idées de décors / situations d'après la photo de la pièce (IA)
 // Ouvert aux rôles qui utilisent la génération IA (voir ACCOUNT_COMMUNITY_MANAGER_PAGES).
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
@@ -35,6 +37,29 @@ switch ($action) {
     case 'delete':
         saved_prompt_delete((int) ($_POST['id'] ?? 0));
         break;
+    case 'preview':
+        $parts = prompt_preview_parts((string) ($_POST['kind'] ?? ''), mb_substr((string) ($_POST['text'] ?? ''), 0, SAVED_PROMPT_MAX_LENGTH), (string) ($_POST['angle'] ?? 'auto'));
+        if ($parts === null) prompts_reply(['ok' => false, 'error' => 'Type de prompt inconnu.'], 400);
+        prompts_reply(['ok' => true, 'parts' => $parts]);
+    case 'suggest':
+        if (!GEMINI_API_KEY) prompts_reply(['ok' => false, 'error' => 'Clé Gemini non configurée (Réglages du site).']);
+        $product = get_product((string) ($_POST['ref'] ?? ''));
+        if (!$product) prompts_reply(['ok' => false, 'error' => 'Pièce introuvable.'], 404);
+        $root = realpath(__DIR__ . '/..');
+        $photoId = (int) ($_POST['photo_id'] ?? 0);
+        $path = null;
+        if ($photoId) {
+            $stmt = db()->prepare("SELECT path FROM product_photos WHERE id = ? AND product_ref = ? AND type = 'photo'");
+            $stmt->execute([$photoId, $product['ref']]);
+            $path = $stmt->fetchColumn() ?: null;
+        }
+        $path ??= product_source_photos($product['ref'])[0]['path'] ?? ($product['photo'] ?: null);
+        if (!$path || !is_file($root . '/' . $path)) prompts_reply(['ok' => false, 'error' => "Cette pièce n'a pas de photo à analyser."]);
+        session_write_close();
+        @set_time_limit(90);
+        $ideas = prompt_suggestions_from_photo($root . '/' . $path, (string) ($_POST['kind'] ?? 'ambiance'));
+        if (!$ideas) prompts_reply(['ok' => false, 'error' => "L'IA n'a pas pu proposer d'idées (service surchargé ?) : réessayez."]);
+        prompts_reply(['ok' => true, 'ideas' => $ideas]);
     default:
         prompts_reply(['ok' => false, 'error' => 'Action inconnue.'], 400);
 }

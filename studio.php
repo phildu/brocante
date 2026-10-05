@@ -171,7 +171,7 @@ $siteName = (string) $content['site_name'];
           <p class="qa-note" id="sb-summary"></p>
           <div class="sb-pieces" id="sb-pieces"></div>
           <label class="qa-field">Indications pour l'IA, valables pour tout le lot (facultatif)
-            <textarea id="sb-notes" rows="2" maxlength="300" data-saved-prompts="notes" placeholder="Ex. : vaisselle des années 70, ambiance chaleureuse"></textarea>
+            <textarea id="sb-notes" rows="2" maxlength="300" data-saved-prompts="notes" data-prompt-helper="notes" placeholder="Ex. : vaisselle des années 70, ambiance chaleureuse"></textarea>
           </label>
           <?php if (!$aiReady): ?><p class="qa-warn">Clé Gemini non configurée : les pièces seront enregistrées, sans détourage ni rédaction automatiques.</p><?php endif; ?>
           <div class="sb-actions">
@@ -256,6 +256,7 @@ $siteName = (string) $content['site_name'];
 
   <script src="/assets/product-ai.js"></script>
   <script src="/assets/saved-prompts.js"></script>
+  <script src="/assets/prompt-helper.js"></script>
   <script src="/assets/quick-add.js"></script>
   <script src="/assets/studio.js" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>

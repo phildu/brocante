@@ -61,3 +61,60 @@ function saved_prompt_delete(int $id): void
 {
     db()->prepare('DELETE FROM saved_prompts WHERE id = ?')->execute([$id]);
 }
+
+/**
+ * Prompt réellement envoyé à l'IA pour une génération, en blocs [label, text] : celui que construit le serveur
+ * au moment de générer (mêmes fonctions), plus le cadrage ajouté automatiquement. Sert à l'aperçu affiché sous
+ * le champ « Mots-clés / précisions ». $kind : ambiance, angle, complete ou notes (indications de fiche : la
+ * mise en situation ET la rédaction de la fiche).
+ */
+function prompt_preview_parts(string $kind, string $text, string $anglePreset = 'auto'): ?array
+{
+    $text = trim($text);
+    $directed = $text !== '';
+    $framing = static fn (bool $d): array => ['label' => 'Cadrage ajouté automatiquement (format 3:2)', 'text' => trim(generated_framing_prompt(GENERATED_IMAGE_FORMATS['desktop'], $d))];
+    switch ($kind) {
+        case 'ambiance':
+            return [['label' => "Prompt envoyé à l'IA", 'text' => build_ambiance_prompt($text)], $framing($directed)];
+        case 'angle':
+            return [['label' => "Prompt envoyé à l'IA", 'text' => build_angle_prompt($anglePreset, $text)], $framing(false)];
+        case 'complete':
+            return [['label' => "Prompt envoyé à l'IA", 'text' => build_complete_prompt($text)], $framing(false)];
+        case 'notes':
+            return [
+                ['label' => 'Mise en situation', 'text' => build_ambiance_prompt($text)],
+                $framing($directed),
+                ['label' => 'Fiche (nom, description, catégorie, prix)', 'text' => build_product_sheet_prompt(1, $text)],
+            ];
+    }
+    return null;
+}
+
+/**
+ * Idées de décors / situations pour une pièce, d'après sa photo (aide à la rédaction du prompt) : liste de
+ * phrases courtes en français, ou [] si l'IA ne répond pas.
+ */
+function prompt_suggestions_from_photo(string $photoAbsPath, string $kind): array
+{
+    $what = match ($kind) {
+        'angle' => "de précisions de prise de vue (angle, cadrage, détail à montrer, ce qu'il faut enlever du cadre)",
+        'complete' => "de précisions pour compléter la partie coupée de l'objet (motifs, symétrie, matière)",
+        default => "de mises en situation : décors, situations et ambiances de lumière variés",
+    };
+    $prompt = "Tu regardes la photo d'" . tenant('ai.item') . ' pour ' . tenant('ai.shop') . '. '
+        . "Propose 8 idées courtes (3 à 8 mots chacune, en français) $what, adaptées à CET objet précis, variées entre elles. "
+        . ($kind === 'angle' || $kind === 'complete' ? '' : "Si c'est un vêtement ou un accessoire, inclus des idées où il est porté, en mouvement ou non. ")
+        . 'Réponds UNIQUEMENT avec un tableau JSON de 8 chaînes, sans texte autour, sans markdown.';
+    $small = downscale_for_ai($photoAbsPath, 800) ?? $photoAbsPath;
+    $text = gemini_describe_image($small, $prompt, 1);
+    if ($small !== $photoAbsPath) @unlink($small);
+    if (!$text) return [];
+    $list = json_decode(preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)), true);
+    if (!is_array($list)) return [];
+    $out = [];
+    foreach ($list as $item) {
+        $item = rtrim(trim((string) $item), ' .');
+        if ($item !== '' && mb_strlen($item) <= 90 && !in_array($item, $out, true)) $out[] = $item;
+    }
+    return array_slice($out, 0, 8);
+}

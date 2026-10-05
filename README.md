@@ -151,6 +151,18 @@ confirmation. La 9:16 d'une mise en situation avec personne ne peut pas être «
 l'image finie (le modèle refuse de retoucher une photo réaliste de personne) : elle est alors regénérée
 directement depuis la photo de départ avec la même consigne — scène semblable, pas identique.
 
+## Aide à la rédaction du prompt
+
+Sous le champ « Mots-clés / précisions » (galerie) et les « Indications pour l'IA » (ajout rapide, lot du
+Studio), `assets/prompt-helper.js` affiche : des **idées cliquables** — décors, situations, lumière et style
+(un clic les ajoute au texte, sans doublon) ; pour une pièce existante, un bouton « Idées pour cette pièce
+(IA) » qui en propose huit d'après sa photo (`suggest`, adaptées à l'objet : un vêtement est proposé porté) —
+et le **prompt réellement envoyé à l'IA**, mis à jour à la frappe, avec la consigne surlignée et le cadrage
+ajouté automatiquement. L'aperçu est construit par le serveur avec les mêmes fonctions que la génération
+(`prompt_preview_parts()`, action `preview`), donc fidèle ; pour les indications de fiche il montre la mise en
+situation et la rédaction de la fiche. Il est replié par défaut sur téléphone. Un attribut
+`data-prompt-helper="<type>"` suffit à activer l'aide sur un champ.
+
 ## Prompts enregistrés (« Mots-clés / précisions »)
 
 Sous le champ « Mots-clés / précisions » de la galerie d'une pièce (génération d'une mise en situation,

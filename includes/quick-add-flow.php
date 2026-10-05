@@ -48,7 +48,7 @@
       <input type="file" accept="image/*" multiple id="gallery" hidden>
     </div>
     <label class="qa-field">Indications pour l'IA (facultatif)
-      <textarea id="notes" rows="2" maxlength="300" data-saved-prompts="notes" placeholder="Ex. : années 70, grès, petit éclat au pied, 32 cm de haut"></textarea>
+      <textarea id="notes" rows="2" maxlength="300" data-saved-prompts="notes" data-prompt-helper="notes" placeholder="Ex. : années 70, grès, petit éclat au pied, 32 cm de haut"></textarea>
     </label>
     <?php if (!$aiReady): ?>
       <p class="qa-warn">Clé Gemini non configurée (Réglages du site) : les photos seront enregistrées, mais le détourage, la mise en situation et la rédaction automatiques seront sautés.</p>
