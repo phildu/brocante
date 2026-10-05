@@ -4,6 +4,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/capture.php';
 require_once __DIR__ . '/studio.php';
+require_once __DIR__ . '/prompts.php';
 
 function h($s): string
 {

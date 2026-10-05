@@ -550,6 +550,8 @@
       if (!res.ok) { toast(res.error || 'Pièce introuvable.'); return; }
       var p = res.product;
       $('sr-ref').textContent = 'Réf. N°' + p.ref;
+      $('sr-body').dataset.aiRef = p.ref; // boutons « ↻ IA » (assets/product-ai.js)
+      $('sr-body').querySelector('[data-ai-status]').textContent = '';
       var box = $('sr-photos'); box.textContent = '';
       res.photos.forEach(function (ph) {
         var fig = el('figure'); var img = el('img'); img.src = '/' + ph.path; img.alt = ph.label; img.loading = 'lazy';

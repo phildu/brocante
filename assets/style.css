@@ -1513,6 +1513,8 @@
 .ai-btn { margin-left: 6px; padding: 1px 7px; background: none; border: 1px solid var(--line); color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.02em; cursor: pointer; vertical-align: middle; }
 .ai-btn:hover:not(:disabled), .ai-btn:focus-visible { border-color: var(--accent); color: var(--accent); }
 .ai-btn:disabled, .ai-all:disabled { opacity: 0.5; cursor: progress; }
+.ai-all { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.ai-all:hover:not(:disabled), .ai-all:focus-visible { filter: brightness(1.08); color: var(--accent-ink); }
 .ai-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ai-status { font-size: 0.82rem; color: var(--ink-soft); }
 .ai-status[data-kind="ok"] { color: var(--ink); }
@@ -1520,3 +1522,19 @@
 .ai-filled { animation: ai-filled 1.4s ease-out; }
 @keyframes ai-filled { from { background-color: var(--surface-2); outline: 2px solid var(--accent); } to { outline: 2px solid transparent; } }
 @media (prefers-reduced-motion: reduce) { .ai-filled { animation: none; } }
+
+/* Prompts enregistrés sous les champs « Mots-clés / précisions » (assets/saved-prompts.js). */
+.sp { margin: 6px 0 14px; }
+.sp-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sp-save { padding: 4px 10px; background: none; border: 1px solid var(--line); color: var(--ink); font-family: var(--font-body); font-size: 0.8rem; cursor: pointer; }
+.sp-save:hover:not(:disabled), .sp-save:focus-visible { border-color: var(--accent); color: var(--accent); }
+.sp-save:disabled { opacity: 0.5; }
+.sp-msg { font-size: 0.8rem; color: var(--ink); }
+.sp-msg[data-kind="error"] { color: #b3261e; }
+.sp-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-list[hidden] { display: none; }
+.sp-list li { display: inline-flex; max-width: 100%; border: 1px solid var(--line); background: var(--surface); }
+.sp-use { max-width: 260px; padding: 5px 9px; background: none; border: 0; color: var(--ink); font-family: var(--font-body); font-size: 0.8rem; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-use:hover, .sp-use:focus-visible { background: var(--surface-2); }
+.sp-del { padding: 0 8px; background: none; border: 0; border-left: 1px solid var(--line); color: var(--ink-soft); font-size: 1rem; line-height: 1; cursor: pointer; }
+.sp-del:hover, .sp-del:focus-visible { color: #b3261e; }

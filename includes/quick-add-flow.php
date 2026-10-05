@@ -48,7 +48,7 @@
       <input type="file" accept="image/*" multiple id="gallery" hidden>
     </div>
     <label class="qa-field">Indications pour l'IA (facultatif)
-      <textarea id="notes" rows="2" maxlength="300" placeholder="Ex. : années 70, grès, petit éclat au pied, 32 cm de haut"></textarea>
+      <textarea id="notes" rows="2" maxlength="300" data-saved-prompts="notes" placeholder="Ex. : années 70, grès, petit éclat au pied, 32 cm de haut"></textarea>
     </label>
     <?php if (!$aiReady): ?>
       <p class="qa-warn">Clé Gemini non configurée (Réglages du site) : les photos seront enregistrées, mais le détourage, la mise en situation et la rédaction automatiques seront sautés.</p>
@@ -67,22 +67,26 @@
   </section>
 
   <!-- Étape 3 : vérification -->
-  <section class="qa-panel" id="panel-review" hidden>
+  <section class="qa-panel" id="panel-review" data-ai-form hidden>
     <div class="qa-visuals" id="visuals"></div>
-    <label class="qa-field">Nom<input type="text" id="f-name" maxlength="120"></label>
+    <div class="ai-bar">
+      <button type="button" class="btn btn-ghost ai-all" data-ai-field="all" title="Propose de nouveau un nom, une description, une catégorie, des matières et un prix d'après les photos">Tout régénérer par l'IA</button>
+      <span class="ai-status" data-ai-status role="status"></span>
+    </div>
+    <label class="qa-field">Nom <button type="button" class="ai-btn" data-ai-field="name" title="Générer / régénérer le nom">↻ IA</button><input type="text" id="f-name" data-ai-input="name" maxlength="120"></label>
     <div class="qa-two">
-      <label class="qa-field">Prix<input type="text" id="f-price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
+      <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button><input type="text" id="f-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
       <label class="qa-field">Poids (g)<input type="number" id="f-weight" min="0" step="10" inputmode="numeric" placeholder="500"></label>
     </div>
-    <label class="qa-field">Catégorie
-      <select id="f-cat">
+    <label class="qa-field">Catégorie <button type="button" class="ai-btn" data-ai-field="category" title="Choisir la catégorie d'après la pièce">↻ IA</button>
+      <select id="f-cat" data-ai-input="cat">
         <?php foreach (category_list() as $c): ?>
           <option value="<?= h($c['key']) ?>"><?= h($c['label']) ?></option>
         <?php endforeach; ?>
       </select>
     </label>
-    <label class="qa-field">Description<textarea id="f-desc" rows="5" maxlength="1200"></textarea></label>
-    <label class="qa-field">Matières<input type="text" id="f-materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
+    <label class="qa-field">Description <button type="button" class="ai-btn" data-ai-field="description" title="Générer / régénérer la description">↻ IA</button><textarea id="f-desc" data-ai-input="description" rows="5" maxlength="1200"></textarea></label>
+    <label class="qa-field">Matières <button type="button" class="ai-btn" data-ai-field="materials" title="Reconnaître les matières visibles">↻ IA</button><input type="text" id="f-materials" data-ai-input="materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
     <label class="qa-field">Étiquette<input type="text" id="f-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
     <label class="qa-switch"><input type="checkbox" id="f-publish"> <span>Publier tout de suite<br><small class="qa-note">Sinon la fiche reste masquée, à relire dans le catalogue.</small></span></label>
   </section>

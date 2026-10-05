@@ -73,6 +73,8 @@ $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/admin/quick-a
   box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
 })();
 </script>
+<script src="/assets/product-ai.js"></script>
+<script src="/assets/saved-prompts.js"></script>
 <script src="/assets/quick-add.js"></script>
 </body>
 </html>

@@ -183,6 +183,7 @@
     var done = new FormData();
     done.append('action', 'finish'); done.append('ref', ref); done.append('failed', failedSteps.join(','));
     post(done).then(function () { if (window.studioRunVariants) window.studioRunVariants(); });
+    $('panel-review').dataset.aiRef = ref; // boutons « ↻ IA » de la relecture (assets/product-ai.js)
     var box = $('visuals'); box.textContent = '';
     visuals.forEach(function (v) {
       var fig = document.createElement('figure');

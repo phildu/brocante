@@ -1,4 +1,5 @@
-// Boutons « ↻ IA » des formulaires de fiche produit (catalogue : ajout et édition) :
+// Boutons « ↻ IA » des formulaires de fiche produit (catalogue : ajout et édition ; relecture du Studio et
+// de l'ajout rapide) :
 // (re)génèrent le nom, la description, la catégorie, les matières ou le prix, ou tout d'un coup.
 // Les valeurs proposées sont écrites dans le formulaire, sans rien enregistrer : on relit, on
 // corrige, puis on clique sur « Enregistrer » (ou « Ajouter »). Serveur : admin/product-ai.php.
@@ -28,7 +29,8 @@
     });
   }
 
-  function control(form, field) { return form.querySelector('[name="' + INPUT[field] + '"]'); }
+  // Champ d'un bloc [data-ai-form] : par son name (formulaires du catalogue) ou son data-ai-input (relectures).
+  function control(form, field) { return form.querySelector('[name="' + INPUT[field] + '"]') || form.querySelector('[data-ai-input="' + INPUT[field] + '"]'); }
 
   function setStatus(form, text, kind) {
     var el = form.querySelector('[data-ai-status]');
@@ -48,15 +50,17 @@
   }
 
   function run(btn) {
-    var form = btn.closest('form');
+    var form = btn.closest('[data-ai-form]');
     if (!form) return;
     var fields = btn.dataset.aiField === 'all' ? ALL : btn.dataset.aiField;
     var fd = new FormData();
     fd.append('fields', fields);
-    var ref = form.querySelector('[name="ref"]');
-    if (ref && ref.value) fd.append('ref', ref.value);
+    // Pièce existante : son name="ref" (catalogue) ou data-ai-ref (relectures, renseigné par la page).
+    var refInput = form.querySelector('[name="ref"]');
+    var ref = (refInput && refInput.value) || form.dataset.aiRef || '';
+    if (ref) fd.append('ref', ref);
     ['name', 'description', 'cat', 'materials', 'price', 'size_text'].forEach(function (n) {
-      var c = form.querySelector('[name="' + n + '"]');
+      var c = form.querySelector('[name="' + n + '"]') || form.querySelector('[data-ai-input="' + n + '"]');
       if (c && c.value) fd.append(n, c.value);
     });
     var file = form.querySelector('input[type="file"][name="photo"]');

@@ -214,3 +214,7 @@ body.studio { --tabbar-h: 62px; margin: 0; background: var(--bg); color: var(--i
 .sr-body > * { flex-shrink: 0; }
 #sl-groups { display: flex; flex-direction: column; gap: 20px; }
 .st-variants { margin: 8px 14px 0; padding: 8px 12px; border: 1px solid var(--line); background: var(--surface); font-size: 0.8rem; font-family: var(--font-mono); }
+
+/* Boutons « ↻ IA » dans les champs de relecture : en haut à droite de l'étiquette, sans prendre une ligne. */
+.qa label.qa-field, .studio label.qa-field { position: relative; }
+.qa-field > .ai-btn { position: absolute; top: -3px; right: 0; margin: 0; padding: 3px 8px; }

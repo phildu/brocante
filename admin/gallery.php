@@ -154,7 +154,7 @@ $flash = flash_get();
         </div>
         <div class="field" id="gen-keywords-field">
           <label>Mots-clés / précisions (optionnel)</label>
-          <input type="text" name="keywords" placeholder="ex : fond en bois clair, lumière du matin, sans le couvercle...">
+          <input type="text" name="keywords" placeholder="ex : fond en bois clair, lumière du matin, sans le couvercle..." maxlength="300" data-saved-prompts="@gen-kind">
         </div>
         <button type="submit" class="btn btn-primary">Générer</button>
       </form>
@@ -571,5 +571,6 @@ $flash = flash_get();
 })();
 </script>
 <script src="/assets/admin-upload-check.js"></script>
+<script src="/assets/saved-prompts.js"></script>
 </body>
 </html>

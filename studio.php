@@ -171,7 +171,7 @@ $siteName = (string) $content['site_name'];
           <p class="qa-note" id="sb-summary"></p>
           <div class="sb-pieces" id="sb-pieces"></div>
           <label class="qa-field">Indications pour l'IA, valables pour tout le lot (facultatif)
-            <textarea id="sb-notes" rows="2" maxlength="300" placeholder="Ex. : vaisselle des années 70, ambiance chaleureuse"></textarea>
+            <textarea id="sb-notes" rows="2" maxlength="300" data-saved-prompts="notes" placeholder="Ex. : vaisselle des années 70, ambiance chaleureuse"></textarea>
           </label>
           <?php if (!$aiReady): ?><p class="qa-warn">Clé Gemini non configurée : les pièces seront enregistrées, sans détourage ni rédaction automatiques.</p><?php endif; ?>
           <div class="sb-actions">
@@ -216,24 +216,28 @@ $siteName = (string) $content['site_name'];
   <!-- Relecture d'une pièce -->
   <dialog class="sr" id="sr">
     <form method="dialog" class="sr-close"><button aria-label="Fermer"><?= $ico('<path d="M6 6l12 12M18 6 6 18"/>') ?></button></form>
-    <div class="sr-body">
+    <div class="sr-body" id="sr-body" data-ai-form>
       <p class="eyebrow" id="sr-ref"></p>
       <div class="qa-visuals" id="sr-photos"></div>
       <p class="qa-warn" id="sr-warn" hidden></p>
-      <label class="qa-field">Nom<input type="text" id="sr-name" maxlength="120"></label>
+      <div class="ai-bar">
+        <button type="button" class="btn btn-ghost ai-all" data-ai-field="all" title="Propose de nouveau un nom, une description, une catégorie, des matières et un prix d'après les photos">Tout régénérer par l'IA</button>
+        <span class="ai-status" data-ai-status role="status"></span>
+      </div>
+      <label class="qa-field">Nom <button type="button" class="ai-btn" data-ai-field="name" title="Générer / régénérer le nom">↻ IA</button><input type="text" id="sr-name" data-ai-input="name" maxlength="120"></label>
       <div class="qa-two">
-        <label class="qa-field">Prix<input type="text" id="sr-price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
+        <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button><input type="text" id="sr-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
         <label class="qa-field">Poids (g)<input type="number" id="sr-weight" min="0" step="10" inputmode="numeric" placeholder="500"></label>
       </div>
-      <label class="qa-field">Catégorie
-        <select id="sr-cat">
+      <label class="qa-field">Catégorie <button type="button" class="ai-btn" data-ai-field="category" title="Choisir la catégorie d'après la pièce">↻ IA</button>
+        <select id="sr-cat" data-ai-input="cat">
           <?php foreach (category_list() as $c): ?>
             <option value="<?= h($c['key']) ?>"><?= h($c['label']) ?></option>
           <?php endforeach; ?>
         </select>
       </label>
-      <label class="qa-field">Description<textarea id="sr-desc" rows="5" maxlength="1200"></textarea></label>
-      <label class="qa-field">Matières<input type="text" id="sr-materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
+      <label class="qa-field">Description <button type="button" class="ai-btn" data-ai-field="description" title="Générer / régénérer la description">↻ IA</button><textarea id="sr-desc" data-ai-input="description" rows="5" maxlength="1200"></textarea></label>
+      <label class="qa-field">Matières <button type="button" class="ai-btn" data-ai-field="materials" title="Reconnaître les matières visibles">↻ IA</button><input type="text" id="sr-materials" data-ai-input="materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
       <label class="qa-field">Étiquette<input type="text" id="sr-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
       <label class="qa-switch"><input type="checkbox" id="sr-publish"> <span>Visible dans la boutique<br><small class="qa-note">Sinon la fiche reste masquée.</small></span></label>
       <p class="qa-warn" id="sr-error" role="alert" hidden></p>
@@ -250,6 +254,8 @@ $siteName = (string) $content['site_name'];
     <button type="button" data-go="pieces"><?= $ico('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>') ?><span>Mes pièces</span><i class="st-count" id="st-count" hidden></i></button>
   </nav>
 
+  <script src="/assets/product-ai.js"></script>
+  <script src="/assets/saved-prompts.js"></script>
   <script src="/assets/quick-add.js"></script>
   <script src="/assets/studio.js" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>
