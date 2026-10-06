@@ -169,6 +169,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
               <?php foreach (VEO_MODELS as $key => $m): ?>
                 <option value="<?= h($key) ?>"<?= $key === 'fast' ? ' selected' : '' ?>>Google Veo — <?= h($m['label']) ?></option>
               <?php endforeach; ?>
+              <option value="<?= MODAL_MODEL_KEY ?>"<?= modal_video_available() ? '' : ' disabled' ?>>LTX-Video (Modal) — crédit gratuit Modal<?= modal_video_available() ? '' : ' · service à configurer dans les réglages' ?></option>
               <option value="<?= SF_MODEL_KEY ?>"<?= sf_available() ? '' : ' disabled' ?>>Wan 2.2 (SiliconFlow) — économique<?= sf_available() ? '' : ' · clé à renseigner dans les réglages' ?></option>
             </select>
           </div>
@@ -179,7 +180,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
                 <option value="<?= $sec ?>"<?= $sec === 6 ? ' selected' : '' ?>><?= $sec ?> secondes</option>
               <?php endforeach; ?>
             </select>
-            <p class="hint" id="gen-seconds-note" style="display:none;margin:4px 0 0;">Wan 2.2 n'a pas de réglage de durée : le service fixe la longueur du clip (courte, de l'ordre de quelques secondes).</p>
+            <p class="hint" id="gen-seconds-note" style="display:none;margin:4px 0 0;"><span id="gen-seconds-note-text"></span></p>
           </div>
           <div class="field">
             <label>Format</label>
@@ -224,13 +225,18 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         var costNote = { angle: ' : image 3:2 + version 9:16', ambiance: ' : image 3:2 + version 9:16', complete: ' : image 3:2 + version 9:16', detoure: '' };
         function sync() {
           var k = kindSelect.value;
-          var wan = genForm.elements.model.value === 'wan22';
+          var model = genForm.elements.model.value;
+          var wan = model === 'wan22' || model === 'ltx';
           genForm.elements.seconds.disabled = wan;
           document.getElementById('gen-seconds-label').textContent = wan ? 'Durée (fixée par le service)' : 'Durée';
           document.getElementById('gen-seconds-note').style.display = wan ? '' : 'none';
+          document.getElementById('gen-seconds-note-text').textContent = model === 'ltx'
+            ? "LTX-Video n'a pas de réglage de durée : le clip dure environ 4 secondes."
+            : "Wan 2.2 n'a pas de réglage de durée : le service fixe la longueur du clip (courte, de l'ordre de quelques secondes).";
           if (k === 'video_ai') {
             var vc = veoCosts[genForm.elements.model.value + '-' + genForm.elements.seconds.value];
-            cost.textContent = wan ? 'Coût estimé ' + vc + ' par vidéo (courte, durée fixée par le service) · prête en quelques minutes'
+            cost.textContent = model === 'ltx' ? 'Coût estimé ' + vc + ' par vidéo, prélevé sur le crédit gratuit Modal (30 $ par mois) · prête en 1 à 3 minutes'
+              : wan ? 'Coût estimé ' + vc + ' par vidéo (courte, durée fixée par le service) · prête en quelques minutes'
               : 'Coût estimé ' + vc + ' (facturé seulement si la vidéo aboutit) · prête en 1 à 6 minutes';
           } else {
             cost.textContent = costs[k] ? 'Coût estimé ' + costs[k] + costNote[k] : (k === 'video' ? 'Vidéo : gratuite' + (ffmpegOk ? '' : ' (fabriquée dans votre navigateur)') : '');
@@ -255,6 +261,9 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
       <?php else: ?>
         <p class="publish-status" style="margin-bottom:20px;">Le vrai détourage (fond transparent) nécessite soit Python (rembg) en local, soit une clé fal.ai (voir Réglages du site) — sans les deux, "Détourage" génère un repli à fond blanc via Gemini (pas un vrai fond transparent). Les autres générations (ambiance, autre angle, compléter l'objet, netteté) fonctionnent normalement, elles n'en ont besoin d'aucun des deux.</p>
       <?php endif; ?>
+    <?php endif; ?>
+    <?php if (!modal_video_available()): ?>
+      <p class="publish-status" style="margin-bottom:20px;">Vidéo IA gratuite (LTX-Video sur Modal) : déployez le service sur votre compte Modal, puis renseignez son adresse et son jeton dans <a href="/admin/index.php#modal-video-settings" style="color:var(--accent);">Réglages du site</a> (mode d'emploi dans le README, section « Vidéos de la galerie »).</p>
     <?php endif; ?>
     <?php if (!sf_available()): ?>
       <p class="publish-status" style="margin-bottom:20px;">Vidéo IA économique (Wan 2.2) : renseignez une clé SiliconFlow dans <a href="/admin/index.php#siliconflow-settings" style="color:var(--accent);">Réglages du site</a> pour l'activer.</p>

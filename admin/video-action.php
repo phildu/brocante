@@ -19,6 +19,12 @@ function video_reply(array $data, int $status = 200): never
     exit;
 }
 
+/** Fournisseur d'une vidéo IA d'après la clé de modèle : google (Veo), siliconflow (Wan 2.2) ou modal (LTX-Video). */
+function video_provider(string $modelKey): string
+{
+    return match ($modelKey) { SF_MODEL_KEY => 'siliconflow', MODAL_MODEL_KEY => 'modal', default => 'google' };
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') video_reply(['ok' => false, 'error' => 'Requête invalide.'], 405);
 if (!hash_equals(admin_csrf_token(), (string) ($_POST['csrf'] ?? ''))) video_reply(['ok' => false, 'error' => 'Page expirée : rechargez-la et recommencez.'], 400);
 
@@ -55,13 +61,18 @@ switch ($action) {
         if (!isset(veo_motions()[$effect])) $effect = 'auto';
         $keywords = mb_substr(trim((string) ($_POST['keywords'] ?? '')), 0, SAVED_PROMPT_MAX_LENGTH);
 
-        $wan = $modelKey === SF_MODEL_KEY;
-        if ($wan) $seconds = 0; // durée fixée par le service
+        $provider = video_provider($modelKey);
+        if ($provider !== 'google') $seconds = 0; // durée fixée par le service
         $prompt = build_veo_prompt($effect, $keywords);
-        $started = $wan ? sf_video_start($srcAbs, $prompt, $aspect) : veo_start($srcAbs, $prompt, $aspect, $modelKey, $seconds);
+        $started = match ($provider) {
+            'siliconflow' => sf_video_start($srcAbs, $prompt, $aspect),
+            'modal' => modal_video_start($srcAbs, $prompt, $aspect),
+            default => veo_start($srcAbs, $prompt, $aspect, $modelKey, $seconds),
+        };
         if (!$started['ok']) video_reply(['ok' => false, 'error' => $started['error']], 502);
 
-        $label = ($wan ? 'Vidéo IA (Wan) — ' : 'Vidéo IA — ') . (veo_motions()[$effect] ?? 'Vidéo');
+        $label = ['siliconflow' => 'Vidéo IA (Wan) — ', 'modal' => 'Vidéo IA (LTX) — '][$provider] ?? 'Vidéo IA — ';
+        $label .= veo_motions()[$effect] ?? 'Vidéo';
         db()->prepare('INSERT INTO veo_jobs (product_ref, operation, model, seconds, aspect, label) VALUES (?, ?, ?, ?, ?, ?)')
             ->execute([$ref, $started['operation'], $modelKey, $seconds, $aspect, $label]);
         video_reply(['ok' => true, 'job' => (int) db()->lastInsertId(), 'aspect' => $aspect]);
@@ -86,8 +97,12 @@ switch ($action) {
             video_reply(['ok' => true, 'state' => 'pending']);
         }
 
-        $wan = $job['model'] === SF_MODEL_KEY;
-        $poll = $wan ? sf_video_poll($job['operation']) : veo_poll($job['operation']);
+        $provider = video_provider($job['model']);
+        $poll = match ($provider) {
+            'siliconflow' => sf_video_poll($job['operation']),
+            'modal' => modal_video_poll($job['operation']),
+            default => veo_poll($job['operation']),
+        };
         if ($poll['state'] === 'failed') $fail($poll['error']);
         if ($poll['state'] === 'pending') {
             if ($expired) $fail("Google n'a pas terminé la vidéo à temps : relancez la génération (vous n'êtes pas facturé).");
@@ -98,7 +113,7 @@ switch ($action) {
         $claim = db()->prepare("UPDATE veo_jobs SET status = 'saving' WHERE id = ? AND status = 'pending'");
         $claim->execute([$job['id']]);
         if ($claim->rowCount() === 0) video_reply(['ok' => true, 'state' => 'pending']);
-        $path = veo_download($poll['uri'], !$wan);
+        $path = veo_download($poll['uri'], ['siliconflow' => 'public', 'modal' => 'modal'][$provider] ?? 'google');
         if (!$path) $fail('La vidéo est prête mais son téléchargement a échoué : relancez la génération.');
         add_product_photo($ref, $path, $job['label'], true, 'video');
         ai_usage_log_video($job['model'], (int) $job['seconds']);

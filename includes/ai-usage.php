@@ -6,9 +6,9 @@
 // Google (ai.google.dev/pricing) et fal.ai. Le solde réel d'un compte n'est lisible par aucune API : ce qui est affiché
 // est une estimation, pas une facture.
 
-/** Tarifs par défaut : image = $ par image générée ; text_in / text_out = $ par million de tokens ; search = $ par requête avec recherche web ; cutout = $ par détourage fal.ai ; veo_* = $ par seconde de vidéo Veo 3.1 (Lite, Fast, Standard ; 720p) ; wan22 = $ par vidéo Wan 2.2 (SiliconFlow, durée fixée par le service). */
-const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001, 'veo_lite' => 0.05, 'veo_fast' => 0.10, 'veo_std' => 0.40, 'wan22' => 0.29];
-const AI_KINDS = ['image' => 'Images générées', 'text' => 'Texte et vision', 'search' => 'Recherches web', 'cutout' => 'Détourages (fal.ai)', 'video' => 'Vidéos IA (Veo, Wan)'];
+/** Tarifs par défaut : image = $ par image générée ; text_in / text_out = $ par million de tokens ; search = $ par requête avec recherche web ; cutout = $ par détourage fal.ai ; veo_* = $ par seconde de vidéo Veo 3.1 (Lite, Fast, Standard ; 720p) ; wan22 = $ par vidéo Wan 2.2 (SiliconFlow, durée fixée par le service) ; ltx = $ estimé par vidéo LTX-Video sur Modal (de l'ordre d'une minute de GPU, prélevé sur le crédit Modal). */
+const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001, 'veo_lite' => 0.05, 'veo_fast' => 0.10, 'veo_std' => 0.40, 'wan22' => 0.29, 'ltx' => 0.08];
+const AI_KINDS = ['image' => 'Images générées', 'text' => 'Texte et vision', 'search' => 'Recherches web', 'cutout' => 'Détourages (fal.ai)', 'video' => 'Vidéos IA (Veo, Wan, LTX)'];
 
 function ai_usage_ensure_schema(PDO $pdo): void
 {
@@ -104,6 +104,10 @@ function ai_usage_log_video(string $modelKey, int $seconds): void
 {
     if ($modelKey === SF_MODEL_KEY) {
         ai_usage_record('video', veo_cost_usd($modelKey, $seconds), SF_VIDEO_MODEL);
+        return;
+    }
+    if ($modelKey === MODAL_MODEL_KEY) {
+        ai_usage_record('video', veo_cost_usd($modelKey, $seconds), 'LTX-Video (Modal)');
         return;
     }
     $model = VEO_MODELS[$modelKey] ?? VEO_MODELS['fast'];

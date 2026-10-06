@@ -173,6 +173,27 @@ $flash = flash_get();
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
       </form>
 
+      <form class="admin-block" method="post" action="/admin/save-modal-video.php" id="modal-video-settings">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>Réglages IA (Modal — vidéo IA gratuite, LTX-Video)</h2>
+        <p class="hint">Service de génération que vous déployez sur <a href="https://modal.com" target="_blank" rel="noopener">votre compte Modal</a> (30 $ de crédit gratuit par mois, facturation à la seconde de GPU) : <code>pip install modal</code>, <code>modal setup</code>, <code>modal secret create boutique-video-token AUTH_TOKEN=…</code> puis <code>modal deploy modal/ltx_video_app.py</code>. La dernière commande affiche l'adresse du service ; saisissez-la ici avec le même jeton. Un champ laissé vide conserve la valeur enregistrée.</p>
+        <div class="field">
+          <label>Adresse du service</label>
+          <input type="text" name="modal_url" autocomplete="off" placeholder="<?= MODAL_VIDEO_URL !== '' ? h(MODAL_VIDEO_URL) : 'https://votre-compte--boutique-ltx-video-web.modal.run' ?>">
+        </div>
+        <div class="field">
+          <label>Jeton (le même que dans « modal secret create »)</label>
+          <input type="password" name="modal_token" autocomplete="off" placeholder="<?= MODAL_VIDEO_TOKEN !== '' ? 'Déjà enregistré — ' . h(substr(MODAL_VIDEO_TOKEN, 0, 3)) . '…' . h(substr(MODAL_VIDEO_TOKEN, -3)) : 'jeton' ?>">
+        </div>
+        <p class="publish-status" data-kind="<?= modal_video_available() ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= modal_video_available() ? 'Service Modal configuré — LTX-Video est disponible dans la galerie. La connexion est testée à chaque enregistrement.' : 'Non configuré — LTX-Video est désactivé (les autres vidéos restent disponibles).' ?>
+        </p>
+        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer et tester</button>
+        <?php if (modal_video_available()): ?>
+          <button type="submit" name="remove" value="1" class="btn" style="margin-top:6px;" onclick="return confirm('Retirer la configuration du service Modal ?');">Retirer</button>
+        <?php endif; ?>
+      </form>
+
       <form class="admin-block" method="post" action="/admin/save-siliconflow-key.php" id="siliconflow-settings">
         <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
         <h2>Réglages IA (SiliconFlow — vidéo IA économique)</h2>

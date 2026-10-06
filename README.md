@@ -430,6 +430,17 @@ Galerie d'une pièce → « Générer une nouvelle vue » → deux types de vid�
   ou 720×1280) puis `POST /v1/video/status` (`InQueue`, `InProgress`, `Succeed`, `Failed`) ; le lien de la vidéo
   n'est valable qu'une heure, elle est donc téléchargée tout de suite. Même suivi (`veo_jobs`) et même coût consigné
   que Veo. Code : `includes/siliconflow-video.php`.
+- **Vidéo IA — LTX-Video sur Modal** — l'option gratuite (dans le crédit de 30 $ par mois du plan Starter de Modal, facturation
+  à la seconde de GPU ; une vidéo d'environ 4 s coûte de l'ordre de quelques centimes, estimé à 0,08 $ dans « Consommation IA »).
+  Le service est le script `modal/ltx_video_app.py` (LTX-Video via `diffusers` sur un GPU L40S, poids gardés dans un volume
+  Modal, points d'entrée `/health`, `/submit`, `/status/<id>`, `/video/<id>` protégés par un jeton), à déployer une fois sur
+  le compte Modal du commerçant :
+  `pip install modal`, `modal setup`, `modal secret create boutique-video-token AUTH_TOKEN=<jeton>`,
+  `modal deploy modal/ltx_video_app.py`. L'adresse affichée et le jeton se saisissent dans Administration → Réglages du site →
+  « Modal » (fichier `.secrets/<commerce>/modal-video.json` ; la connexion est testée à l'enregistrement ; l'adresse doit
+  finir par `.modal.run`). Sans configuration, l'option est grisée. Le dossier `modal/` n'est pas envoyé par le script de
+  déploiement. Formats 768×448 ou 448×768, 97 images à 24 i/s ; la première génération après une période d'inactivité charge
+  aussi le modèle (plus long). Code PHP : `includes/modal-video.php`. Qualité inférieure à Veo : l'objet peut se déformer.
 
 ## Photos et vidéos depuis un téléphone proche
 

@@ -132,6 +132,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .git/ \
   --exclude-glob .github/ \
   --exclude-glob .claude/ \
+  --exclude-glob modal/ \
   --exclude-glob .venv/ \
   --exclude-glob .secrets/ \
   --exclude-glob var/log/ \
@@ -209,6 +210,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .git/ \
   --exclude-glob .github/ \
   --exclude-glob .claude/ \
+  --exclude-glob modal/ \
   --exclude-glob .venv/ \
   --exclude-glob .secrets/ \
   --exclude-glob var/log/ \

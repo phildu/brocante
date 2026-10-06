@@ -38,6 +38,7 @@ function veo_ensure_schema(PDO $pdo): void
 function veo_cost_usd(string $modelKey, int $seconds): float
 {
     if ($modelKey === SF_MODEL_KEY) return ai_pricing()['wan22']; // un prix par vidéo
+    if ($modelKey === MODAL_MODEL_KEY) return ai_pricing()['ltx']; // un prix estimé par vidéo (crédit Modal)
     $model = VEO_MODELS[$modelKey] ?? VEO_MODELS['fast'];
     return ai_pricing()[$model['price']] * $seconds;
 }
@@ -46,7 +47,7 @@ function veo_cost_usd(string $modelKey, int $seconds): float
 function veo_cost_labels(): array
 {
     $out = [];
-    foreach (array_merge(array_keys(VEO_MODELS), [SF_MODEL_KEY]) as $key) {
+    foreach (array_merge(array_keys(VEO_MODELS), [SF_MODEL_KEY, MODAL_MODEL_KEY]) as $key) {
         foreach (VEO_SECONDS as $s) $out["$key-$s"] = ai_estimate_label(['usd' => veo_cost_usd($key, $s)]);
     }
     return $out;
@@ -206,13 +207,19 @@ function veo_poll(string $operation): array
 }
 
 /**
- * Télécharge la vidéo terminée dans uploads/ ; retourne le chemin relatif ou null. $google : lien de l'API Gemini
- * (la clé est jointe à la requête) ; sinon lien public d'un autre fournisseur (https obligatoire, aucune clé envoyée).
+ * Télécharge la vidéo terminée dans uploads/ ; retourne le chemin relatif ou null. $source : « google » (lien de l'API
+ * Gemini, la clé est jointe à la requête), « public » (lien public d'un autre fournisseur : https obligatoire, aucune clé
+ * envoyée) ou « modal » (service Modal du commerçant, avec son jeton).
  */
-function veo_download(string $uri, bool $google = true): ?string
+function veo_download(string $uri, string $source = 'google'): ?string
 {
     $host = (string) parse_url($uri, PHP_URL_HOST);
-    if ($google ? !str_starts_with($uri, 'https://generativelanguage.googleapis.com/') : (!str_starts_with($uri, 'https://') || $host === '' || filter_var($host, FILTER_VALIDATE_IP))) return null;
+    $allowed = match ($source) {
+        'google' => str_starts_with($uri, 'https://generativelanguage.googleapis.com/'),
+        'modal' => modal_video_url_valid($uri) && str_starts_with($uri, MODAL_VIDEO_URL . '/'),
+        default => str_starts_with($uri, 'https://') && $host !== '' && !filter_var($host, FILTER_VALIDATE_IP),
+    };
+    if (!$allowed) return null;
     $dir = __DIR__ . '/../uploads';
     if (!is_dir($dir)) mkdir($dir, 0755, true);
     $filename = 'video-ia-' . substr(bin2hex(random_bytes(4)), 0, 8) . '.mp4';
@@ -224,9 +231,13 @@ function veo_download(string $uri, bool $google = true): ?string
         CURLOPT_FILE => $fh,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS => 4,
-        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+        CURLOPT_PROTOCOLS => $source === 'modal' ? (CURLPROTO_HTTPS | CURLPROTO_HTTP) : CURLPROTO_HTTPS,
         CURLOPT_TIMEOUT => 55,
-        CURLOPT_HTTPHEADER => $google ? ['x-goog-api-key: ' . GEMINI_API_KEY] : [],
+        CURLOPT_HTTPHEADER => match ($source) {
+            'google' => ['x-goog-api-key: ' . GEMINI_API_KEY],
+            'modal' => ['Authorization: Bearer ' . MODAL_VIDEO_TOKEN],
+            default => [],
+        },
     ]);
     $ok = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
