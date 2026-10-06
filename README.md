@@ -406,6 +406,19 @@ Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
 dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
 `tenants/`, `includes/`…).
 
+## Plusieurs photos de départ (galerie d'une pièce)
+
+Galerie d'une pièce → « Générer une nouvelle vue » : la photo de départ est un sélecteur de miniatures où l'on peut en cliquer
+**plusieurs** (la première choisie est la principale, marquée ★ ; les suivantes sont numérotées). Selon le type :
+
+- **Autre angle, mise en situation, compléter l'objet** : toutes les photos (4 au plus) partent ensemble chez Gemini avec une
+  consigne « photos de référence du MÊME objet » (`multi_photo_prompt()`), et l'IA produit UNE image qui tient compte de
+  tous les côtés (dos, détails, étiquettes). La photo principale est celle posée sur la toile du format voulu ; le coût ne change pas.
+- **Détourage** et **vidéo zoom/travelling** : un résultat PAR photo (3 détourages, 6 vidéos au plus par demande ; un résumé
+  « n sur m ajoutés » s'affiche).
+- **Vidéo IA** (Veo, Wan, LTX) : une vidéo par photo (6 au plus) ; le coût estimé est multiplié par le nombre de photos, et la page suit
+  toutes les générations en parallèle.
+
 ## Vidéos de la galerie d'une pièce
 
 Galerie d'une pièce → « Générer une nouvelle vue » → deux types de vidéo, sans ffmpeg obligatoire :

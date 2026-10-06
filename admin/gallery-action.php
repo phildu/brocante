@@ -288,89 +288,123 @@ switch ($action) {
         $anglePreset = (string) ($_POST['angle_preset'] ?? 'auto');
         $keywords = trim((string) ($_POST['keywords'] ?? ''));
 
-        $sourceRow = $sourcePhotoId ? get_photo_row($ref, $sourcePhotoId) : null;
-        $sourcePath = $sourceRow['path'] ?? $product['photo'];
+        // Une ou plusieurs photos de départ (ids dans l'ordre choisi ; la première est la photo principale).
+        $ids = array_values(array_unique(array_filter(array_map('intval', explode(',', (string) ($_POST['source_photo_ids'] ?? ''))))));
+        if (!$ids && $sourcePhotoId) $ids = [$sourcePhotoId];
+        $sourcePaths = [];
+        $pathToId = [];
+        foreach ($ids as $id) {
+            $row = get_photo_row($ref, $id);
+            if ($row && ($row['type'] ?? 'photo') === 'photo') { $sourcePaths[] = $row['path']; $pathToId[$row['path']] = $id; }
+        }
+        if (!$sourcePaths && $product['photo']) $sourcePaths = [$product['photo']];
+        $sourcePath = $sourcePaths[0] ?? null;
         if (!$sourcePath) {
             flash_set("Cette pièce n'a pas encore de photo à partir de laquelle générer.", 'error');
             break;
         }
 
-        if ($kind === 'video') {
-            // Effet Ken Burns via ffmpeg : rapide (1-3s), pas d'IA — exécuté
-            // directement dans la requête, pas besoin de tâche de fond.
-            $videoEffect = (string) ($_POST['video_effect'] ?? 'zoom_in');
-            if (!array_key_exists($videoEffect, video_effects())) $videoEffect = 'zoom_in';
-            $srcAbs = __DIR__ . '/../' . $sourcePath;
-            $path = run_ken_burns_video($srcAbs, $videoEffect);
-            if (!$path) {
-                flash_set('La génération de la vidéo a échoué.', 'error');
-                break;
-            }
-            add_product_photo($ref, $path, video_effects()[$videoEffect], false, 'video');
-            flash_set('Vidéo générée et ajoutée à la galerie.');
-            break;
-        }
-
-        if ($kind === 'detoure') {
-            // Rembg (Python) tourne en local via exec() — vrai détourage,
-            // fond réellement transparent (PNG + canal alpha). Reste le
-            // choix par défaut quand disponible (meilleure qualité).
-            if (shell_exec_available() && PHP_CLI_BIN && PYTHON_BIN) {
-                $logDir = __DIR__ . '/../var/log';
-                if (!is_dir($logDir)) mkdir($logDir, 0755, true);
-                $logFile = $logDir . '/generate-' . $ref . '-detoure-' . time() . '.log';
-                $cmd = '/usr/bin/nohup ' . escapeshellarg(PHP_CLI_BIN) . ' ' . escapeshellarg(__DIR__ . '/cli/generate.php') . ' '
-                    . escapeshellarg($ref) . ' ' . escapeshellarg('detoure') . ' '
-                    . escapeshellarg((string) $sourcePhotoId)
-                    . ' < /dev/null > ' . escapeshellarg($logFile) . ' 2>&1 &';
-                exec($cmd);
-                flash_set("Le détourage est en cours de génération (~1 à 2 minutes) — actualisez cette page dans un instant pour le voir apparaître.");
-                break;
-            }
-
-            // rembg local indisponible (exec() désactivé) : fal.ai héberge le
-            // même modèle rembg, appelé en HTTP classique — vrai fond
-            // transparent, sans dépendre d'exec(). Reste le meilleur repli.
-            if (FAL_API_KEY) {
-                $srcAbs = __DIR__ . '/../' . $sourcePath;
-                $bytes = fal_remove_background($srcAbs);
-                if ($bytes) {
-                    $detourePath = save_binary_photo($bytes, 'product-' . $ref . '-detoure', 'png');
-                    if ($detourePath) {
-                        add_product_photo($ref, $detourePath, 'Détourée', false);
-                        flash_set('Photo détourée (fond transparent) et ajoutée à la galerie.');
-                        break;
+        // Vidéo zoom/travelling et détourage : un résultat PAR photo choisie (les autres types utilisent toutes les photos ensemble).
+        if (in_array($kind, ['video', 'detoure'], true)) {
+            $perPhotoMax = $kind === 'detoure' ? 3 : 6;
+            $skipped = max(0, count($sourcePaths) - $perPhotoMax);
+            $messages = [];
+            $capture = static function () use (&$messages): void {
+                if (!empty($_SESSION['flash'])) { $messages[] = $_SESSION['flash']; unset($_SESSION['flash']); }
+            };
+            foreach (array_slice($sourcePaths, 0, $perPhotoMax) as $sourcePath) {
+                $capture();
+                $sourcePhotoId = $pathToId[$sourcePath] ?? 0; // le détourage en tâche de fond reçoit l'id de CETTE photo
+                if ($kind === 'video') {
+                    // Effet Ken Burns via ffmpeg : rapide (1-3s), pas d'IA — exécuté
+                    // directement dans la requête, pas besoin de tâche de fond.
+                    $videoEffect = (string) ($_POST['video_effect'] ?? 'zoom_in');
+                    if (!array_key_exists($videoEffect, video_effects())) $videoEffect = 'zoom_in';
+                    $srcAbs = __DIR__ . '/../' . $sourcePath;
+                    $path = run_ken_burns_video($srcAbs, $videoEffect);
+                    if (!$path) {
+                        flash_set('La génération de la vidéo a échoué.', 'error');
+                        continue;
                     }
+                    add_product_photo($ref, $path, video_effects()[$videoEffect], false, 'video');
+                    flash_set('Vidéo générée et ajoutée à la galerie.');
+                    continue;
                 }
-                flash_set("Le détourage via fal.ai a échoué (service indisponible ou surchargé) — réessayez dans un instant.", 'error');
-                break;
-            }
 
-            // Dernier repli, quand ni rembg local ni fal.ai ne sont
-            // disponibles : Gemini ne peut pas produire de vrai fond
-            // transparent, seulement remplacer le fond par du blanc uni —
-            // étiqueté différemment pour ne jamais faire croire à un export
-            // PNG transparent.
-            if (!GEMINI_API_KEY) {
-                flash_set("Le détourage nécessite Python (rembg) ou une clé fal.ai, tous deux indisponibles ici — configurez une clé fal.ai dans Réglages du site pour un vrai fond transparent.", 'error');
-                break;
-            }
-            $srcAbs = __DIR__ . '/../' . $sourcePath;
-            $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
-            $bytes = gemini_generate_image($small, build_detoure_fallback_prompt(), 1);
-            if ($small !== $srcAbs) @unlink($small);
+                if ($kind === 'detoure') {
+                    // Rembg (Python) tourne en local via exec() — vrai détourage,
+                    // fond réellement transparent (PNG + canal alpha). Reste le
+                    // choix par défaut quand disponible (meilleure qualité).
+                    if (shell_exec_available() && PHP_CLI_BIN && PYTHON_BIN) {
+                        $logDir = __DIR__ . '/../var/log';
+                        if (!is_dir($logDir)) mkdir($logDir, 0755, true);
+                        $logFile = $logDir . '/generate-' . $ref . '-detoure-' . time() . '.log';
+                        $cmd = '/usr/bin/nohup ' . escapeshellarg(PHP_CLI_BIN) . ' ' . escapeshellarg(__DIR__ . '/cli/generate.php') . ' '
+                            . escapeshellarg($ref) . ' ' . escapeshellarg('detoure') . ' '
+                            . escapeshellarg((string) $sourcePhotoId)
+                            . ' < /dev/null > ' . escapeshellarg($logFile) . ' 2>&1 &';
+                        exec($cmd);
+                        flash_set("Le détourage est en cours de génération (~1 à 2 minutes) — actualisez cette page dans un instant pour le voir apparaître.");
+                        continue;
+                    }
 
-            if (!$bytes) {
-                flash_set('Le fond blanc de repli a échoué (service IA indisponible ou surchargé) — réessayez dans un instant.', 'error');
-                break;
+                    // rembg local indisponible (exec() désactivé) : fal.ai héberge le
+                    // même modèle rembg, appelé en HTTP classique — vrai fond
+                    // transparent, sans dépendre d'exec(). Reste le meilleur repli.
+                    if (FAL_API_KEY) {
+                        $srcAbs = __DIR__ . '/../' . $sourcePath;
+                        $bytes = fal_remove_background($srcAbs);
+                        if ($bytes) {
+                            $detourePath = save_binary_photo($bytes, 'product-' . $ref . '-detoure', 'png');
+                            if ($detourePath) {
+                                add_product_photo($ref, $detourePath, 'Détourée', false);
+                                flash_set('Photo détourée (fond transparent) et ajoutée à la galerie.');
+                                continue;
+                            }
+                        }
+                        flash_set("Le détourage via fal.ai a échoué (service indisponible ou surchargé) — réessayez dans un instant.", 'error');
+                        continue;
+                    }
+
+                    // Dernier repli, quand ni rembg local ni fal.ai ne sont
+                    // disponibles : Gemini ne peut pas produire de vrai fond
+                    // transparent, seulement remplacer le fond par du blanc uni —
+                    // étiqueté différemment pour ne jamais faire croire à un export
+                    // PNG transparent.
+                    if (!GEMINI_API_KEY) {
+                        flash_set("Le détourage nécessite Python (rembg) ou une clé fal.ai, tous deux indisponibles ici — configurez une clé fal.ai dans Réglages du site pour un vrai fond transparent.", 'error');
+                        continue;
+                    }
+                    $srcAbs = __DIR__ . '/../' . $sourcePath;
+                    $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
+                    $bytes = gemini_generate_image($small, build_detoure_fallback_prompt(), 1);
+                    if ($small !== $srcAbs) @unlink($small);
+
+                    if (!$bytes) {
+                        flash_set('Le fond blanc de repli a échoué (service IA indisponible ou surchargé) — réessayez dans un instant.', 'error');
+                        continue;
+                    }
+                    $detourePath = save_binary_photo($bytes, 'product-' . $ref . '-detoure-repli', 'jpg');
+                    if (!$detourePath) {
+                        flash_set("Impossible d'enregistrer l'image générée.", 'error');
+                        continue;
+                    }
+                    add_product_photo($ref, $detourePath, 'Détourée (fond blanc, approx. IA)', true);
+                    flash_set("Détourage indisponible sur cet hébergement (rembg et fal.ai absents) — une version à fond blanc via l'IA a été générée à la place, ce n'est pas un vrai fond transparent.", 'ok');
+                    continue;
+                }
             }
-            $detourePath = save_binary_photo($bytes, 'product-' . $ref . '-detoure-repli', 'jpg');
-            if (!$detourePath) {
-                flash_set("Impossible d'enregistrer l'image générée.", 'error');
-                break;
+            $capture();
+            if (count($messages) === 1 && !$skipped) {
+                flash_set($messages[0]['message'], $messages[0]['kind'], $messages[0]['link'] ?? null);
+            } else {
+                $failed = array_values(array_filter($messages, static fn ($m) => ($m['kind'] ?? 'ok') === 'error'));
+                $okCount = count($messages) - count($failed);
+                $summary = $okCount . ' ' . ($kind === 'video' ? 'vidéo(s)' : 'détourage(s)') . ' sur ' . count($messages) . ' ajouté(s) à la galerie'
+                    . ($skipped ? " ($skipped photo(s) en trop ignorée(s) : " . $perPhotoMax . ' au plus par demande)' : '') . '.'
+                    . ($failed ? ' Échec : ' . $failed[0]['message'] : '');
+                flash_set($summary, $okCount > 0 ? 'ok' : 'error');
             }
-            add_product_photo($ref, $detourePath, 'Détourée (fond blanc, approx. IA)', true);
-            flash_set("Détourage indisponible sur cet hébergement (rembg et fal.ai absents) — une version à fond blanc via l'IA a été générée à la place, ce n'est pas un vrai fond transparent.", 'ok');
             break;
         }
 
@@ -386,17 +420,27 @@ switch ($action) {
 
         $srcAbs = __DIR__ . '/../' . $sourcePath;
         $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
+        // Autres photos choisies (3 au plus) : envoyées avec la principale, pour que l'IA voie l'objet sous plusieurs côtés.
+        $extras = [];
+        $extraTemps = [];
+        foreach (array_slice($sourcePaths, 1, 3) as $extraPath) {
+            $extraAbs = __DIR__ . '/../' . $extraPath;
+            $tmp = downscale_for_ai($extraAbs, 1024, 82);
+            if ($tmp) $extraTemps[] = $tmp;
+            $extras[] = $tmp ?? $extraAbs;
+        }
         $prompt = match ($kind) {
             'ambiance' => build_ambiance_prompt($keywords),
             'angle' => build_angle_prompt($anglePreset, $keywords),
             'complete' => build_complete_prompt($keywords),
-        };
+        } . multi_photo_prompt(1 + count($extras));
         // Version ordinateur (3:2) maintenant ; la version smartphone (9:16)
         // suit dans une requête séparée (queue_mobile_variant), pour rester
         // sous le délai du serveur.
         @set_time_limit(120);
-        $desktop = generate_desktop_image($small, $prompt, generated_photo_basename('product-' . $ref . '-' . $kind, $keywords), 1, $kind === 'ambiance' && $keywords !== '');
+        $desktop = generate_desktop_image($small, $prompt, generated_photo_basename('product-' . $ref . '-' . $kind, $keywords), 1, $kind === 'ambiance' && $keywords !== '', $extras);
         if ($small !== $srcAbs) @unlink($small);
+        foreach ($extraTemps as $tmp) @unlink($tmp);
 
         if (!$desktop) {
             flash_set('La génération a échoué (service IA indisponible ou surchargé) — réessayez dans un instant.', 'error');
@@ -407,7 +451,7 @@ switch ($action) {
         $photoId = add_product_photo($ref, $desktop, $label, true);
         queue_mobile_variant($photoId, $desktop, $kind === 'ambiance' ? $sourcePath : null, $kind === 'ambiance' ? $keywords : '');
         $doneLabel = ['ambiance' => "La photo d'ambiance", 'angle' => 'La vue sous un autre angle', 'complete' => "Le complément de l'objet"][$kind];
-        flash_set("$doneLabel a été générée et ajoutée à la galerie (format ordinateur 3:2) sous le nom « $label »" . ($keywords !== '' ? ' d\'après votre consigne' : '') . '. La version smartphone 9:16 se génère maintenant, sans rien bloquer.');
+        flash_set("$doneLabel a été générée et ajoutée à la galerie (format ordinateur 3:2) sous le nom « $label »" . ($keywords !== '' ? ' d\'après votre consigne' : '') . '. La version smartphone 9:16 se génère maintenant, sans rien bloquer.' . ($extras ? ' (à partir de ' . (1 + count($extras)) . ' photos de la pièce)' : ''));
         break;
     }
 }

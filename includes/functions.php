@@ -659,8 +659,9 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
 /**
  * @param string|null $aspectRatio Format de l'image produite (« 3:2 », « 9:16 »…),
  *  demandé au modèle : l'image est composée pour ce cadre, sans recadrage après coup.
+ * @param string[] $extraAbsPaths Autres photos du même objet, envoyées après la principale (voir multi_photo_prompt()).
  */
-function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3, ?string $aspectRatio = null): ?string
+function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3, ?string $aspectRatio = null, array $extraAbsPaths = []): ?string
 {
     if (!GEMINI_API_KEY) return null;
 
@@ -676,6 +677,11 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
             ],
         ]],
     ];
+    foreach ($extraAbsPaths as $extra) {
+        $extraData = @file_get_contents($extra);
+        if ($extraData === false) continue;
+        $payload['contents'][0]['parts'][] = ['inlineData' => ['mimeType' => @getimagesize($extra)['mime'] ?? 'image/jpeg', 'data' => base64_encode($extraData)]];
+    }
     if ($aspectRatio !== null) {
         $payload['generationConfig'] = ['imageConfig' => ['aspectRatio' => $aspectRatio]];
     }
@@ -1017,18 +1023,18 @@ function fit_generated_to_ratio(string $binary, string $aspectRatio, bool $allow
  * Un visuel au format donné : source préparée (photo posée entière avec marge
  * sur une toile à ce format), consigne de cadrage, format vérifié.
  */
-function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries, bool $directed = false): ?string
+function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries, bool $directed = false, array $extraAbsPaths = []): ?string
 {
     $prepared = prepare_generation_source($srcAbsPath, $aspectRatio);
-    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio, $directed), $retries, $aspectRatio);
+    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio, $directed), $retries, $aspectRatio, $extraAbsPaths);
     if ($prepared) @unlink($prepared);
     return $bytes ? fit_generated_to_ratio($bytes, $aspectRatio) : null;
 }
 
 /** Visuel au format ordinateur (3:2), enregistré dans uploads/ : chemin, ou null. */
-function generate_desktop_image(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1, bool $directed = false): ?string
+function generate_desktop_image(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1, bool $directed = false, array $extraAbsPaths = []): ?string
 {
-    $bytes = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries, $directed);
+    $bytes = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries, $directed, $extraAbsPaths);
     return $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
 }
 
@@ -2166,6 +2172,19 @@ function owner_direction_prompt(string $keywords): string
 {
     return $keywords === '' ? '' : " OWNER'S DIRECTION (mandatory, it takes priority over any default above that contradicts it): « "
         . $keywords . " ». Follow it faithfully — setting, light, framing (close-up, wide shot, angle), action, and any person it mentions — while keeping the object itself identical.";
+}
+
+/**
+ * Ajout au prompt quand plusieurs photos de la même pièce servent de départ : la première est la photo principale (celle
+ * posée sur la toile du format voulu), les autres montrent d'autres côtés ou détails du MÊME objet.
+ */
+function multi_photo_prompt(int $count): string
+{
+    if ($count < 2) return '';
+    return " REFERENCE PHOTOS: $count images of the SAME real object are provided. The first image is the main photo; the others "
+        . "show other sides, angles or details of the same object. Use ALL of them to understand its true shape, colours, "
+        . "patterns, materials and details (back, sides, labels, small features), and never invent details that contradict any of them. "
+        . "Produce one single image.";
 }
 
 function build_angle_prompt(string $anglePreset, string $keywords): string

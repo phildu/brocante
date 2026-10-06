@@ -14,6 +14,12 @@
   try { paths = JSON.parse(form.dataset.paths || '{}'); } catch (e) {}
   var busy = false;
 
+  // Photos de départ choisies dans la galerie (voir le sélecteur de miniatures de admin/gallery.php) : au moins une.
+  function selectedIds() {
+    var ids = window.genSelectedIds ? window.genSelectedIds() : [];
+    return ids.length ? ids : [form.elements.source_photo_id.value];
+  }
+
   function say(text, kind) {
     statusEl.hidden = !text;
     statusEl.textContent = text || '';
@@ -108,59 +114,103 @@
 
   function makeKenBurns() {
     var effect = form.elements.video_effect.value;
-    var path = paths[form.elements.source_photo_id.value];
+    var ids = selectedIds().filter(function (id) { return paths[id]; }).slice(0, 6);
     var mime = pickMime();
-    if (!path) { say('Choisissez une photo de départ.', 'error'); return; }
+    if (!ids.length) { say('Choisissez une photo de départ.', 'error'); return; }
     if (!mime) { say("Ce navigateur ne sait pas enregistrer de vidéo : utilisez Chrome, Edge ou Safari récent.", 'error'); return; }
     lock(true);
-    say('Fabrication de la vidéo (3 secondes)…');
-    loadImage(BASE + '/' + path)
-      .then(function (img) { return recordKenBurns(img, effect, mime); })
-      .then(function (blob) {
-        say('Envoi de la vidéo…');
-        return post({ action: 'upload', effect: effect, file: new File([blob], 'video.' + (mime.indexOf('mp4') !== -1 ? 'mp4' : 'webm'), { type: blob.type }) });
-      })
-      .then(function (res) {
-        if (res.ok) { location.reload(); return; }
-        say(res.error || "L'envoi a échoué.", 'error'); lock(false);
-      })
-      .catch(function (err) { say((err && err.message) || 'La vidéo a échoué.', 'error'); lock(false); });
+    var index = 0;
+    (function next() {
+      if (index >= ids.length) { location.reload(); return; }
+      var id = ids[index++];
+      var prefix = ids.length > 1 ? 'Vidéo ' + index + '/' + ids.length + ' : ' : '';
+      say(prefix + 'fabrication (3 secondes)…');
+      loadImage(BASE + '/' + paths[id])
+        .then(function (img) { return recordKenBurns(img, effect, mime); })
+        .then(function (blob) {
+          say(prefix + 'envoi…');
+          return post({ action: 'upload', effect: effect, file: new File([blob], 'video.' + (mime.indexOf('mp4') !== -1 ? 'mp4' : 'webm'), { type: blob.type }) });
+        })
+        .then(function (res) {
+          if (res.ok) { next(); return; }
+          say(prefix + (res.error || "l'envoi a échoué."), 'error'); lock(false);
+        })
+        .catch(function (err) { say(prefix + ((err && err.message) || 'la vidéo a échoué.'), 'error'); lock(false); });
+    })();
   }
 
-  // ── Vidéo IA (Veo) ──
+  // ── Vidéo IA (Veo, Wan, LTX) : une vidéo par photo choisie ──
   var pollTimer = null;
-  function poll(job, label, since, justStarted) {
+  function elapsedSince(since) {
+    var s = Math.max(0, Math.round(Date.now() / 1000 - since));
+    return Math.floor(s / 60) + ' min ' + ('0' + (s % 60)).slice(-2) + ' s';
+  }
+
+  // jobs : [{ id, label, since }] ; on les interroge l'un après l'autre toutes les 10 secondes.
+  function pollAll(jobs, justStarted) {
     clearTimeout(pollTimer);
-    function elapsed() { var s = Math.max(0, Math.round(Date.now() / 1000 - since)); return Math.floor(s / 60) + ' min ' + ('0' + (s % 60)).slice(-2) + ' s'; }
-    function step() {
-      post({ action: 'veo_poll', job: job }).then(function (res) {
-        if (res.state === 'done') { location.reload(); return; }
-        if (res.state === 'failed' || !res.ok) { say((res.error || 'La vidéo a échoué.'), 'error'); lock(false); return; }
-        say('« ' + label + ' » est en cours de génération — ' + elapsed() + '. Vous pouvez quitter cette page : la vidéo sera ajoutée à la galerie si vous revenez ici.');
-        pollTimer = setTimeout(step, 10000);
-      });
-    }
     lock(true);
-    if (justStarted) say('✓ Génération lancée avec succès. Elle prend quelques minutes : vous pouvez quitter cette page, la vidéo sera ajoutée à la galerie.', 'ok');
-    else say('« ' + label + ' » est en cours de génération — ' + elapsed() + ' (quelques minutes).');
+    var first = jobs.reduce(function (m, j) { return Math.min(m, j.since); }, Infinity);
+    var many = jobs.length > 1;
+    function pending() { return jobs.filter(function (j) { return !j.finished; }); }
+    function progress() {
+      var left = pending().length;
+      return many ? (jobs.length - left) + ' vidéo(s) prête(s) sur ' + jobs.length : '« ' + jobs[0].label + ' » est en cours de génération';
+    }
+    function finish() {
+      var failed = jobs.filter(function (j) { return j.error; });
+      var okCount = jobs.length - failed.length;
+      if (!failed.length) { location.reload(); return; }
+      say(okCount + ' vidéo(s) prête(s), ' + failed.length + ' échec(s) : ' + failed[0].error, 'error');
+      if (okCount) setTimeout(function () { location.reload(); }, 6000); else lock(false);
+    }
+    function step() {
+      var todo = pending(), i = 0;
+      (function next() {
+        if (i >= todo.length) {
+          if (!pending().length) { finish(); return; }
+          say(progress() + ' — ' + elapsedSince(first) + '. Vous pouvez quitter cette page : les vidéos seront ajoutées à la galerie si vous revenez ici.');
+          pollTimer = setTimeout(step, 10000);
+          return;
+        }
+        var job = todo[i++];
+        post({ action: 'veo_poll', job: job.id }).then(function (res) {
+          if (res.state === 'done') job.finished = true;
+          else if (res.state === 'failed' || !res.ok) { job.finished = true; job.error = res.error || 'La vidéo a échoué.'; }
+          next();
+        });
+      })();
+    }
+    if (justStarted) say('✓ ' + (many ? jobs.length + ' générations lancées' : 'Génération lancée') + ' avec succès. Cela prend quelques minutes : vous pouvez quitter cette page, ' + (many ? 'les vidéos seront ajoutées' : 'la vidéo sera ajoutée') + ' à la galerie.', 'ok');
+    else say(progress() + ' — ' + elapsedSince(first) + ' (quelques minutes).');
     pollTimer = setTimeout(step, 8000);
   }
 
   function startVeo() {
+    var ids = selectedIds().slice(0, 6);
     lock(true);
-    say('Envoi de la photo au service de génération…');
-    post({
-      action: 'veo_start',
-      source_photo_id: form.elements.source_photo_id.value,
-      model: form.elements.model.value,
-      seconds: form.elements.seconds.value,
-      aspect: form.elements.aspect.value,
-      effect: form.elements.veo_effect.value,
-      keywords: form.elements.keywords.value
-    }).then(function (res) {
-      if (!res.ok) { say(res.error || 'Le service a refusé la demande.', 'error'); lock(false); return; }
-      poll(res.job, 'la vidéo IA', Date.now() / 1000, true);
-    });
+    var jobs = [], index = 0;
+    (function next() {
+      if (index >= ids.length) { pollAll(jobs, true); return; }
+      var id = ids[index++];
+      say('Envoi de la photo ' + index + '/' + ids.length + ' au service de génération…');
+      post({
+        action: 'veo_start',
+        source_photo_id: id,
+        model: form.elements.model.value,
+        seconds: form.elements.seconds.value,
+        aspect: form.elements.aspect.value,
+        effect: form.elements.veo_effect.value,
+        keywords: form.elements.keywords.value
+      }).then(function (res) {
+        if (!res.ok) {
+          if (jobs.length) { pollAll(jobs, true); say('Photo ' + index + ' refusée : ' + (res.error || 'erreur') + ' — les ' + jobs.length + ' autre(s) génération(s) continuent.', 'error'); return; }
+          say(res.error || 'Le service a refusé la demande.', 'error'); lock(false); return;
+        }
+        jobs.push({ id: res.job, label: 'la vidéo IA', since: Date.now() / 1000 });
+        next();
+      });
+    })();
   }
 
   form.addEventListener('submit', function (e) {
@@ -172,5 +222,5 @@
   // Générations lancées avant un rechargement de la page : on reprend leur suivi.
   var pending = [];
   try { pending = JSON.parse(form.dataset.pending || '[]'); } catch (e) {}
-  if (pending.length) poll(pending[0].id, pending[0].label, pending[0].since);
+  if (pending.length) pollAll(pending.map(function (p) { return { id: p.id, label: p.label, since: p.since }; }), false);
 })();

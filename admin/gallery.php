@@ -31,6 +31,13 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>
+  .gen-sources { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .gen-src { position: relative; width: 88px; padding: 0; border: 2px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; text-align: left; }
+  .gen-src img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+  .gen-src.is-on { border-color: var(--accent); }
+  .gen-src-badge { display: none; position: absolute; top: 4px; left: 4px; min-width: 20px; height: 20px; line-height: 20px; padding: 0 4px; background: var(--accent); color: var(--accent-ink); font-size: 0.75rem; font-weight: 700; text-align: center; }
+  .gen-src.is-on .gen-src-badge { display: block; }
+  .gen-src-label { display: block; padding: 3px 5px; font-size: 0.68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gm-list { display: flex; flex-direction: column; gap: 16px; }
   .gm-item {
     display: grid;
@@ -121,15 +128,20 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         data-paths="<?= h(json_encode($photoPaths)) ?>" data-pending="<?= h(json_encode($pendingVideos)) ?>">
         <input type="hidden" name="ref" value="<?= h($ref) ?>">
         <input type="hidden" name="action" value="generate">
-        <div class="field-row-3">
-          <div class="field">
-            <label>Photo de départ</label>
-            <select name="source_photo_id">
-              <?php foreach ($photos as $ph): if (($ph['type'] ?? 'photo') !== 'photo') continue; ?>
-                <option value="<?= (int) $ph['id'] ?>"><?= h($ph['label']) ?></option>
-              <?php endforeach; ?>
-            </select>
+        <div class="field" id="gen-sources-field">
+          <label>Photos de départ <span style="text-transform:none;letter-spacing:0;font-weight:400;">— cliquez pour en choisir une ou plusieurs ; la première choisie est la principale</span></label>
+          <div class="gen-sources" id="gen-sources">
+            <?php foreach ($photos as $i => $ph): if (($ph['type'] ?? 'photo') !== 'photo') continue; ?>
+              <button type="button" class="gen-src" data-id="<?= (int) $ph['id'] ?>" title="<?= h($ph['label']) ?>" aria-pressed="false">
+                <img src="/<?= h($ph['path']) ?>" alt="" loading="lazy"><span class="gen-src-badge"></span><span class="gen-src-label"><?= h($ph['label']) ?></span>
+              </button>
+            <?php endforeach; ?>
           </div>
+          <input type="hidden" name="source_photo_id" value="">
+          <input type="hidden" name="source_photo_ids" value="">
+          <p class="hint" id="gen-sources-note" style="margin:6px 0 0;"></p>
+        </div>
+        <div class="field-row-3">
           <div class="field">
             <label>Type de génération</label>
             <select name="kind" id="gen-kind">
@@ -207,7 +219,10 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         <span class="hint" id="gen-cost" style="margin:0 0 0 12px;" data-costs="<?= h(json_encode([
             'angle' => ai_estimate_label(['image' => 2]), 'ambiance' => ai_estimate_label(['image' => 2]), 'complete' => ai_estimate_label(['image' => 2]),
             'detoure' => FAL_API_KEY ? ai_estimate_label(['cutout' => 1]) : ai_estimate_label(['image' => 1]), 'video' => '',
-        ])) ?>" data-veo-costs="<?= h(json_encode(veo_cost_labels())) ?>"></span>
+        ])) ?>" data-veo-costs="<?= h(json_encode(veo_cost_labels())) ?>"
+          data-eur="<?= h(json_encode(['angle' => ai_eur(ai_estimate_usd(['image' => 2])), 'ambiance' => ai_eur(ai_estimate_usd(['image' => 2])), 'complete' => ai_eur(ai_estimate_usd(['image' => 2])),
+            'detoure' => ai_eur(ai_estimate_usd(ai_cutout_counts())), 'video' => 0])) ?>"
+          data-veo-eur="<?= h(json_encode(veo_cost_eur_map())) ?>"></span>
       </form>
     </div>
     <script>
@@ -223,8 +238,42 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         var genForm = document.getElementById('generate-form');
         var ffmpegOk = genForm.dataset.ffmpeg === '1';
         var costNote = { angle: ' : image 3:2 + version 9:16', ambiance: ' : image 3:2 + version 9:16', complete: ' : image 3:2 + version 9:16', detoure: '' };
+        var eur = JSON.parse(cost.dataset.eur), veoEur = JSON.parse(cost.dataset.veoEur);
+        function fmt(v) { return v < 0.005 ? '< 0,01 €' : '≈ ' + v.toFixed(2).replace('.', ',') + ' €'; }
+
+        // Photos de départ : on les choisit en cliquant (la première choisie est la principale, marquée ★).
+        var srcBox = document.getElementById('gen-sources'), srcNote = document.getElementById('gen-sources-note');
+        var order = srcBox.firstElementChild ? [srcBox.firstElementChild.dataset.id] : [];
+        window.genSelectedIds = function () { return order.slice(); };
+        function renderSources() {
+          Array.prototype.forEach.call(srcBox.children, function (b) {
+            var i = order.indexOf(b.dataset.id);
+            b.classList.toggle('is-on', i >= 0);
+            b.setAttribute('aria-pressed', i >= 0 ? 'true' : 'false');
+            b.querySelector('.gen-src-badge').textContent = i === 0 ? '★' : (i > 0 ? String(i + 1) : '');
+          });
+          genForm.elements.source_photo_id.value = order[0] || '';
+          genForm.elements.source_photo_ids.value = order.join(',');
+          sync();
+        }
+        srcBox.addEventListener('click', function (e) {
+          var b = e.target.closest('.gen-src');
+          if (!b) return;
+          var i = order.indexOf(b.dataset.id);
+          if (i >= 0) { if (order.length > 1) order.splice(i, 1); } else order.push(b.dataset.id);
+          renderSources();
+        });
+
         function sync() {
           var k = kindSelect.value;
+          var n = Math.max(1, order.length);
+          var perPhoto = k === 'detoure' || k === 'video' || k === 'video_ai';
+          srcNote.textContent = n < 2
+            ? (perPhoto ? '' : "Une seule photo choisie : pour que l'IA voie l'objet sous plusieurs côtés (dos, détails), choisissez-en plusieurs.")
+            : k === 'detoure' ? n + ' photos : un détourage par photo (3 au plus par demande).'
+            : k === 'video' ? n + ' photos : une vidéo par photo (6 au plus par demande).'
+            : k === 'video_ai' ? n + ' photos : une vidéo IA par photo — le coût est multiplié par ' + n + '.'
+            : n + ' photos envoyées ensemble à l\'IA pour produire UNE image' + (n > 4 ? ' (seules les 4 premières sont envoyées).' : '.');
           var model = genForm.elements.model.value;
           var wan = model === 'wan22' || model === 'ltx';
           genForm.elements.seconds.disabled = wan;
@@ -234,12 +283,12 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
             ? "LTX-Video n'a pas de réglage de durée : le clip dure environ 3 secondes (au-delà, il déformerait l'objet)."
             : "Wan 2.2 n'a pas de réglage de durée : le service fixe la longueur du clip (courte, de l'ordre de quelques secondes).";
           if (k === 'video_ai') {
-            var vc = veoCosts[genForm.elements.model.value + '-' + genForm.elements.seconds.value];
+            var vc = fmt(veoEur[genForm.elements.model.value + '-' + genForm.elements.seconds.value] * n);
             cost.textContent = model === 'ltx' ? 'Coût estimé ' + vc + ' par vidéo, prélevé sur le crédit gratuit Modal (30 $ par mois) · prête en 1 à 3 minutes'
               : wan ? 'Coût estimé ' + vc + ' par vidéo (courte, durée fixée par le service) · prête en quelques minutes'
               : 'Coût estimé ' + vc + ' (facturé seulement si la vidéo aboutit) · prête en 1 à 6 minutes';
           } else {
-            cost.textContent = costs[k] ? 'Coût estimé ' + costs[k] + costNote[k] : (k === 'video' ? 'Vidéo : gratuite' + (ffmpegOk ? '' : ' (fabriquée dans votre navigateur)') : '');
+            cost.textContent = eur[k] ? 'Coût estimé ' + fmt(eur[k] * (k === 'detoure' ? n : 1)) + costNote[k] : (k === 'video' ? 'Vidéo : gratuite' + (ffmpegOk ? '' : ' (fabriquée dans votre navigateur)') : '');
           }
           angleField.style.display = k === 'angle' ? '' : 'none';
           videoField.style.display = k === 'video' ? '' : 'none';
@@ -249,7 +298,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         genForm.elements.model.addEventListener('change', sync);
         genForm.elements.seconds.addEventListener('change', sync);
         kindSelect.addEventListener('change', sync);
-        sync();
+        renderSources();
       })();
     </script>
     <?php if (!GEMINI_API_KEY): ?>

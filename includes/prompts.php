@@ -74,6 +74,15 @@ function owner_direction_prompt_fr(string $keywords): string
         . $keywords . " ». Suis-la fidèlement — décor, lumière, cadrage (gros plan, plan large, angle), action, et toute personne qu'elle mentionne — en gardant l'objet lui-même identique.";
 }
 
+function multi_photo_prompt_fr(int $count): string
+{
+    if ($count < 2) return '';
+    return " PHOTOS DE RÉFÉRENCE : $count images du MÊME objet réel sont fournies. La première est la photo principale ; les autres "
+        . "montrent d'autres côtés, angles ou détails du même objet. Utilise-les TOUTES pour comprendre sa vraie forme, ses couleurs, "
+        . "ses motifs, ses matières et ses détails (dos, côtés, étiquettes, petits éléments), et n'invente jamais de détail qui en contredise une. "
+        . "Produis une seule image.";
+}
+
 function build_ambiance_prompt_fr(string $keywords): string
 {
     if ($keywords === '') {

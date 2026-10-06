@@ -53,6 +53,16 @@ function veo_cost_labels(): array
     return $out;
 }
 
+/** Mêmes clés que veo_cost_labels(), en euros (nombre), pour que la page multiplie par le nombre de photos choisies. */
+function veo_cost_eur_map(): array
+{
+    $out = [];
+    foreach (array_merge(array_keys(VEO_MODELS), [SF_MODEL_KEY, MODAL_MODEL_KEY]) as $key) {
+        foreach (VEO_SECONDS as $s) $out["$key-$s"] = ai_eur(veo_cost_usd($key, $s));
+    }
+    return $out;
+}
+
 /** Mouvement de caméra (en anglais, pour Veo) correspondant aux effets proposés pour la vidéo gratuite. */
 function veo_motion_prompt(string $effect): string
 {
