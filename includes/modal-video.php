@@ -17,8 +17,11 @@ if (!defined('MODAL_VIDEO_URL')) {
 /** Clé de modèle utilisée dans le formulaire, la table veo_jobs et les tarifs. */
 const MODAL_MODEL_KEY = 'ltx';
 const MODAL_NEGATIVE_PROMPT = 'worst quality, inconsistent motion, blurry, jittery, distorted, deformed object, text, watermark, subtitles, people, hands';
-/** 97 images à 24 i/s ≈ 4 s (le modèle veut 8n + 1 images). */
-const MODAL_FRAMES = 97;
+/**
+ * 65 images à 24 i/s ≈ 2,7 s (le modèle veut 8n + 1 images). Plus long, LTX-Video déforme l'objet vers la fin
+ * (essais sur une photo de sweat imprimé : à 97 images le texte se défait, à 65 il reste intact).
+ */
+const MODAL_FRAMES = 65;
 const MODAL_STEPS = 30;
 
 function modal_video_available(): bool
@@ -71,6 +74,26 @@ function modal_video_check(): array
     return $status === 200 && !empty($data['ok'])
         ? ['ok' => true, 'message' => 'Connexion réussie : le service Modal répond.']
         : ['ok' => false, 'message' => modal_video_error_message($status, $data)];
+}
+
+/**
+ * Prompt de LTX-Video : une description continue, avec un mouvement de caméra doux (un mouvement fort ou un prompt
+ * vague fait déformer l'objet, voire le remplace par autre chose) et un léger mouvement ambiant (sans lui, la vidéo
+ * peut rester figée). Éprouvé sur Modal avec une photo de sweat imprimé.
+ */
+function build_ltx_prompt(string $effect, string $keywords): string
+{
+    $motion = match ($effect) {
+        'zoom_out' => 'slowly and smoothly pulls back a little, a subtle, gentle pull-out revealing a bit more of the surroundings',
+        'pan_left' => 'slowly and smoothly glides sideways from right to left, a subtle, gentle lateral travelling',
+        'pan_right' => 'slowly and smoothly glides sideways from left to right, a subtle, gentle lateral travelling',
+        'orbit' => 'slowly and smoothly arcs a little around the product, a subtle, gentle orbit',
+        default => 'slowly and smoothly moves a little closer to the product, a subtle, gentle push-in',
+    };
+    return "The camera $motion. The product stays perfectly sharp, stable and unchanged: same shape, colours, print, lettering and details. "
+        . 'A faint natural movement in the scene: the light shifts very softly and soft materials move slightly as if in a light breeze. '
+        . 'Soft natural light, photorealistic, high quality. If the first frame has plain empty margins, extend the background naturally.'
+        . owner_direction_prompt($keywords);
 }
 
 /** Format de la vidéo (largeur × hauteur, multiples de 32) d'après le format demandé. */

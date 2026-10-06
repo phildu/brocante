@@ -63,7 +63,7 @@ switch ($action) {
 
         $provider = video_provider($modelKey);
         if ($provider !== 'google') $seconds = 0; // durée fixée par le service
-        $prompt = build_veo_prompt($effect, $keywords);
+        $prompt = $provider === 'modal' ? build_ltx_prompt($effect, $keywords) : build_veo_prompt($effect, $keywords);
         $started = match ($provider) {
             'siliconflow' => sf_video_start($srcAbs, $prompt, $aspect),
             'modal' => modal_video_start($srcAbs, $prompt, $aspect),

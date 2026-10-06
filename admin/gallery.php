@@ -231,7 +231,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
           document.getElementById('gen-seconds-label').textContent = wan ? 'Durée (fixée par le service)' : 'Durée';
           document.getElementById('gen-seconds-note').style.display = wan ? '' : 'none';
           document.getElementById('gen-seconds-note-text').textContent = model === 'ltx'
-            ? "LTX-Video n'a pas de réglage de durée : le clip dure environ 4 secondes."
+            ? "LTX-Video n'a pas de réglage de durée : le clip dure environ 3 secondes (au-delà, il déformerait l'objet)."
             : "Wan 2.2 n'a pas de réglage de durée : le service fixe la longueur du clip (courte, de l'ordre de quelques secondes).";
           if (k === 'video_ai') {
             var vc = veoCosts[genForm.elements.model.value + '-' + genForm.elements.seconds.value];

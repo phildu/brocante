@@ -18,9 +18,10 @@ Points d'entrée (tous protégés par « Authorization: Bearer <jeton> ») :
     GET  /video/{call_id}   -> le fichier MP4
 
 Coût : facturation à la seconde, uniquement pendant la génération. Un GPU L40S coûte environ 0,0005 $ par seconde ; une vidéo
-prend de l'ordre d'une minute (la première demande après un moment d'inactivité charge aussi le modèle, un peu plus long).
+prend une dizaine de secondes de GPU (la première demande après un moment d'inactivité charge aussi le modèle, un peu plus long).
 Le plan gratuit de Modal offre 30 $ de crédit par mois.
 """
+import inspect
 import io
 import os
 
@@ -75,13 +76,19 @@ class Generator:
 
     @modal.method()
     def generate(self, image_bytes: bytes, prompt: str, negative_prompt: str, width: int, height: int,
-                 num_frames: int, steps: int, seed: int) -> bytes:
+                 num_frames: int, steps: int, seed: int, guidance_scale: float = 3.0, cond_noise: float = 0.15,
+                 jpeg_quality: int = 0) -> bytes:
         # LTX-Video : largeur et hauteur multiples de 32, nombre d'images de la forme 8n + 1.
         width, height = max(256, width // 32 * 32), max(256, height // 32 * 32)
         num_frames = max(9, (num_frames - 1) // 8 * 8 + 1)
         image = ImageOps.fit(Image.open(io.BytesIO(image_bytes)).convert("RGB"), (width, height))
+        if jpeg_quality:
+            # LTX-Video fige l'image quand la photo de départ est trop nette : une légère compression JPEG aide.
+            buf = io.BytesIO()
+            image.save(buf, "JPEG", quality=jpeg_quality)
+            image = Image.open(buf).convert("RGB")
         generator = torch.Generator(device="cuda").manual_seed(seed)
-        frames = self.pipe(
+        kwargs = dict(
             image=image,
             prompt=prompt,
             negative_prompt=negative_prompt,
@@ -89,8 +96,13 @@ class Generator:
             height=height,
             num_frames=num_frames,
             num_inference_steps=steps,
+            guidance_scale=guidance_scale,
             generator=generator,
-        ).frames[0]
+        )
+        # Bruit ajouté à l'image de départ : plus il est élevé, plus la vidéo bouge (selon la version du modèle).
+        if "image_cond_noise_scale" in inspect.signature(self.pipe.__call__).parameters:
+            kwargs["image_cond_noise_scale"] = cond_noise
+        frames = self.pipe(**kwargs).frames[0]
         path = f"/tmp/out-{seed}.mp4"
         export_to_video(frames, path, fps=FPS)
         with open(path, "rb") as fh:
@@ -131,9 +143,12 @@ def web():
                 str(body.get("negative_prompt", ""))[:500],
                 int(body.get("width", 768)),
                 int(body.get("height", 448)),
-                int(body.get("num_frames", 97)),
+                int(body.get("num_frames", 65)),
                 int(body.get("steps", 30)),
                 int(body.get("seed", 0)) or 42,
+                float(body.get("guidance_scale", 3.0)),
+                float(body.get("cond_noise", 0.15)),
+                int(body.get("jpeg_quality", 60)),
             )
         except (KeyError, ValueError) as err:
             raise HTTPException(status_code=400, detail=f"Requête invalide : {err}")
@@ -169,3 +184,44 @@ def web():
         return Response(content=data, media_type="video/mp4")
 
     return api
+
+
+@app.local_entrypoint()
+def test(image: str, outdir: str = "/tmp/ltx-test", variants: str = "E,F,G,H", prompt: str = "", size: str = "768x448", name: str = "custom"):
+    """Essai de réglages : modal run modal/ltx_video_app.py --image photo.jpg  (une vidéo par variante, dans outdir)."""
+    os.makedirs(outdir, exist_ok=True)
+    data = open(image, "rb").read()
+    negative = "worst quality, inconsistent motion, blurry, jittery, distorted, deformed object, text, watermark, subtitles, people, hands"
+    old = ("Animate this product photograph into a short, smooth, photorealistic video. Camera: a slow, smooth push-in towards the product. "
+           "The product must stay exactly as in the photo. Steady camera, soft natural lighting, one continuous shot, no cuts.")
+    new = ("The camera pushes steadily in towards the product, getting noticeably closer. The product stays exactly the same: same shape, "
+           "colours, pattern and details. Gentle natural movement in the scene: the light shifts softly, loose fabric sways slightly, "
+           "with subtle depth and parallax between foreground and background. Smooth, continuous motion throughout the whole shot, photorealistic, high quality.")
+    vague = ("Animate this product photograph into a short, smooth, photorealistic video. Camera: a gentle, natural camera movement chosen to show "
+             "the product at its best. The product must stay exactly as in the photo. Steady camera, soft natural lighting, one continuous shot, no cuts.")
+    subtle = ("The camera slowly and smoothly moves a little closer to the product, a subtle, gentle push-in. The product stays perfectly sharp, stable "
+              "and unchanged: same shape, colours, print, lettering and details. Soft natural light, photorealistic, high quality.")
+    ambient = ("The camera slowly and smoothly moves a little closer to the product, a subtle, gentle push-in. The product stays perfectly sharp, stable "
+               "and unchanged: same shape, colours, print, lettering and details. A faint natural movement in the scene: the light shifts very softly "
+               "and the fabric moves slightly as if in a light breeze. Soft natural light, photorealistic, high quality.")
+    configs = {
+        "E": dict(prompt=subtle, frames=97, cond_noise=0.15, jpeg_quality=60),
+        "F": dict(prompt=subtle, frames=65, cond_noise=0.15, jpeg_quality=60),
+        "G": dict(prompt=vague, frames=97, cond_noise=0.15, jpeg_quality=0),   # le prompt « au choix de l'IA » de la première version
+        "H": dict(prompt=ambient, frames=65, cond_noise=0.15, jpeg_quality=60),
+    }
+    gen = Generator()
+    if prompt:  # un seul essai avec le prompt donné (comme le fait la boutique : 65 images, photo compressée à 60)
+        width, height = (int(v) for v in size.split("x"))
+        video = gen.generate.remote(data, prompt, negative, width, height, 65, 30, 42, 3.0, 0.15, 60)
+        with open(f"{outdir}/{name}.mp4", "wb") as fh:
+            fh.write(video)
+        print("écrit :", f"{outdir}/{name}.mp4", len(video), "octets")
+        return
+    for name in variants.split(","):
+        cfg = configs[name.strip()]
+        video = gen.generate.remote(data, cfg["prompt"], negative, 768, 448, cfg["frames"], 30, 42, 3.0, cfg["cond_noise"], cfg["jpeg_quality"])
+        path = f"{outdir}/{name.strip()}.mp4"
+        with open(path, "wb") as fh:
+            fh.write(video)
+        print("écrit :", path, len(video), "octets")
