@@ -406,6 +406,18 @@ Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
 dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
 `tenants/`, `includes/`…).
 
+## Détourage haute précision (Modal)
+
+Quand le service Modal est configuré (voir « Vidéo IA — LTX-Video sur Modal » ci-dessus) et que rembg local n'existe pas (hébergement
+mutualisé), le bouton « Détourage » de la galerie utilise `modal/ltx_video_app.py` (classe `Cutter` : bibliothèque `rembg`,
+modèle **BiRefNet** sur 4 processeurs, sans GPU ; poids gardés dans le volume Modal). Sur une photo de sweat imprimé, il garde tout
+le lettrage fin d'une manche qu'`isnet-general-use` (le modèle léger de rembg) efface en partie. La première demande après une pause
+peut prendre 1 à 2 minutes (démarrage à froid + chargement du modèle ; 20 s environ ensuite, le conteneur reste chaud 5 minutes) : le
+détourage est donc suivi par la page comme une vidéo (table `veo_jobs`, modèle `cutout`, actions `cutout_start` / `veo_poll` de
+`admin/video-action.php`), une tâche par photo (3 au plus). Les flux synchrones (import par lot, Studio) gardent fal.ai puis le fond
+blanc IA, car ils ne peuvent pas attendre un démarrage à froid. Coût estimé : 0,001 $ par détourage (tarif « Détourage », modifiable).
+Après toute modification du script : `modal deploy modal/ltx_video_app.py`.
+
 ## Plusieurs photos de départ (galerie d'une pièce)
 
 Galerie d'une pièce → « Générer une nouvelle vue » : la photo de départ est un sélecteur de miniatures où l'on peut en cliquer

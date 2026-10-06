@@ -175,8 +175,8 @@ $flash = flash_get();
 
       <form class="admin-block" method="post" action="/admin/save-modal-video.php" id="modal-video-settings">
         <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
-        <h2>Réglages IA (Modal — vidéo IA gratuite, LTX-Video)</h2>
-        <p class="hint">Service de génération que vous déployez sur <a href="https://modal.com" target="_blank" rel="noopener">votre compte Modal</a> (30 $ de crédit gratuit par mois, facturation à la seconde de GPU) : <code>pip install modal</code>, <code>modal setup</code>, <code>modal secret create boutique-video-token AUTH_TOKEN=…</code> puis <code>modal deploy modal/ltx_video_app.py</code>. La dernière commande affiche l'adresse du service ; saisissez-la ici avec le même jeton. Un champ laissé vide conserve la valeur enregistrée.</p>
+        <h2>Réglages IA (Modal — vidéo IA LTX-Video et détourage BiRefNet)</h2>
+        <p class="hint">Service (vidéo IA gratuite LTX-Video et détourage haute précision à fond transparent) que vous déployez sur <a href="https://modal.com" target="_blank" rel="noopener">votre compte Modal</a> (30 $ de crédit gratuit par mois, facturation à la seconde de GPU) : <code>pip install modal</code>, <code>modal setup</code>, <code>modal secret create boutique-video-token AUTH_TOKEN=…</code> puis <code>modal deploy modal/ltx_video_app.py</code>. La dernière commande affiche l'adresse du service ; saisissez-la ici avec le même jeton. Un champ laissé vide conserve la valeur enregistrée.</p>
         <div class="field">
           <label>Adresse du service</label>
           <input type="text" name="modal_url" autocomplete="off" placeholder="<?= MODAL_VIDEO_URL !== '' ? h(MODAL_VIDEO_URL) : 'https://votre-compte--boutique-ltx-video-web.modal.run' ?>">

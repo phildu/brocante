@@ -141,3 +141,50 @@ function modal_video_poll(string $callId): array
         default => ['state' => 'pending'],
     };
 }
+
+
+// ── Détourage (fond transparent) : BiRefNet via rembg sur Modal ──
+// Plus précis que le détourage de fal.ai sur les détails (lettrage fin, franges) ; mais un démarrage à froid peut prendre une
+// à plusieurs minutes : le détourage est donc suivi par la page comme une vidéo (table veo_jobs, modèle « cutout »).
+
+/** Clé de modèle d'un détourage dans la table veo_jobs. */
+const MODAL_CUTOUT_KEY = 'cutout';
+
+/** Lance un détourage : ['ok' => true, 'operation' => identifiant] ou ['ok' => false, 'error' => message]. */
+function modal_cutout_start(string $srcAbsPath): array
+{
+    if (!modal_video_available()) return ['ok' => false, 'error' => 'Service Modal non configuré : renseignez son adresse et son jeton dans les réglages du site.'];
+    $small = downscale_for_ai($srcAbsPath, 1600, 92);
+    $bytes = (string) @file_get_contents($small ?: $srcAbsPath);
+    if ($small) @unlink($small);
+    if ($bytes === '') return ['ok' => false, 'error' => 'Impossible de lire la photo de départ.'];
+    [$status, $data] = modal_video_request('POST', '/cutout', ['image' => base64_encode($bytes)]);
+    if ($status >= 400 || $status === 0 || empty($data['call_id'])) {
+        error_log("modal_cutout_start: HTTP $status " . substr(json_encode($data), 0, 400));
+        return ['ok' => false, 'error' => modal_video_error_message($status, $data)];
+    }
+    return ['ok' => true, 'operation' => (string) $data['call_id']];
+}
+
+/** Même suivi que modal_video_poll(), avec le lien du PNG. */
+function modal_cutout_poll(string $callId): array
+{
+    $poll = modal_video_poll($callId);
+    if ($poll['state'] === 'done') $poll['uri'] = MODAL_VIDEO_URL . '/png/' . $callId;
+    return $poll;
+}
+
+/** Télécharge le PNG détouré et l'enregistre dans uploads/ : chemin relatif, ou null. */
+function modal_cutout_download(string $uri, string $baseName): ?string
+{
+    if (!modal_video_url_valid($uri) || !str_starts_with($uri, MODAL_VIDEO_URL . '/')) return null;
+    $ch = curl_init($uri);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 50, CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . MODAL_VIDEO_TOKEN]]);
+    $bytes = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    if ($status !== 200 || !is_string($bytes) || !str_starts_with($bytes, "\x89PNG")) {
+        error_log("modal_cutout_download: HTTP $status, " . (is_string($bytes) ? strlen($bytes) : 0) . ' octets');
+        return null;
+    }
+    return save_binary_photo($bytes, $baseName, 'png');
+}

@@ -147,7 +147,8 @@
   }
 
   // jobs : [{ id, label, since }] ; on les interroge l'un après l'autre toutes les 10 secondes.
-  function pollAll(jobs, justStarted) {
+  function pollAll(jobs, justStarted, noun) {
+    noun = noun || 'vidéo';
     clearTimeout(pollTimer);
     lock(true);
     var first = jobs.reduce(function (m, j) { return Math.min(m, j.since); }, Infinity);
@@ -155,13 +156,13 @@
     function pending() { return jobs.filter(function (j) { return !j.finished; }); }
     function progress() {
       var left = pending().length;
-      return many ? (jobs.length - left) + ' vidéo(s) prête(s) sur ' + jobs.length : '« ' + jobs[0].label + ' » est en cours de génération';
+      return many ? (jobs.length - left) + ' ' + noun + '(s) prêt(s) sur ' + jobs.length : '« ' + jobs[0].label + ' » est en cours de génération';
     }
     function finish() {
       var failed = jobs.filter(function (j) { return j.error; });
       var okCount = jobs.length - failed.length;
       if (!failed.length) { location.reload(); return; }
-      say(okCount + ' vidéo(s) prête(s), ' + failed.length + ' échec(s) : ' + failed[0].error, 'error');
+      say(okCount + ' ' + noun + '(s) prêt(s), ' + failed.length + ' échec(s) : ' + failed[0].error, 'error');
       if (okCount) setTimeout(function () { location.reload(); }, 6000); else lock(false);
     }
     function step() {
@@ -169,7 +170,7 @@
       (function next() {
         if (i >= todo.length) {
           if (!pending().length) { finish(); return; }
-          say(progress() + ' — ' + elapsedSince(first) + '. Vous pouvez quitter cette page : les vidéos seront ajoutées à la galerie si vous revenez ici.');
+          say(progress() + ' — ' + elapsedSince(first) + '. Vous pouvez quitter cette page : les résultats seront ajoutés à la galerie si vous revenez ici.');
           pollTimer = setTimeout(step, 10000);
           return;
         }
@@ -181,20 +182,22 @@
         });
       })();
     }
-    if (justStarted) say('✓ ' + (many ? jobs.length + ' générations lancées' : 'Génération lancée') + ' avec succès. Cela prend quelques minutes : vous pouvez quitter cette page, ' + (many ? 'les vidéos seront ajoutées' : 'la vidéo sera ajoutée') + ' à la galerie.', 'ok');
+    if (justStarted) say('✓ ' + (many ? jobs.length + ' générations lancées' : 'Génération lancée') + ' avec succès. Cela prend quelques minutes : vous pouvez quitter cette page, ' + (many ? 'les résultats seront ajoutés' : 'le résultat sera ajouté') + ' à la galerie.', 'ok');
     else say(progress() + ' — ' + elapsedSince(first) + ' (quelques minutes).');
     pollTimer = setTimeout(step, 8000);
   }
 
-  function startVeo() {
-    var ids = selectedIds().slice(0, 6);
+  // cutout : détourage Modal (une tâche par photo, 3 au plus) ; sinon vidéo IA (6 au plus).
+  function startVeo(cutout) {
+    var ids = selectedIds().slice(0, cutout ? 3 : 6);
+    var noun = cutout ? 'détourage' : 'vidéo';
     lock(true);
     var jobs = [], index = 0;
     (function next() {
-      if (index >= ids.length) { pollAll(jobs, true); return; }
+      if (index >= ids.length) { pollAll(jobs, true, noun); return; }
       var id = ids[index++];
       say('Envoi de la photo ' + index + '/' + ids.length + ' au service de génération…');
-      post({
+      post(cutout ? { action: 'cutout_start', source_photo_id: id } : {
         action: 'veo_start',
         source_photo_id: id,
         model: form.elements.model.value,
@@ -204,10 +207,10 @@
         keywords: form.elements.keywords.value
       }).then(function (res) {
         if (!res.ok) {
-          if (jobs.length) { pollAll(jobs, true); say('Photo ' + index + ' refusée : ' + (res.error || 'erreur') + ' — les ' + jobs.length + ' autre(s) génération(s) continuent.', 'error'); return; }
+          if (jobs.length) { pollAll(jobs, true, noun); say('Photo ' + index + ' refusée : ' + (res.error || 'erreur') + ' — les ' + jobs.length + ' autre(s) génération(s) continuent.', 'error'); return; }
           say(res.error || 'Le service a refusé la demande.', 'error'); lock(false); return;
         }
-        jobs.push({ id: res.job, label: 'la vidéo IA', since: Date.now() / 1000 });
+        jobs.push({ id: res.job, label: cutout ? 'le détourage' : 'la vidéo IA', since: Date.now() / 1000 });
         next();
       });
     })();
@@ -215,12 +218,13 @@
 
   form.addEventListener('submit', function (e) {
     var kind = form.elements.kind.value;
-    if (kind === 'video_ai') { e.preventDefault(); if (!busy) startVeo(); }
+    if (kind === 'video_ai') { e.preventDefault(); if (!busy) startVeo(false); }
+    else if (kind === 'detoure' && form.dataset.modalCutout === '1') { e.preventDefault(); if (!busy) startVeo(true); }
     else if (kind === 'video' && form.dataset.ffmpeg !== '1') { e.preventDefault(); if (!busy) makeKenBurns(); }
   });
 
   // Générations lancées avant un rechargement de la page : on reprend leur suivi.
   var pending = [];
   try { pending = JSON.parse(form.dataset.pending || '[]'); } catch (e) {}
-  if (pending.length) pollAll(pending.map(function (p) { return { id: p.id, label: p.label, since: p.since }; }), false);
+  if (pending.length) pollAll(pending.map(function (p) { return { id: p.id, label: p.label, since: p.since }; }), false, pending.every(function (p) { return /^Détourée/.test(p.label); }) ? 'détourage' : 'vidéo');
 })();

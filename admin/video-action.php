@@ -22,7 +22,7 @@ function video_reply(array $data, int $status = 200): never
 /** Fournisseur d'une vidéo IA d'après la clé de modèle : google (Veo), siliconflow (Wan 2.2) ou modal (LTX-Video). */
 function video_provider(string $modelKey): string
 {
-    return match ($modelKey) { SF_MODEL_KEY => 'siliconflow', MODAL_MODEL_KEY => 'modal', default => 'google' };
+    return match ($modelKey) { SF_MODEL_KEY => 'siliconflow', MODAL_MODEL_KEY => 'modal', MODAL_CUTOUT_KEY => 'modal-cutout', default => 'google' };
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') video_reply(['ok' => false, 'error' => 'Requête invalide.'], 405);
@@ -78,6 +78,19 @@ switch ($action) {
         video_reply(['ok' => true, 'job' => (int) db()->lastInsertId(), 'aspect' => $aspect]);
     }
 
+    case 'cutout_start': {
+        $stmt = db()->prepare("SELECT * FROM product_photos WHERE id = ? AND product_ref = ? AND COALESCE(type, 'photo') = 'photo'");
+        $stmt->execute([(int) ($_POST['source_photo_id'] ?? 0), $ref]);
+        $photo = $stmt->fetch();
+        $srcAbs = $photo ? __DIR__ . '/../' . $photo['path'] : '';
+        if (!$photo || !is_file($srcAbs)) video_reply(['ok' => false, 'error' => 'Photo de départ introuvable.'], 404);
+        $started = modal_cutout_start($srcAbs);
+        if (!$started['ok']) video_reply(['ok' => false, 'error' => $started['error']], 502);
+        db()->prepare('INSERT INTO veo_jobs (product_ref, operation, model, seconds, aspect, label) VALUES (?, ?, ?, 0, ?, ?)')
+            ->execute([$ref, $started['operation'], MODAL_CUTOUT_KEY, '-', 'Détourée']);
+        video_reply(['ok' => true, 'job' => (int) db()->lastInsertId()]);
+    }
+
     case 'veo_poll': {
         $stmt = db()->prepare('SELECT * FROM veo_jobs WHERE id = ? AND product_ref = ?');
         $stmt->execute([(int) ($_POST['job'] ?? 0), $ref]);
@@ -101,6 +114,7 @@ switch ($action) {
         $poll = match ($provider) {
             'siliconflow' => sf_video_poll($job['operation']),
             'modal' => modal_video_poll($job['operation']),
+            'modal-cutout' => modal_cutout_poll($job['operation']),
             default => veo_poll($job['operation']),
         };
         if ($poll['state'] === 'failed') $fail($poll['error']);
@@ -113,6 +127,15 @@ switch ($action) {
         $claim = db()->prepare("UPDATE veo_jobs SET status = 'saving' WHERE id = ? AND status = 'pending'");
         $claim->execute([$job['id']]);
         if ($claim->rowCount() === 0) video_reply(['ok' => true, 'state' => 'pending']);
+        if ($provider === 'modal-cutout') {
+            $path = modal_cutout_download($poll['uri'], 'product-' . $ref . '-detoure');
+            if (!$path) $fail('Le détourage est prêt mais son téléchargement a échoué : relancez-le.');
+            add_product_photo($ref, $path, 'Détourée', false);
+            ai_usage_log_cutout('rembg BiRefNet (Modal)');
+            db()->prepare("UPDATE veo_jobs SET status = 'done' WHERE id = ?")->execute([$job['id']]);
+            flash_set('Photo détourée (fond transparent) et ajoutée à la galerie.');
+            video_reply(['ok' => true, 'state' => 'done']);
+        }
         $path = veo_download($poll['uri'], ['siliconflow' => 'public', 'modal' => 'modal'][$provider] ?? 'google');
         if (!$path) $fail('La vidéo est prête mais son téléchargement a échoué : relancez la génération.');
         add_product_photo($ref, $path, $job['label'], true, 'video');

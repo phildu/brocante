@@ -125,7 +125,8 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
       <p class="publish-status" id="video-status" role="status" aria-live="polite" hidden style="margin:0 0 16px;"></p>
       <form method="post" action="/admin/gallery-action.php" id="generate-form"
         data-csrf="<?= h(admin_csrf_token()) ?>" data-ffmpeg="<?= $ffmpegOk ? '1' : '0' ?>"
-        data-paths="<?= h(json_encode($photoPaths)) ?>" data-pending="<?= h(json_encode($pendingVideos)) ?>">
+        data-paths="<?= h(json_encode($photoPaths)) ?>" data-pending="<?= h(json_encode($pendingVideos)) ?>"
+        data-modal-cutout="<?= modal_video_available() && !(shell_exec_available() && PHP_CLI_BIN && PYTHON_BIN) ? '1' : '0' ?>">
         <input type="hidden" name="ref" value="<?= h($ref) ?>">
         <input type="hidden" name="action" value="generate">
         <div class="field" id="gen-sources-field">
@@ -270,7 +271,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
           var perPhoto = k === 'detoure' || k === 'video' || k === 'video_ai';
           srcNote.textContent = n < 2
             ? (perPhoto ? '' : "Une seule photo choisie : pour que l'IA voie l'objet sous plusieurs côtés (dos, détails), choisissez-en plusieurs.")
-            : k === 'detoure' ? n + ' photos : un détourage par photo (3 au plus par demande).'
+            : k === 'detoure' ? n + ' photos : un détourage par photo (3 au plus par demande).' + (genForm.dataset.modalCutout === '1' ? ' Détourage haute précision (Modal) : 20 s à 2 min, suivi ici.' : '')
             : k === 'video' ? n + ' photos : une vidéo par photo (6 au plus par demande).'
             : k === 'video_ai' ? n + ' photos : une vidéo IA par photo — le coût est multiplié par ' + n + '.'
             : n + ' photos envoyées ensemble à l\'IA pour produire UNE image' + (n > 4 ? ' (seules les 4 premières sont envoyées).' : '.');
@@ -305,7 +306,9 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
       <p class="publish-status" data-kind="error" style="margin-bottom:20px;">Clé Gemini absente — les générations "ambiance", "autre angle" et "compléter l'objet" ne fonctionneront pas tant que la clé n'est pas renseignée dans Réglages du site. La vidéo « zoom, travelling » fonctionne sans elle ; la vidéo IA Veo la demande (la vidéo IA Wan 2.2 demande plutôt une clé SiliconFlow).</p>
     <?php endif; ?>
     <?php if (!shell_exec_available() || !PHP_CLI_BIN || !PYTHON_BIN): ?>
-      <?php if (FAL_API_KEY): ?>
+      <?php if (modal_video_available()): ?>
+        <p class="publish-status" data-kind="ok" style="margin-bottom:20px;">Le détourage utilise votre service Modal (modèle BiRefNet, haute précision, vrai fond transparent). Le premier détourage après une pause peut prendre 1 à 2 minutes : la page le suit toute seule.</p>
+      <?php elseif (FAL_API_KEY): ?>
         <p class="publish-status" data-kind="ok" style="margin-bottom:20px;">Python (rembg) local indisponible sur cet hébergement — le détourage utilise fal.ai à la place (vrai fond transparent, aucune différence pour vous).</p>
       <?php else: ?>
         <p class="publish-status" style="margin-bottom:20px;">Le vrai détourage (fond transparent) nécessite soit Python (rembg) en local, soit une clé fal.ai (voir Réglages du site) — sans les deux, "Détourage" génère un repli à fond blanc via Gemini (pas un vrai fond transparent). Les autres générations (ambiance, autre angle, compléter l'objet, netteté) fonctionnent normalement, elles n'en ont besoin d'aucun des deux.</p>

@@ -8,7 +8,7 @@
 
 /** Tarifs par défaut : image = $ par image générée ; text_in / text_out = $ par million de tokens ; search = $ par requête avec recherche web ; cutout = $ par détourage fal.ai ; veo_* = $ par seconde de vidéo Veo 3.1 (Lite, Fast, Standard ; 720p) ; wan22 = $ par vidéo Wan 2.2 (SiliconFlow, durée fixée par le service) ; ltx = $ estimé par vidéo LTX-Video sur Modal (de l'ordre d'une minute de GPU, prélevé sur le crédit Modal). */
 const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001, 'veo_lite' => 0.05, 'veo_fast' => 0.10, 'veo_std' => 0.40, 'wan22' => 0.29, 'ltx' => 0.08];
-const AI_KINDS = ['image' => 'Images générées', 'text' => 'Texte et vision', 'search' => 'Recherches web', 'cutout' => 'Détourages (fal.ai)', 'video' => 'Vidéos IA (Veo, Wan, LTX)'];
+const AI_KINDS = ['image' => 'Images générées', 'text' => 'Texte et vision', 'search' => 'Recherches web', 'cutout' => 'Détourages (fal.ai, Modal)', 'video' => 'Vidéos IA (Veo, Wan, LTX)'];
 
 function ai_usage_ensure_schema(PDO $pdo): void
 {
@@ -114,9 +114,9 @@ function ai_usage_log_video(string $modelKey, int $seconds): void
     ai_usage_record('video', veo_cost_usd($modelKey, $seconds), $model['id'] . " ({$seconds} s)");
 }
 
-function ai_usage_log_cutout(): void
+function ai_usage_log_cutout(string $model = 'fal-ai/imageutils/rembg'): void
 {
-    ai_usage_record('cutout', ai_pricing()['cutout'], 'fal-ai/imageutils/rembg');
+    ai_usage_record('cutout', ai_pricing()['cutout'], $model);
 }
 
 // ── Estimations affichées avant de générer ──
@@ -162,7 +162,7 @@ function ai_estimate_label(array $counts): string
 /** Détourage d'une pièce : fal.ai s'il est configuré, sinon le repli par image générée. */
 function ai_cutout_counts(): array
 {
-    return FAL_API_KEY ? ['cutout' => 1] : ['image' => 1];
+    return FAL_API_KEY || modal_video_available() ? ['cutout' => 1] : ['image' => 1];
 }
 
 /** Traitement complet d'une pièce (Studio, lot) : détourage, mise en situation 3:2 et 9:16, fiche. */

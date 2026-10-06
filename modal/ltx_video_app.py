@@ -16,6 +16,8 @@ Points d'entrée (tous protégés par « Authorization: Bearer <jeton> ») :
                                                       num_frames, steps, seed
     GET  /status/{call_id}  -> {"status": "pending" | "done" | "failed", "error": "..."}
     GET  /video/{call_id}   -> le fichier MP4
+    POST /cutout            -> {"call_id": "..."}   corps JSON : image (base64), model (facultatif)  [détourage]
+    GET  /png/{call_id}     -> le PNG détouré (fond transparent) ; l'état se lit avec /status/{call_id}
 
 Coût : facturation à la seconde, uniquement pendant la génération. Un GPU L40S coûte environ 0,0005 $ par seconde ; une vidéo
 prend une dizaine de secondes de GPU (la première demande après un moment d'inactivité charge aussi le modèle, un peu plus long).
@@ -111,6 +113,37 @@ class Generator:
         return data
 
 
+# Détourage (fond transparent) : bibliothèque rembg sur processeur, sans GPU (quelques secondes par photo).
+CUTOUT_MODEL = "birefnet-general"
+cutout_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("rembg[cpu]", "pillow", "numpy")
+    .env({"U2NET_HOME": CACHE_DIR + "/rembg"})
+)
+
+
+@app.cls(cpu=4, memory=6144, image=cutout_image, volumes={CACHE_DIR: cache}, timeout=300, scaledown_window=300)
+class Cutter:
+    @modal.enter()
+    def load(self):
+        self.sessions = {}
+
+    def session(self, model: str):
+        from rembg import new_session
+        if model not in self.sessions:
+            self.sessions[model] = new_session(model)
+            try:
+                cache.commit()  # garde le modèle téléchargé pour les prochains démarrages
+            except Exception:
+                pass
+        return self.sessions[model]
+
+    @modal.method()
+    def cutout(self, image_bytes: bytes, model: str = CUTOUT_MODEL) -> bytes:
+        from rembg import remove
+        return remove(image_bytes, session=self.session(model))
+
+
 @app.function(image=web_image, secrets=[modal.Secret.from_name("boutique-video-token")])
 @modal.asgi_app()
 def web():
@@ -154,6 +187,18 @@ def web():
             raise HTTPException(status_code=400, detail=f"Requête invalide : {err}")
         return {"call_id": call.object_id}
 
+    @api.post("/cutout", dependencies=[Depends(check)])
+    async def cutout(body: dict):
+        try:
+            image = base64.b64decode(body["image"], validate=False)
+            model = str(body.get("model") or CUTOUT_MODEL)
+            if model not in ("birefnet-general", "isnet-general-use", "u2net"):
+                model = CUTOUT_MODEL
+            call = await Cutter().cutout.spawn.aio(image, model)
+        except (KeyError, ValueError) as err:
+            raise HTTPException(status_code=400, detail=f"Requête invalide : {err}")
+        return {"call_id": call.object_id}
+
     async def fetch(call_id: str):
         call = modal.FunctionCall.from_id(call_id)
         try:
@@ -175,6 +220,13 @@ def web():
         if state == "expired":
             return {"status": "failed", "error": "Résultat expiré"}
         return {"status": "failed", "error": state.removeprefix("failed:")}
+
+    @api.get("/png/{call_id}", dependencies=[Depends(check)])
+    async def png(call_id: str):
+        data, state = await fetch(call_id)
+        if state is not None:
+            return JSONResponse({"status": state}, status_code=202 if state == "pending" else 404)
+        return Response(content=data, media_type="image/png")
 
     @api.get("/video/{call_id}", dependencies=[Depends(check)])
     async def video(call_id: str):
@@ -225,3 +277,19 @@ def test(image: str, outdir: str = "/tmp/ltx-test", variants: str = "E,F,G,H", p
         with open(path, "wb") as fh:
             fh.write(video)
         print("écrit :", path, len(video), "octets")
+
+
+@app.local_entrypoint()
+def cutout_test(image: str, outdir: str = "/tmp/cutout-test", models: str = "isnet-general-use,birefnet-general"):
+    """Essai de modèles de détourage : modal run modal/ltx_video_app.py::cutout_test --image photo.jpg"""
+    import time
+    os.makedirs(outdir, exist_ok=True)
+    data = open(image, "rb").read()
+    cutter = Cutter()
+    for model in models.split(","):
+        started = time.time()
+        png = cutter.cutout.remote(data, model.strip())
+        path = f"{outdir}/{model.strip()}.png"
+        with open(path, "wb") as fh:
+            fh.write(png)
+        print(f"écrit : {path} ({len(png)} octets, {time.time() - started:.1f} s)")
