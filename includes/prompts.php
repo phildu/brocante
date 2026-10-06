@@ -5,7 +5,7 @@
 // (« Indications pour l'IA »). Propres à chaque commerce ; partagés par toute son équipe.
 
 /** Types de prompts : un par génération de la galerie, plus les indications de fiche. */
-const SAVED_PROMPT_KINDS = ['ambiance', 'angle', 'complete', 'notes'];
+const SAVED_PROMPT_KINDS = ['ambiance', 'angle', 'complete', 'video_ai', 'notes'];
 const SAVED_PROMPT_MAX_LENGTH = 300;
 /** Prompts gardés au plus par type (au-delà, il faut en supprimer avant d'en ajouter). */
 const SAVED_PROMPT_MAX_PER_KIND = 40;
@@ -167,6 +167,8 @@ function prompt_preview_parts(string $kind, string $text, string $anglePreset = 
             return [['label' => $label, 'text' => build_angle_prompt($anglePreset, $text), 'text_fr' => build_angle_prompt_fr($anglePreset, $text)], $framing(false)];
         case 'complete':
             return [['label' => $label, 'text' => build_complete_prompt($text), 'text_fr' => build_complete_prompt_fr($text)], $framing(false)];
+        case 'video_ai':
+            return [['label' => "Prompt envoyé à Veo (mouvement : au choix de l'IA)", 'text' => build_veo_prompt('auto', $text), 'text_fr' => build_veo_prompt_fr('auto', $text)]];
         case 'notes':
             // Le prompt de la fiche est déjà rédigé en français.
             $sheet = build_product_sheet_prompt(1, $text);
@@ -188,11 +190,12 @@ function prompt_suggestions_from_photo(string $photoAbsPath, string $kind): arra
     $what = match ($kind) {
         'angle' => "de précisions de prise de vue (angle, cadrage, détail à montrer, ce qu'il faut enlever du cadre)",
         'complete' => "de précisions pour compléter la partie coupée de l'objet (motifs, symétrie, matière)",
+        'video_ai' => "d'animations pour une courte vidéo de cette photo (mouvement de caméra lent, petit mouvement dans la scène : tissu qui bouge, lumière qui change, vapeur, reflets)",
         default => "de mises en situation : décors, situations et ambiances de lumière variés",
     };
     $prompt = "Tu regardes la photo d'" . tenant('ai.item') . ' pour ' . tenant('ai.shop') . '. '
         . "Propose 8 idées courtes (3 à 8 mots chacune, en français) $what, adaptées à CET objet précis, variées entre elles. "
-        . ($kind === 'angle' || $kind === 'complete' ? '' : "Si c'est un vêtement ou un accessoire, inclus des idées où il est porté, en mouvement ou non. ")
+        . ($kind === 'angle' || $kind === 'complete' || $kind === 'video_ai' ? '' : "Si c'est un vêtement ou un accessoire, inclus des idées où il est porté, en mouvement ou non. ")
         . 'Réponds UNIQUEMENT avec un tableau JSON de 8 chaînes, sans texte autour, sans markdown.';
     $small = downscale_for_ai($photoAbsPath, 800) ?? $photoAbsPath;
     $text = gemini_describe_image($small, $prompt, 1);

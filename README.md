@@ -406,6 +406,24 @@ Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
 dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
 `tenants/`, `includes/`…).
 
+## Vidéos de la galerie d'une pièce
+
+Galerie d'une pièce → « Générer une nouvelle vue » → deux types de vidéo, sans ffmpeg obligatoire :
+
+- **Petite vidéo (zoom, travelling)** — gratuite, 3 s, carrée (900 px). Si le serveur a ffmpeg
+  (`FFMPEG_BIN`), il la fabrique (`run_ken_burns_video`) ; sinon (OVH mutualisé) elle est fabriquée dans
+  le navigateur (`assets/video-gen.js` : canvas + MediaRecorder, MP4 ou WebM selon le navigateur), puis envoyée à
+  `admin/video-action.php` (action `upload`).
+- **Vidéo IA (Veo)** — Google Veo 3.1 via l'API Gemini (même clé que les images ; **compte avec facturation
+  obligatoire**, pas de quota gratuit). Modèles Lite / Fast / Standard, 4, 6 ou 8 s, 720p, 16:9 ou 9:16, mouvement de
+  caméra au choix + « Mots-clés / précisions » (prompts enregistrables). La génération est asynchrone
+  (11 s à 6 min) : `veo_start` la lance (`predictLongRunning`, image en `bytesBase64Encoded`), la page interroge
+  `veo_poll` toutes les 10 s (table `veo_jobs`, reprise après rechargement), puis la vidéo est téléchargée dans
+  `uploads/` (Google ne la garde que 2 jours) et ajoutée à la galerie. Chaque requête reste courte (limite de 60 s).
+  Le coût (tarif par seconde × durée, modifiable dans « Consommation IA ») est consigné à la fin, seulement si la
+  vidéo aboutit. Veo produit une piste audio : les lecteurs du site lisent les vidéos en sourdine.
+  Code : `includes/veo.php`.
+
 ## Photos et vidéos depuis un téléphone proche
 
 Administration → **Médiathèque** → « Utiliser mon téléphone » : l'ordinateur affiche un code

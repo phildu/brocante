@@ -93,6 +93,9 @@ function db(): PDO
         // Consommation de l'IA (coûts estimés, solde).
         require_once __DIR__ . '/includes/ai-usage.php';
         ai_usage_ensure_schema($pdo);
+        // Vidéos IA (Veo) en cours de génération.
+        require_once __DIR__ . '/includes/veo.php';
+        veo_ensure_schema($pdo);
         // Prompts (mots-clés / précisions) enregistrés pour la génération IA.
         require_once __DIR__ . '/includes/prompts.php';
         prompts_ensure_schema($pdo);

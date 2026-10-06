@@ -68,7 +68,7 @@ function account_role_label(string $role): string
 const ACCOUNT_COMMUNITY_MANAGER_PAGES = [
     'hero.php', 'hero-action.php', 'slideshow.php', 'slideshow-action.php',
     'banners.php', 'banners-action.php', 'media.php', 'media-action.php', 'media-describe.php',
-    'enhance-image.php', 'gallery.php', 'gallery-action.php', 'mobile-variants.php',
+    'enhance-image.php', 'gallery.php', 'gallery-action.php', 'video-action.php', 'mobile-variants.php',
     'profile.php', 'profile-action.php', // son propre profil
     'capture-session.php', // code QR pour envoyer des photos/vidéos depuis un téléphone
     'prompts-action.php', // prompts enregistrés de la génération IA (galerie)

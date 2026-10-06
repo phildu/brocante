@@ -26,7 +26,7 @@ $recent = db()->query('SELECT u.*, p.name AS product_name FROM ai_usage u LEFT J
 $origins = [
     'gallery-action.php' => 'Galerie (génération)', 'quick-add-action.php' => 'Nouvelle pièce / Studio', 'mobile-variants.php' => 'Version 9:16',
     'batch-import-action.php' => 'Import par lot', 'product-ai.php' => 'Boutons « ↻ IA » des fiches', 'price-research.php' => 'Prix du marché',
-    'media-describe.php' => 'Médiathèque (description)', 'enhance-image.php' => 'Amélioration de détail', 'universes-action.php' => 'Univers',
+    'media-describe.php' => 'Médiathèque (description)', 'enhance-image.php' => 'Amélioration de détail', 'universes-action.php' => 'Univers', 'video-action.php' => 'Galerie (vidéo IA)',
 ];
 
 $estimates = [
@@ -35,6 +35,7 @@ $estimates = [
     ['Pièce complète au Studio (détourage, 2 visuels, fiche)', ai_estimate_piece_counts()],
     ['Un bouton « ↻ IA » sur un champ ou « Tout (re)générer »', ['text' => 1]],
     ['Recherche du prix du marché (web)', ['search' => 1]],
+    ['Vidéo IA Veo Fast de 6 s (720p)', ['usd' => veo_cost_usd('fast', 6)]],
 ];
 $eur = static fn ($usd): string => ai_format_eur(ai_eur((float) $usd));
 ?><!DOCTYPE html>
@@ -197,6 +198,9 @@ $eur = static fn ($usd): string => ai_format_eur(ai_eur((float) $usd));
         <label>Texte : sortie ($ / M tokens)<input type="text" name="text_out" value="<?= h((string) $pricing['text_out']) ?>"></label>
         <label>Recherche web ($ / requête)<input type="text" name="search" value="<?= h((string) $pricing['search']) ?>"></label>
         <label>Détourage fal.ai ($ / image)<input type="text" name="cutout" value="<?= h((string) $pricing['cutout']) ?>"></label>
+        <label>Vidéo Veo Lite ($ / seconde)<input type="text" name="veo_lite" value="<?= h((string) $pricing['veo_lite']) ?>"></label>
+        <label>Vidéo Veo Fast ($ / seconde)<input type="text" name="veo_fast" value="<?= h((string) $pricing['veo_fast']) ?>"></label>
+        <label>Vidéo Veo Standard ($ / seconde)<input type="text" name="veo_std" value="<?= h((string) $pricing['veo_std']) ?>"></label>
         <label>Dollar → euro<input type="text" name="usd_eur" value="<?= h((string) $pricing['usd_eur']) ?>"></label>
         <button type="submit" class="btn-small">Enregistrer les tarifs</button>
       </form>

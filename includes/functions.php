@@ -9,6 +9,7 @@ require_once __DIR__ . '/universes.php';
 require_once __DIR__ . '/comparables.php';
 require_once __DIR__ . '/price-research.php';
 require_once __DIR__ . '/ai-usage.php';
+require_once __DIR__ . '/veo.php';
 
 function h($s): string
 {

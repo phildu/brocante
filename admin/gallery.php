@@ -14,6 +14,12 @@ if (!$product) {
 $content = get_content();
 $photos = product_photos_list($ref);
 $flash = flash_get();
+$ffmpegOk = FFMPEG_BIN && shell_exec_available();
+$photoPaths = [];
+foreach ($photos as $ph) if (($ph['type'] ?? 'photo') === 'photo') $photoPaths[(int) $ph['id']] = $ph['path'];
+$pendingVideos = db()->prepare("SELECT id, label, created_at FROM veo_jobs WHERE product_ref = ? AND status IN ('pending', 'saving') AND created_at > datetime('now', '-15 minutes') ORDER BY id");
+$pendingVideos->execute([$ref]);
+$pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'], 'label' => $j['label'], 'since' => strtotime($j['created_at'] . ' UTC')], $pendingVideos->fetchAll());
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -109,7 +115,9 @@ $flash = flash_get();
     <div class="admin-block" style="margin-bottom:24px;">
       <h2 style="font-size:1.1rem;">Générer une nouvelle vue</h2>
       <p class="hint">Choisissez la photo de départ et le type de vue. Pour "Autre angle", précisez si besoin l'angle souhaité et des mots-clés libres.</p>
-      <form method="post" action="/admin/gallery-action.php" id="generate-form">
+      <form method="post" action="/admin/gallery-action.php" id="generate-form"
+        data-csrf="<?= h(admin_csrf_token()) ?>" data-ffmpeg="<?= $ffmpegOk ? '1' : '0' ?>"
+        data-paths="<?= h(json_encode($photoPaths)) ?>" data-pending="<?= h(json_encode($pendingVideos)) ?>">
         <input type="hidden" name="ref" value="<?= h($ref) ?>">
         <input type="hidden" name="action" value="generate">
         <div class="field-row-3">
@@ -128,7 +136,8 @@ $flash = flash_get();
               <option value="ambiance">🪄 Mise en situation (ambiance)</option>
               <option value="detoure">✂️ Détourage (fond transparent)</option>
               <option value="complete">🧩 Compléter l'objet (tronqué)</option>
-              <option value="video">🎬 Petite vidéo (zoom, travelling)</option>
+              <option value="video">🎬 Petite vidéo (zoom, travelling) — gratuite</option>
+              <option value="video_ai">🎞 Vidéo IA (Veo) — animation réaliste, payante</option>
             </select>
           </div>
           <div class="field" id="gen-angle-field">
@@ -152,6 +161,40 @@ $flash = flash_get();
             </select>
           </div>
         </div>
+        <div class="field-row-3" id="gen-veo-field" style="display:none;">
+          <div class="field">
+            <label>Modèle</label>
+            <select name="model">
+              <?php foreach (VEO_MODELS as $key => $m): ?>
+                <option value="<?= h($key) ?>"<?= $key === 'fast' ? ' selected' : '' ?>><?= h($m['label']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="field">
+            <label>Durée</label>
+            <select name="seconds">
+              <?php foreach (VEO_SECONDS as $sec): ?>
+                <option value="<?= $sec ?>"<?= $sec === 6 ? ' selected' : '' ?>><?= $sec ?> secondes</option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="field">
+            <label>Format</label>
+            <select name="aspect">
+              <option value="auto">Selon la photo (portrait ou paysage)</option>
+              <option value="16:9">Paysage 16:9 (ordinateur)</option>
+              <option value="9:16">Portrait 9:16 (smartphone)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Mouvement de caméra</label>
+            <select name="veo_effect">
+              <?php foreach (veo_motions() as $key => $label): ?>
+                <option value="<?= h($key) ?>"><?= h($label) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        </div>
         <div class="field" id="gen-keywords-field">
           <label>Mots-clés / précisions (optionnel)</label>
           <input type="text" name="keywords" placeholder="ex : fond en bois clair, lumière du matin, sans le couvercle..." maxlength="300" data-saved-prompts="@gen-kind" data-prompt-helper="@gen-kind">
@@ -160,7 +203,8 @@ $flash = flash_get();
         <span class="hint" id="gen-cost" style="margin:0 0 0 12px;" data-costs="<?= h(json_encode([
             'angle' => ai_estimate_label(['image' => 2]), 'ambiance' => ai_estimate_label(['image' => 2]), 'complete' => ai_estimate_label(['image' => 2]),
             'detoure' => FAL_API_KEY ? ai_estimate_label(['cutout' => 1]) : ai_estimate_label(['image' => 1]), 'video' => '',
-        ])) ?>"></span>
+        ])) ?>" data-veo-costs="<?= h(json_encode(veo_cost_labels())) ?>"></span>
+        <p class="publish-status" id="video-status" hidden style="margin:14px 0 0;"></p>
       </form>
     </div>
     <script>
@@ -171,20 +215,32 @@ $flash = flash_get();
         var keywordsField = document.getElementById('gen-keywords-field');
         var cost = document.getElementById('gen-cost');
         var costs = JSON.parse(cost.dataset.costs);
+        var veoCosts = JSON.parse(cost.dataset.veoCosts);
+        var veoField = document.getElementById('gen-veo-field');
+        var genForm = document.getElementById('generate-form');
+        var ffmpegOk = genForm.dataset.ffmpeg === '1';
         var costNote = { angle: ' : image 3:2 + version 9:16', ambiance: ' : image 3:2 + version 9:16', complete: ' : image 3:2 + version 9:16', detoure: '' };
         function sync() {
           var k = kindSelect.value;
-          cost.textContent = costs[k] ? 'Coût estimé ' + costs[k] + costNote[k] : (k === 'video' ? 'Vidéo : gratuite (ffmpeg)' : '');
+          if (k === 'video_ai') {
+            var vc = veoCosts[genForm.elements.model.value + '-' + genForm.elements.seconds.value];
+            cost.textContent = 'Coût estimé ' + vc + ' (facturé seulement si la vidéo aboutit) · prête en 1 à 6 minutes';
+          } else {
+            cost.textContent = costs[k] ? 'Coût estimé ' + costs[k] + costNote[k] : (k === 'video' ? 'Vidéo : gratuite' + (ffmpegOk ? '' : ' (fabriquée dans votre navigateur)') : '');
+          }
           angleField.style.display = k === 'angle' ? '' : 'none';
           videoField.style.display = k === 'video' ? '' : 'none';
+          veoField.style.display = k === 'video_ai' ? '' : 'none';
           keywordsField.style.display = (k === 'detoure' || k === 'video') ? 'none' : '';
         }
+        genForm.elements.model.addEventListener('change', sync);
+        genForm.elements.seconds.addEventListener('change', sync);
         kindSelect.addEventListener('change', sync);
         sync();
       })();
     </script>
     <?php if (!GEMINI_API_KEY): ?>
-      <p class="publish-status" data-kind="error" style="margin-bottom:20px;">Clé Gemini absente — les générations "ambiance", "autre angle" et "compléter l'objet" ne fonctionneront pas tant que la clé n'est pas renseignée dans Réglages du site. La vidéo (ffmpeg) fonctionne sans elle.</p>
+      <p class="publish-status" data-kind="error" style="margin-bottom:20px;">Clé Gemini absente — les générations "ambiance", "autre angle" et "compléter l'objet" ne fonctionneront pas tant que la clé n'est pas renseignée dans Réglages du site. La vidéo « zoom, travelling » fonctionne sans elle ; la vidéo IA (Veo) la demande.</p>
     <?php endif; ?>
     <?php if (!shell_exec_available() || !PHP_CLI_BIN || !PYTHON_BIN): ?>
       <?php if (FAL_API_KEY): ?>
@@ -193,8 +249,8 @@ $flash = flash_get();
         <p class="publish-status" style="margin-bottom:20px;">Le vrai détourage (fond transparent) nécessite soit Python (rembg) en local, soit une clé fal.ai (voir Réglages du site) — sans les deux, "Détourage" génère un repli à fond blanc via Gemini (pas un vrai fond transparent). Les autres générations (ambiance, autre angle, compléter l'objet, netteté) fonctionnent normalement, elles n'en ont besoin d'aucun des deux.</p>
       <?php endif; ?>
     <?php endif; ?>
-    <?php if (!FFMPEG_BIN || !shell_exec_available()): ?>
-      <p class="publish-status" data-kind="error" style="margin-bottom:20px;">ffmpeg n'est pas configuré sur cet hébergement — la génération de vidéos ne fonctionnera pas.</p>
+    <?php if (!$ffmpegOk): ?>
+      <p class="publish-status" style="margin-bottom:20px;">ffmpeg n'est pas disponible sur cet hébergement : la vidéo « zoom, travelling » est fabriquée dans votre navigateur (gratuite, 3 secondes) et envoyée à la galerie. La vidéo IA (Veo) passe par Google et ne dépend pas du serveur.</p>
     <?php endif; ?>
 
     <div class="gm-list">
@@ -581,5 +637,6 @@ $flash = flash_get();
 <script src="/assets/admin-upload-check.js"></script>
 <script src="/assets/saved-prompts.js"></script>
 <script src="/assets/prompt-helper.js"></script>
+<script src="/assets/video-gen.js"></script>
 </body>
 </html>

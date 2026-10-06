@@ -6,9 +6,9 @@
 // Google (ai.google.dev/pricing) et fal.ai. Le solde réel d'un compte n'est lisible par aucune API : ce qui est affiché
 // est une estimation, pas une facture.
 
-/** Tarifs par défaut : image = $ par image générée ; text_in / text_out = $ par million de tokens ; search = $ par requête avec recherche web ; cutout = $ par détourage fal.ai. */
-const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001];
-const AI_KINDS = ['image' => 'Images générées', 'text' => 'Texte et vision', 'search' => 'Recherches web', 'cutout' => 'Détourages (fal.ai)'];
+/** Tarifs par défaut : image = $ par image générée ; text_in / text_out = $ par million de tokens ; search = $ par requête avec recherche web ; cutout = $ par détourage fal.ai ; veo_* = $ par seconde de vidéo Veo 3.1 (Lite, Fast, Standard ; 720p). */
+const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001, 'veo_lite' => 0.05, 'veo_fast' => 0.10, 'veo_std' => 0.40];
+const AI_KINDS = ['image' => 'Images générées', 'text' => 'Texte et vision', 'search' => 'Recherches web', 'cutout' => 'Détourages (fal.ai)', 'video' => 'Vidéos IA (Veo)'];
 
 function ai_usage_ensure_schema(PDO $pdo): void
 {
@@ -99,6 +99,13 @@ function ai_usage_log_search(array $usage, bool $grounded): void
     ai_usage_record('search', $cost + ($grounded ? ai_pricing()['search'] : 0), 'gemini-2.5-flash + Google Search', $in, $out);
 }
 
+/** Vidéo Veo terminée (Google ne facture que les vidéos réussies). */
+function ai_usage_log_video(string $modelKey, int $seconds): void
+{
+    $model = VEO_MODELS[$modelKey] ?? VEO_MODELS['fast'];
+    ai_usage_record('video', veo_cost_usd($modelKey, $seconds), $model['id'] . " ({$seconds} s)");
+}
+
 function ai_usage_log_cutout(): void
 {
     ai_usage_record('cutout', ai_pricing()['cutout'], 'fal-ai/imageutils/rembg');
@@ -117,12 +124,12 @@ function ai_text_call_usd(): float
     return 0.003;
 }
 
-/** Coût estimé en dollars de $counts = ['image' => n, 'text' => n, 'search' => n, 'cutout' => n]. */
+/** Coût estimé en dollars de $counts = ['image' => n, 'text' => n, 'search' => n, 'cutout' => n, 'usd' => montant déjà calculé]. */
 function ai_estimate_usd(array $counts): float
 {
     $p = ai_pricing();
     return ($counts['image'] ?? 0) * $p['image'] + ($counts['text'] ?? 0) * ai_text_call_usd()
-        + ($counts['search'] ?? 0) * ($p['search'] + ai_text_call_usd() * 2) + ($counts['cutout'] ?? 0) * $p['cutout'];
+        + ($counts['search'] ?? 0) * ($p['search'] + ai_text_call_usd() * 2) + ($counts['cutout'] ?? 0) * $p['cutout'] + ($counts['usd'] ?? 0);
 }
 
 function ai_eur(float $usd): float

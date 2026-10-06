@@ -20,6 +20,7 @@
     ambiance: SCENES,
     notes: SCENES.concat([['Précisions pour la fiche', ['années 70', 'excellent état', 'petite usure visible', 'léger éclat', 'pièce rare', 'fait main', 'pièce unique']]]),
     angle: [['Cadrages', ['gros plan sur le détail', 'plan moyen', 'plan large', 'vue de dessus, à plat', 'légère plongée', 'contre-plongée', 'objet décentré']], ['Prise de vue', ['fond gris clair uni', 'sans les accessoires', 'éclairage doux de studio', 'objet légèrement incliné', 'on voit bien la signature']]],
+    video_ai: [['Mouvements de caméra', ['lent rapprochement vers le détail', 'léger tour de l\'objet', 'recul pour montrer l\'ensemble', 'travelling doux de gauche à droite', 'plan fixe, très léger zoom']], ['Animation de la scène', ['rideau qui bouge doucement', 'lumière du soleil qui se déplace', 'poussière dorée dans la lumière', 'vêtement qui flotte légèrement', 'reflets qui changent doucement', 'sans aucun mouvement dans la scène']]],
     complete: [['Précisions', ['garder exactement les mêmes motifs', 'compléter la base symétriquement', 'même matière et même couleur', 'sans rien ajouter d\'autre']]]
   };
 
