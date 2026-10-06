@@ -36,6 +36,7 @@ $estimates = [
     ['Un bouton « ↻ IA » sur un champ ou « Tout (re)générer »', ['text' => 1]],
     ['Recherche du prix du marché (web)', ['search' => 1]],
     ['Vidéo IA Veo Fast de 6 s (720p)', ['usd' => veo_cost_usd('fast', 6)]],
+    ['Vidéo IA Wan 2.2 (SiliconFlow), une vidéo', ['usd' => veo_cost_usd(SF_MODEL_KEY, 0)]],
 ];
 $eur = static fn ($usd): string => ai_format_eur(ai_eur((float) $usd));
 ?><!DOCTYPE html>
@@ -201,6 +202,7 @@ $eur = static fn ($usd): string => ai_format_eur(ai_eur((float) $usd));
         <label>Vidéo Veo Lite ($ / seconde)<input type="text" name="veo_lite" value="<?= h((string) $pricing['veo_lite']) ?>"></label>
         <label>Vidéo Veo Fast ($ / seconde)<input type="text" name="veo_fast" value="<?= h((string) $pricing['veo_fast']) ?>"></label>
         <label>Vidéo Veo Standard ($ / seconde)<input type="text" name="veo_std" value="<?= h((string) $pricing['veo_std']) ?>"></label>
+        <label>Vidéo Wan 2.2 SiliconFlow ($ / vidéo)<input type="text" name="wan22" value="<?= h((string) $pricing['wan22']) ?>"></label>
         <label>Dollar → euro<input type="text" name="usd_eur" value="<?= h((string) $pricing['usd_eur']) ?>"></label>
         <button type="submit" class="btn-small">Enregistrer les tarifs</button>
       </form>

@@ -173,6 +173,23 @@ $flash = flash_get();
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
       </form>
 
+      <form class="admin-block" method="post" action="/admin/save-siliconflow-key.php" id="siliconflow-settings">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>Réglages IA (SiliconFlow — vidéo IA économique)</h2>
+        <p class="hint">Clé depuis <a href="https://cloud.siliconflow.com/account/ak" target="_blank" rel="noopener">cloud.siliconflow.com</a> (rubrique clés API) — utilisée pour la « Vidéo IA — Wan 2.2 » de la galerie photo, une alternative bon marché à Google Veo (environ 0,29 $ par vidéo ; un petit crédit de départ est offert aux nouveaux comptes, à vérifier chez eux). Un champ laissé vide conserve la clé déjà enregistrée.</p>
+        <div class="field">
+          <label>Clé API SiliconFlow</label>
+          <input type="password" name="siliconflow_key" autocomplete="off" placeholder="<?= SILICONFLOW_API_KEY ? 'Déjà enregistrée — ' . h(substr(SILICONFLOW_API_KEY, 0, 4)) . '…' . h(substr(SILICONFLOW_API_KEY, -4)) : 'sk-...' ?>">
+        </div>
+        <p class="publish-status" data-kind="<?= SILICONFLOW_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= SILICONFLOW_API_KEY ? 'Clé SiliconFlow configurée — la vidéo IA Wan 2.2 est disponible dans la galerie.' : 'Aucune clé enregistrée — la vidéo IA Wan 2.2 est désactivée (Google Veo et la vidéo zoom/travelling restent disponibles).' ?>
+        </p>
+        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
+        <?php if (SILICONFLOW_API_KEY): ?>
+          <button type="submit" name="remove" value="1" class="btn" style="margin-top:6px;" onclick="return confirm('Retirer la clé SiliconFlow de ce commerce ?');">Retirer la clé</button>
+        <?php endif; ?>
+      </form>
+
     </div>
   </div>
 </section>

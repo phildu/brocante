@@ -37,6 +37,7 @@ function veo_ensure_schema(PDO $pdo): void
 /** Coût estimé en dollars d'une vidéo de $seconds secondes. */
 function veo_cost_usd(string $modelKey, int $seconds): float
 {
+    if ($modelKey === SF_MODEL_KEY) return ai_pricing()['wan22']; // un prix par vidéo
     $model = VEO_MODELS[$modelKey] ?? VEO_MODELS['fast'];
     return ai_pricing()[$model['price']] * $seconds;
 }
@@ -45,7 +46,7 @@ function veo_cost_usd(string $modelKey, int $seconds): float
 function veo_cost_labels(): array
 {
     $out = [];
-    foreach (array_keys(VEO_MODELS) as $key) {
+    foreach (array_merge(array_keys(VEO_MODELS), [SF_MODEL_KEY]) as $key) {
         foreach (VEO_SECONDS as $s) $out["$key-$s"] = ai_estimate_label(['usd' => veo_cost_usd($key, $s)]);
     }
     return $out;
@@ -204,10 +205,14 @@ function veo_poll(string $operation): array
     return ['state' => 'failed', 'error' => $why !== '' ? 'Google a refusé cette vidéo : ' . mb_substr((string) $why, 0, 200) : "Google n'a renvoyé aucune vidéo."];
 }
 
-/** Télécharge la vidéo terminée dans uploads/ ; retourne le chemin relatif ou null. */
-function veo_download(string $uri): ?string
+/**
+ * Télécharge la vidéo terminée dans uploads/ ; retourne le chemin relatif ou null. $google : lien de l'API Gemini
+ * (la clé est jointe à la requête) ; sinon lien public d'un autre fournisseur (https obligatoire, aucune clé envoyée).
+ */
+function veo_download(string $uri, bool $google = true): ?string
 {
-    if (!str_starts_with($uri, 'https://generativelanguage.googleapis.com/')) return null;
+    $host = (string) parse_url($uri, PHP_URL_HOST);
+    if ($google ? !str_starts_with($uri, 'https://generativelanguage.googleapis.com/') : (!str_starts_with($uri, 'https://') || $host === '' || filter_var($host, FILTER_VALIDATE_IP))) return null;
     $dir = __DIR__ . '/../uploads';
     if (!is_dir($dir)) mkdir($dir, 0755, true);
     $filename = 'video-ia-' . substr(bin2hex(random_bytes(4)), 0, 8) . '.mp4';
@@ -219,8 +224,9 @@ function veo_download(string $uri): ?string
         CURLOPT_FILE => $fh,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS => 4,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
         CURLOPT_TIMEOUT => 55,
-        CURLOPT_HTTPHEADER => ['x-goog-api-key: ' . GEMINI_API_KEY],
+        CURLOPT_HTTPHEADER => $google ? ['x-goog-api-key: ' . GEMINI_API_KEY] : [],
     ]);
     $ok = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);

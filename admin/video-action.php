@@ -1,7 +1,7 @@
 <?php
 // Vidéos de la galerie d'une pièce, en JSON :
 //   upload     → vidéo « zoom / travelling » fabriquée dans le navigateur (gratuite, sans ffmpeg)
-//   veo_start  → lance une vidéo IA (Google Veo) à partir d'une photo
+//   veo_start  → lance une vidéo IA (Google Veo, ou Wan 2.2 via SiliconFlow) à partir d'une photo
 //   veo_poll   → état d'une vidéo IA ; à la fin, la télécharge et l'ajoute à la galerie
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
@@ -51,10 +51,13 @@ switch ($action) {
         if (!isset(veo_motions()[$effect])) $effect = 'auto';
         $keywords = mb_substr(trim((string) ($_POST['keywords'] ?? '')), 0, SAVED_PROMPT_MAX_LENGTH);
 
-        $started = veo_start($srcAbs, build_veo_prompt($effect, $keywords), $aspect, $modelKey, $seconds);
+        $wan = $modelKey === SF_MODEL_KEY;
+        if ($wan) $seconds = 0; // durée fixée par le service
+        $prompt = build_veo_prompt($effect, $keywords);
+        $started = $wan ? sf_video_start($srcAbs, $prompt, $aspect) : veo_start($srcAbs, $prompt, $aspect, $modelKey, $seconds);
         if (!$started['ok']) video_reply(['ok' => false, 'error' => $started['error']], 502);
 
-        $label = 'Vidéo IA — ' . (veo_motions()[$effect] ?? 'Vidéo');
+        $label = ($wan ? 'Vidéo IA (Wan) — ' : 'Vidéo IA — ') . (veo_motions()[$effect] ?? 'Vidéo');
         db()->prepare('INSERT INTO veo_jobs (product_ref, operation, model, seconds, aspect, label) VALUES (?, ?, ?, ?, ?, ?)')
             ->execute([$ref, $started['operation'], $modelKey, $seconds, $aspect, $label]);
         video_reply(['ok' => true, 'job' => (int) db()->lastInsertId(), 'aspect' => $aspect]);
@@ -79,7 +82,8 @@ switch ($action) {
             video_reply(['ok' => true, 'state' => 'pending']);
         }
 
-        $poll = veo_poll($job['operation']);
+        $wan = $job['model'] === SF_MODEL_KEY;
+        $poll = $wan ? sf_video_poll($job['operation']) : veo_poll($job['operation']);
         if ($poll['state'] === 'failed') $fail($poll['error']);
         if ($poll['state'] === 'pending') {
             if ($expired) $fail("Google n'a pas terminé la vidéo à temps : relancez la génération (vous n'êtes pas facturé).");
@@ -90,7 +94,7 @@ switch ($action) {
         $claim = db()->prepare("UPDATE veo_jobs SET status = 'saving' WHERE id = ? AND status = 'pending'");
         $claim->execute([$job['id']]);
         if ($claim->rowCount() === 0) video_reply(['ok' => true, 'state' => 'pending']);
-        $path = veo_download($poll['uri']);
+        $path = veo_download($poll['uri'], !$wan);
         if (!$path) $fail('La vidéo est prête mais son téléchargement a échoué : relancez la génération.');
         add_product_photo($ref, $path, $job['label'], true, 'video');
         ai_usage_log_video($job['model'], (int) $job['seconds']);

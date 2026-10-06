@@ -423,6 +423,13 @@ Galerie d'une pièce → « Générer une nouvelle vue » → deux types de vid�
   Le coût (tarif par seconde × durée, modifiable dans « Consommation IA ») est consigné à la fin, seulement si la
   vidéo aboutit. Veo produit une piste audio : les lecteurs du site lisent les vidéos en sourdine.
   Code : `includes/veo.php`.
+- **Vidéo IA — Wan 2.2 (SiliconFlow)** — alternative économique à Veo (≈ 0,29 $ par vidéo, durée fixée par le
+  service ; 1 $ de crédit offert aux nouveaux comptes d'après leur page de tarifs). Clé : Administration → Réglages du
+  site → « SiliconFlow » (fichier `.secrets/<commerce>/siliconflow.key`, bouton « Retirer la clé » inclus) ; sans clé,
+  l'option est grisée. L'API vidéo n'est pas au format OpenAI : `POST /v1/video/submit` (image en data URI, 1280×720
+  ou 720×1280) puis `POST /v1/video/status` (`InQueue`, `InProgress`, `Succeed`, `Failed`) ; le lien de la vidéo
+  n'est valable qu'une heure, elle est donc téléchargée tout de suite. Même suivi (`veo_jobs`) et même coût consigné
+  que Veo. Code : `includes/siliconflow-video.php`.
 
 ## Photos et vidéos depuis un téléphone proche
 

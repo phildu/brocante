@@ -135,18 +135,18 @@
       post({ action: 'veo_poll', job: job }).then(function (res) {
         if (res.state === 'done') { location.reload(); return; }
         if (res.state === 'failed' || !res.ok) { say((res.error || 'La vidéo a échoué.'), 'error'); lock(false); return; }
-        say('Google génère « ' + label + ' » — ' + elapsed() + ' (1 à 6 minutes). Vous pouvez quitter cette page : la vidéo sera ajoutée à la galerie si vous revenez ici.');
+        say('« ' + label + ' » est en cours de génération — ' + elapsed() + '. Vous pouvez quitter cette page : la vidéo sera ajoutée à la galerie si vous revenez ici.');
         pollTimer = setTimeout(step, 10000);
       });
     }
     lock(true);
-    say('Google génère « ' + label + ' » — ' + elapsed() + ' (1 à 6 minutes).');
+    say('« ' + label + ' » est en cours de génération — ' + elapsed() + ' (quelques minutes).');
     pollTimer = setTimeout(step, 8000);
   }
 
   function startVeo() {
     lock(true);
-    say('Envoi de la photo à Google…');
+    say('Envoi de la photo au service de génération…');
     post({
       action: 'veo_start',
       source_photo_id: form.elements.source_photo_id.value,
@@ -156,7 +156,7 @@
       effect: form.elements.veo_effect.value,
       keywords: form.elements.keywords.value
     }).then(function (res) {
-      if (!res.ok) { say(res.error || 'Google a refusé la demande.', 'error'); lock(false); return; }
+      if (!res.ok) { say(res.error || 'Le service a refusé la demande.', 'error'); lock(false); return; }
       poll(res.job, 'la vidéo IA', Date.now() / 1000);
     });
   }

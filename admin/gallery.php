@@ -166,11 +166,12 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
             <label>Modèle</label>
             <select name="model">
               <?php foreach (VEO_MODELS as $key => $m): ?>
-                <option value="<?= h($key) ?>"<?= $key === 'fast' ? ' selected' : '' ?>><?= h($m['label']) ?></option>
+                <option value="<?= h($key) ?>"<?= $key === 'fast' ? ' selected' : '' ?>>Google Veo — <?= h($m['label']) ?></option>
               <?php endforeach; ?>
+              <option value="<?= SF_MODEL_KEY ?>"<?= sf_available() ? '' : ' disabled' ?>>Wan 2.2 (SiliconFlow) — économique<?= sf_available() ? '' : ' · clé à renseigner dans les réglages' ?></option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" id="gen-seconds-field">
             <label>Durée</label>
             <select name="seconds">
               <?php foreach (VEO_SECONDS as $sec): ?>
@@ -222,9 +223,12 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         var costNote = { angle: ' : image 3:2 + version 9:16', ambiance: ' : image 3:2 + version 9:16', complete: ' : image 3:2 + version 9:16', detoure: '' };
         function sync() {
           var k = kindSelect.value;
+          var wan = genForm.elements.model.value === 'wan22';
+          document.getElementById('gen-seconds-field').style.display = wan ? 'none' : '';
           if (k === 'video_ai') {
             var vc = veoCosts[genForm.elements.model.value + '-' + genForm.elements.seconds.value];
-            cost.textContent = 'Coût estimé ' + vc + ' (facturé seulement si la vidéo aboutit) · prête en 1 à 6 minutes';
+            cost.textContent = wan ? 'Coût estimé ' + vc + ' par vidéo (courte, durée fixée par le service) · prête en quelques minutes'
+              : 'Coût estimé ' + vc + ' (facturé seulement si la vidéo aboutit) · prête en 1 à 6 minutes';
           } else {
             cost.textContent = costs[k] ? 'Coût estimé ' + costs[k] + costNote[k] : (k === 'video' ? 'Vidéo : gratuite' + (ffmpegOk ? '' : ' (fabriquée dans votre navigateur)') : '');
           }
@@ -240,7 +244,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
       })();
     </script>
     <?php if (!GEMINI_API_KEY): ?>
-      <p class="publish-status" data-kind="error" style="margin-bottom:20px;">Clé Gemini absente — les générations "ambiance", "autre angle" et "compléter l'objet" ne fonctionneront pas tant que la clé n'est pas renseignée dans Réglages du site. La vidéo « zoom, travelling » fonctionne sans elle ; la vidéo IA (Veo) la demande.</p>
+      <p class="publish-status" data-kind="error" style="margin-bottom:20px;">Clé Gemini absente — les générations "ambiance", "autre angle" et "compléter l'objet" ne fonctionneront pas tant que la clé n'est pas renseignée dans Réglages du site. La vidéo « zoom, travelling » fonctionne sans elle ; la vidéo IA Veo la demande (la vidéo IA Wan 2.2 demande plutôt une clé SiliconFlow).</p>
     <?php endif; ?>
     <?php if (!shell_exec_available() || !PHP_CLI_BIN || !PYTHON_BIN): ?>
       <?php if (FAL_API_KEY): ?>
@@ -248,6 +252,9 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
       <?php else: ?>
         <p class="publish-status" style="margin-bottom:20px;">Le vrai détourage (fond transparent) nécessite soit Python (rembg) en local, soit une clé fal.ai (voir Réglages du site) — sans les deux, "Détourage" génère un repli à fond blanc via Gemini (pas un vrai fond transparent). Les autres générations (ambiance, autre angle, compléter l'objet, netteté) fonctionnent normalement, elles n'en ont besoin d'aucun des deux.</p>
       <?php endif; ?>
+    <?php endif; ?>
+    <?php if (!sf_available()): ?>
+      <p class="publish-status" style="margin-bottom:20px;">Vidéo IA économique (Wan 2.2) : renseignez une clé SiliconFlow dans <a href="/admin/index.php#siliconflow-settings" style="color:var(--accent);">Réglages du site</a> pour l'activer.</p>
     <?php endif; ?>
     <?php if (!$ffmpegOk): ?>
       <p class="publish-status" style="margin-bottom:20px;">ffmpeg n'est pas disponible sur cet hébergement : la vidéo « zoom, travelling » est fabriquée dans votre navigateur (gratuite, 3 secondes) et envoyée à la galerie. La vidéo IA (Veo) passe par Google et ne dépend pas du serveur.</p>
