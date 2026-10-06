@@ -10,6 +10,8 @@ $counts = universes_counts();
 $orphans = universes_orphan_refs();
 $customized = universes_saved() !== null;
 $profile = shop_profile();
+$sectorsSaved = shop_sectors_saved();
+$sectors = shop_sectors();
 $staleExamples = $profile === '' && trim((string) tenant('ai.examples')) !== '';
 $withPhotos = (int) db()->query("SELECT COUNT(*) FROM products WHERE photo IS NOT NULL AND photo != ''")->fetchColumn();
 // Pas encore de type de boutique et des photos à regarder : l'IA les analyse d'elle-même à l'ouverture de la page.
@@ -35,6 +37,10 @@ $allRefs = db()->query('SELECT ref FROM products ORDER BY ref')->fetchAll(PDO::F
   .un-row .un-move button, .un-row .un-del { background: none; border: 1px solid var(--line); color: var(--ink); padding: 6px 9px; cursor: pointer; font-size: 0.85rem; }
   .un-row .un-del:hover { border-color: #b3261e; color: #b3261e; }
   .un-profile { margin: 18px 0 6px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); }
+  .un-sectors { display: flex; flex-wrap: wrap; gap: 6px; }
+  .un-sector { padding: 5px 11px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; color: var(--ink); font-family: var(--font-body); font-size: 0.84rem; cursor: pointer; }
+  .un-sector:hover { border-color: var(--accent); }
+  .un-sector[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
   .un-profile label { font-weight: 600; font-size: 0.92rem; }
   .un-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .un-ideas { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--accent); background: var(--surface); }
@@ -69,6 +75,14 @@ $allRefs = db()->query('SELECT ref FROM products ORDER BY ref')->fetchAll(PDO::F
           <button type="button" class="btn-small" id="un-detect"<?= GEMINI_API_KEY ? '' : ' disabled title="Clé Gemini non configurée"' ?>>Détecter ce que vend ma boutique (IA)</button>
         </div>
         <p class="hint" style="margin:6px 0 0;">Laissez vide et cliquez pour que l'IA décide d'après vos photos ; ou écrivez-le vous-même, l'IA le suivra pour proposer les univers.</p>
+        <p style="margin:12px 0 4px;font-weight:600;font-size:0.88rem;">Secteurs de la boutique <span class="hint" style="margin:0;font-weight:400;">(un ou plusieurs ; l'IA les coche d'après vos photos)</span></p>
+        <div class="un-sectors" id="un-sectors" role="group" aria-label="Secteurs de la boutique">
+          <?php foreach ($sectors as $key => $sector): ?>
+            <button type="button" class="un-sector" data-key="<?= h($key) ?>" data-profile="<?= h($sector['profile']) ?>" data-universes="<?= h(json_encode(universes_for_sectors([$key]))) ?>" aria-pressed="<?= in_array($key, $sectorsSaved, true) ? 'true' : 'false' ?>"><?= h($sector['label']) ?></button>
+          <?php endforeach; ?>
+        </div>
+        <input type="hidden" name="sectors" id="un-sectors-input" value="<?= h(implode(',', $sectorsSaved)) ?>">
+        <p style="margin:10px 0 0;"><button type="button" class="btn-small" id="un-sector-apply" disabled>Utiliser les univers prêts à l'emploi des secteurs cochés</button></p>
       </div>
       <ul class="un-list" id="un-list">
         <?php foreach ($universes as $u): $n = $counts[$u['key']] ?? 0; ?>

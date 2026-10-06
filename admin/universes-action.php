@@ -23,7 +23,7 @@ if ($action === 'suggest') {
     @set_time_limit(90);
     $found = universes_suggest(mb_substr((string) ($_POST['hint'] ?? ''), 0, 200));
     echo json_encode($found
-        ? ['ok' => true, 'profile' => $found['profile'], 'universes' => $found['universes'], 'seen' => $found['seen']]
+        ? ['ok' => true, 'profile' => $found['profile'], 'universes' => $found['universes'], 'sectors' => $found['sectors'], 'source' => $found['source'], 'seen' => $found['seen']]
         : ['ok' => false, 'error' => "L'IA n'a pas pu répondre (service surchargé ?) : réessayez dans un instant. Si cela persiste, décrivez votre boutique dans le champ « Ce que vend votre boutique » puis cliquez sur « Proposer des univers »."], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -33,6 +33,7 @@ try {
         $rows = universes_normalize((array) ($_POST['key'] ?? []), (array) ($_POST['label'] ?? []), (array) ($_POST['icon'] ?? []));
         universes_save($rows);
         if (isset($_POST['profile'])) shop_profile_save((string) $_POST['profile']);
+        if (isset($_POST['sectors'])) shop_sectors_save(explode(',', (string) $_POST['sectors']));
         $orphans = count(universes_orphan_refs());
         flash_set('Univers enregistrés (' . count($rows) . ').' . ($orphans ? " $orphans pièce(s) ont un univers qui n'existe plus : reclassez-les ci-dessous." : ''));
     } elseif ($action === 'reset') {

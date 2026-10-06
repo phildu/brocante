@@ -1817,6 +1817,44 @@ function product_nature_options(): array
             'outils' => 'Outils à main', 'quincaillerie' => 'Quincaillerie et serrurerie', 'jardinage' => 'Jardinage', 'cuisine_campagne' => 'Objets de campagne et de ferme', 'velos' => 'Vélos et accessoires',
             'valises' => 'Valises et malles',
         ]],
+        'sport' => ['label' => 'Sport et loisirs', 'subs' => [
+            'velos_sport' => 'Vélos, trottinettes et accessoires', 'fitness' => 'Fitness et musculation', 'sports_balle' => 'Sports de balle et de ballon', 'raquettes' => 'Tennis, badminton et raquettes',
+            'plein_air' => 'Randonnée, camping et plein air', 'glisse' => 'Ski, snowboard et glisse', 'nautique' => 'Sports nautiques, plongée et pêche', 'combat' => 'Sports de combat',
+            'equitation' => 'Équitation', 'supporters' => 'Maillots, écharpes et objets de supporters', 'course' => 'Course, athlétisme et cyclisme (équipement)',
+        ]],
+        'alimentaire' => ['label' => 'Alimentaire', 'subs' => [
+            'epicerie_salee' => 'Épicerie salée', 'epicerie_sucree' => 'Épicerie sucrée et confiseries', 'boissons' => 'Boissons, vins et spiritueux', 'boulangerie' => 'Pains, viennoiseries et pâtisseries',
+            'frais' => 'Produits frais et charcuterie', 'terroir' => 'Produits du terroir et conserves', 'coffrets' => 'Coffrets et paniers garnis', 'bio' => 'Bio et diététique',
+        ]],
+        'tv_hifi' => ['label' => 'TV, hifi et audiovisuel', 'subs' => [
+            'televisions' => 'Télévisions et écrans de salon', 'enceintes' => 'Enceintes et barres de son', 'casques' => 'Casques et écouteurs', 'amplis' => 'Amplificateurs et tuners',
+            'platines' => 'Platines vinyles et lecteurs', 'videoprojecteurs' => 'Vidéoprojecteurs et home cinéma', 'cameras' => 'Caméras et appareils photo numériques', 'accessoires_av' => 'Câbles, télécommandes et accessoires audio-vidéo',
+        ]],
+        'informatique' => ['label' => 'Informatique', 'subs' => [
+            'portables' => 'Ordinateurs portables', 'fixes' => 'Ordinateurs fixes et mini-PC', 'ecrans' => 'Écrans et moniteurs', 'composants' => 'Composants (processeurs, cartes, mémoire)',
+            'peripheriques' => 'Claviers, souris et périphériques', 'reseau' => 'Réseau, box et routeurs', 'stockage' => 'Stockage (disques, clés, cartes)', 'imprimantes' => 'Imprimantes et scanners',
+            'tablettes' => 'Tablettes et liseuses', 'cables_info' => 'Câbles, chargeurs et accessoires', 'logiciels_jeux' => 'Logiciels et accessoires gaming',
+        ]],
+        'telephonie' => ['label' => 'Téléphonie et objets connectés', 'subs' => [
+            'smartphones' => 'Smartphones', 'telephones_fixes' => 'Téléphones fixes et sans fil', 'coques' => 'Coques, protections et supports', 'montres_connectees' => 'Montres et bracelets connectés',
+            'chargeurs' => 'Chargeurs, batteries et câbles', 'domotique' => 'Domotique et objets connectés',
+        ]],
+        'electromenager' => ['label' => 'Électroménager', 'subs' => [
+            'gros_electro' => 'Gros électroménager', 'cuisine_electro' => 'Petit électroménager de cuisine', 'entretien' => 'Aspirateurs et entretien', 'soin_electrique' => 'Soin et beauté électrique',
+            'chauffage' => 'Chauffage, ventilation et climatisation',
+        ]],
+        'beaute' => ['label' => 'Beauté et bien-être', 'subs' => [
+            'parfums' => 'Parfums', 'maquillage' => 'Maquillage', 'soins' => 'Soins du visage et du corps', 'cheveux' => 'Cheveux et coiffure', 'accessoires_beaute' => 'Trousses, miroirs et accessoires',
+        ]],
+        'bebe' => ['label' => 'Bébé et puériculture', 'subs' => [
+            'poussettes' => 'Poussettes et porte-bébés', 'sieges' => 'Sièges auto et chaises hautes', 'puericulture' => 'Biberons, repas et soins', 'eveil' => 'Jouets d\'éveil et peluches', 'chambre_bebe' => 'Mobilier et déco de chambre',
+        ]],
+        'animaux' => ['label' => 'Animaux', 'subs' => [
+            'chiens' => 'Accessoires pour chiens', 'chats' => 'Accessoires pour chats', 'aquariophilie' => 'Aquariophilie', 'rongeurs_oiseaux' => 'Rongeurs, oiseaux et autres animaux',
+        ]],
+        'auto_moto' => ['label' => 'Auto et moto', 'subs' => [
+            'pieces_auto' => 'Pièces et entretien auto', 'accessoires_auto' => 'Accessoires et équipement auto', 'moto' => 'Moto, scooter et équipement du motard', 'outillage_auto' => 'Outillage et garage',
+        ]],
         'autre' => ['label' => 'Autre', 'subs' => [
             'divers' => 'Divers', 'lots' => 'Lots et assortiments',
         ]],

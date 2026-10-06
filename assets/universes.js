@@ -35,6 +35,51 @@
     addRow('').querySelector('[name="label[]"]').focus();
   });
 
+  // ── Secteurs ──
+  var sectorBox = document.getElementById('un-sectors');
+  var sectorInput = document.getElementById('un-sectors-input');
+  var sectorApply = document.getElementById('un-sector-apply');
+  var profileEl = document.getElementById('un-profile');
+  profileEl.addEventListener('input', function () { profileEl.dataset.auto = ''; });
+  function chips() { return Array.prototype.slice.call(sectorBox.querySelectorAll('.un-sector')); }
+  function selectedSectors() { return chips().filter(function (c) { return c.getAttribute('aria-pressed') === 'true'; }); }
+  function syncSectors(updateProfile) {
+    var sel = selectedSectors();
+    sectorInput.value = sel.map(function (c) { return c.dataset.key; }).join(',');
+    sectorApply.disabled = !sel.length;
+    // Phrase de la boutique tirée des secteurs cochés, tant que le vendeur ne l'a pas écrite lui-même.
+    if (updateProfile && sel.length && (!profileEl.value.trim() || profileEl.dataset.auto)) {
+      profileEl.value = sel.map(function (c) { return c.dataset.profile; }).join(' ; ').slice(0, 120);
+      profileEl.dataset.auto = '1';
+    }
+  }
+  chips().forEach(function (c) {
+    c.addEventListener('click', function () { c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); syncSectors(true); });
+  });
+  function applyUniverses(list) {
+    // Les univers repris gardent leur clé (leurs pièces restent rattachées) ; les autres sont retirés, les nouveaux ajoutés.
+    var byLabel = {};
+    Array.prototype.forEach.call(list_().children, function (li) { byLabel[li.querySelector('[name="label[]"]').value.trim().toLowerCase()] = li; });
+    var keep = [];
+    list.forEach(function (u) {
+      var existing = byLabel[u.label.trim().toLowerCase()];
+      if (existing) { existing.querySelector('[name="icon[]"]').value = u.icon; keep.push(existing); }
+      else keep.push(addRow(u.label, u.icon));
+    });
+    Array.prototype.slice.call(list_().children).forEach(function (li) { if (keep.indexOf(li) < 0) li.remove(); });
+    keep.forEach(function (li) { list_().appendChild(li); });
+  }
+  function list_() { return document.getElementById('un-list'); }
+  sectorApply.addEventListener('click', function () {
+    var all = [], seen = {};
+    selectedSectors().forEach(function (c) {
+      JSON.parse(c.dataset.universes || '[]').forEach(function (u) { if (!seen[u.label.toLowerCase()]) { seen[u.label.toLowerCase()] = 1; all.push(u); } });
+    });
+    applyUniverses(all.slice(0, 12));
+    say(status, 'Univers des secteurs cochés appliqués : relisez, puis « Enregistrer les univers ».');
+  });
+  syncSectors(false);
+
   // ── Propositions de l'IA ──
   var ideas = [];
   var found = '';
@@ -52,10 +97,14 @@
         suggestBtn.disabled = detectBtn.disabled = false;
         if (!res.ok) { say(status, res.error || 'Propositions indisponibles.'); return; }
         ideas = res.universes; found = res.profile || '';
+        // Les secteurs reconnus sont cochés : c'est la réponse à « de quoi vend-on ? ».
+        if (res.sectors && res.sectors.length) { chips().forEach(function (c) { c.setAttribute('aria-pressed', res.sectors.indexOf(c.dataset.key) > -1 ? 'true' : 'false'); }); syncSectors(false); }
         // La boutique détectée est écrite dans le champ : on voit ce que l'IA a compris, et on peut le corriger.
         if (found && !profileInput.value.trim()) profileInput.value = found;
         var seen = res.seen || {};
-        say(status, (found ? 'Boutique détectée : ' + found + '.' : '') + (seen.photos ? ' (' + seen.photos + ' photo' + (seen.photos > 1 ? 's' : '') + ' analysée' + (seen.photos > 1 ? 's' : '') + (seen.names && seen.names.length ? ' : ' + seen.names.join(', ') : '') + ')' : ' Aucune photo de pièce à analyser : l\'IA s\'est fiée au nom de la boutique ; décrivez-la dans le champ pour la guider.'));
+        var labels = selectedSectors().map(function (c) { return c.textContent; });
+        var how = { ia: "d'après vos photos", natures: 'd\'après la nature de vos pièces', texte: 'd\'après le nom de la boutique' }[res.source] || '';
+        say(status, (labels.length ? 'Secteur détecté : ' + labels.join(', ') + (how ? ' (' + how + ')' : '') + '. ' : '') + (found ? 'Boutique : ' + found.replace(/[.\s]+$/, '') + '.' : '') + (seen.photos ? ' (' + seen.photos + ' photo' + (seen.photos > 1 ? 's' : '') + ' analysée' + (seen.photos > 1 ? 's' : '') + (seen.names && seen.names.length ? ' : ' + seen.names.join(', ') : '') + ')' : ' Aucune photo de pièce à analyser : l\'IA s\'est fiée au nom de la boutique ; décrivez-la dans le champ pour la guider.'));
         var ul = document.getElementById('un-ideas-list'); ul.textContent = '';
         ideas.forEach(function (u) { var li = document.createElement('li'); li.textContent = u.label; ul.appendChild(li); });
         ideasBox.hidden = false;
@@ -66,17 +115,7 @@
   if (document.getElementById('un-form').dataset.autoDetect) suggest();
   detectBtn.addEventListener('click', function () { profileInput.value = ''; suggest(); });
   document.getElementById('un-apply').addEventListener('click', function () {
-    // Les univers repris gardent leur clé (leurs pièces restent rattachées) ; les autres sont retirés, les nouveaux ajoutés.
-    var byLabel = {};
-    Array.prototype.forEach.call(list.children, function (li) { byLabel[li.querySelector('[name="label[]"]').value.trim().toLowerCase()] = li; });
-    var keep = [];
-    ideas.forEach(function (u) {
-      var existing = byLabel[u.label.trim().toLowerCase()];
-      if (existing) { existing.querySelector('[name="icon[]"]').value = u.icon; keep.push(existing); }
-      else { keep.push(addRow(u.label, u.icon)); }
-    });
-    Array.prototype.slice.call(list.children).forEach(function (li) { if (keep.indexOf(li) < 0) li.remove(); });
-    keep.forEach(function (li) { list.appendChild(li); });
+    applyUniverses(ideas);
     ideasBox.hidden = true;
     say(status, 'Liste remplacée : relisez, puis « Enregistrer les univers ».');
   });

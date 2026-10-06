@@ -175,6 +175,23 @@ l'étiquette si elle est lisible, sinon la taille la plus probable d'après la c
 Last-Modified, réponse 304 si rien n'a changé) au lieu de garder pendant 15 minutes — durée par défaut du serveur — l'ancienne
 version d'un script avec la nouvelle page, ce qui laissait des boutons sans effet juste après un déploiement.
 
+## Secteurs : Mode, Sport, Déco, Alimentaire, TV-hifi, Informatique…
+
+Au-dessus des univers (les rayons), la page Univers propose les **secteurs** de la boutique (`shop_sectors()`, `includes/universes.php`) —
+16 domaines : Mode et vêtements, Sport et loisirs, Déco et maison, Alimentaire, TV, hifi et audiovisuel, Informatique, Téléphonie
+et objets connectés, Électroménager, Bijoux/montres/beauté, Brocante et vintage, Livres/musique/films, Jeux et jouets, Bricolage et
+jardin, Auto et moto, Bébé et enfant, Animaux. Une boutique peut en cocher plusieurs ; chaque secteur apporte sa phrase de boutique
+et des **univers prêts à l'emploi** (Mode : hauts, pulls et sweats, pantalons, robes, vestes, chaussures, accessoires…), appliqués
+d'un clic (« Utiliser les univers prêts à l'emploi des secteurs cochés »), sans dépendre de l'IA. Les secteurs cochés sont enregistrés
+avec la phrase de la boutique (`shop_sectors_saved()`).
+
+**Détection.** L'IA (qui voit les photos des pièces) coche les secteurs ; si elle ne répond pas ou ne reconnaît rien, le repli est
+déterministe : (1) la nature des pièces en vente (secteurs regroupant au moins 25 % des pièces avec nature, `shop_sectors_from_natures()`),
+(2) les mots du nom de la boutique, de son accroche et de l'indication du vendeur (« fripe », « tissus » → Mode ;
+`shop_sectors_from_text()`). Le message indique d'après quoi le secteur a été reconnu (photos, nature des pièces, nom). Les natures de
+produits ont été étendues aux nouveaux secteurs (sport, alimentaire, TV-hifi, informatique, téléphonie, électroménager, beauté, bébé,
+animaux, auto-moto : 25 natures, 185 sous-catégories).
+
 ## Univers (rayons) modifiables, taille et poids estimés par l'IA
 
 **Univers.** Les univers d'une boutique (filtres de « La boutique », accueil, champ « Univers » des fiches) venaient
