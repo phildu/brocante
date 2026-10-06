@@ -38,7 +38,7 @@ function veo_ensure_schema(PDO $pdo): void
 function veo_cost_usd(string $modelKey, int $seconds): float
 {
     if ($modelKey === SF_MODEL_KEY) return ai_pricing()['wan22']; // un prix par vidéo
-    if ($modelKey === MODAL_MODEL_KEY) return ai_pricing()['ltx']; // un prix estimé par vidéo (crédit Modal)
+    if ($modelKey === MODAL_MODEL_KEY) return ai_pricing()['modal_video']; // un prix estimé par vidéo (crédit Modal)
     $model = VEO_MODELS[$modelKey] ?? VEO_MODELS['fast'];
     return ai_pricing()[$model['price']] * $seconds;
 }

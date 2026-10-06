@@ -19,7 +19,7 @@ function video_reply(array $data, int $status = 200): never
     exit;
 }
 
-/** Fournisseur d'une vidéo IA d'après la clé de modèle : google (Veo), siliconflow (Wan 2.2) ou modal (LTX-Video). */
+/** Fournisseur d'une vidéo IA d'après la clé de modèle : google (Veo), siliconflow (Wan 2.2) ou modal (Wan 2.2 5B). */
 function video_provider(string $modelKey): string
 {
     return match ($modelKey) { SF_MODEL_KEY => 'siliconflow', MODAL_MODEL_KEY => 'modal', MODAL_CUTOUT_KEY => 'modal-cutout', default => 'google' };
@@ -63,7 +63,7 @@ switch ($action) {
 
         $provider = video_provider($modelKey);
         if ($provider !== 'google') $seconds = 0; // durée fixée par le service
-        $prompt = $provider === 'modal' ? build_ltx_prompt($effect, $keywords) : build_veo_prompt($effect, $keywords);
+        $prompt = $provider === 'modal' ? build_wan_prompt($effect, $keywords) : build_veo_prompt($effect, $keywords);
         $started = match ($provider) {
             'siliconflow' => sf_video_start($srcAbs, $prompt, $aspect),
             'modal' => modal_video_start($srcAbs, $prompt, $aspect),
@@ -71,7 +71,7 @@ switch ($action) {
         };
         if (!$started['ok']) video_reply(['ok' => false, 'error' => $started['error']], 502);
 
-        $label = ['siliconflow' => 'Vidéo IA (Wan) — ', 'modal' => 'Vidéo IA (LTX) — '][$provider] ?? 'Vidéo IA — ';
+        $label = ['siliconflow' => 'Vidéo IA (Wan) — ', 'modal' => 'Vidéo IA (Wan) — '][$provider] ?? 'Vidéo IA — ';
         $label .= veo_motions()[$effect] ?? 'Vidéo';
         db()->prepare('INSERT INTO veo_jobs (product_ref, operation, model, seconds, aspect, label) VALUES (?, ?, ?, ?, ?, ?)')
             ->execute([$ref, $started['operation'], $modelKey, $seconds, $aspect, $label]);

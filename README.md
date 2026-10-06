@@ -408,7 +408,7 @@ dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
 
 ## Détourage haute précision (Modal)
 
-Quand le service Modal est configuré (voir « Vidéo IA — LTX-Video sur Modal » ci-dessus) et que rembg local n'existe pas (hébergement
+Quand le service Modal est configuré (voir « Vidéo IA — Wan 2.2 5B sur Modal » ci-dessus) et que rembg local n'existe pas (hébergement
 mutualisé), le bouton « Détourage » de la galerie utilise `modal/ltx_video_app.py` (classe `Cutter` : bibliothèque `rembg`,
 modèle **BiRefNet** sur 4 processeurs, sans GPU ; poids gardés dans le volume Modal). Sur une photo de sweat imprimé, il garde tout
 le lettrage fin d'une manche qu'`isnet-general-use` (le modèle léger de rembg) efface en partie. La première demande après une pause
@@ -428,7 +428,7 @@ Galerie d'une pièce → « Générer une nouvelle vue » : la photo de départ 
   tous les côtés (dos, détails, étiquettes). La photo principale est celle posée sur la toile du format voulu ; le coût ne change pas.
 - **Détourage** et **vidéo zoom/travelling** : un résultat PAR photo (3 détourages, 6 vidéos au plus par demande ; un résumé
   « n sur m ajoutés » s'affiche).
-- **Vidéo IA** (Veo, Wan, LTX) : une vidéo par photo (6 au plus) ; le coût estimé est multiplié par le nombre de photos, et la page suit
+- **Vidéo IA** (Veo, Wan) : une vidéo par photo (6 au plus) ; le coût estimé est multiplié par le nombre de photos, et la page suit
   toutes les générations en parallèle.
 
 ## Vidéos de la galerie d'une pièce
@@ -455,17 +455,25 @@ Galerie d'une pièce → « Générer une nouvelle vue » → deux types de vid�
   ou 720×1280) puis `POST /v1/video/status` (`InQueue`, `InProgress`, `Succeed`, `Failed`) ; le lien de la vidéo
   n'est valable qu'une heure, elle est donc téléchargée tout de suite. Même suivi (`veo_jobs`) et même coût consigné
   que Veo. Code : `includes/siliconflow-video.php`.
-- **Vidéo IA — LTX-Video sur Modal** — l'option gratuite (dans le crédit de 30 $ par mois du plan Starter de Modal, facturation
-  à la seconde de GPU ; une vidéo d'environ 3 s se génère en une dizaine de secondes et coûte quelques centimes, estimé à 0,08 $ dans « Consommation IA »).
-  Le service est le script `modal/ltx_video_app.py` (LTX-Video via `diffusers` sur un GPU L40S, poids gardés dans un volume
-  Modal, points d'entrée `/health`, `/submit`, `/status/<id>`, `/video/<id>` protégés par un jeton), à déployer une fois sur
-  le compte Modal du commerçant :
-  `pip install modal`, `modal setup`, `modal secret create boutique-video-token AUTH_TOKEN=<jeton>`,
+- **Vidéo IA — Wan 2.2 5B sur Modal** — l'option dans le crédit gratuit (30 $ par mois du plan Starter de Modal, facturation à la
+  seconde de GPU). Elle a remplacé **LTX-Video**, jugé mauvais après comparaison sur une photo de sweat imprimé (même consigne, mêmes
+  photos) : LTX déformait l'objet ou le remplaçait par autre chose dès que le mouvement était marqué ; **Wan 2.2 TI2V-5B** garde
+  forme, couleurs et lettrage intacts avec un vrai rapprochement de caméra, en ~22 s de GPU sur un H100 (≈ 0,03 $, ≈ 0,07 $ avec
+  le chargement du modèle après une pause ; estimé à 0,07 $ dans « Consommation IA »). Wan 2.2 I2V-A14B (14 milliards de paramètres)
+  est un peu plus fidèle mais 10 fois plus lent (~4 min) : non retenu. Le service est le script `modal/ltx_video_app.py` (nom
+  historique, conservé pour ne pas changer l'adresse déjà saisie ; points d'entrée `/health`, `/submit`, `/status/<id>`,
+  `/video/<id>`, `/cutout`, `/png/<id>` protégés par un jeton), à déployer une fois sur le compte Modal du commerçant :
+  `pip install modal` (dans un `python3 -m venv`), `modal setup`, `modal secret create boutique-video-token AUTH_TOKEN=<jeton>`,
+  `modal run modal/video_models_test.py::download --which 5b` (télécharge les ~25 Go de poids sur processeur, peu coûteux),
   `modal deploy modal/ltx_video_app.py`. L'adresse affichée et le jeton se saisissent dans Administration → Réglages du site →
-  « Modal » (fichier `.secrets/<commerce>/modal-video.json` ; la connexion est testée à l'enregistrement ; l'adresse doit
-  finir par `.modal.run`). Sans configuration, l'option est grisée. Le dossier `modal/` n'est pas envoyé par le script de
-  déploiement. Formats 768×448 ou 448×768, 65 images à 24 i/s (≈ 3 s : au-delà LTX-Video déforme l'objet) ; prompt doux « léger rapprochement + légère brise » (un prompt vague ou un mouvement fort fait déformer l'objet) ; photo de départ légèrement compressée (JPEG 60) ; réglages éprouvés avec `modal run modal/ltx_video_app.py --image photo.jpg` ; la première génération après une période d'inactivité charge
-  aussi le modèle (plus long). Code PHP : `includes/modal-video.php`. Qualité inférieure à Veo : l'objet peut se déformer.
+  « Modal » (fichier `.secrets/<commerce>/modal-video.json` ; connexion testée à l'enregistrement ; l'adresse doit finir par
+  `.modal.run`). Sans configuration, l'option est grisée. Le dossier `modal/` n'est pas envoyé par le script de déploiement.
+  **Point décisif : ne jamais envoyer à Wan une photo posée sur une toile aux bandes floues** (le modèle les prend pour un vrai
+  décor et « recule » dans une pièce inventée) : la vidéo se fait au **format naturel de la photo** (surface ≈ 480 × 832, multiples de
+  32 ; 81 images à 24 i/s ≈ 3,4 s) ; choisir 16:9 ou 9:16 recadre la photo. Prompt : mouvement de caméra net mais lisse + « le produit
+  reste net, stable et inchangé » (`build_wan_prompt()`) ; éviter « brise », « tissu qui ondule » (des mains et des pieds apparaissent).
+  Le banc d'essai `modal/video_models_test.py` (`modal run … ::test --models-to-run 5b,14b,5b-prompts`) sert à comparer des modèles
+  et des consignes avant tout changement. Code PHP : `includes/modal-video.php`. Qualité inférieure à Veo.
 
 ## Photos et vidéos depuis un téléphone proche
 

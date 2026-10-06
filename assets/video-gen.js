@@ -139,7 +139,7 @@
     })();
   }
 
-  // ── Vidéo IA (Veo, Wan, LTX) : une vidéo par photo choisie ──
+  // ── Vidéo IA (Veo, Wan) : une vidéo par photo choisie ──
   var pollTimer = null;
   function elapsedSince(since) {
     var s = Math.max(0, Math.round(Date.now() / 1000 - since));

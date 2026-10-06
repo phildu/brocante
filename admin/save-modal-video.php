@@ -36,7 +36,7 @@ if (!empty($_POST['remove'])) {
         $body = curl_exec($ch);
         $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         if ($code === 200 && !empty((json_decode((string) $body, true) ?: [])['ok'])) {
-            flash_set('Service Modal enregistré : connexion réussie. LTX-Video est disponible dans la galerie.');
+            flash_set('Service Modal enregistré : connexion réussie. Wan 2.2 (vidéo) et le détourage haute précision sont disponibles dans la galerie.');
         } else {
             flash_set('Enregistré, mais le test a échoué : ' . modal_video_error_message($code, json_decode((string) $body, true) ?: []), 'error');
         }
