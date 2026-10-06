@@ -5,7 +5,9 @@ require_admin();
 
 $content = get_content();
 $slides = slideshow_slides_list();
-$mediaAll = get_media_items();
+// Médiathèque propre ET visuels / vidéos des galeries de pièces (dont les vidéos générées par l'IA) ; les vidéos d'abord.
+$mediaAll = get_media_overview();
+usort($mediaAll, static fn (array $a, array $b): int => [$a['type'] === 'video' ? 0 : 1] <=> [$b['type'] === 'video' ? 0 : 1]);
 $products = get_products(null, true);
 $flash = flash_get();
 
@@ -197,7 +199,7 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
             <?php else: ?>
               <img src="/<?= h($m['path']) ?>" alt="<?= h($m['label']) ?>">
             <?php endif; ?>
-            <span><?= h($m['label']) ?><?= $m['type'] === 'video' ? ' (vidéo)' : '' ?></span>
+            <span><?= h($m['label']) ?><?= $m['type'] === 'video' ? ' (vidéo)' : '' ?><?= ($m['kind'] ?? '') === 'fiche' ? ' — ' . h($m['origin_name']) : '' ?></span>
           </button>
         <?php endforeach; ?>
       </div>

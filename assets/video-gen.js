@@ -18,6 +18,7 @@
     statusEl.hidden = !text;
     statusEl.textContent = text || '';
     statusEl.dataset.kind = kind || '';
+    if (text && statusEl.scrollIntoView) statusEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
   function lock(on) {
     busy = on;
@@ -128,7 +129,7 @@
 
   // ── Vidéo IA (Veo) ──
   var pollTimer = null;
-  function poll(job, label, since) {
+  function poll(job, label, since, justStarted) {
     clearTimeout(pollTimer);
     function elapsed() { var s = Math.max(0, Math.round(Date.now() / 1000 - since)); return Math.floor(s / 60) + ' min ' + ('0' + (s % 60)).slice(-2) + ' s'; }
     function step() {
@@ -140,7 +141,8 @@
       });
     }
     lock(true);
-    say('« ' + label + ' » est en cours de génération — ' + elapsed() + ' (quelques minutes).');
+    if (justStarted) say('✓ Génération lancée avec succès. Elle prend quelques minutes : vous pouvez quitter cette page, la vidéo sera ajoutée à la galerie.', 'ok');
+    else say('« ' + label + ' » est en cours de génération — ' + elapsed() + ' (quelques minutes).');
     pollTimer = setTimeout(step, 8000);
   }
 
@@ -157,7 +159,7 @@
       keywords: form.elements.keywords.value
     }).then(function (res) {
       if (!res.ok) { say(res.error || 'Le service a refusé la demande.', 'error'); lock(false); return; }
-      poll(res.job, 'la vidéo IA', Date.now() / 1000);
+      poll(res.job, 'la vidéo IA', Date.now() / 1000, true);
     });
   }
 

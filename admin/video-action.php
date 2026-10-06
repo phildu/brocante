@@ -8,8 +8,12 @@ require_once __DIR__ . '/../includes/functions.php';
 require_admin();
 
 header('Content-Type: application/json; charset=utf-8');
+// Réponse toujours en JSON pur : un avertissement PHP (ou une dépréciation) ne doit pas le casser.
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE & ~E_WARNING);
+ob_start();
 function video_reply(array $data, int $status = 200): never
 {
+    while (ob_get_level() > 0) ob_end_clean();
     http_response_code($status);
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;

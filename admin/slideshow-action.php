@@ -31,11 +31,22 @@ switch ($action) {
         $stmt->execute([$path]);
         $row = $stmt->fetch();
         if (!$row) {
+            // Visuel ou vidéo de la galerie d'une pièce (par exemple une vidéo générée par l'IA).
+            $stmt = db()->prepare('SELECT path, type FROM product_photos WHERE path = ? LIMIT 1');
+            $stmt->execute([$path]);
+            $row = $stmt->fetch();
+            if (!$row) {
+                $stmt = db()->prepare("SELECT path_mobile AS path, 'photo' AS type FROM product_photos WHERE path_mobile = ? LIMIT 1");
+                $stmt->execute([$path]);
+                $row = $stmt->fetch();
+            }
+        }
+        if (!$row) {
             flash_set('Média introuvable dans la médiathèque.', 'error');
             break;
         }
         $kind = $row['type'] === 'video' ? 'video' : 'ambiance';
-        add_slideshow_slide($kind, $row['path'], null, trim((string) ($_POST['caption'] ?? '')), 8);
+        add_slideshow_slide($kind, $row['path'], null, trim((string) ($_POST['caption'] ?? '')), $kind === 'video' ? 0 : 8); // 0 = durée de la vidéo
         flash_set('Média ajouté au diaporama.');
         break;
     }

@@ -115,6 +115,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
     <div class="admin-block" style="margin-bottom:24px;">
       <h2 style="font-size:1.1rem;">Générer une nouvelle vue</h2>
       <p class="hint">Choisissez la photo de départ et le type de vue. Pour "Autre angle", précisez si besoin l'angle souhaité et des mots-clés libres.</p>
+      <p class="publish-status" id="video-status" role="status" aria-live="polite" hidden style="margin:0 0 16px;"></p>
       <form method="post" action="/admin/gallery-action.php" id="generate-form"
         data-csrf="<?= h(admin_csrf_token()) ?>" data-ffmpeg="<?= $ffmpegOk ? '1' : '0' ?>"
         data-paths="<?= h(json_encode($photoPaths)) ?>" data-pending="<?= h(json_encode($pendingVideos)) ?>">
@@ -172,12 +173,13 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
             </select>
           </div>
           <div class="field" id="gen-seconds-field">
-            <label>Durée</label>
+            <label id="gen-seconds-label">Durée</label>
             <select name="seconds">
               <?php foreach (VEO_SECONDS as $sec): ?>
                 <option value="<?= $sec ?>"<?= $sec === 6 ? ' selected' : '' ?>><?= $sec ?> secondes</option>
               <?php endforeach; ?>
             </select>
+            <p class="hint" id="gen-seconds-note" style="display:none;margin:4px 0 0;">Wan 2.2 n'a pas de réglage de durée : le service fixe la longueur du clip (courte, de l'ordre de quelques secondes).</p>
           </div>
           <div class="field">
             <label>Format</label>
@@ -205,7 +207,6 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
             'angle' => ai_estimate_label(['image' => 2]), 'ambiance' => ai_estimate_label(['image' => 2]), 'complete' => ai_estimate_label(['image' => 2]),
             'detoure' => FAL_API_KEY ? ai_estimate_label(['cutout' => 1]) : ai_estimate_label(['image' => 1]), 'video' => '',
         ])) ?>" data-veo-costs="<?= h(json_encode(veo_cost_labels())) ?>"></span>
-        <p class="publish-status" id="video-status" hidden style="margin:14px 0 0;"></p>
       </form>
     </div>
     <script>
@@ -224,7 +225,9 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         function sync() {
           var k = kindSelect.value;
           var wan = genForm.elements.model.value === 'wan22';
-          document.getElementById('gen-seconds-field').style.display = wan ? 'none' : '';
+          genForm.elements.seconds.disabled = wan;
+          document.getElementById('gen-seconds-label').textContent = wan ? 'Durée (fixée par le service)' : 'Durée';
+          document.getElementById('gen-seconds-note').style.display = wan ? '' : 'none';
           if (k === 'video_ai') {
             var vc = veoCosts[genForm.elements.model.value + '-' + genForm.elements.seconds.value];
             cost.textContent = wan ? 'Coût estimé ' + vc + ' par vidéo (courte, durée fixée par le service) · prête en quelques minutes'
