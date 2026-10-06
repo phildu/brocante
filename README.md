@@ -439,7 +439,7 @@ n'ont pas la leur : portail → **« Clés API partagées »** (`portail/cles.ph
 déploiement) ; `secret_path()` (`includes/shared-secrets.php`) lit d'abord la clé du commerce, puis la clé partagée : **une clé
 propre reste toujours prioritaire**, et les réglages d'un commerce signalent « Clé partagée (période de test) » quand c'est elle qui sert.
 Un commerçant ne peut ni voir ni modifier les clés partagées. Les clés **Stripe ne sont jamais partagées**. Le Petit Chalet, hébergé
-dans un autre dossier, a ses propres clés (la page n'agit que sur le déploiement où elle est ouverte).
+dans un autre dossier (`/www/brocante/`), ne voit pas le dossier du portail (`/www/brocs/`) par défaut : pour qu'il lise aussi les clés partagées du portail, `SHARED_SECRETS_FROM=../brocs` dans son `.env.deploy` fait déposer par `deploy-brocante.sh` un fichier `.shared-secrets-from` à sa racine (lecture seule ; ses propres clés restent prioritaires). La page n'écrit que dans le déploiement où elle est ouverte, et « Mise en production » efface donc aussi l'accès de Petit Chalet à ces clés.
 **Mise en production** : le bouton « Supprimer toutes les clés partagées » (confirmation en tapant `PRODUCTION`) les efface d'un coup ;
 chaque commerce n'utilise plus que ses propres clés (et perd les fonctions d'IA correspondantes s'il n'en a pas).
 

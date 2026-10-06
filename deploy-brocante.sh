@@ -119,6 +119,14 @@ deploy_front() {
     local tenant_file
     tenant_file="$(mktemp)"
     printf '%s\n' "$TENANT" > "$tenant_file"
+    # Lecture des clés partagées d'un autre déploiement (SHARED_SECRETS_FROM=../brocs dans le fichier .env.deploy du commerce).
+    local shared_link_cmd=""
+    if [ -n "$SHARED_SECRETS_FROM" ]; then
+        local shared_link
+        shared_link="$(mktemp)"
+        printf '%s\n' "$SHARED_SECRETS_FROM" > "$shared_link"
+        shared_link_cmd="put $shared_link -o ${FTP_PATH_FRONT}.shared-secrets-from"
+    fi
 
     lftp -c "
 set ftp:ssl-allow yes
@@ -150,6 +158,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob '*.db.bak-*' \
   --exclude-glob .DS_Store \
   --exclude-glob .tenant \
+  --exclude-glob .shared-secrets-from \
   --exclude-glob portail/ \
   --exclude-glob data/ \
   --exclude-glob tenants/ \
@@ -161,6 +170,7 @@ mirror --reverse --no-perms --no-umask --verbose tenants/$TENANT ${FTP_PATH_FRON
 put tenants/.htaccess -o ${FTP_PATH_FRONT}tenants/.htaccess
 $( [ -d "assets/tenants/$TENANT" ] && echo "mirror --reverse --no-perms --no-umask --verbose assets/tenants/$TENANT ${FTP_PATH_FRONT}assets/tenants/$TENANT" )
 put $tenant_file -o ${FTP_PATH_FRONT}.tenant
+$shared_link_cmd
 mkdir -p -f ${FTP_PATH_FRONT}.secrets
 put $DENY_FILE -o ${FTP_PATH_FRONT}.secrets/.htaccess
 mkdir -p -f ${FTP_PATH_FRONT}data

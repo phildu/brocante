@@ -19,20 +19,46 @@ function shared_secrets_dir(): string
     return dirname(__DIR__) . '/.secrets/_partage';
 }
 
+/**
+ * Dossiers de clés partagées à lire, par ordre : celui de ce déploiement, puis celui d'un autre déploiement s'il est désigné par le
+ * fichier .shared-secrets-from (à la racine, déposé par deploy-brocante.sh d'après SHARED_SECRETS_FROM dans le fichier .env.deploy du
+ * commerce, ex. « ../brocs » pour que le Petit Chalet, hébergé dans /www/brocante/, lise les clés du portail dans /www/brocs/).
+ * Lecture seule : les clés se gèrent là où elles sont, depuis le portail.
+ */
+function shared_secrets_read_dirs(): array
+{
+    $dirs = [shared_secrets_dir()];
+    $link = dirname(__DIR__) . '/.shared-secrets-from';
+    $from = is_file($link) ? trim((string) file_get_contents($link)) : '';
+    if ($from !== '' && preg_match('#^[A-Za-z0-9._/-]+$#', $from)) {
+        $real = realpath(dirname(__DIR__) . '/' . $from . '/.secrets/_partage');
+        if ($real !== false && !in_array($real, $dirs, true)) $dirs[] = $real;
+    }
+    return $dirs;
+}
+
+/** Chemin d'une clé partagée lisible (ce déploiement d'abord, puis l'autre), ou null. */
+function shared_secret_read_path(string $name): ?string
+{
+    if (!isset(SHARED_SECRET_FILES[$name])) return null;
+    foreach (shared_secrets_read_dirs() as $dir) {
+        if (is_file($dir . '/' . $name)) return $dir . '/' . $name;
+    }
+    return null;
+}
+
 /** Chemin à lire pour une clé : celle du commerce si elle existe, sinon la clé partagée si elle existe, sinon celle du commerce. */
 function secret_path(string $name): string
 {
     $own = (defined('SECRETS_DIR') ? SECRETS_DIR : dirname(__DIR__) . '/.secrets') . '/' . $name;
-    if (is_file($own)) return $own;
-    $shared = shared_secrets_dir() . '/' . $name;
-    return isset(SHARED_SECRET_FILES[$name]) && is_file($shared) ? $shared : $own;
+    return is_file($own) ? $own : (shared_secret_read_path($name) ?? $own);
 }
 
 /** Ce commerce utilise-t-il la clé partagée (parce qu'il n'a pas la sienne) ? */
 function secret_is_shared(string $name): bool
 {
     $own = (defined('SECRETS_DIR') ? SECRETS_DIR : dirname(__DIR__) . '/.secrets') . '/' . $name;
-    return !is_file($own) && isset(SHARED_SECRET_FILES[$name]) && is_file(shared_secrets_dir() . '/' . $name);
+    return !is_file($own) && shared_secret_read_path($name) !== null;
 }
 
 function shared_secret_exists(string $name): bool
