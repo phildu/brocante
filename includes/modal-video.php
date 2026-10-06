@@ -9,7 +9,8 @@
 // Réglages : fichier .secrets/<commerce>/modal-video.json {"url": "...", "token": "..."} (ici et non dans config.php :
 // en local, config.local.php remplace tout le bloc de production de config.php).
 if (!defined('MODAL_VIDEO_URL')) {
-    $mvFile = (defined('SECRETS_DIR') ? SECRETS_DIR : __DIR__ . '/../.secrets') . '/modal-video.json';
+    require_once __DIR__ . '/shared-secrets.php';
+    $mvFile = secret_path('modal-video.json'); // la configuration du commerce, sinon celle partagée de test
     $mv = is_file($mvFile) ? (json_decode((string) file_get_contents($mvFile), true) ?: []) : [];
     define('MODAL_VIDEO_URL', rtrim((string) ($mv['url'] ?? ''), '/'));
     define('MODAL_VIDEO_TOKEN', (string) ($mv['token'] ?? ''));

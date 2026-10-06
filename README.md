@@ -431,6 +431,18 @@ Galerie d'une pièce → « Générer une nouvelle vue » : la photo de départ 
 - **Vidéo IA** (Veo, Wan) : une vidéo par photo (6 au plus) ; le coût estimé est multiplié par le nombre de photos, et la page suit
   toutes les générations en parallèle.
 
+## Clés API partagées (période de test)
+
+Pendant les essais, une même clé (Gemini, fal.ai, SiliconFlow, Modal) peut servir à **tous les commerces d'un même déploiement** qui
+n'ont pas la leur : portail → **« Clés API partagées »** (`portail/cles.php`, réservé à l'exploitant). On y colle une clé, ou on
+« reprend la clé d'un commerce » (la copie en clé partagée). Elles vivent dans `.secrets/_partage/` (jamais envoyé par le script de
+déploiement) ; `secret_path()` (`includes/shared-secrets.php`) lit d'abord la clé du commerce, puis la clé partagée : **une clé
+propre reste toujours prioritaire**, et les réglages d'un commerce signalent « Clé partagée (période de test) » quand c'est elle qui sert.
+Un commerçant ne peut ni voir ni modifier les clés partagées. Les clés **Stripe ne sont jamais partagées**. Le Petit Chalet, hébergé
+dans un autre dossier, a ses propres clés (la page n'agit que sur le déploiement où elle est ouverte).
+**Mise en production** : le bouton « Supprimer toutes les clés partagées » (confirmation en tapant `PRODUCTION`) les efface d'un coup ;
+chaque commerce n'utilise plus que ses propres clés (et perd les fonctions d'IA correspondantes s'il n'en a pas).
+
 ## Vidéos de la galerie d'une pièce
 
 Galerie d'une pièce → « Générer une nouvelle vue » → deux types de vidéo, sans ffmpeg obligatoire :

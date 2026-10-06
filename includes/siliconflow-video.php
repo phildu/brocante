@@ -8,7 +8,8 @@
 // Clé lue dans le dossier des secrets du commerce, comme les autres (ici et non dans config.php : en local,
 // config.local.php remplace tout le bloc de production de config.php).
 if (!defined('SILICONFLOW_API_KEY')) {
-    $sfKeyFile = (defined('SECRETS_DIR') ? SECRETS_DIR : __DIR__ . '/../.secrets') . '/siliconflow.key';
+    require_once __DIR__ . '/shared-secrets.php';
+    $sfKeyFile = secret_path('siliconflow.key'); // la clé du commerce, sinon la clé partagée de test
     define('SILICONFLOW_API_KEY', is_file($sfKeyFile) ? trim((string) file_get_contents($sfKeyFile)) : '');
 }
 

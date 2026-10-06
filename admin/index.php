@@ -157,6 +157,9 @@ $flash = flash_get();
         <p class="publish-status" data-kind="<?= GEMINI_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
           <?= GEMINI_API_KEY ? 'Clé Gemini configurée — les générations IA sont actives.' : 'Aucune clé enregistrée — les générations et suggestions IA sont désactivées.' ?>
         </p>
+        <?php if (secret_is_shared('gemini.key')): ?>
+          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+        <?php endif; ?>
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
       </form>
 
@@ -170,6 +173,9 @@ $flash = flash_get();
         <p class="publish-status" data-kind="<?= FAL_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
           <?= FAL_API_KEY ? 'Clé fal.ai configurée — le détourage à fond transparent est actif.' : 'Aucune clé enregistrée — le détourage utilisera un repli fond blanc (Gemini) si disponible, sinon sera désactivé.' ?>
         </p>
+        <?php if (secret_is_shared('fal.key')): ?>
+          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+        <?php endif; ?>
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
       </form>
 
@@ -188,6 +194,9 @@ $flash = flash_get();
         <p class="publish-status" data-kind="<?= modal_video_available() ? '' : 'error' ?>" style="margin-top:10px;">
           <?= modal_video_available() ? 'Service Modal configuré — Wan 2.2 (vidéo) et le détourage haute précision sont disponibles dans la galerie. La connexion est testée à chaque enregistrement.' : 'Non configuré — LTX-Video est désactivé (les autres vidéos restent disponibles).' ?>
         </p>
+        <?php if (secret_is_shared('modal-video.json')): ?>
+          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+        <?php endif; ?>
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer et tester</button>
         <?php if (modal_video_available()): ?>
           <button type="submit" name="remove" value="1" class="btn" style="margin-top:6px;" onclick="return confirm('Retirer la configuration du service Modal ?');">Retirer</button>
@@ -205,6 +214,9 @@ $flash = flash_get();
         <p class="publish-status" data-kind="<?= SILICONFLOW_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
           <?= SILICONFLOW_API_KEY ? 'Clé SiliconFlow configurée — la vidéo IA Wan 2.2 est disponible dans la galerie.' : 'Aucune clé enregistrée — la vidéo IA Wan 2.2 est désactivée (Google Veo et la vidéo zoom/travelling restent disponibles).' ?>
         </p>
+        <?php if (secret_is_shared('siliconflow.key')): ?>
+          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+        <?php endif; ?>
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
         <?php if (SILICONFLOW_API_KEY): ?>
           <button type="submit" name="remove" value="1" class="btn" style="margin-top:6px;" onclick="return confirm('Retirer la clé SiliconFlow de ce commerce ?');">Retirer la clé</button>

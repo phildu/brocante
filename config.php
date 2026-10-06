@@ -10,6 +10,9 @@ require_once __DIR__ . '/includes/tenant.php';
 // — voir tenant_rewrite_output() et tenant_rewrite_location().
 tenant_enable_base_path();
 
+// Clés API partagées pendant la période de test (voir includes/shared-secrets.php).
+require_once __DIR__ . '/includes/shared-secrets.php';
+
 // La base est un simple fichier SQLite (comme le projet Louxor) — aucun
 // serveur de base de données à provisionner, ni en local ni sur OVH. Un
 // fichier par commerce (tenant.php → db_file ; brocante.db pour le Petit Chalet).
@@ -46,13 +49,13 @@ if (is_file(__DIR__ . '/config.local.php')) {
     define('SITE_URL', getenv('SITE_URL') ?: (string) tenant('site_url'));
 
     // Clé API Gemini — lue depuis un fichier local, jamais commitée/déployée en clair.
-    $geminiKeyFile = SECRETS_DIR . '/gemini.key';
+    $geminiKeyFile = secret_path('gemini.key');
     define('GEMINI_API_KEY', is_file($geminiKeyFile) ? trim(file_get_contents($geminiKeyFile)) : '');
 
     // Clé API fal.ai — détourage à vrai fond transparent via leur modèle
     // rembg hébergé (https://fal.run/fal-ai/imageutils/rembg), en appel HTTP
     // classique : contrairement au rembg local, ne nécessite pas exec().
-    $falKeyFile = SECRETS_DIR . '/fal.key';
+    $falKeyFile = secret_path('fal.key');
     define('FAL_API_KEY', is_file($falKeyFile) ? trim(file_get_contents($falKeyFile)) : '');
 
     // Détourage (Python/rembg), vidéos Ken Burns (ffmpeg) et lecture de leurs
