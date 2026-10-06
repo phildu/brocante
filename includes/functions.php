@@ -1634,7 +1634,7 @@ function gemini_score_cutout_simplicity(string $srcAbsPath): ?int
 /** Prompt demandant un JSON strict {name, description, category, price_hint} pour une fiche produit. */
 function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): string
 {
-    $cats = implode(', ', array_column(category_list(), 'key'));
+    $cats = universes_prompt_list();
     $examples = ai_shop_examples() ? ' (' . ai_shop_examples() . ')' : '';
     $seen = $photoCount > 1
         ? "Tu regardes " . $photoCount . " photos du MÊME objet, sous différents angles : " . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". Sers-toi de tous les angles (marques, signatures, état, dessous). "
@@ -1644,7 +1644,7 @@ function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): st
         . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "size_text": "vêtement ou chaussure : taille de l\'étiquette, sinon taille probable écrite « M (probable) » ; objet : dimensions estimées ; très courte", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "la clé exacte (avant le signe =) de l\'UNIVERS du produit, son grand domaine, parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "size_text": "vêtement ou chaussure : taille de l\'étiquette, sinon taille probable écrite « M (probable) » ; objet : dimensions estimées ; très courte", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1657,8 +1657,9 @@ function parse_product_sheet_response(string $text): ?array
     $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', $text);
     $data = json_decode($text, true);
     if (!is_array($data) || empty($data['name'])) return null;
-    $validCats = array_column(category_list(), 'key');
-    $cat = in_array($data['category'] ?? '', $validCats, true) ? $data['category'] : default_category_key();
+    $natureKey = product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['nature'];
+    // Univers : celui que l'IA donne (clé ou libellé) ; sinon celui qui correspond à la nature détectée (vêtements → Mode) ; sinon le défaut.
+    $cat = universe_key_resolve((string) ($data['category'] ?? '')) ?: (universe_key_for_nature($natureKey) ?: default_category_key());
     return [
         'name' => trim((string) $data['name']),
         'description' => trim((string) ($data['description'] ?? '')),
@@ -1958,7 +1959,7 @@ function product_source_photos(string $ref): array
  */
 function build_product_fields_prompt(array $fields, array $current, int $photoCount, string $notes = '', array $comparables = []): string
 {
-    $cats = implode(' ; ', array_map(static fn ($c) => $c['key'] . ' = ' . $c['label'], category_list()));
+    $cats = universes_prompt_list();
     $examples = ai_shop_examples() ? ' (' . ai_shop_examples() . ')' : '';
     $seen = match (true) {
         $photoCount > 1 => 'Tu regardes ' . $photoCount . ' photos du MÊME objet, sous différents angles : ' . tenant('ai.item') . ' pour ' . tenant('ai.shop') . $examples . '. ',

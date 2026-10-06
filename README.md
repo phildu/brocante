@@ -175,45 +175,37 @@ l'étiquette si elle est lisible, sinon la taille la plus probable d'après la c
 Last-Modified, réponse 304 si rien n'a changé) au lieu de garder pendant 15 minutes — durée par défaut du serveur — l'ancienne
 version d'un script avec la nouvelle page, ce qui laissait des boutons sans effet juste après un déploiement.
 
-## Secteurs : Mode, Sport, Déco, Alimentaire, TV-hifi, Informatique…
+## Univers : les grands domaines de la boutique (Mode, Sport, Déco, Alimentaire, TV-hifi, Informatique…)
 
-Au-dessus des univers (les rayons), la page Univers propose les **secteurs** de la boutique (`shop_sectors()`, `includes/universes.php`) —
-16 domaines : Mode et vêtements, Sport et loisirs, Déco et maison, Alimentaire, TV, hifi et audiovisuel, Informatique, Téléphonie
-et objets connectés, Électroménager, Bijoux/montres/beauté, Brocante et vintage, Livres/musique/films, Jeux et jouets, Bricolage et
-jardin, Auto et moto, Bébé et enfant, Animaux. Une boutique peut en cocher plusieurs ; chaque secteur apporte sa phrase de boutique
-et des **univers prêts à l'emploi** (Mode : hauts, pulls et sweats, pantalons, robes, vestes, chaussures, accessoires…), appliqués
-d'un clic (« Utiliser les univers prêts à l'emploi des secteurs cochés »), sans dépendre de l'IA. Les secteurs cochés sont enregistrés
-avec la phrase de la boutique (`shop_sectors_saved()`).
+Vocabulaire : l'**univers** d'une pièce est son grand domaine — Mode, Sport, Déco, Alimentaire, TV et hifi, Informatique… Il sert de
+filtre dans « La boutique », d'entrée à l'accueil et de champ « Univers » de la fiche. Le détail — vêtement › pulls, chaussures ›
+baskets — est la **nature** et la **sous-catégorie** de la pièce (voir plus bas). Les univers possibles sont les 16 secteurs de
+`shop_sectors()` (`includes/universes.php`) : Mode, Sport, Déco, Alimentaire, TV et hifi, Informatique, Téléphonie, Électroménager,
+Bijoux et beauté, Brocante, Livres et médias, Jeux et jouets, Bricolage et jardin, Auto et moto, Bébé et enfant, Animaux — chacun avec
+son libellé court, sa description pour l'IA, son pictogramme, les natures de produits qui y mènent et des mots-clés qui le trahissent.
 
-**Détection.** L'IA (qui voit les photos des pièces) coche les secteurs ; si elle ne répond pas ou ne reconnaît rien, le repli est
-déterministe : (1) la nature des pièces en vente (secteurs regroupant au moins 25 % des pièces avec nature, `shop_sectors_from_natures()`),
-(2) les mots du nom de la boutique, de son accroche et de l'indication du vendeur (« fripe », « tissus » → Mode ;
-`shop_sectors_from_text()`). Le message indique d'après quoi le secteur a été reconnu (photos, nature des pièces, nom). Les natures de
-produits ont été étendues aux nouveaux secteurs (sport, alimentaire, TV-hifi, informatique, téléphonie, électroménager, beauté, bébé,
-animaux, auto-moto : 25 natures, 185 sous-catégories).
+**Page Univers** (`admin/universes.php`). Des pastilles ajoutent ou retirent un univers de la boutique d'un clic ; la liste s'édite
+(nom, pictogramme, ordre ; on peut aussi créer un univers personnalisé, comme les rayons d'une brocante) ; la liste enregistrée (table
+`settings`, clé `universes`) remplace celle de `tenants/<slug>/tenant.php`, « Rétablir » y revient. Les clés des univers de domaine sont
+celles des secteurs (`mode`, `tv_hifi`…) ; celle d'un univers renommé ne change pas : ses pièces y restent rattachées.
 
-## Univers (rayons) modifiables, taille et poids estimés par l'IA
+**Détection.** « Détecter les univers de ma boutique (IA) » — lancée d'elle-même à la première ouverture quand la boutique n'a pas de
+type enregistré et que des pièces ont une photo — regarde les **photos** des pièces récentes, leurs natures, le nom et l'accroche de la
+boutique, et l'indication écrite par le vendeur dans « Ce que vend votre boutique ». Les textes du site et la description technique
+(souvent un modèle d'exemple : une boulangerie) sont déclarés non fiables. Si l'IA ne répond pas ou ne reconnaît rien, le repli est
+déterministe : (1) la nature des pièces en vente (secteurs regroupant au moins 25 % des pièces avec nature,
+`shop_sectors_from_natures()`), (2) les mots du nom, de l'accroche et de l'indication (« fripe », « tissus » → Mode ;
+`shop_sectors_from_text()`). Les univers détectés s'affichent avec leur source (photos, nature des pièces, nom de la boutique) :
+« Remplacer mes univers par ceux-ci » ou « Les ajouter » ; rien n'est enregistré avant « Enregistrer les univers ». La phrase de la
+boutique comprise par l'IA (`shop_profile()`) remplace ensuite la description d'origine dans **tous** les prompts de l'IA
+(`ai_shop_examples()`).
 
-**Univers.** Les univers d'une boutique (filtres de « La boutique », accueil, champ « Univers » des fiches) venaient
-uniquement de `tenants/<slug>/tenant.php` : une boutique créée sur un modèle de boulangerie gardait « Pains,
-Viennoiseries… » même pour vendre des vêtements, et l'IA, qui choisit l'univers parmi cette liste, ne pouvait que se
-tromper. La page **Univers** de l'administration (`admin/universes.php`, `includes/universes.php`) les rend modifiables
-sans toucher au serveur : renommer (les pièces restent rattachées, la clé est conservée), ajouter, réordonner, retirer,
-choisir le pictogramme. La liste enregistrée (table `settings`, clé `universes`) remplace celle du fichier ;
-« Rétablir les univers d'origine » l'efface. **Détecter ce que vend ma boutique (IA)** et **Proposer des univers (IA)**
-découvrent d'abord ce que vend VRAIMENT la boutique (`universes_suggest()`), puis en suggèrent 4 à 8 univers. Sources, de la
-plus fiable à la moins fiable : l'indication écrite par le vendeur dans le champ « Ce que vend votre boutique », les
-**photos** des pièces récemment mises en vente (jointes à la requête) et leurs natures, le nom et l'accroche de la boutique.
-Les textes du site et la description du fichier du commerce sont déclarés non fiables : ils viennent souvent d'un modèle
-d'exemple (une boulangerie…) et l'IA doit les ignorer quand ils contredisent les photos. Ce que l'IA a compris est écrit dans
-le champ (« friperie de vêtements d'occasion pour hommes et femmes ») : on le relit, on le corrige, et il est enregistré avec
-les univers (`shop_profile()`, table `settings`). À l'ouverture de la page, si la boutique n'a pas encore de type enregistré et que des pièces ont une photo, **l'IA lance la détection
-d'elle-même** (aucun clic) et indique ce qu'elle a analysé (« 2 photos analysées : … ») ; sans photo, elle le dit et invite à décrire la
-boutique dans le champ. **Ce type de boutique remplace ensuite la description d'origine dans tous les
-prompts de l'IA** (fiches, images, prix : `ai_shop_examples()`). **Reclasser par l'IA** (pièces sans univers valide,
-ou toutes) rejoue le choix de l'univers pièce par pièce, enregistré aussitôt, arrêtable. Les prompts de l'IA citent
-désormais les univers enregistrés (`ai_shop_examples()`), et l'IA peut ne choisir aucun univers s'ils ne conviennent
-pas (message : « adaptez-les dans Univers »).
+**Classement des pièces.** L'IA choisit l'univers de chaque pièce d'après sa photo, parmi ceux de la boutique, décrits dans le prompt
+(`universes_prompt_list()` : « mode = Mode (mode et vêtements…) »), et peut n'en choisir aucun. À défaut, l'univers qui correspond à la
+nature détectée (vêtements → Mode) est utilisé. « Reclasser par l'IA » (pièces sans univers valide, ou toutes) rejoue le choix pièce
+par pièce, enregistré aussitôt, arrêtable.
+
+## Taille et poids estimés par l'IA
 
 **Taille et poids.** Boutons « ↻ IA » sur Taille et Poids (catalogue, relectures du Studio et de l'ajout rapide),
 champs inclus dans « Tout (re)générer » et dans la génération de fiche (Studio, lot, ajout rapide) : taille lue sur
@@ -223,7 +215,7 @@ d'après la nature, les matières et la taille apparente (`weight_grams` pour le
 
 ## Nature du produit et sous-catégories, détectées par l'IA
 
-Indépendante de l'« univers » du commerce (ses rayons), la **nature** dit ce que l'objet est : 15 natures et 119
+Plus fine que l'**univers** (le grand domaine : Mode, Déco…), la **nature** dit ce que l'objet est : 25 natures et 185
 sous-catégories (`product_nature_options()`, colonnes `products.nature` et `products.sous_categorie`, ajoutées
 automatiquement aux bases existantes) — Vêtements (hauts, pulls et sweats, vestes, robes…), Chaussures, Accessoires de
 mode, Bijoux et montres, Linge de maison, Décoration, Arts de la table et cuisine, Mobilier, Luminaires, Livres, disques et

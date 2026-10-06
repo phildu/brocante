@@ -33,7 +33,6 @@ try {
         $rows = universes_normalize((array) ($_POST['key'] ?? []), (array) ($_POST['label'] ?? []), (array) ($_POST['icon'] ?? []));
         universes_save($rows);
         if (isset($_POST['profile'])) shop_profile_save((string) $_POST['profile']);
-        if (isset($_POST['sectors'])) shop_sectors_save(explode(',', (string) $_POST['sectors']));
         $orphans = count(universes_orphan_refs());
         flash_set('Univers enregistrés (' . count($rows) . ').' . ($orphans ? " $orphans pièce(s) ont un univers qui n'existe plus : reclassez-les ci-dessous." : ''));
     } elseif ($action === 'reset') {
