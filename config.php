@@ -96,6 +96,9 @@ function db(): PDO
         // Prompts (mots-clés / précisions) enregistrés pour la génération IA.
         require_once __DIR__ . '/includes/prompts.php';
         prompts_ensure_schema($pdo);
+        // Univers enregistrés avec d'anciens rayons (« Hauts et t-shirts »…) : ramenés aux grands domaines, une fois.
+        require_once __DIR__ . '/includes/universes.php';
+        universes_migrate_legacy($pdo);
         // Application smartphone Studio : suivi des pièces créées.
         require_once __DIR__ . '/includes/studio.php';
         studio_ensure_schema($pdo);

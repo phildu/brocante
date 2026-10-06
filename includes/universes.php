@@ -323,3 +323,69 @@ function universe_key_for_nature(?string $nature): string
     }
     return '';
 }
+
+/**
+ * Anciens « univers prêts à l'emploi » (rayons comme « Hauts et t-shirts », « Pulls et sweats »), proposés par une version
+ * précédente de la page Univers alors que les univers sont les grands domaines : libellé => secteur. Les rayons de brocante
+ * (Céramique, Bois et mobilier…) n'y figurent pas : ils peuvent être de vrais univers personnalisés.
+ */
+const UNIVERSE_LEGACY_PRESETS = [
+    'mode' => ['Hauts et t-shirts', 'Pulls et sweats', 'Pantalons et jeans', 'Robes et jupes', 'Vestes et manteaux', 'Chaussures', 'Sacs et accessoires'],
+    'sport' => ['Vêtements de sport', 'Chaussures de sport', 'Vélos et glisse', 'Fitness et musculation', "Sports d'équipe", 'Plein air et camping'],
+    'deco' => ['Vases et objets déco', 'Cadres et miroirs', 'Luminaires', 'Linge et textiles', 'Arts de la table', 'Mobilier'],
+    'alimentaire' => ['Épicerie salée', 'Épicerie sucrée', 'Boissons', 'Pains et pâtisseries', 'Produits du terroir', 'Coffrets cadeaux'],
+    'tv_hifi' => ['Télévisions', 'Hi-fi et enceintes', 'Casques et écouteurs', 'Platines et radios', 'Home cinéma', 'Câbles et accessoires'],
+    'informatique' => ['Ordinateurs portables', 'Ordinateurs fixes', 'Écrans', 'Composants', 'Périphériques', 'Réseau et stockage'],
+    'telephonie' => ['Smartphones', 'Coques et protections', 'Chargeurs et câbles', 'Montres connectées', 'Domotique'],
+    'electromenager' => ['Gros électroménager', 'Petit électroménager', 'Entretien et ménage', 'Chauffage et ventilation'],
+    'bijoux_beaute' => ['Colliers et pendentifs', 'Bracelets et bagues', 'Montres', 'Parfums', 'Soins et maquillage'],
+    'livres_medias' => ['Romans et littérature', 'BD et mangas', 'Livres jeunesse', 'Vinyles et CD', 'Papeterie'],
+    'jeux_jouets' => ['Jouets', 'Poupées et peluches', 'Jeux de société', 'Jeux vidéo', 'Maquettes'],
+    'bricolage_jardin' => ['Outils à main', 'Outillage électrique', 'Quincaillerie', 'Jardinage', 'Rangement et malles'],
+    'auto_moto' => ['Pièces auto', 'Accessoires auto', 'Moto et scooter', 'Équipement du motard', 'Outillage garage'],
+    'bebe_enfant' => ['Vêtements bébé et enfant', 'Poussettes et sièges', "Jouets d'éveil", 'Chambre et déco', 'Repas et soins'],
+    'animaux' => ['Chiens', 'Chats', 'Aquariophilie', 'Rongeurs et oiseaux'],
+];
+
+/**
+ * Remet d'aplomb, une seule fois par commerce, une liste d'univers enregistrée avec les anciens rayons : chaque rayon est
+ * retiré, son domaine (Mode, Déco…) est ajouté s'il n'y est pas, et les pièces qui y étaient rangées passent dans ce domaine.
+ * Seules les lignes issues de ces préréglages sont touchées (clé = libellé en minuscules sans accents, ni underscore).
+ */
+function universes_migrate_legacy(PDO $pdo): void
+{
+    $done = $pdo->prepare("SELECT 1 FROM settings WHERE name = 'universes_legacy_done'");
+    $done->execute();
+    if ($done->fetchColumn()) return;
+    $mark = static fn () => $pdo->exec("INSERT OR REPLACE INTO settings (name, value) VALUES ('universes_legacy_done', '1')");
+
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE name = 'universes'");
+    $stmt->execute();
+    $rows = json_decode((string) $stmt->fetchColumn(), true);
+    if (!is_array($rows) || !$rows) { $mark(); return; }
+
+    $labelToSector = [];
+    foreach (UNIVERSE_LEGACY_PRESETS as $sector => $labels) foreach ($labels as $label) $labelToSector[mb_strtolower($label)] = $sector;
+    $sectors = shop_sectors();
+    $kept = [];
+    $moved = [];     // clé de rayon retiré => secteur
+    $present = [];
+    foreach ($rows as $row) {
+        $key = (string) ($row['key'] ?? '');
+        $sector = $labelToSector[mb_strtolower((string) ($row['label'] ?? ''))] ?? null;
+        $isLegacy = $sector !== null && !isset($sectors[$key]) && $key === trim(slugify((string) $row['label'], 30), '-');
+        if ($isLegacy) { $moved[$key] = $sector; continue; }
+        $kept[] = $row;
+        $present[$key] = true;
+    }
+    if (!$moved) { $mark(); return; }
+    foreach (array_unique(array_values($moved)) as $sector) {
+        if (!isset($present[$sector]) && isset($sectors[$sector])) {
+            $kept[] = ['key' => $sector, 'label' => $sectors[$sector]['short'], 'icon' => $sectors[$sector]['icon']];
+        }
+    }
+    $pdo->prepare("INSERT OR REPLACE INTO settings (name, value) VALUES ('universes', ?)")->execute([json_encode(array_values($kept), JSON_UNESCAPED_UNICODE)]);
+    $update = $pdo->prepare('UPDATE products SET cat = ? WHERE cat = ?');
+    foreach ($moved as $oldKey => $sector) $update->execute([$sector, $oldKey]);
+    $mark();
+}
