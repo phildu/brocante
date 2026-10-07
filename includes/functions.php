@@ -1569,10 +1569,18 @@ function is_fixed_price(?string $price): bool
 function price_to_cents(?string $price): ?int
 {
     if (!$price) return null;
-    if (!preg_match('/(\d[\d\s]*)(?:[,.](\d{1,2}))?/', $price, $m)) return null;
-    $euros = (int) str_replace(' ', '', $m[1]);
-    $cents = isset($m[2]) ? (int) str_pad($m[2], 2, '0') : 0;
-    return $euros * 100 + $cents;
+    
+    // Nettoyer le prix : retirer symboles monétaires, espaces, etc.
+    $cleanPrice = preg_replace('/[^\d.,-]/u', '', $price);
+    
+    // Gérer les formats : "10", "10.50", "10,50", "10,5", "1 000", "10,5"
+    if (preg_match('/^(\d{1,10})([.,](\d{1,2}))?$/', str_replace(' ', '', $cleanPrice), $m)) {
+        $euros = (int) $m[1];
+        $cents = isset($m[3]) ? (int) str_pad($m[3], 2, '0') : 0;
+        return $euros * 100 + $cents;
+    }
+    
+    return null;
 }
 
 function format_cents(int $cents): string

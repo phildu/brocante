@@ -15,7 +15,8 @@ if (is_file(__DIR__ . '/config.local.php')) {
     // --- Valeurs de production / préprod OVH ---
 
     // Mot de passe de l'espace Administration — à changer avant toute mise en ligne réelle.
-    define('ADMIN_PASSWORD', 'armoire2026');
+    $adminPasswordFile = __DIR__ . '/.secrets/admin_password.txt';
+    define('ADMIN_PASSWORD', is_file($adminPasswordFile) ? trim(file_get_contents($adminPasswordFile)) : '');
 
     // Clés Stripe (mode test) — se règlent depuis Administration → Réglages
     // Stripe une fois le site en ligne (admin/save-stripe-keys.php écrit ces

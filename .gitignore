@@ -8,3 +8,4 @@ config.local.php
 .env.deploy
 brocante.db
 db-backup/
+backups/
