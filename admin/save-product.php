@@ -58,6 +58,10 @@ $params = [
     'stock' => isset($_POST['stock']) ? max(0, (int) $_POST['stock']) : $product['stock'],
     'ref' => $ref,
 ];
+if (isset($_POST['barcode'])) {
+    $set .= ', barcode = :barcode';
+    $params['barcode'] = product_barcode_clean($_POST['barcode']) ?: null;
+}
 if ($photoPath) {
     $set .= ', photo = :photo';
     $params['photo'] = $photoPath;

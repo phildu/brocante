@@ -13,6 +13,7 @@ if ($etat) $details['État'] = h($etat[0]) . ' <span class="etat-hint">— ' . h
 if (!empty($product['materials'])) $details['Matières'] = h($product['materials']);
 if (!empty($product['size_text'])) $details['Dimensions'] = h($product['size_text']);
 if (!empty($product['weight_text'])) $details['Poids'] = h($product['weight_text']);
+if (!empty($product['barcode'])) $details[product_barcode_label($product['barcode'])] = h($product['barcode']);
 $details['Référence'] = 'N°' . h($product['ref']);
 ?>
 <div class="buybar" id="buybar" aria-label="Achat rapide">

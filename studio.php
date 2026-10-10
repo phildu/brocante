@@ -79,6 +79,7 @@ $siteName = (string) $content['site_name'];
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="/assets/studio.css">
+<link rel="stylesheet" href="/assets/barcode-scan.css">
 </head>
 <body class="studio">
 <?php if (!$account): ?>
@@ -264,6 +265,7 @@ $siteName = (string) $content['site_name'];
   <script src="/assets/price-research.js"></script>
   <script src="/assets/saved-prompts.js"></script>
   <script src="/assets/prompt-helper.js"></script>
+  <script src="/assets/barcode-scan.js"></script>
   <script src="/assets/quick-add.js"></script>
   <script src="/assets/studio.js" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>

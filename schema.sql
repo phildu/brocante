@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS products (
   etat TEXT,
   nature TEXT,
   sous_categorie TEXT,
+  barcode TEXT,
   weight_grams INTEGER NOT NULL DEFAULT 0,
   featured INTEGER NOT NULL DEFAULT 0,
   is_hidden INTEGER NOT NULL DEFAULT 0,

@@ -257,6 +257,29 @@ function render_page_banner(string $pageKey): void
     echo '</div>';
 }
 
+/** Code-barres / ISBN saisi : chiffres (et X final des ISBN-10) uniquement, 8 à 14 caractères ; '' sinon. */
+function product_barcode_clean($value): string
+{
+    $v = strtoupper(preg_replace('/[^0-9Xx]/', '', (string) $value));
+    return preg_match('/^\d{8,14}$|^\d{9}X$/', $v) ? $v : '';
+}
+
+/** « ISBN » pour un code de livre (978 / 979), « Code-barres » sinon. */
+function product_barcode_label(string $code): string
+{
+    return preg_match('/^97[89]\d{10}$/', $code) ? 'ISBN' : 'Code-barres';
+}
+
+/** Récupère la pochette ou la couverture trouvée par le scanner (adresse publique seulement) et l'enregistre comme photo de la pièce ; null si impossible. */
+function product_photo_from_cover_url(string $url, string $baseName): ?string
+{
+    require_once __DIR__ . '/barcode.php';
+    if (!preg_match('#^https://#i', $url) || !($tmp = barcode_download_image($url))) return null;
+    $path = copy_photo_into_uploads($tmp, $baseName);
+    @unlink($tmp);
+    return $path;
+}
+
 /** Limite d'articles de l'offre de la boutique (tenants/<slug>/tenant.php → item_limit) ; 0 = sans limite. */
 function shop_item_limit(): int
 {

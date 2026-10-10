@@ -228,6 +228,7 @@
     fd.append('nature', $('f-nature').value);
     fd.append('sous_categorie', $('f-sous').value);
     fd.append('badge', $('f-badge').value);
+    fd.append('barcode', $('f-barcode').value);
     if ($('f-publish').checked) fd.append('publish', '1');
     post(fd).then(function (res) {
       if (!res.ok) { mainBtn.disabled = false; mainBtn.textContent = 'Réessayer l\'enregistrement'; alert(res.error); return; }

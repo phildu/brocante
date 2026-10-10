@@ -209,7 +209,7 @@ switch ($action) {
         $pair = product_nature_resolve($_POST['nature'] ?? '', $_POST['sous_categorie'] ?? '');
         $validCats = array_column(category_list(), 'key');
         $cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : $product['cat'];
-        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, materials = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, is_hidden = ? WHERE ref = ?')
+        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, materials = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, is_hidden = ?, barcode = ? WHERE ref = ?')
             ->execute([
                 trim((string) ($_POST['name'] ?? '')) ?: $product['name'],
                 $cat,
@@ -223,6 +223,7 @@ switch ($action) {
                 isset($_POST['size_text']) ? mb_substr(trim((string) $_POST['size_text']), 0, 60) : $product['size_text'],
                 max(0, (int) ($_POST['weight_grams'] ?? $product['weight_grams'])),
                 empty($_POST['publish']) ? 1 : 0,
+                isset($_POST['barcode']) ? (product_barcode_clean($_POST['barcode']) ?: null) : ($product['barcode'] ?? null),
                 $product['ref'],
             ]);
         if (studio_job_get($product['ref'])) studio_job_set($product['ref'], 'reviewed');

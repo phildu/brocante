@@ -68,7 +68,7 @@
   </section>
 
   <!-- Étape 3 : vérification -->
-  <section class="qa-panel" id="panel-review" data-ai-form hidden>
+  <section class="qa-panel" id="panel-review" data-ai-form data-scan-form hidden>
     <div class="qa-visuals" id="visuals"></div>
     <div class="ai-bar">
       <button type="button" class="btn btn-ghost ai-all" data-ai-field="all" title="Propose de nouveau un nom, une description, une catégorie, des matières et un prix d'après les photos">Tout régénérer par l'IA</button>
@@ -92,6 +92,7 @@
     <label class="qa-field">État <button type="button" class="ai-btn" data-ai-field="etat" title="Estimer l'état d'après les photos">↻ IA</button><select id="f-etat" data-ai-input="etat"><?= product_condition_select_html(null) ?></select></label>
     <label class="qa-field">Nature <button type="button" class="ai-btn" data-ai-field="nature" title="Détecter la nature et la sous-catégorie">↻ IA</button><select id="f-nature" data-ai-input="nature"><?= product_nature_select_html(null) ?></select></label>
     <label class="qa-field">Sous-catégorie<select id="f-sous" data-ai-input="sous_categorie"><?= product_subcategory_select_html(null) ?></select></label>
+    <label class="qa-field">Code-barres / ISBN<input type="text" id="f-barcode" data-ai-input="barcode" maxlength="20" inputmode="numeric" placeholder="rempli par le scanner (livres, CD, vinyles…)"></label>
     <label class="qa-field">Étiquette<input type="text" id="f-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
     <label class="qa-switch"><input type="checkbox" id="f-publish"> <span>Publier tout de suite<br><small class="qa-note">Sinon la fiche reste masquée, à relire dans le catalogue.</small></span></label>
   </section>

@@ -413,6 +413,22 @@ Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
 dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
 `tenants/`, `includes/`…).
 
+## Scanner un code-barres ou un QR pour créer l'article (livres, CD, vinyles, DVD)
+
+Une barre **« Scanner un code-barres / QR »** s'ouvre en tête du formulaire « Ajouter une pièce » (catalogue) et de la relecture de l'ajout rapide / du **Studio**
+smartphone ; sur une fiche existante, le champ **Code-barres / ISBN** a un bouton « Fiche » qui complète les champs vides. Trois façons de donner le code :
+la **caméra** (https obligatoire, donc en ligne ; BarcodeDetector du navigateur, sinon la bibliothèque html5-qrcode chargée à la demande, ex. iPhone), une **photo**
+du code (appareil photo ou fichier) ou la **saisie** (ISBN, EAN, UPC, ou adresse lue dans un QR).
+
+La fiche est cherchée côté serveur (`admin/barcode-lookup.php`, `includes/barcode.php`), sans clé d'API :
+- **Livres** (ISBN-10 ou 13, y compris un ASIN Amazon d'un livre) : BnF (catalogue français), Open Library (couverture, poids, sujets, extrait), Google Books pour le résumé s'il répond ;
+  titre, auteur, éditeur, année, pages, langue, collection ; nature « Livres, disques et papeterie » et sous-catégorie (livres, BD, jeunesse, cuisine) déduites.
+- **CD, vinyles, cassettes, DVD** (EAN/UPC) : MusicBrainz (artiste, titre, label, année, pays, support, **liste des pistes**) et pochette (Cover Art Archive) ; poids estimé selon le support.
+- **Code QR** : adresse Discogs (release ou master), ISBN ou ASIN dans une adresse, sinon titre / description / image de la page (Open Graph) ; autres EAN : UPCitemdb (essai gratuit limité).
+Le formulaire est pré-rempli **sans écraser** ce qui est déjà saisi (« Remplacer tout » force) ; la pochette peut devenir la photo de la pièce (case cochée par défaut) ;
+le code est enregistré avec la pièce (`barcode`), un **doublon** est signalé, et l'ISBN / code-barres s'affiche sur la fiche publique. Prix et état restent à renseigner.
+Résultats gardés 30 jours (`data/barcode-cache/`). Les adresses venant d'un QR ne sont ouvertes que si elles mènent à une machine publique (jamais le réseau local).
+
 ## Détourage haute précision (Modal)
 
 Quand le service Modal est configuré (voir « Vidéo IA — Wan 2.2 5B sur Modal » ci-dessus) et que rembg local n'existe pas (hébergement

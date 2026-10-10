@@ -109,13 +109,14 @@ if ($view = shop_view('product')) {
       <p class="lede" style="margin-bottom:24px;"><?= nl2br(h($product['description'])) ?></p>
 
       <?php $etat = product_condition($product['etat'] ?? ''); $nature = product_nature_labels($product['nature'] ?? '', $product['sous_categorie'] ?? ''); ?>
-      <?php if ($nature || $etat || !empty($product['materials']) || !empty($product['size_text']) || !empty($product['weight_text'])): ?>
+      <?php if ($nature || $etat || !empty($product['materials']) || !empty($product['size_text']) || !empty($product['weight_text']) || !empty($product['barcode'])): ?>
         <ul class="info-list" style="margin-bottom:24px;">
           <?php if ($nature): ?><li><strong>Type</strong> <a href="/boutique.php?nature=<?= urlencode($product['nature']) ?>" class="nature-link"><?= h($nature[0]) ?></a><?php if ($nature[1]): ?> › <a href="/boutique.php?nature=<?= urlencode($product['nature']) ?>&amp;sous=<?= urlencode($product['sous_categorie']) ?>" class="nature-link"><?= h($nature[1]) ?></a><?php endif; ?></li><?php endif; ?>
           <?php if ($etat): ?><li><strong>État</strong> <?= h($etat[0]) ?> <span class="etat-hint">— <?= h($etat[1]) ?></span></li><?php endif; ?>
           <?php if (!empty($product['materials'])): ?><li><strong>Matières</strong> <?= h($product['materials']) ?></li><?php endif; ?>
           <?php if (!empty($product['size_text'])): ?><li><strong>Taille</strong> <?= h($product['size_text']) ?></li><?php endif; ?>
           <?php if (!empty($product['weight_text'])): ?><li><strong>Poids</strong> <?= h($product['weight_text']) ?></li><?php endif; ?>
+          <?php if (!empty($product['barcode'])): ?><li><strong><?= h(product_barcode_label($product['barcode'])) ?></strong> <?= h($product['barcode']) ?></li><?php endif; ?>
         </ul>
       <?php endif; ?>
 

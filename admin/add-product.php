@@ -23,9 +23,13 @@ $weightGrams = max(0, min(300000, (int) ($_POST['weight_grams'] ?? 0)));
 $weightText = mb_substr(trim((string) ($_POST['weight_text'] ?? '')), 0, 60) ?: product_weight_text($weightGrams);
 
 $photoPath = store_uploaded_photo('photo', 'product-' . $ref);
+// Pas de photo envoyée : la pochette / couverture trouvée par le scanner (case cochée).
+if (!$photoPath && !empty($_POST['use_cover']) && trim((string) ($_POST['cover_url'] ?? '')) !== '') {
+    $photoPath = product_photo_from_cover_url(trim((string) $_POST['cover_url']), 'product-' . $ref);
+}
 
-$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, etat, nature, sous_categorie, size_text, weight_text, weight_grams, price, badge, featured, sort_order)
-                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :price, :badge, 0, :sort_order)');
+$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, badge, featured, sort_order)
+                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :badge, 0, :sort_order)');
 $stmt->execute([
     'ref' => $ref,
     'name' => $name,
@@ -39,6 +43,7 @@ $stmt->execute([
     'weight_text' => $weightText,
     'weight_grams' => $weightGrams,
     'sous_categorie' => $nature['sous_categorie'] ?: null,
+    'barcode' => product_barcode_clean($_POST['barcode'] ?? '') ?: null,
     'price' => trim((string) ($_POST['price'] ?? '')) ?: '0 €',
     'badge' => trim((string) ($_POST['badge'] ?? '')) ?: 'Chiné',
     'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),

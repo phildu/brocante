@@ -48,6 +48,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/barcode-scan.css">
 <style>
   .catalog-table { width: 100%; border-collapse: collapse; }
   .catalog-table th { text-align: left; font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); padding: 10px 12px; border-bottom: 1px solid var(--line); }
@@ -167,7 +168,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                         <div class="field-row-3">
                           <div class="field"><label>Nature <?= $aiBtn('nature', 'Détecter la nature (vêtement, déco…) et la sous-catégorie') ?></label><select name="nature"><?= product_nature_select_html($p['nature'] ?? null) ?></select></div>
                           <div class="field"><label>Sous-catégorie</label><select name="sous_categorie"><?= product_subcategory_select_html($p['sous_categorie'] ?? null) ?></select></div>
-                          <div></div>
+                          <div class="field"><label>Code-barres / ISBN</label><input type="text" name="barcode" inputmode="numeric" maxlength="20" value="<?= h($p['barcode'] ?? '') ?>" placeholder="EAN, ISBN" data-barcode-field></div>
                         </div>
                         <div class="field-row-3">
                           <div class="field"><label>Taille <?= $aiBtn('size', 'Lire la taille sur l\'étiquette ou estimer les dimensions') ?></label><input type="text" name="size_text" value="<?= h($p['size_text']) ?>" placeholder="ex : 20 × 15 × 30 cm"></div>
@@ -229,7 +230,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
       <p class="hint" style="margin:0 0 12px;">Sur smartphone : <a href="/admin/quick-add.php"><strong>Nouvelle pièce en photos</strong></a> — photos sous plusieurs angles, puis détourage, mise en situation et fiche rédigés automatiquement.</p>
       <details>
         <summary class="add-product-btn" style="cursor:pointer;">+ Ajouter une pièce</summary>
-        <form method="post" action="/admin/add-product.php" enctype="multipart/form-data" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--line);" data-ai-form>
+        <form method="post" action="/admin/add-product.php" enctype="multipart/form-data" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--line);" data-ai-form data-scan-form>
           <div class="field-row-3">
             <div class="field"><label>Photo</label><input type="file" name="photo" accept="image/*" data-check-resolution></div>
             <div class="ai-bar" style="align-self:end;">
@@ -258,7 +259,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
           <div class="field-row-3">
             <div class="field"><label>Nature <?= $aiBtn('nature', 'Détecter la nature (vêtement, déco…) et la sous-catégorie') ?></label><select name="nature"><?= product_nature_select_html(null) ?></select></div>
             <div class="field"><label>Sous-catégorie</label><select name="sous_categorie"><?= product_subcategory_select_html(null) ?></select></div>
-            <div></div>
+            <div class="field"><label>Code-barres / ISBN</label><input type="text" name="barcode" inputmode="numeric" maxlength="20" placeholder="EAN, ISBN, UPC"></div>
           </div>
           <div class="field-row-3">
             <div class="field"><label>Taille <?= $aiBtn('size', 'Lire la taille sur l\'étiquette ou estimer les dimensions') ?></label><input type="text" name="size_text" placeholder="ex : 20 × 15 × 30 cm, M, 38"></div>
@@ -363,5 +364,6 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
 <script src="/assets/nature-select.js"></script>
 <script src="/assets/nature-detect.js"></script>
 <script src="/assets/price-research.js"></script>
+<script src="/assets/barcode-scan.js"></script>
 </body>
 </html>

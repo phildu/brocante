@@ -58,6 +58,7 @@ $size = trim((string) ($product['size_text'] ?? ''));
           <?php if (!empty($product['materials'])): ?><li><b>Matières</b> <?= h($product['materials']) ?></li><?php endif; ?>
           <?php if ($size !== ''): ?><li><b>Taille</b> <?= h($size) ?></li><?php endif; ?>
           <?php if (!empty($product['weight_text'])): ?><li><b>Poids</b> <?= h($product['weight_text']) ?></li><?php endif; ?>
+          <?php if (!empty($product['barcode'])): ?><li><b><?= h(product_barcode_label($product['barcode'])) ?></b> <?= h($product['barcode']) ?></li><?php endif; ?>
           <li><b>Référence</b> N°<?= h($product['ref']) ?></li>
         </ul></div></details>
       <details class="md-acc"><summary>Livraison et retrait</summary>

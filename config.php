@@ -123,6 +123,10 @@ function db(): PDO
                 $pdo->exec("ALTER TABLE products ADD COLUMN $col TEXT");
             }
         }
+        // Code-barres / ISBN de l'article (scanné ou saisi, voir includes/barcode.php).
+        if ($productColumns && !in_array('barcode', $productColumns, true)) {
+            $pdo->exec('ALTER TABLE products ADD COLUMN barcode TEXT');
+        }
         // Bases créées avant l'ajout des visuels en deux formats.
         $photoColumns = $pdo->query('PRAGMA table_info(product_photos)')->fetchAll(PDO::FETCH_COLUMN, 1);
         if ($photoColumns && !in_array('path_mobile', $photoColumns, true)) {
