@@ -401,6 +401,13 @@ function product_card_html(array $p, int $i = 0): string
         ? '<span class="price-old">' . h($p['price']) . '</span> <span class="price price-promo">' . h($p['promo_price']) . '</span>'
         : '<span class="price">' . h($p['price']) . '</span>';
 
+    // Modèle à mise en page propre : sa vue « card » produit la carte (variables : $p, $i, $href, $gallery, $priceHtml, $action).
+    if ($view = shop_view('card')) {
+        ob_start();
+        include $view;
+        return (string) ob_get_clean();
+    }
+
     return '
       <article class="card ' . $tone . '" data-cat="' . h($p['cat']) . '">
         <a href="' . h($href) . '" class="card-icon"' . $preview . '>' . product_media_html($p, $gallery) . '</a>

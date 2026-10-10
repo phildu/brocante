@@ -141,6 +141,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .github/ \
   --exclude-glob .claude/ \
   --exclude-glob modal/ \
+  --exclude-glob LocalValetDriver.php \
   --exclude-glob .venv/ \
   --exclude-glob .secrets/ \
   --exclude-glob var/log/ \
@@ -160,6 +161,10 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .tenant \
   --exclude-glob .shared-secrets-from \
   --exclude-glob portail/ \
+  --exclude-glob accueil/ \
+  --exclude-glob annuaire/ \
+  --exclude-glob inscription/ \
+  --exclude-glob galerie/ \
   --exclude-glob data/ \
   --exclude-glob tenants/ \
   --exclude-glob assets/tenants/ \
@@ -221,6 +226,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .github/ \
   --exclude-glob .claude/ \
   --exclude-glob modal/ \
+  --exclude-glob LocalValetDriver.php \
   --exclude-glob .venv/ \
   --exclude-glob .secrets/ \
   --exclude-glob var/log/ \

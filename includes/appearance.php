@@ -190,6 +190,25 @@ function appearance_save(array $colors, string $display, string $body): void
             'body' => isset(APPEARANCE_FONTS['body'][$body]) ? $body : APPEARANCE_BASE_FONTS['body'],
         ],
     ];
+    // Le modèle de mise en page choisi (Apparence → Modèle) survit à un changement de palette ou de polices.
+    if (!empty(appearance_saved()['template'])) $data['template'] = appearance_saved()['template'];
+    appearance_table();
+    db()->prepare("INSERT INTO settings (name, value) VALUES ('appearance', ?)
+                   ON CONFLICT(name) DO UPDATE SET value = excluded.value")
+        ->execute([json_encode($data, JSON_UNESCAPED_SLASHES)]);
+}
+
+/**
+ * Choisit le modèle de mise en page du commerce (voir includes/templates.php). $withStyle : adopte aussi la palette et les polices du modèle ;
+ * sinon l'apparence actuelle (palette, polices) est conservée telle quelle.
+ */
+function appearance_save_template(string $key, bool $withStyle): void
+{
+    if (!shop_template_valid($key)) throw new InvalidArgumentException('Modèle inconnu.');
+    $cur = appearance_current();
+    $colors = $withStyle ? SHOP_TEMPLATES[$key]['colors'] : $cur['colors'];
+    $fonts = $withStyle ? SHOP_TEMPLATES[$key]['fonts'] : $cur['fonts'];
+    $data = ['colors' => $colors, 'fonts' => $fonts, 'template' => $key];
     appearance_table();
     db()->prepare("INSERT INTO settings (name, value) VALUES ('appearance', ?)
                    ON CONFLICT(name) DO UPDATE SET value = excluded.value")

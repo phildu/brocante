@@ -6,9 +6,18 @@
 
 $path = (string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
-// Racine du domaine : le portail, quand il est présent (déploiement portail).
+// Racine du domaine : la page d'accueil de la plateforme, quand le portail est présent (déploiement portail).
 if ($path === '/' && !getenv('TENANT') && is_file(__DIR__ . '/portail/index.php')) {
-    header('Location: /portail/');
+    $_SERVER['SCRIPT_NAME'] = '/accueil/index.php';
+    require __DIR__ . '/accueil/index.php';
+    return true;
+}
+
+// Galeries commerciales : /galerie/ et /galerie/<identifiant>/ (même règle que dans le .htaccess).
+if (preg_match('#^/galerie(?:/([a-z0-9][a-z0-9-]*))?/?$#', $path, $m)) {
+    $_GET['g'] = $m[1] ?? '';
+    $_SERVER['SCRIPT_NAME'] = '/galerie/index.php';
+    require __DIR__ . '/galerie/index.php';
     return true;
 }
 

@@ -17,6 +17,7 @@ $adminNavItems = [
     'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
     'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
     'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
+    'social' => ['/admin/social.php', 'Connexion sociale', 'user'],
     'ia' => ['/admin/ai-usage.php', 'Consommation IA', 'receipt'],
     'hero' => ['/admin/hero.php', 'Diaporama hero', 'image'],
     'slideshow' => ['/admin/slideshow.php', 'Diaporama boutique', 'play'],

@@ -9,6 +9,7 @@ $current = appearance_current();
 $logos = logos_saved();
 $colors = $current['colors'];
 $fonts = $current['fonts'];
+$activeTemplate = shop_template_active();
 
 // Données pour l'aperçu en direct (même calcul qu'appearance_derive, côté navigateur).
 $fontCatalog = [];
@@ -34,6 +35,19 @@ $colorFields = [
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>
+  .tplx-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; margin: 16px 0 10px; }
+  .tplx { position: relative; display: grid; gap: 6px; align-content: start; padding: 10px; border: 2px solid var(--line); background: var(--bg); cursor: pointer; }
+  .tplx input { position: absolute; opacity: 0; }
+  .tplx:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .tplx:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .tplx-mock { display: block; background: var(--p-bg); color: var(--p-ink); border: 1px solid var(--line); min-height: 96px; overflow: hidden; }
+  .tplx-mock svg { width: 100%; height: auto; display: block; }
+  .tplx-mock b { display: block; font-size: 1.8rem; line-height: 1; padding: 14px 12px 4px; }
+  .tplx-mock i { display: block; height: 5px; margin: 5px 12px; background: var(--p-ink); opacity: .28; width: 80%; } .tplx-mock i.s { width: 50%; }
+  .tplx-mock u { display: block; width: 56px; height: 16px; margin: 8px 12px 12px; background: var(--p-accent); }
+  .tplx small { color: var(--ink-soft); line-height: 1.35; } .tplx-sector { font-weight: 600; }
+  .tplx-preview { font-size: .82rem; font-weight: 600; color: var(--accent); }
+  .tplx-opt { display: flex; gap: 8px; align-items: center; font-size: .9rem; }
   .apx-grid { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 28px; align-items: start; margin-top: 20px; }
   @media (max-width: 960px) { .apx-grid { grid-template-columns: 1fr; } }
   .apx-form { display: flex; flex-direction: column; gap: 22px; }
@@ -111,6 +125,26 @@ $colorFields = [
     <?php if ($flash): ?>
       <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin:16px 0;"><?= h($flash['message']) ?></p>
     <?php endif; ?>
+
+    <form class="apx-block" id="modele" method="post" action="/admin/appearance-action.php" style="margin-top:20px;">
+      <input type="hidden" name="action" value="template">
+      <h2>Modèle de mise en page</h2>
+      <p class="hint" style="margin:0;">Le modèle change la <strong>structure</strong> des pages (en-tête, accueil, boutique, fiche), pas seulement les couleurs. Vos produits, textes et photos restent les mêmes. Pour l'essayer sans rien changer, utilisez « Aperçu » : vous parcourez tout le site avec ce modèle, puis vous le quittez depuis le bandeau noir.</p>
+      <div class="tplx-pick">
+        <?php foreach (SHOP_TEMPLATES as $key => $t): $wire = shop_template_wireframe($key); ?>
+          <label class="tplx<?= $key === $activeTemplate ? ' is-current' : '' ?>" style="--p-bg:<?= h($t['colors']['bg']) ?>;--p-ink:<?= h($t['colors']['ink']) ?>;--p-accent:<?= h($t['colors']['accent']) ?>">
+            <input type="radio" name="template" value="<?= h($key) ?>"<?= $key === $activeTemplate ? ' checked' : '' ?>>
+            <span class="tplx-mock" aria-hidden="true"><?php if ($wire): ?><?= $wire ?><?php else: ?><b style="font-family:'<?= h($t['fonts']['display']) ?>',Georgia,serif">Aa</b><i></i><i class="s"></i><u></u><?php endif; ?></span>
+            <strong><?= h($t['label']) ?><?= $key === $activeTemplate ? ' <small>(actuel)</small>' : '' ?></strong>
+            <small><?= h($t['tagline']) ?></small>
+            <?php if (!empty($t['sector'])): ?><small class="tplx-sector"><?= h($t['sector']) ?></small><?php endif; ?>
+            <a class="tplx-preview" href="/index.php?modele=<?= h($key) ?>" target="_blank" rel="noopener">Aperçu ↗</a>
+          </label>
+        <?php endforeach; ?>
+      </div>
+      <label class="tplx-opt"><input type="checkbox" name="with_style" value="1" checked> Adopter aussi la palette et les polices du modèle <small>(décochez pour garder vos couleurs et polices actuelles)</small></label>
+      <button type="submit" class="btn btn-primary" style="margin-top:12px;">Appliquer ce modèle</button>
+    </form>
 
     <form class="apx-block apx-logos" id="logos" method="post" action="/admin/appearance-action.php" enctype="multipart/form-data" style="margin-top:20px;">
       <input type="hidden" name="action" value="logos">

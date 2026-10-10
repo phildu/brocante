@@ -60,10 +60,17 @@ Les autres commerces ont leur base dans `data/<slug>.db` et leurs clés dans
 | http://brocenstock.test/portail/            | le portail des commerces                       |
 | http://naty.brocenstock.test                | le commerce `tenants/naty`                     |
 | http://exemple-librairie.brocenstock.test   | la Librairie des Quais                         |
-| http://brocenstock.test                     | le commerce par défaut (`.tenant`, sinon Petit Chalet) |
+| http://brocenstock.test                     | le portail (redirection, comme en ligne) |
+| http://brocenstock.test/exemple-librairie/  | la Librairie des Quais sous le domaine du portail (comme `brocs.arrimage.com/<commerce>/`) |
+| http://brocenstock.test/galerie/<id>/       | une galerie commerciale (`/galerie/` : la liste des galeries publiées) |
 
 Le sous-domaine est l'identifiant du commerce (nom de son dossier dans
 `tenants/`) ; un sous-domaine inconnu affiche le commerce par défaut.
+
+**`LocalValetDriver.php`** (à la racine) apprend à Herd — qui tourne sous nginx et ne lit pas le `.htaccess` — les mêmes règles
+d'adresses que la ligne : racine → portail, `/galerie/…`, `/<commerce>/…`, et il refuse (403) `data/`, `tenants/`, `includes/`,
+`var/`, `scripts/`, les fichiers cachés (`.secrets/`…) et les `*.db`, `*.sql`, `*.log`, `*.bak`, qui seraient sinon téléchargeables en
+local. Il n'est jamais envoyé en ligne (exclu du déploiement). Sans Herd : `php -S localhost:8000 router.php` (mêmes règles).
 
 Le portail liste les commerces avec leur adresse, affiche la boutique choisie
 (accueil, boutique, panier, administration, vue mobile), réinitialise les
@@ -431,6 +438,105 @@ Galerie d'une pièce → « Générer une nouvelle vue » : la photo de départ 
 - **Vidéo IA** (Veo, Wan) : une vidéo par photo (6 au plus) ; le coût estimé est multiplié par le nombre de photos, et la page suit
   toutes les générations en parallèle.
 
+## Modèles de boutique : de simples variantes de style, et de vraies mises en page
+
+Un modèle (`includes/templates.php`) se choisit à la création de la boutique (étape 3) et se change ensuite dans **Administration → Apparence → Modèle de
+mise en page** (avec ou sans la palette et les polices du modèle) ; « Aperçu » parcourt tout le site avec un modèle sans rien enregistrer (`?modele=<clé>`,
+l'aperçu dure le temps de la visite, bandeau noir « Quitter l'aperçu » ou `?modele=0`).
+
+- **Brocante, Atelier, Galerie** : mêmes pages, autre palette, autres polices et feuille de style (`assets/templates/<clé>.css`, layout « classic »).
+- **Librairie** et **Mode** : une **structure de pages différente** (wireframe propre), pas seulement un autre habillage. Chacun a son dossier
+  `views/<layout>/` (`header`, `footer`, `home`, `shop`, `product`, `card` : une vue absente retombe sur la page classique) et sa feuille
+  `assets/templates/<clé>.css` (chargée par `<link>`, tout préfixé par `html[data-layout="<layout>"]`). Mêmes données que le modèle classique
+  (produits, textes, univers, galerie de la fiche), donc aucun changement de base.
+
+| | Librairie (livres, BD, disques, papeterie) | Mode (vêtements, accessoires, friperie) |
+|---|---|---|
+| En-tête | bandeau d'info, **recherche large au centre**, barre des rayons | nom centré, navigation à gauche, **flotte sur la grande image** puis se solidifie |
+| Accueil | « à la une » (couverture + grand résumé), **rayons à gauche**, **étagères défilantes** de couvertures, mot du libraire | **image plein écran**, bandeau défilant, univers en grandes tuiles asymétriques, nouveautés, pièce en promo en pleine largeur |
+| Catalogue | **filtres latéraux avec effectifs** et filtres actifs effaçables, tri, **grille / liste** | **barre collée** (onglets d'univers, recherche, type, tri), grille serrée de grandes images, 2ᵉ image au survol |
+| Fiche | couverture portrait, **grand résumé + fiche détaillée**, **encart d'achat collé** | **images empilées** (défilement horizontal sur smartphone), infos collées, **taille en évidence**, volets |
+
+Choix issus de pratiques courantes du e-commerce de livres (recherche en vedette, étagères, filtres persistants avec effectifs, longue description) et de
+mode (images grandes, grille serrée avec image au survol, lookbook, achat collé, taille bien visible). Pour ajouter un modèle : une entrée dans
+`SHOP_TEMPLATES` avec un `layout`, un dossier `views/<layout>/`, une feuille CSS et, si l'on veut, une maquette dans `shop_template_wireframe()`.
+Les pièces étant en exemplaire unique, la fiche « Mode » montre la taille (champ « Taille » de la pièce) plutôt qu'un sélecteur de tailles.
+
+## Vitrine de la plateforme : accueil, annuaire, inscription
+
+Sur le domaine du portail (déploiement « portail »), la racine `/` n'ouvre plus le portail mais la **vitrine publique** de la plateforme
+(le portail de l'exploitant reste à `/portail/`) :
+
+- **`/`** (`accueil/index.php`) : présentation, étapes, **formules**, galeries publiées, commerces à la une, questions fréquentes.
+- **`/annuaire/`** (`annuaire/index.php`) : tous les commerces (de ce serveur et « d'ailleurs »), recherche et filtre par univers, avec aperçu
+  des pièces ; calculé depuis le catalogue de chaque commerce et mis en cache 10 minutes (`data/saas/cache.json`).
+- **`/inscription/`** (`inscription/index.php`) : demande de boutique d'un commerçant (nom, adresse, compte, formule, galerie souhaitée). **Rien
+  n'est créé tout de suite** : la demande est enregistrée (`data/inscriptions/<id>.json`, mot de passe seulement haché), l'exploitant est prévenu
+  par e-mail, et le commerçant reçoit un accusé. Protections : jeton CSRF, champ piège, 5 demandes par heure et par IP, adresse et e-mail uniques,
+  adresses réservées (`galerie`, `portail`, `admin`…).
+- **Validation** : portail → **« Inscriptions »** (`portail/inscriptions.php`) : « Valider et créer la boutique » crée `tenants/<adresse>/` (base,
+  logo, une catégorie « Nos articles » ; le commerçant règle ensuite ses univers), y installe le compte choisi par le commerçant (identifiant = son
+  e-mail, mot de passe haché tel que saisi), l'ajoute à la galerie demandée et lui écrit les liens ; « Refuser » le prévient, avec un motif facultatif.
+- **Réglages** : portail → **« Offres et annuaire »** (`portail/offres.php`) : nom, slogan, couleur et e-mail de contact de la plateforme (`data/saas.json`),
+  jusqu'à 4 formules (nom, prix, avantages ; ⚠ les limites écrites, « jusqu'à 20 pièces », sont du texte : **elles ne sont pas appliquées**), commerces
+  visibles dans l'annuaire, commerces d'ailleurs (comme le Petit Chalet, via son `/catalogue.php`).
+- **Code** : `includes/saas.php` (réglages, annuaire, demandes, e-mails, mise en page), `assets/saas.css`. Routes : `.htaccess`, `router.php`, `LocalValetDriver.php`.
+  Ces pages ne sont pas envoyées dans le déploiement d'une boutique seule.
+- **Pas encore** : paiement des formules (abonnement Stripe), application des limites par formule, changement d'adresse par le commerçant, e-mail de
+  réinitialisation du mot de passe, inscription sans validation de l'exploitant.
+
+## Création de boutique : formule, paiement, puis génération — sans validation
+
+Le parcours public (`/inscription/`) se fait en **trois étapes, le paiement AVANT la création, et aucune validation de l'exploitant** : le client arrive sur sa boutique.
+
+1. **Ma formule** (`inscription/index.php`) : formule + e-mail (+ conditions). Le formulaire complet ne s'affiche qu'après le paiement.
+2. **Paiement** : formule payante et Stripe configuré → Stripe Checkout (abonnement mensuel). Le retour (`inscription/merci.php`) INTERROGE Stripe pour confirmer la
+   session payée, marque la demande « paid » et envoie le client à l'étape 3 ; le webhook signé (`inscription/webhook.php`, `checkout.session.completed` et
+   `customer.subscription.deleted`) fait de même et envoie par e-mail le lien de création si le client a fermé la page. Formule gratuite, paiement en ligne non configuré
+   ou indisponible : on passe directement à l'étape 3 (paiement « manuel » noté sur la demande et dans l'e-mail à l'exploitant).
+3. **Ma boutique** (`inscription/creer.php`, accessible seulement par le lien personnel `r` + jeton secret `k`) : nom, adresse, **design** (3 modèles avec aperçu), compte et mot
+   de passe (seulement haché), galerie. À la validation du formulaire la boutique est **générée tout de suite** (`saas_generate_shop()` : modèle, compte, galerie, textes de départ
+   modifiables, e-mail) et le client est **redirigé vers sa boutique**. L'exploitant reçoit un e-mail « nouvelle boutique créée » (payée / gratuite / paiement à régler).
+
+États d'une demande (`data/inscriptions/<id>.json`) : `draft` (étape 1 faite, 24 h) → `awaiting_payment` (chez Stripe, 24 h) → `paid` (payée, boutique à créer ; ne s'expire jamais) →
+`approved` (boutique créée). Le portail → « Inscriptions » (`portail/inscriptions.php`) suit les boutiques créées, les paiements dont la boutique n'est pas encore créée (« Renvoyer le lien de création »,
+« Créer la boutique maintenant » si le formulaire est rempli mais la création a échoué) et les paiements en attente. Une adresse ou un e-mail est réservé tant que la demande est active.
+**Garde-fous** (puisqu'il n'y a plus de validation humaine) : jeton CSRF, champ piège, 5 demandes par heure et par adresse IP à l'étape 1, adresse et e-mail uniques, et un **plafond de boutiques
+gratuites par 24 h** (10 par défaut ; portail → Offres et annuaire ; `free_daily_cap` dans `data/saas.json`, 0 = aucun plafond ; les formules payantes ne sont pas comptées). L'e-mail n'est pas
+vérifié : ajouter une confirmation par lien serait la suite logique si des créations abusives apparaissent.
+
+- **Trois modèles de design** (`includes/templates.php`, feuilles `assets/templates/<clé>.css`) : **Brocante** (le design historique : papier chaud, filets fins,
+  machine à écrire), **Atelier** (moderne et doux : coins arrondis, ombres, boutons en pilule ; Bricolage Grotesque / DM Sans, teal et ambre) et **Galerie**
+  (éditorial et épuré : grands titres, blanc généreux, noir et or ; Playfair Display / Karla). Un modèle = une palette + une paire de polices + une feuille de style
+  (sélecteurs préfixés `html`, plus prioritaires que `style.css`) ; la clé `'template'` de `tenants/<slug>/tenant.php` l'enregistre (`brocante` par défaut). Aperçu sur
+  n'importe quelle boutique : `?modele=atelier` (rien n'est enregistré). Pour ajouter un modèle : une entrée dans `SHOP_TEMPLATES` et un fichier CSS.
+- **Stripe de la plateforme** : clés dans portail → Offres et annuaire → « Paiement des formules » (`.secrets/stripe_plateforme.json`), sans rapport avec les clés Stripe des
+  commerces, qui encaissent leurs propres clients. Clés `sk_test_…` pour essayer sans débit (carte `4242 4242 4242 4242`) ; le portail affiche « mode test » ou « mode RÉEL ».
+  Point de terminaison du webhook à déclarer chez Stripe : `<domaine>/inscription/webhook.php`. Les essais automatiques utilisent un faux Stripe local (`api_base` du fichier de
+  clés, accepté uniquement avec `config.local.php`).
+- **Création de boutique partagée** : `includes/tenant-factory.php` (portail, `portail/nouveau.php`, `portail/inscriptions.php` et étape 3).
+- **Pas encore** : modèle modifiable après coup depuis l'administration de la boutique, changement de formule, facturation / portail client Stripe, application des limites par formule.
+
+## Galeries commerciales
+
+Une **galerie** regroupe les pièces de plusieurs commerces (une rue, un village, un groupe d'amis…) sur une page publique commune,
+**`/galerie/<identifiant>/`** (liste des galeries publiées : `/galerie/`), avec un annuaire des commerces, la recherche, les filtres
+(commerce, univers, prix) et le tri. Chaque commerce garde sa boutique, son administration, son panier et son paiement : la galerie
+présente, et chaque pièce renvoie vers sa fiche chez le commerçant (pas de panier commun).
+
+- **Gestion** : portail → **« Galeries commerciales »** (`portail/galeries.php`, réservé à l'exploitant) : créer une galerie (nom,
+  identifiant, slogan, couleur), cocher les commerces membres (★ = à la une), ajouter un **commerce d'ailleurs** (autre serveur, comme
+  le Petit Chalet : son adresse, testée à l'ajout), publier. Une galerie non publiée s'ouvre par un lien d'aperçu secret (`?apercu=…`).
+  Les galeries sont des fichiers `data/galeries/<identifiant>.json` (jamais envoyés par le déploiement).
+- **Données** : chaque boutique sert son **catalogue public** en JSON à `/catalogue.php` (infos du commerce, logo, pièces non masquées et
+  en stock, prix, photo de couverture, lien de la fiche). La galerie lit directement la base des commerces de ce serveur et le flux
+  `/catalogue.php` des commerces d'ailleurs ; le catalogue regroupé est mis en cache 10 minutes (`data/galeries/cache/`, bouton
+  « Actualiser » dans le portail). Un commerce injoignable est signalé et la galerie continue sans lui.
+- **Code** : `includes/galleries.php` (galeries, catalogue, cache ; ne dépend que de `includes/tenant.php`), `galerie/index.php` (page
+  publique), `catalogue.php`, `portail/galeries.php`. Routes : `.htaccess` (`/galerie/…`) et `router.php` en local.
+- **Pas encore** : panier commun à plusieurs commerces, abonnements (vente / location d'une boutique seule ou en galerie), inscription
+  libre des commerçants, logo et visuel propres à la galerie.
+
 ## Clés API partagées (période de test)
 
 Pendant les essais, une même clé (Gemini, fal.ai, SiliconFlow, Modal) peut servir à **tous les commerces d'un même déploiement** qui
@@ -544,6 +650,40 @@ base ancienne, voir `includes/accounts.php`), une fiche par adresse e-mail.
   newsletter un prospect (un prospect qui commande devient client).
   « Importer les clients depuis les commandes » rattrape les commandes déjà passées ;
   « Exporter les contacts (CSV) » ne contient jamais les comptes de l'équipe.
+
+## Connexion par les réseaux sociaux (Google, Facebook, Microsoft, Apple)
+
+Un bouton « Continuer avec… » apparaît à trois endroits, dès qu'au moins un fournisseur est actif (portail → **Connexion sociale**) :
+
+- **Création de boutique** (`/inscription/`) : l'e-mail est repris du compte, **aucun mot de passe à créer** (facultatif à l'étape 3) ;
+- **Administration de chaque boutique** (`/admin/login.php`) : entre un compte de l'équipe ou le compte principal dont l'e-mail correspond à une
+  adresse **vérifiée** par le fournisseur (un compte de l'équipe se crée comme d'habitude dans Administration → Comptes) ;
+- **Compte client** (`/compte.php`, lien « Mon compte » du menu) : suivi des commandes payées avec la même adresse ; l'e-mail est
+  prérempli au paiement. Le visiteur devient un contact de la boutique (Comptes → source « Connexion sociale »).
+
+**Un seul jeu de clés pour toute la plateforme.** Un fournisseur n'accepte que des adresses de retour déclarées à l'avance : le retour se fait
+donc sur UNE adresse centrale, `<domaine du portail>/oauth/callback.php` (affichée dans le portail), qui renvoie la personne sur sa boutique
+(`oauth/finish.php`) avec un justificatif signé (HMAC, 2 minutes, destiné à cette boutique, lié à sa session, usage unique). Domaines de
+retour acceptés : le domaine central et ses sous-domaines, les `site_url` des commerces du serveur, plus ceux ajoutés dans le portail.
+
+Pour chaque fournisseur : créer une application (le portail donne le lien de la console et la marche à suivre), y déclarer l'adresse de retour,
+puis coller l'ID client et le secret dans le portail. **Google** : la plus simple. **Facebook** : app en mode Live + politique de confidentialité
+en ligne. **Microsoft** : comptes organisationnels ET personnels (seuls les comptes personnels ont une adresse considérée comme vérifiée ;
+les autres peuvent s'inscrire mais pas ouvrir une administration ni un compte client). **Apple** : Services ID + clé `.p8`, HTTPS obligatoire
+(le secret client est un JWT ES256 calculé à partir de la clé).
+
+**Réglages et clés propres à chaque boutique** (Administration → **Connexion sociale**, réservé aux administrateurs) : le commerçant choisit où
+proposer la connexion (administration, comptes clients), coupe un fournisseur, et peut enregistrer **ses propres clés** (sa propre application
+Google, Facebook…), prioritaires sur celles de la plateforme. Avec ses clés, le retour se fait directement sur SA propre adresse
+(`<boutique>/oauth/callback.php`, affichée dans la page : à déclarer chez le fournisseur ; HTTPS exigé hors `localhost`), sans passer par le domaine
+central, et le justificatif est signé avec la clé de signature de la boutique (`.secrets/<boutique>/oauth.json`, jamais déployé). L'inscription
+utilise toujours les clés de la plateforme. Un justificatif ne vaut qu'avec la clé qui l'a signé (plateforme ou boutique, indiqué dans le justificatif).
+Des clés propres erronées ne bloquent personne : la connexion par identifiant et mot de passe reste toujours possible.
+
+Clés de la plateforme dans `.secrets/oauth_plateforme.json` (jamais déployé, jamais affiché) ; un commerce hébergé ailleurs les lit via `.shared-secrets-from`
+(ajoutez son domaine dans « Autres domaines autorisés »). En local, un simulateur de fournisseur peut être désigné dans « Simulateur » (champ
+visible seulement si `config.local.php` existe) ; Google, Facebook et Apple refusent les adresses `.test` : pour un vrai essai en local,
+utiliser `php -S localhost:8000 router.php` (Google accepte `http://localhost`).
 
 ## Connexion à l'administration
 

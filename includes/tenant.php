@@ -109,7 +109,7 @@ function tenant_dynamic_path_regex(): string
                 $pages[] = preg_quote($name, '~');
             }
         }
-        $regex = 'admin/|' . ($pages ? '(?:' . implode('|', $pages) . ')' : 'index\.php');
+        $regex = 'admin/|oauth/|' . ($pages ? '(?:' . implode('|', $pages) . ')' : 'index\.php');
     }
     return $regex;
 }
@@ -300,6 +300,7 @@ function tenant_defaults(string $slug): array
 }
 
 require_once __DIR__ . '/appearance.php';
+require_once __DIR__ . '/templates.php';
 
 /** Chemin absolu d'un fichier déclaré relativement à la racine du projet. */
 function tenant_path(string $key): string
@@ -325,6 +326,11 @@ function tenant_head_html(): string
     $fontVars = [];
 
     $saved = function_exists('appearance_saved') ? appearance_saved() : null;
+    // Modèle de design : l'aperçu demandé (?modele=<clé>), sinon celui réglé dans l'administration, sinon celui du tenant.php.
+    // Un aperçu prend aussi sa palette et ses polices.
+    $tplPreview = function_exists('shop_template_preview') ? shop_template_preview() : '';
+    $tplKey = function_exists('shop_template_active') ? shop_template_active() : (string) tenant('template', '');
+    if ($tplPreview !== '') $saved = ['colors' => SHOP_TEMPLATES[$tplPreview]['colors'], 'fonts' => SHOP_TEMPLATES[$tplPreview]['fonts']];
     if ($saved) {
         $palette = appearance_derive($saved['colors'] ?? []);
         $lightColors = $palette['light'];
@@ -366,5 +372,11 @@ function tenant_head_html(): string
     if ($css !== '') {
         $html .= "\n<style>$css</style>";
     }
+    $templateCss = function_exists('shop_template_css') ? shop_template_css($tplKey) : '';
+    if ($templateCss !== '') {
+        $html .= "\n<style id=\"template-" . h($tplKey) . "\">$templateCss</style>";
+    }
+    $templateLink = function_exists('shop_template_link') ? shop_template_link($tplKey) : '';
+    if ($templateLink !== '') $html .= "\n" . $templateLink;
     return $html . "\n";
 }

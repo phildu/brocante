@@ -85,6 +85,12 @@ $params = [
     'shipping_options' => $shippingOptions,
 ];
 
+// Client connecté par un réseau social : son adresse e-mail est préremplie sur la page de paiement.
+require_once __DIR__ . '/includes/oauth.php';
+if ($customer = customer_session()) {
+    $params['customer_email'] = $customer['email'];
+}
+
 $i = 0;
 foreach ($lines as $line) {
     $p = $line['product'];

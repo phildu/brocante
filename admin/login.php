@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/oauth.php';
 
 // Déjà connecté (bouton « Connexion » du site) : direction l'administration.
 if (is_admin_logged_in()) {
@@ -10,6 +11,10 @@ if (is_admin_logged_in()) {
 
 $content = get_content();
 $error = null;
+if (!empty($_SESSION['login_error'])) {   // message laissé par la connexion sociale (oauth/finish.php)
+    $error = (string) $_SESSION['login_error'];
+    unset($_SESSION['login_error']);
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Sans compte configuré, l'administration reste fermée.
     $login = admin_login((string) ($_POST['username'] ?? ''), (string) ($_POST['password'] ?? ''));
@@ -41,6 +46,7 @@ if (!admin_password_configured()) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/oauth.css">
 <style>
   .login-wrap { max-width: 380px; margin: 14vh auto 0; padding: 0 24px; }
   .login-box { background: var(--surface); border: 1px solid var(--line); padding: 32px; }
@@ -68,6 +74,10 @@ if (!admin_password_configured()) {
     <h1>Administration</h1>
     <p class="lede">Connectez-vous pour gérer les contenus et le catalogue.</p>
     <?php if ($error): ?><p class="login-error"><?= h($error) ?></p><?php endif; ?>
+    <?php if ($social = oauth_buttons_html('admin')): ?>
+      <?= $social ?>
+      <div class="oauth-sep"><span>ou</span></div>
+    <?php endif; ?>
     <form method="post">
       <input type="text" name="username" placeholder="Identifiant ou e-mail" aria-label="Identifiant ou e-mail" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required value="<?= h($_POST['username'] ?? '') ?>">
       <div class="password-field">

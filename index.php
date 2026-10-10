@@ -37,6 +37,13 @@ $followPhotos = array_slice($followPhotos, 0, 6);
 $activeNav = 'accueil';
 $pageTitle = null;
 include __DIR__ . '/includes/header.php';
+
+// Modèle à mise en page propre (views/<modèle>/home.php) : il remplace l'accueil d'origine, avec les mêmes données.
+if ($view = shop_view('home')) {
+    include $view;
+    include __DIR__ . '/includes/footer.php';
+    return;
+}
 ?>
 
 <div class="welcome-splash" id="welcome-splash">

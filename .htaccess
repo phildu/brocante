@@ -1,10 +1,15 @@
 # Routage des adresses (Apache / OVH).
 RewriteEngine On
 
-# Déploiement « portail » : la racine du domaine ouvre le portail des commerces
-# (absent d'un déploiement à un seul commerce, dont la racine est la boutique).
+# Déploiement « portail » : la racine du domaine ouvre la page d'accueil de la plateforme (accueil/index.php ; annuaire/, inscription/ et
+# galerie/ sont ses autres pages publiques ; le portail de l'exploitant reste à /portail/). Absent d'un déploiement à un seul commerce,
+# dont la racine est la boutique.
 RewriteCond %{DOCUMENT_ROOT}/portail/index.php -f
-RewriteRule ^$ /portail/ [R=302,L]
+RewriteRule ^$ accueil/index.php [L]
+
+# Galeries commerciales (page publique, sans connexion) : /galerie/ et /galerie/<identifiant>/ — voir galerie/index.php.
+RewriteRule ^galerie/?$ galerie/index.php [L]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/?$ galerie/index.php?g=$1 [L,QSA]
 
 # Un commerce servi sous le domaine du portail : /<identifiant>/… affiche la
 # boutique de tenants/<identifiant>/ (le PHP reconnaît le commerce à l'adresse
@@ -28,7 +33,7 @@ RewriteRule ^([a-z0-9][a-z0-9_-]*)/(.+)$ $2 [L,QSA]
 RedirectMatch 404 "(?:^|/)\.(?!well-known)"
 
 # Dossiers internes : configuration des commerces, bases, scripts, journaux.
-RedirectMatch 404 "^/(?:data|tenants|scripts|includes|var|db-backup)(?:/|$)"
+RedirectMatch 404 "^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$)"
 
 # Scripts et styles : toujours revalidés (ETag / Last-Modified), pour que chaque déploiement soit pris en compte tout de suite
 # au lieu d'attendre l'expiration du cache du navigateur (15 minutes par défaut) avec une ancienne version des scripts.

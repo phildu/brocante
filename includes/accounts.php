@@ -19,7 +19,7 @@ const ACCOUNT_ROLES = [
 /** Rôles qui se connectent à l'administration (les autres sont des contacts, sans accès). */
 const ACCOUNT_STAFF_ROLES = ['admin', 'community_manager'];
 
-const ACCOUNT_SOURCES = ['manuel' => 'Ajouté à la main', 'commande' => 'Commande', 'newsletter' => 'Newsletter'];
+const ACCOUNT_SOURCES = ['manuel' => 'Ajouté à la main', 'commande' => 'Commande', 'newsletter' => 'Newsletter', 'connexion' => 'Connexion sociale'];
 
 const ACCOUNT_PASSWORD_MIN = 8;
 
@@ -114,6 +114,14 @@ function account_staff_by_login(string $login): ?array
     $stmt = db()->prepare("SELECT * FROM accounts WHERE (email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE)
         AND role IN ('admin', 'community_manager') AND is_active = 1 AND password_hash IS NOT NULL LIMIT 1");
     $stmt->execute([$login, $login]);
+    return $stmt->fetch() ?: null;
+}
+
+/** Compte de l'équipe actif portant cette adresse e-mail, avec ou sans mot de passe (connexion par un réseau social : l'adresse vérifiée suffit). */
+function account_staff_by_email(string $email): ?array
+{
+    $stmt = db()->prepare("SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND role IN ('admin', 'community_manager') AND is_active = 1 LIMIT 1");
+    $stmt->execute([trim($email)]);
     return $stmt->fetch() ?: null;
 }
 

@@ -1,4 +1,5 @@
 </main>
+<?php if ($__viewFooter = shop_view('footer')): include $__viewFooter; else: ?>
 <footer class="site">
   <div class="wrap footer-grid">
     <div>
@@ -28,6 +29,7 @@
     <span>Prototype de boutique — déploiement local</span>
   </div>
 </footer>
+<?php endif; ?>
 <div class="quick-preview-overlay" id="quick-preview-overlay" aria-hidden="true">
   <div class="quick-preview-media" id="quick-preview-media"></div>
   <span id="quick-preview-name"></span>

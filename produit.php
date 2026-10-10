@@ -41,6 +41,13 @@ $buyHtml = static function () use ($product): string {
         . '<button class="btn btn-ghost" type="submit" name="redirect" value="/cart.php">Commander</button>'
         . '</form>';
 };
+
+// Modèle à mise en page propre (views/<modèle>/product.php) : mêmes données ($product, $gallery, $related, $priceHtml, $buyHtml).
+if ($view = shop_view('product')) {
+    include $view;
+    include __DIR__ . '/includes/footer.php';
+    return;
+}
 ?>
 
 <div class="buybar" id="buybar" aria-label="Achat rapide">

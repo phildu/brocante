@@ -34,6 +34,13 @@ function boutique_url(string $cat, string $q, string $nature = '', string $sous 
 $activeNav = 'boutique';
 $pageTitle = 'La boutique';
 include __DIR__ . '/includes/header.php';
+
+// Modèle à mise en page propre (views/<modèle>/shop.php) : mêmes données, autre structure.
+if ($view = shop_view('shop')) {
+    include $view;
+    include __DIR__ . '/includes/footer.php';
+    return;
+}
 ?>
 
 <section class="shop-head">

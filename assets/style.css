@@ -1621,3 +1621,7 @@
 .admin-sidebar-foot .admin-ai-chip { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); padding: 4px 12px; text-decoration: none; }
 .admin-sidebar-foot .admin-ai-chip:hover { color: var(--accent); }
 .admin-sidebar-collapsed .admin-ai-chip { display: none; }
+
+/* Bandeau d'aperçu d'un modèle de design (?modele=<clé>) : rien n'est enregistré. */
+.template-preview-bar { position: sticky; top: 0; z-index: 60; background: #1d1d1d; color: #fff; text-align: center; font-size: 0.82rem; padding: 7px 12px; }
+.template-preview-bar a { color: #fff; font-weight: 700; margin-left: 10px; }

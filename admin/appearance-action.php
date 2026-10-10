@@ -18,6 +18,16 @@ switch ($_POST['action'] ?? '') {
         flash_set('Apparence enregistrée : elle s\'applique maintenant à tout le site.');
         break;
 
+    case 'template':
+        try {
+            appearance_save_template((string) ($_POST['template'] ?? ''), !empty($_POST['with_style']));
+            flash_set('Modèle « ' . SHOP_TEMPLATES[$_POST['template']]['label'] . ' » appliqué : il s\'affiche maintenant sur tout le site.');
+        } catch (InvalidArgumentException $e) {
+            flash_set($e->getMessage(), 'error');
+        }
+        header('Location: /admin/appearance.php#modele');
+        exit;
+
     case 'reset':
         appearance_reset();
         flash_set("Apparence d'origine rétablie.");
