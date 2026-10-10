@@ -169,7 +169,11 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   .lede { color: var(--ink-soft); margin: 0 0 18px; }
 
   .shops { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
-  .shop { display: flex; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; text-decoration: none; transition: transform .15s, box-shadow .15s, border-color .15s; }
+  .shop { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; text-decoration: none; transition: transform .15s, box-shadow .15s, border-color .15s; }
+  .shop-main { display: flex; gap: 14px; align-items: center; text-decoration: none; }
+  .shop-links { display: flex; flex-wrap: wrap; gap: 6px 14px; padding-top: 8px; border-top: 1px solid var(--line); font-size: .86rem; font-weight: 600; }
+  .shop-links a { color: var(--ink-soft); text-decoration: none; } .shop-links a:hover { color: var(--accent); text-decoration: underline; } .shop-links a.visit { color: var(--accent); }
+  .shop.join { flex-direction: row; align-items: center; }
   .shop:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--accent); }
   .shop.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .avatar { flex: none; width: 54px; height: 54px; border-radius: 12px; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 1.4rem; overflow: hidden; background: var(--surface-2); }
@@ -309,16 +313,22 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       <p class="lede"><?= e($st['shops_lede'] !== '' ? $st['shops_lede'] : 'Chaque commerce a sa boutique, son panier et son paiement : une pièce se règle chez son commerçant.') ?></p>
       <div class="shops">
         <?php foreach ($shops as $key => $s): $initial = mb_strtoupper(mb_substr(preg_replace('/^[^\p{L}\p{N}]+/u', '', $s['name']), 0, 1)); ?>
-          <a class="shop<?= $shopFilter === $key ? ' is-on' : '' ?>" href="<?= e(gal_url(['commerce' => $shopFilter === $key ? null : $key])) ?>#pieces" title="Voir ses pièces">
-            <span class="avatar" style="<?= $s['accent'] !== '' ? 'color:' . e(gal_ink_on($s['accent'])) . ';background:' . e($s['accent']) : '' ?>">
-              <?= e($initial) ?><?php if ($s['logo'] !== ''): ?><img src="<?= e($s['logo']) ?>" alt="" loading="lazy" onerror="this.remove()"><?php endif; ?>
-            </span>
-            <span>
-              <?php if ($s['featured']): ?><span class="star">★ À la une</span><br><?php endif; ?>
-              <h3><?= e($s['name']) ?></h3>
-              <p><?= e($s['tagline'] !== '' ? $s['tagline'] : '') ?><?= $s['tagline'] !== '' ? ' · ' : '' ?><?= (int) $s['count'] ?> pièce<?= $s['count'] > 1 ? 's' : '' ?></p>
-            </span>
-          </a>
+          <div class="shop<?= $shopFilter === $key ? ' is-on' : '' ?>">
+            <a class="shop-main" href="<?= e($s['url'] !== '' ? $s['url'] : gal_url(['commerce' => $key]) . '#pieces') ?>"<?= $s['url'] !== '' ? ' target="_blank" rel="noopener"' : '' ?> title="<?= $s['url'] !== '' ? 'Ouvrir sa boutique' : 'Voir ses pièces' ?>">
+              <span class="avatar" style="<?= $s['accent'] !== '' ? 'color:' . e(gal_ink_on($s['accent'])) . ';background:' . e($s['accent']) : '' ?>">
+                <?= e($initial) ?><?php if ($s['logo'] !== ''): ?><img src="<?= e($s['logo']) ?>" alt="" loading="lazy" onerror="this.remove()"><?php endif; ?>
+              </span>
+              <span>
+                <?php if ($s['featured']): ?><span class="star">★ À la une</span><br><?php endif; ?>
+                <h3><?= e($s['name']) ?></h3>
+                <p><?= e($s['tagline'] !== '' ? $s['tagline'] : '') ?><?= $s['tagline'] !== '' ? ' · ' : '' ?><?= (int) $s['count'] ?> pièce<?= $s['count'] > 1 ? 's' : '' ?></p>
+              </span>
+            </a>
+            <div class="shop-links">
+              <?php if ($s['url'] !== ''): ?><a class="visit" href="<?= e($s['url']) ?>" target="_blank" rel="noopener">Visiter la boutique ↗</a><?php endif; ?>
+              <a href="<?= e(gal_url(['commerce' => $shopFilter === $key ? null : $key])) ?>#pieces"><?= $shopFilter === $key ? 'Toutes les pièces' : 'Ses pièces' ?></a>
+            </div>
+          </div>
         <?php endforeach; ?>
         <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
           <a class="shop join" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><span>＋ Votre boutique ici<br><small style="font-weight:400;color:var(--ink-soft)">Rejoindre <?= e($gallery['name']) ?></small></span></a>
