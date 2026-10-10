@@ -8,6 +8,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+if (!shop_can_add_items()) {
+    flash_set(shop_limit_message(), 'error');
+    header('Location: /admin/catalog.php');
+    exit;
+}
+
 $validCats = array_column(category_list(), 'key');
 $cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : default_category_key();
 $name = trim((string) ($_POST['name'] ?? '')) ?: 'Nouvelle pièce';

@@ -7,6 +7,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     try {
         $slug = create_tenant_from_form($f, $_FILES['logo'] ?? null);
+        require_once PORTAIL_ROOT . '/includes/saas.php';
+        saas_event('shop_created_manual', ['slug' => $slug, 'note' => trim((string) ($f['name'] ?? ''))]);
         portail_flash('Commerce « ' . trim($f['name']) . " » créé dans tenants/$slug, à l'adresse " . portail_shop_label($slug, tenant_load($slug)) . '.');
         header('Location: /portail/?voir=' . rawurlencode($slug));
         exit;

@@ -12,6 +12,7 @@
 // commerce, que le portail.
 
 require_once __DIR__ . '/tenant.php';
+require_once __DIR__ . '/appearance.php';
 
 const GALLERY_CACHE_TTL = 600;
 const GALLERY_SLUG_PATTERN = '/^[a-z0-9][a-z0-9-]{1,39}$/';
@@ -80,8 +81,120 @@ function gallery_normalize(string $slug, array $data): array
         'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', $accent) ? strtolower($accent) : '#b5502e',
         'published' => !empty($data['published']),
         'created' => (int) ($data['created'] ?? time()),
+        'style' => gallery_style_normalize((array) ($data['style'] ?? [])),
         'members' => $members,
     ];
+}
+
+// ── Apparence de la page publique ───────────────────────────────────────────
+
+const GALLERY_STYLE_CHOICES = [
+    'banner_pos' => ['top' => 'Haut', 'center' => 'Centre', 'bottom' => 'Bas'],
+    'hero_height' => ['compact' => 'Compact', 'normal' => 'Normal', 'tall' => 'Grand'],
+    'hero_align' => ['left' => 'À gauche', 'center' => 'Centré'],
+    'radius' => ['square' => 'Angles droits', 'soft' => 'Arrondis doux', 'round' => 'Très arrondis'],
+    'card_ratio' => ['4/5' => 'Portrait (4:5)', '3/4' => 'Portrait haut (3:4)', '1/1' => 'Carré', '3/2' => 'Paysage (3:2)'],
+    'density' => ['airy' => 'Aérée', 'compact' => 'Serrée'],
+    'per_page' => ['12' => '12 pièces', '24' => '24 pièces', '48' => '48 pièces', '96' => '96 pièces'],
+    'default_sort' => ['recent' => 'Nouveautés', 'prix-asc' => 'Prix croissant', 'prix-desc' => 'Prix décroissant', 'nom' => 'Nom'],
+    'dark_mode' => ['auto' => 'Suit l\'appareil du visiteur', 'light' => 'Toujours clair'],
+];
+
+/** Réglages d'apparence d'une galerie, valeurs sûres (couleurs #rrggbb, choix dans des listes fermées, images sous uploads/galeries/). */
+function gallery_style_normalize(array $s): array
+{
+    $color = static fn ($v): string => preg_match('/^#[0-9a-fA-F]{6}$/', (string) $v) ? strtolower((string) $v) : '';
+    $choice = static fn (string $key, $v, string $default): string => isset(GALLERY_STYLE_CHOICES[$key][(string) $v]) ? (string) $v : $default;
+    $image = static fn ($v): string => preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*\.(?:jpg|png|webp)$#', (string) $v) ? (string) $v : '';
+    $text = static fn ($v, int $max): string => mb_substr(trim((string) $v), 0, $max);
+    return [
+        'bg' => $color($s['bg'] ?? ''), 'ink' => $color($s['ink'] ?? ''), 'hero_color' => $color($s['hero_color'] ?? ''),
+        'banner' => $image($s['banner'] ?? ''), 'logo' => $image($s['logo'] ?? ''),
+        'banner_overlay' => max(0, min(80, (int) ($s['banner_overlay'] ?? 35))),
+        'banner_pos' => $choice('banner_pos', $s['banner_pos'] ?? '', 'center'),
+        'hero_height' => $choice('hero_height', $s['hero_height'] ?? '', 'normal'),
+        'hero_align' => $choice('hero_align', $s['hero_align'] ?? '', 'left'),
+        'font_display' => isset(APPEARANCE_FONTS['display'][(string) ($s['font_display'] ?? '')]) ? (string) $s['font_display'] : '',
+        'font_body' => isset(APPEARANCE_FONTS['body'][(string) ($s['font_body'] ?? '')]) ? (string) $s['font_body'] : '',
+        'radius' => $choice('radius', $s['radius'] ?? '', 'soft'),
+        'card_ratio' => $choice('card_ratio', $s['card_ratio'] ?? '', '4/5'),
+        'density' => $choice('density', $s['density'] ?? '', 'airy'),
+        'per_page' => (int) $choice('per_page', $s['per_page'] ?? '', '24'),
+        'default_sort' => $choice('default_sort', $s['default_sort'] ?? '', 'recent'),
+        'dark_mode' => $choice('dark_mode', $s['dark_mode'] ?? '', 'auto'),
+        'show_stats' => !array_key_exists('show_stats', $s) || !empty($s['show_stats']),
+        'show_cta' => !array_key_exists('show_cta', $s) || !empty($s['show_cta']),
+        'cta_label' => $text($s['cta_label'] ?? '', 50),
+        'shops_title' => $text($s['shops_title'] ?? '', 60), 'shops_lede' => $text($s['shops_lede'] ?? '', 200), 'pieces_title' => $text($s['pieces_title'] ?? '', 60),
+        'footer_text' => $text($s['footer_text'] ?? '', 300),
+    ];
+}
+
+/**
+ * Habillage calculé d'une galerie pour la page publique : 'css' (variables CSS, clair puis sombre), 'fonts' (adresse Google Fonts ou ''), 'allow_dark'
+ * (la feuille de base peut-elle suivre le mode sombre ?), 'hero_ink' (couleur du texte de l'en-tête), 'radius', 'card_min'.
+ * Sans couleur de fond ni de texte choisies, les teintes d'origine de la page sont gardées (seuls l'accent et l'en-tête changent).
+ */
+function gallery_theme(array $g): array
+{
+    $s = $g['style'];
+    $accent = $g['accent'];
+    $heroBg = $s['hero_color'] !== '' ? $s['hero_color'] : $accent;
+    $heroInk = $s['banner'] !== '' ? '#ffffff' : appearance_on($heroBg);
+    $vars = ['--accent' => $accent, '--accent-ink' => appearance_on($accent), '--hero-bg' => $heroBg, '--hero-ink' => $heroInk,
+        '--radius' => ['square' => '4px', 'soft' => '14px', 'round' => '26px'][$s['radius']], '--ratio' => str_replace('/', ' / ', $s['card_ratio']),
+        '--card-min' => $s['density'] === 'compact' ? '170px' : '210px'];
+    if ($s['font_display'] !== '') $vars['--display'] = appearance_font_stack('display', $s['font_display']);
+    if ($s['font_body'] !== '') $vars['--body'] = appearance_font_stack('body', $s['font_body']);
+    $light = $dark = [];
+    $custom = $s['bg'] !== '' || $s['ink'] !== '';
+    if ($custom) {
+        $pal = appearance_derive(['bg' => $s['bg'] !== '' ? $s['bg'] : '#f7f3ec', 'ink' => $s['ink'] !== '' ? $s['ink'] : '#221f1a', 'accent' => $accent, 'accent-2' => $accent]);
+        foreach (['bg', 'surface', 'surface-2', 'ink', 'ink-soft', 'line'] as $k) $light['--' . $k] = $pal['light'][$k];
+        foreach (['bg', 'surface', 'surface-2', 'ink', 'ink-soft', 'line', 'accent', 'accent-ink'] as $k) $dark['--' . $k] = $pal['dark'][$k];
+    }
+    $decl = static function (array $a): string { $o = ''; foreach ($a as $k => $v) $o .= $k . ':' . $v . ';'; return $o; };
+    $css = ':root{' . $decl($vars + $light) . '}';
+    $allowDark = $s['dark_mode'] === 'auto';
+    if ($custom && $allowDark) $css .= '@media (prefers-color-scheme: dark){:root{' . $decl($dark) . '}}';
+    if (!$allowDark) $css .= ':root{color-scheme:light}';
+    $fonts = $s['font_display'] !== '' || $s['font_body'] !== '' ? appearance_fonts_url($s['font_display'] ?: 'Fraunces', $s['font_body'] ?: 'Archivo') : '';
+    return ['css' => $css, 'fonts' => $fonts, 'allow_dark' => $allowDark && !$custom, 'hero_ink' => $heroInk];
+}
+
+/**
+ * Enregistre une image de galerie envoyée par formulaire ($file = élément de $_FILES) sous uploads/galeries/ : redimensionnée (largeur max $maxW),
+ * JPEG pour une bannière, PNG (transparence gardée) pour un logo. Retourne le chemin relatif. Lève InvalidArgumentException si le fichier ne convient pas.
+ */
+function gallery_image_store(array $file, string $slug, string $kind, int $maxW): string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new InvalidArgumentException(($file['error'] ?? 0) === UPLOAD_ERR_INI_SIZE || ($file['error'] ?? 0) === UPLOAD_ERR_FORM_SIZE ? "L'image est trop lourde pour le serveur." : "L'image n'a pas pu être envoyée.");
+    }
+    $info = @getimagesize($file['tmp_name']);
+    if (!$info || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) throw new InvalidArgumentException('Image non reconnue : JPEG, PNG ou WebP.');
+    if (($file['size'] ?? 0) > 12 * 1024 * 1024) throw new InvalidArgumentException("L'image dépasse 12 Mo.");
+    $src = match ($info[2]) { IMAGETYPE_JPEG => @imagecreatefromjpeg($file['tmp_name']), IMAGETYPE_PNG => @imagecreatefrompng($file['tmp_name']), default => @imagecreatefromwebp($file['tmp_name']) };
+    if (!$src) throw new InvalidArgumentException("L'image est illisible.");
+    [$w, $h] = [imagesx($src), imagesy($src)];
+    $scale = min(1, $maxW / $w);
+    [$nw, $nh] = [max(1, (int) round($w * $scale)), max(1, (int) round($h * $scale))];
+    $dst = imagecreatetruecolor($nw, $nh);
+    $png = $kind === 'logo';
+    if ($png) { imagealphablending($dst, false); imagesavealpha($dst, true); imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 0, 0, 0, 127)); }
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+    $dir = dirname(__DIR__) . '/uploads/galeries';
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) throw new InvalidArgumentException("Dossier uploads/galeries/ non inscriptible.");
+    $name = $slug . '-' . $kind . '-' . substr(bin2hex(random_bytes(4)), 0, 8) . ($png ? '.png' : '.jpg');
+    $ok = $png ? imagepng($dst, "$dir/$name", 6) : imagejpeg($dst, "$dir/$name", 82);
+    if (!$ok) throw new InvalidArgumentException("L'image n'a pas pu être enregistrée.");
+    return 'uploads/galeries/' . $name;
+}
+
+/** Supprime une image de galerie (uniquement sous uploads/galeries/). */
+function gallery_image_delete(string $path): void
+{
+    if (preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*$#', $path)) @unlink(dirname(__DIR__) . '/' . $path);
 }
 
 function gallery_save(array $gallery): bool
@@ -98,6 +211,7 @@ function gallery_save(array $gallery): bool
 function gallery_delete(string $slug): void
 {
     if (!gallery_slug_valid($slug)) return;
+    if ($g = gallery_load($slug)) foreach (['banner', 'logo'] as $f) gallery_image_delete($g['style'][$f]);
     @unlink(galleries_dir() . '/' . $slug . '.json');
     gallery_cache_clear($slug);
 }

@@ -1,6 +1,6 @@
 <?php
 // Webhook Stripe de la plateforme (à déclarer dans le tableau de bord Stripe : <domaine>/inscription/webhook.php, événements
-// checkout.session.completed et customer.subscription.deleted). La signature est vérifiée avec le « secret de signature » (whsec_…) enregistré
+// checkout.session.completed, customer.subscription.deleted, et pour le suivi de l'activité : invoice.paid, invoice.payment_failed, charge.refunded). La signature est vérifiée avec le « secret de signature » (whsec_…) enregistré
 // dans le portail → Offres et annuaire. Sert de filet : la boutique est générée même si le client ferme la page de retour.
 require_once __DIR__ . '/../includes/saas.php';
 
@@ -17,6 +17,18 @@ if (!is_array($event) || empty($event['type'])) exit('événement illisible');
 
 $obj = $event['data']['object'] ?? [];
 $origin = saas_origin();
+saas_event('webhook', ['note' => (string) $event['type'], 'actor' => 'stripe']);
+
+/** Demande dont l'abonnement (ou le client) Stripe est celui de l'objet reçu. */
+$requestOf = static function (array $o): ?array {
+    $sub = (string) ($o['subscription'] ?? '');
+    $cus = (string) ($o['customer'] ?? '');
+    foreach (saas_requests() as $r) {
+        $p = $r['payment'] ?? [];
+        if (($sub !== '' && ($p['subscription'] ?? '') === $sub) || ($sub === '' && $cus !== '' && ($p['customer'] ?? '') === $cus)) return $r;
+    }
+    return null;
+};
 
 if ($event['type'] === 'checkout.session.completed') {
     $reqId = (string) ($obj['client_reference_id'] ?? '');
@@ -33,8 +45,16 @@ if ($event['type'] === 'checkout.session.completed') {
             $r['payment']['state'] = 'canceled';
             $r['payment']['canceled_at'] = time();
             saas_request_save($r);
+            saas_event('subscription_canceled', ['ref' => $r['id'], 'slug' => $r['slug'] ?? '', 'email' => $r['email'], 'plan' => $r['plan'], 'actor' => 'stripe']);
         }
     }
+} elseif ($event['type'] === 'invoice.paid' && ($obj['billing_reason'] ?? '') === 'subscription_cycle') {
+    // Renouvellement mensuel (le premier paiement, lui, est déjà compté par checkout.session.completed).
+    if ($r = $requestOf($obj)) saas_event('payment_renewed', ['ref' => $r['id'], 'slug' => $r['slug'] ?? '', 'email' => $r['email'], 'plan' => $r['plan'], 'amount' => (int) ($obj['amount_paid'] ?? 0), 'actor' => 'stripe']);
+} elseif ($event['type'] === 'invoice.payment_failed') {
+    if ($r = $requestOf($obj)) saas_event('payment_failed', ['ref' => $r['id'], 'slug' => $r['slug'] ?? '', 'email' => $r['email'], 'plan' => $r['plan'], 'amount' => (int) ($obj['amount_due'] ?? 0), 'actor' => 'stripe']);
+} elseif ($event['type'] === 'charge.refunded') {
+    if ($r = $requestOf($obj)) saas_event('payment_refunded', ['ref' => $r['id'], 'slug' => $r['slug'] ?? '', 'email' => $r['email'], 'plan' => $r['plan'], 'amount' => (int) ($obj['amount_refunded'] ?? 0), 'actor' => 'stripe']);
 }
 http_response_code(200);
 echo 'ok';

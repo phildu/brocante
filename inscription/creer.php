@@ -14,7 +14,8 @@ $origin = saas_origin();
 $galleries = array_filter(gallery_list(), static fn (array $g): bool => $g['published']);
 $planName = '';
 $req = saas_request_by_link((string) ($_REQUEST['r'] ?? ''), (string) ($_REQUEST['k'] ?? ''));
-if ($req) $planName = array_column($cfg['plans'], 'name', 'key')[$req['plan']] ?? (string) $req['plan'];
+$offer = $req ? saas_req_offer($req) : null;
+if ($req) $planName = $offer['name'];
 
 $errors = [];
 $view = 'form';           // form | done | sent | invalid | waiting | closed
@@ -50,6 +51,7 @@ if (!$req) {
                     $generated = saas_generate_shop($req, $origin);
                     $req = array_merge($req, ['status' => 'approved', 'approved' => time(), 'shop_url' => $generated['shop_url'], 'login' => $generated['login'], 'gallery' => $generated['gallery'], 'error' => '']);
                     saas_request_save($req);
+                    saas_event('shop_created', ['slug' => $generated['slug'], 'ref' => $req['id'], 'email' => $req['email'], 'plan' => $req['plan'], 'actor' => 'client', 'note' => !empty($req['social']) ? 'via ' . $req['social']['provider'] : '']);
                     $manual = ($req['payment']['state'] ?? '') === 'manual';
                     if ($cfg['contact'] !== '') {
                         saas_mail($cfg['contact'], 'Nouvelle boutique créée : ' . $req['shop_name'],
@@ -63,6 +65,7 @@ if (!$req) {
                     // La demande est enregistrée mais la boutique n'a pas pu être créée (adresse prise entre-temps, droits d'écriture…).
                     $req['error'] = 'La boutique n\'a pas pu être créée : ' . $e->getMessage();
                     saas_request_save($req);
+                    saas_event('shop_failed', ['slug' => $req['slug'] ?? '', 'ref' => $req['id'], 'email' => $req['email'], 'plan' => $req['plan'], 'note' => $e->getMessage(), 'actor' => 'système']);
                     if ($status === 'paid' && $cfg['contact'] !== '') saas_mail($cfg['contact'], 'Paiement reçu, boutique à finaliser : ' . $req['shop_name'], $req['error'] . "\n\n$origin/portail/inscriptions.php\n");
                     $errors[str_contains($e->getMessage(), 'déjà prise') ? 'slug' : 'form'] = $status === 'paid'
                         ? 'Votre paiement est bien enregistré, mais la création a rencontré un problème (' . $e->getMessage() . '). Vous pouvez corriger l\'adresse puis réessayer ; sinon nous finalisons votre boutique et vous écrivons.'
@@ -125,6 +128,7 @@ saas_page_start('Ma boutique — ' . $cfg['name'], 'Dernière étape : le nom, l
     <form class="form-card" method="post" action="/inscription/creer.php" novalidate>
       <?php if (isset($errors['form'])): ?><div class="notice error" role="alert"><?= saas_e($errors['form']) ?></div><?php elseif ($errors): ?><div class="notice error" role="alert"><strong>La création n'a pas pu aboutir :</strong><ul style="margin:6px 0 0;padding-left:18px"><?php foreach ($errors as $m): ?><li><?= saas_e($m) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
       <?php if (($req['payment']['state'] ?? '') === 'manual'): ?><div class="notice" role="status">Le paiement en ligne n'est pas disponible pour le moment : votre boutique est créée tout de suite et nous vous écrivons pour régler votre formule <strong><?= saas_e($planName) ?></strong>.</div><?php endif; ?>
+      <?php if ($offer): ?><div class="notice" role="status">Votre offre : <strong><?= saas_e($offer['name']) ?></strong> — <?= saas_e(saas_price_text($offer['cents'], $offer['billing'])) ?><?= $offer['billing'] === 'year' ? ' (facturation annuelle)' : '' ?><?= $offer['max_items'] ? ' · jusqu\'à ' . (int) $offer['max_items'] . ' articles' : '' ?>.</div><?php endif; ?>
       <input type="hidden" name="csrf" value="<?= saas_e($_SESSION['saas_csrf']) ?>"><input type="hidden" name="r" value="<?= saas_e($req['id']) ?>"><input type="hidden" name="k" value="<?= saas_e($req['token']) ?>">
 
       <div class="form-grid">
@@ -165,11 +169,8 @@ saas_page_start('Ma boutique — ' . $cfg['name'], 'Dernière étape : le nom, l
         <label class="field<?= isset($errors['password2']) ? ' has-error' : '' ?>"><span>Confirmer le mot de passe</span><input type="password" name="password2"<?= $social ? '' : ' required' ?> minlength="8" autocomplete="new-password"><?= $err('password2') ?></label>
         <label class="field full"><span>Que vendez-vous ? (facultatif)</span><textarea name="about" maxlength="400" placeholder="Vêtements de seconde main, objets de brocante, livres anciens…"><?= saas_e($v['about']) ?></textarea></label>
 
-        <?php if ($galleries): ?>
-          <label class="field full"><span>Rejoindre une galerie commerciale (facultatif)</span>
-            <select name="gallery"><option value="">Pas pour le moment</option>
-              <?php foreach ($galleries as $g): ?><option value="<?= saas_e($g['slug']) ?>"<?= $v['gallery'] === $g['slug'] ? ' selected' : '' ?>><?= saas_e($g['name']) ?></option><?php endforeach; ?></select>
-            <small>Votre boutique y sera ajoutée dès sa création.</small></label>
+        <?php if (!empty($req['gallery']) && isset($galleries[$req['gallery']])): ?>
+          <p class="field full oauth-note" style="margin:0">Votre boutique rejoindra la galerie <strong><?= saas_e($galleries[$req['gallery']]['name']) ?></strong> dès sa création.</p>
         <?php endif; ?>
       </div>
       <p style="margin:22px 0 0"><button class="btn" type="submit">Créer ma boutique</button></p>

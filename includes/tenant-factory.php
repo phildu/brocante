@@ -124,6 +124,8 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
         'name' => $name,
         'tagline' => trim((string) ($f['tagline'] ?? '')),
         'site_url' => trim((string) ($f['url'] ?? '')) ?: "https://$slug.example.com",
+        // Limite d'articles de l'offre de la boutique (absente = sans limite) ; appliquée par l'administration (voir shop_item_limit()).
+        'item_limit' => max(0, (int) ($f['item_limit'] ?? 0)),
         'admin_user' => $adminUser,
         // Haché : le mot de passe n'est lisible nulle part. Pour le changer,
         // remplacer cette valeur par le nouveau mot de passe, en clair.

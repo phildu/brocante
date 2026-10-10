@@ -517,6 +517,58 @@ vérifié : ajouter une confirmation par lien serait la suite logique si des cr�
 - **Création de boutique partagée** : `includes/tenant-factory.php` (portail, `portail/nouveau.php`, `portail/inscriptions.php` et étape 3).
 - **Pas encore** : modèle modifiable après coup depuis l'administration de la boutique, changement de formule, facturation / portail client Stripe, application des limites par formule.
 
+## Activité de la plateforme (portail → Activité)
+
+`/portail/activite.php` suit tout ce qui se passe sur la plateforme (calculs dans `includes/saas-events.php`) :
+
+- **Chiffres clés** sur 7 j / 30 j / 90 j / 12 mois : boutiques en ligne et créées, entonnoir inscriptions → paiements → boutiques, encaissé par la
+  plateforme (paiements, renouvellements, remboursements), abonnements actifs et loyer mensuel estimé, résiliations et suppressions, ventes des boutiques.
+- **À traiter** : clients qui ont payé sans créer leur boutique, paiements à régler à part, créations en échec, abonnements résiliés dont la boutique est
+  toujours en ligne, paiements refusés récents.
+- **Courbes** (créations, encaissements, inscriptions par jour), **formules**, **santé du système** (Stripe, webhook, e-mail, disque, plafond gratuit).
+- **Boutiques** : formule, état du paiement, pièces en vente, commandes et chiffre d'affaires (30 j et total), dernière commande, boutiques inactives.
+- **Derniers paiements** et **journal** filtrable (inscriptions, paiements, boutiques, suppressions et résiliations, réglages, notes), avec recherche,
+  notes libres et exports CSV (journal, paiements, boutiques).
+
+Le journal est `data/saas/events.jsonl` (une ligne JSON par événement, ajout seul) : inscriptions, paiements Stripe, créations (par le client, par
+l'exploitant, à la main), suppressions (vers `data/corbeille/`), remises à zéro, changements d'accès, réglages du portail. Ce qui date d'avant le journal
+est **reconstitué** d'après les demandes et la corbeille (marqué « reconstitué »). Pour voir renouvellements, échecs de paiement et remboursements,
+déclarez en plus dans le webhook Stripe : `invoice.paid`, `invoice.payment_failed`, `charge.refunded`.
+
+## Personnaliser la page d'une galerie
+
+Portail → Galeries commerciales → *Gérer* → **Apparence de la page publique** (stockée avec la galerie, `style` dans `data/galeries/<identifiant>.json`). Un aperçu
+simplifié se met à jour pendant la saisie ; rien ne change en ligne avant « Enregistrer l'apparence » (« Rétablir l'apparence d'origine » remet tout à zéro).
+
+- **Palette** : couleur principale, fond, texte et couleur de l'en-tête (cases « personnaliser » : décochées, les teintes d'origine sont gardées), palettes toutes prêtes
+  (les mêmes que l'apparence des boutiques), mode sombre calculé ou désactivé (« toujours clair »).
+- **Bannière et logo** : image de bannière (assombrissement réglable, cadrage haut/centre/bas, hauteur compact/normal/grand, alignement gauche/centré) et logo (PNG
+  transparent conseillé), redimensionnés et enregistrés sous `uploads/galeries/` (JPEG, PNG ou WebP, 12 Mo max) ; l'image de bannière sert aussi d'image de partage.
+- **Polices** des titres et des textes (catalogue de l'apparence des boutiques).
+- **Cartes et grille** : angles (droits / doux / très arrondis), format des photos (4:5, 3:4, carré, 3:2), grille aérée ou serrée, pièces par page (12 à 96), tri par défaut.
+- **Textes et blocs** : chiffres sous le titre, appel « Créer ma boutique » (bouton, tuile, bandeau : on peut le couper ou changer son texte), titres de sections,
+  phrase d'introduction des commerces, texte de bas de page.
+
+## Tarifs : par défaut et par galerie, mensuel et annuel, formules ou tranches d'articles
+
+`/portail/tarifs.php` règle tous les prix (`includes/saas-pricing.php`, données dans `data/saas/tarifs.json`) :
+
+- **Une grille par défaut** (accueil, inscription sans galerie) et, pour **chaque galerie commerciale**, des **tarifs propres** (case à cocher : décochée, la galerie applique la grille par défaut ; « Partir d'une autre grille » copie une grille existante).
+- Chaque grille propose des **formules** (nom, prix **par mois**, prix **par an**, limite d'articles facultative, avantages, mise en avant) et/ou des
+  **tranches par nombre d'articles** (jusqu'à N articles, dernière tranche illimitée). Avec les deux, le client choisit d'un clic entre « Formules » et
+  « Selon le nombre d'articles ».
+- **Facturation annuelle** : à activer par grille. Un prix annuel laissé vide vaut 12 mois moins la **remise annuelle** de la grille (« 2 mois offerts » ou
+  « −17 % » est affiché) ; un prix annuel saisi prime. Prix à 0 = gratuit ; prix vide = sur devis (jamais payé en ligne). Stripe facture à l'année (`interval=year`).
+- **La galerie détermine le prix** : le client la choisit dès l'étape 1 de l'inscription (`/inscription/?galerie=<identifiant>`, bouton « Rejoindre cette
+  galerie » sur la page de la galerie). L'offre choisie est **figée** dans la demande (prix, facturation, limite, galerie) : modifier les tarifs ensuite ne change pas ce qui a été vendu.
+- **La limite d'articles est appliquée** : elle est enregistrée dans le `tenant.php` de la boutique (`item_limit`, 0 = sans limite) ; au-delà, l'administration refuse d'ajouter
+  un article (ajout manuel, studio photo, import par lot) et invite à changer de tranche. Les pièces vendues ne comptent plus. Le portail → Activité montre « 12 / 20 » et signale les boutiques pleines.
+- Le loyer mensuel estimé (portail → Activité) compte une offre annuelle pour 1/12 de son prix.
+
+Les pages publiques des galeries (`/galerie/` et `/galerie/<identifiant>/`) portent un appel « **Créer ma boutique** » : bouton dans l'en-tête (avec le prix de départ de la grille de la galerie), tuile « ＋ Votre boutique ici » parmi les commerces, bandeau « Vous êtes commerçant ? » en bas de page et bouton flottant sur smartphone ; tous mènent à `/inscription/?galerie=<identifiant>`.
+
+Les anciennes formules (`data/saas.json`) sont reprises telles quelles comme grille par défaut tant qu'aucun tarif n'est enregistré.
+
 ## Galeries commerciales
 
 Une **galerie** regroupe les pièces de plusieurs commerces (une rue, un village, un groupe d'amis…) sur une page publique commune,

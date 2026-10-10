@@ -15,6 +15,10 @@ function gal_ink_on(string $hex): string
     return (0.299 * $r + 0.587 * $g + 0.114 * $b) > 160 ? '#1c1a17' : '#ffffff';
 }
 
+// « Créer ma boutique » : seulement sur un déploiement qui porte l'inscription (portail). Les tarifs viennent de includes/saas-pricing.php.
+$canSignup = is_file(__DIR__ . '/../inscription/index.php');
+if ($canSignup) require_once __DIR__ . '/../includes/saas.php';
+
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $origin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 $slug = strtolower((string) ($_GET['g'] ?? ''));
@@ -40,6 +44,9 @@ if ($slug === '') {
     }
 }
 $ink = gal_ink_on($accent);
+// Habillage choisi dans le portail (palette, polices, bannière, logo, présentation) ; sans galerie (liste), l'habillage d'origine.
+$theme = $gallery ? gallery_theme($gallery) : null;
+$st = $gallery['style'] ?? gallery_style_normalize([]);
 
 // ── Filtres (galerie) ──
 $data = ['shops' => [], 'products' => [], 'skipped' => []];
@@ -48,7 +55,7 @@ $total = 0;
 $q = $shopFilter = $catFilter = $sort = '';
 $min = $max = null;
 $page = 1;
-$perPage = 24;
+$perPage = $st['per_page'];
 $universes = [];
 if ($gallery) {
     $data = gallery_catalogue($gallery, $origin);
@@ -57,7 +64,7 @@ if ($gallery) {
     $q = trim((string) ($_GET['q'] ?? ''));
     $shopFilter = (string) ($_GET['commerce'] ?? '');
     $catFilter = (string) ($_GET['cat'] ?? '');
-    $sort = in_array($_GET['tri'] ?? '', ['prix-asc', 'prix-desc', 'nom'], true) ? (string) $_GET['tri'] : 'recent';
+    $sort = in_array($_GET['tri'] ?? '', ['prix-asc', 'prix-desc', 'nom', 'recent'], true) ? (string) $_GET['tri'] : $st['default_sort'];
     $min = ($_GET['min'] ?? '') !== '' ? (float) str_replace(',', '.', (string) $_GET['min']) : null;
     $max = ($_GET['max'] ?? '') !== '' ? (float) str_replace(',', '.', (string) $_GET['max']) : null;
     $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -119,10 +126,12 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 <meta name="description" content="<?= e($metaDescription) ?>">
 <meta property="og:title" content="<?= e($pageTitle) ?>">
 <meta property="og:description" content="<?= e($metaDescription) ?>">
+<?php if ($gallery && !empty($st['banner'])): ?><meta property="og:image" content="<?= e($origin . '/' . $st['banner']) ?>"><?php endif; ?>
 <?php if (!empty($notFound) || ($gallery && !$gallery['published'])): ?><meta name="robots" content="noindex, nofollow"><?php endif; ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<?php if ($theme && $theme['fonts'] !== ''): ?><link href="<?= e($theme['fonts']) ?>" rel="stylesheet"><?php endif; ?>
 <style>
   :root {
     --accent: <?= e($accent) ?>; --accent-ink: <?= e($ink) ?>;
@@ -130,9 +139,9 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     --radius: 14px; --shadow: 0 1px 2px rgba(34,31,26,.06), 0 8px 24px -12px rgba(34,31,26,.18);
     --display: 'Fraunces', Georgia, serif; --body: 'Archivo', system-ui, sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
+  <?php if (!$theme || $theme['allow_dark']): ?>@media (prefers-color-scheme: dark) {
     :root { --bg: #17140f; --surface: #221e18; --surface-2: #2c2720; --ink: #f1ebe0; --ink-soft: #a89f90; --line: #3a342b; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -12px rgba(0,0,0,.6); }
-  }
+  }<?php endif; ?>
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.5; -webkit-font-smoothing: antialiased; }
   a { color: inherit; }
@@ -140,7 +149,13 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; background: var(--surface); padding: 8px 12px; z-index: 10; }
   :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
-  .hero { background: var(--accent); color: var(--accent-ink); padding: clamp(32px, 6vw, 72px) 0 clamp(28px, 5vw, 56px); position: relative; overflow: hidden; }
+  .hero { background: var(--hero-bg, var(--accent)); color: var(--hero-ink, var(--accent-ink)); padding: clamp(32px, 6vw, 72px) 0 clamp(28px, 5vw, 56px); position: relative; overflow: hidden; }
+  .hero > .wrap { position: relative; z-index: 2; }
+  .hero-media { position: absolute; inset: 0; background-size: cover; z-index: 0; } .hero-shade { position: absolute; inset: 0; z-index: 1; }
+  .hero.has-banner::after { display: none; }
+  .hero.h-compact { padding: clamp(20px, 3vw, 36px) 0 clamp(18px, 3vw, 30px); } .hero.h-tall { padding: clamp(64px, 12vw, 150px) 0 clamp(40px, 7vw, 90px); min-height: min(68vh, 560px); display: flex; align-items: flex-end; } .hero.h-tall > .wrap { width: min(1200px, 100% - 32px); }
+  .hero.a-center { text-align: center; } .hero.a-center h1, .hero.a-center .tagline, .hero.a-center .intro { margin-inline: auto; } .hero.a-center .stats, .hero.a-center .hero-cta { justify-content: center; }
+  .hero-logo { display: block; max-height: 68px; max-width: 220px; width: auto; margin: 0 0 16px; object-fit: contain; } .hero.a-center .hero-logo { margin-inline: auto; }
   .hero::after { content: ""; position: absolute; inset: auto -10% -60% auto; width: 520px; height: 520px; border-radius: 50%; background: currentColor; opacity: .07; }
   .hero .eyebrow { font-size: .78rem; letter-spacing: .14em; text-transform: uppercase; opacity: .8; margin: 0 0 10px; font-weight: 600; }
   .hero h1 { font-family: var(--display); font-weight: 600; font-size: clamp(2rem, 5.2vw, 3.6rem); line-height: 1.04; margin: 0; max-width: 18ch; text-wrap: balance; }
@@ -174,10 +189,10 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   .chip b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); font-size: .8rem; }
   .count { margin: 18px 0 12px; color: var(--ink-soft); }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 210px), 1fr)); gap: 18px; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; transition: transform .15s, box-shadow .15s; }
   .card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
-  .card .ph { position: relative; aspect-ratio: 4/5; background: var(--surface-2); display: block; }
+  .card .ph { position: relative; aspect-ratio: var(--ratio, 4 / 5); background: var(--surface-2); display: block; }
   .card .ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
   .card .ph .none { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-size: 2.6rem; color: var(--ink-soft); }
   .badge { position: absolute; top: 10px; left: 10px; background: var(--accent); color: var(--accent-ink); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; }
@@ -203,9 +218,29 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   .gcard .band { height: 10px; }
   .gcard div.in { padding: 18px; } .gcard h3 { margin: 0 0 6px; font-family: var(--display); font-size: 1.25rem; } .gcard p { margin: 0; color: var(--ink-soft); }
 
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin: 24px 0 0; }
+  .btn-cta { font: inherit; font-weight: 700; font-size: 1.02rem; border-radius: 12px; padding: 14px 24px; background: var(--hero-ink, var(--accent-ink)); color: var(--hero-bg, var(--accent)); text-decoration: none; display: inline-block; box-shadow: 0 8px 22px -10px rgba(0,0,0,.45); }
+  .btn-cta:hover { transform: translateY(-1px); box-shadow: 0 12px 26px -10px rgba(0,0,0,.5); }
+  .hero-cta .from { font-size: .92rem; opacity: .9; } .hero-cta .alt { color: inherit; font-weight: 600; opacity: .9; }
+  .cta-band { margin-top: 52px; padding: clamp(28px, 5vw, 48px) 0; background: var(--surface-2); border-block: 1px solid var(--line); }
+  .cta-band .in { display: grid; grid-template-columns: 1.3fr 1fr; gap: 28px; align-items: center; }
+  .cta-band h2 { font-size: clamp(1.4rem, 3vw, 2rem); margin: 0 0 8px; }
+  .cta-band ul { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; color: var(--ink-soft); } .cta-band li::before { content: "✓ "; color: var(--accent); font-weight: 700; }
+  .cta-band .act { display: grid; gap: 10px; justify-items: start; } .cta-band .btn-cta { background: var(--accent); color: var(--accent-ink); }
+  .cta-band .from { color: var(--ink-soft); font-size: .92rem; }
+  .shop.join { border-style: dashed; justify-content: center; color: var(--accent); font-weight: 700; text-align: center; }
+  .cta-band ~ footer { margin-top: 0; }
+  .cta-float { display: none; }
+  @media (max-width: 720px) {
+    .cta-band .in { grid-template-columns: 1fr; }
+    .cta-float { display: block; position: fixed; right: 14px; bottom: 14px; z-index: 20; background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 12px 18px; border-radius: 999px; text-decoration: none; box-shadow: 0 10px 26px -8px rgba(0,0,0,.5); }
+    body { padding-bottom: 70px; }
+  }
   @media (max-width: 980px) { form.filters { grid-template-columns: 1fr 1fr; } form.filters .wide { grid-column: 1 / -1; } }
   @media (max-width: 520px) { .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; } .card .body { padding: 10px; } form.filters { grid-template-columns: 1fr 1fr; } }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  <?= $theme ? $theme['css'] : '' ?>
+  <?php if ($theme): ?>body { font-family: var(--body); } h1, h2, .gcard h3, .avatar, .stats strong, .card .none { font-family: var(--display); }<?php endif; ?>
 </style>
 </head>
 <body>
@@ -216,6 +251,10 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <p class="eyebrow">Des commerçants réunis</p>
     <h1>Galeries commerciales</h1>
     <p class="tagline">Une rue, un village, un groupe d'amis : leurs boutiques réunies au même endroit.</p>
+    <?php if ($canSignup): ?>
+      <p class="hero-cta"><a class="btn-cta" href="/inscription/">Créer ma boutique</a>
+        <span class="from"><?= e(saas_grid_from_text(saas_grid(''))) ?> · sans engagement</span><a class="alt" href="/#formules">Voir les tarifs</a></p>
+    <?php endif; ?>
   </div></header>
   <main id="contenu" class="wrap">
     <section>
@@ -240,16 +279,23 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   </section></main>
 
 <?php else: ?>
-  <header class="hero"><div class="wrap">
+  <header class="hero<?= $st['banner'] !== '' ? ' has-banner' : '' ?> h-<?= e($st['hero_height']) ?> a-<?= e($st['hero_align']) ?>">
+    <?php if ($st['banner'] !== ''): ?><div class="hero-media" style="background-image:url('/<?= e($st['banner']) ?>');background-position:center <?= e($st['banner_pos']) ?>"></div><div class="hero-shade" style="background:rgba(0,0,0,<?= round($st['banner_overlay'] / 100, 2) ?>)"></div><?php endif; ?>
+    <div class="wrap">
+    <?php if ($st['logo'] !== ''): ?><img class="hero-logo" src="/<?= e($st['logo']) ?>" alt="<?= e($gallery['name']) ?>"><?php endif; ?>
     <p class="eyebrow">Galerie commerciale<?= $gallery['published'] ? '' : ' · aperçu non publié' ?></p>
     <h1><?= e($gallery['name']) ?></h1>
     <?php if ($gallery['tagline'] !== ''): ?><p class="tagline"><?= e($gallery['tagline']) ?></p><?php endif; ?>
     <?php if ($gallery['description'] !== ''): ?><p class="intro"><?= nl2br(e($gallery['description'])) ?></p><?php endif; ?>
-    <ul class="stats">
+    <?php if ($st['show_stats']): ?><ul class="stats">
       <li><strong><?= count($shops) ?></strong>commerce<?= count($shops) > 1 ? 's' : '' ?></li>
       <li><strong><?= count($data['products']) ?></strong>pièce<?= count($data['products']) > 1 ? 's' : '' ?> en ligne</li>
       <li><strong><?= count($universes) ?></strong>univers</li>
-    </ul>
+    </ul><?php endif; ?>
+    <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
+      <p class="hero-cta"><a class="btn-cta" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><?= e($st['cta_label'] !== '' ? $st['cta_label'] : 'Créer ma boutique dans cette galerie') ?></a>
+        <span class="from"><?= e(saas_grid_from_text(saas_grid($gallery['slug']))) ?> · sans engagement</span><a class="alt" href="#cta-boutique">En savoir plus</a></p>
+    <?php endif; ?>
   </div></header>
 
   <main id="contenu" class="wrap">
@@ -259,8 +305,8 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 
     <?php if ($shops): ?>
     <section aria-labelledby="h-commerces">
-      <h2 id="h-commerces">Les commerces</h2>
-      <p class="lede">Chaque commerce a sa boutique, son panier et son paiement : une pièce se règle chez son commerçant.</p>
+      <h2 id="h-commerces"><?= e($st['shops_title'] !== '' ? $st['shops_title'] : 'Les commerces') ?></h2>
+      <p class="lede"><?= e($st['shops_lede'] !== '' ? $st['shops_lede'] : 'Chaque commerce a sa boutique, son panier et son paiement : une pièce se règle chez son commerçant.') ?></p>
       <div class="shops">
         <?php foreach ($shops as $key => $s): $initial = mb_strtoupper(mb_substr(preg_replace('/^[^\p{L}\p{N}]+/u', '', $s['name']), 0, 1)); ?>
           <a class="shop<?= $shopFilter === $key ? ' is-on' : '' ?>" href="<?= e(gal_url(['commerce' => $shopFilter === $key ? null : $key])) ?>#pieces" title="Voir ses pièces">
@@ -274,11 +320,14 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
             </span>
           </a>
         <?php endforeach; ?>
+        <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
+          <a class="shop join" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><span>＋ Votre boutique ici<br><small style="font-weight:400;color:var(--ink-soft)">Rejoindre <?= e($gallery['name']) ?></small></span></a>
+        <?php endif; ?>
       </div>
     </section>
 
     <section id="pieces" aria-labelledby="h-pieces">
-      <h2 id="h-pieces">Toutes les pièces</h2>
+      <h2 id="h-pieces"><?= e($st['pieces_title'] !== '' ? $st['pieces_title'] : 'Toutes les pièces') ?></h2>
       <form class="filters" method="get" action="<?= e(strtok($_SERVER['REQUEST_URI'] ?? '/', '?')) ?>">
         <?php if (isset($_GET['apercu'])): ?><input type="hidden" name="apercu" value="<?= e($_GET['apercu']) ?>"><?php endif; ?>
         <label class="wide">Recherche<input type="search" name="q" value="<?= e($q) ?>" placeholder="Un objet, une matière, un commerce…"></label>
@@ -340,8 +389,24 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   </main>
 <?php endif; ?>
 
+<?php if ($canSignup && ($slug === '' || ($gallery && $gallery['published'] && $st['show_cta']))):
+    $ctaUrl = '/inscription/' . ($slug !== '' ? '?galerie=' . rawurlencode($slug) : ''); ?>
+<section class="cta-band" id="cta-boutique"><div class="wrap in">
+  <div>
+    <h2><?= $slug !== '' ? 'Vous êtes commerçant ? Rejoignez ' . e($gallery['name']) : 'Vous êtes commerçant ? Créez votre boutique' ?></h2>
+    <p class="lede" style="margin:0">Votre boutique en ligne, prête en quelques minutes, avec son panier et son paiement<?= $slug !== '' ? ' — et vos pièces visibles ici, avec celles des autres commerces' : ', seule ou réunie avec d\'autres commerçants dans une galerie' ?>.</p>
+    <ul><li>Vous choisissez votre formule, vous créez votre compte : aucune validation à attendre</li>
+      <li>Vous arrivez directement sur votre boutique, à votre image (modèle au choix)</li>
+      <li>Photos depuis le téléphone, fiches préparées par l'IA</li></ul>
+  </div>
+  <div class="act"><a class="btn-cta" href="<?= e($ctaUrl) ?>">Créer ma boutique</a>
+    <span class="from"><?= e(saas_grid_from_text(saas_grid($slug))) ?> · mensuel ou annuel · sans engagement</span></div>
+</div></section>
+<a class="cta-float" href="<?= e($ctaUrl) ?>">Créer ma boutique</a>
+<?php endif; ?>
+
 <footer><div class="wrap">
-  <?php if ($slug !== ''): ?><a href="/galerie/">← Toutes les galeries</a> · <?php endif; ?>Les pièces sont vendues et expédiées par les commerces eux-mêmes.
+  <?php if ($slug !== ''): ?><a href="/galerie/">← Toutes les galeries</a> · <?php endif; ?><?= e($st['footer_text'] !== '' && $slug !== '' ? $st['footer_text'] : 'Les pièces sont vendues et expédiées par les commerces eux-mêmes.') ?>
 </div></footer>
 </body>
 </html>

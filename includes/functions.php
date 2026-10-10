@@ -257,6 +257,31 @@ function render_page_banner(string $pageKey): void
     echo '</div>';
 }
 
+/** Limite d'articles de l'offre de la boutique (tenants/<slug>/tenant.php → item_limit) ; 0 = sans limite. */
+function shop_item_limit(): int
+{
+    return max(0, (int) tenant('item_limit', 0));
+}
+
+/** Articles du catalogue (en vente ou masqués ; les pièces vendues ne comptent plus). */
+function shop_item_count(): int
+{
+    return (int) db()->query('SELECT COUNT(*) FROM products WHERE stock > 0')->fetchColumn();
+}
+
+/** La boutique peut-elle encore ajouter $n article(s) sans dépasser la limite de son offre ? */
+function shop_can_add_items(int $n = 1): bool
+{
+    $limit = shop_item_limit();
+    return $limit === 0 || shop_item_count() + $n <= $limit;
+}
+
+function shop_limit_message(): string
+{
+    return 'Votre offre permet ' . shop_item_limit() . ' articles et votre catalogue en compte ' . shop_item_count()
+        . ' : pour en ajouter, passez à une tranche supérieure (écrivez-nous) ou retirez des articles.';
+}
+
 function next_ref(): string
 {
     $max = (int) db()->query('SELECT MAX(CAST(ref AS INTEGER)) FROM products')->fetchColumn();

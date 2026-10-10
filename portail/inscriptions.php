@@ -27,11 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'resend' && $req['status'] === 'paid') {
         $ok = saas_mail($req['email'], 'Créez votre boutique — ' . $cfg['name'],
             "Bonjour,\n\nVotre paiement est bien reçu. Il ne reste qu'à créer votre boutique (nom, design, mot de passe) :\n\n" . saas_creation_url($req, $origin) . "\n\n" . $cfg['name'] . "\n");
+        saas_event('link_resent', ['ref' => $req['id'], 'email' => $req['email'], 'plan' => $req['plan'], 'note' => $ok ? '' : 'e-mail non parti']);
         portail_flash($ok ? 'Lien renvoyé à ' . $req['email'] . '.' : "L'e-mail n'a pas pu partir : copiez le lien de création et transmettez-le vous-même.", $ok ? 'ok' : 'error');
     } elseif ($action === 'approve' && in_array($req['status'], ['pending', 'paid'], true) && $req['shop_name'] !== '' && !empty($req['password_hash'])) {
         try {
             $gen = saas_generate_shop($req, $origin, (string) ($_POST['gallery'] ?? ''));
             saas_request_save(array_merge($req, ['status' => 'approved', 'approved' => time(), 'shop_url' => $gen['shop_url'], 'gallery' => $gen['gallery'], 'login' => $gen['login'], 'error' => '']));
+            saas_event('shop_created_approved', ['slug' => $gen['slug'], 'ref' => $req['id'], 'email' => $req['email'], 'plan' => $req['plan']]);
             portail_flash('Boutique « ' . $req['shop_name'] . ' » créée' . ($gen['gallery_name'] !== '' ? " et ajoutée à la galerie « {$gen['gallery_name']} »" : '') . ". Identifiant du commerçant : {$gen['login']}."
                 . ($gen['mailed'] ? ' Un e-mail lui a été envoyé.' : " L'e-mail n'a pas pu partir : transmettez-lui les liens vous-même."));
         } catch (Throwable $e) {
@@ -43,8 +45,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saas_mail($req['email'], 'Votre demande — ' . $cfg['name'],
             "Bonjour {$req['first_name']},\n\nNous ne pouvons pas donner suite à votre demande de boutique « {$req['shop_name']} » pour le moment."
             . ($reason !== '' ? "\n\n$reason" : '') . "\n\nN'hésitez pas à nous répondre pour en parler.\n" . $cfg['name'] . "\n");
+        saas_event('request_rejected', ['ref' => $req['id'], 'email' => $req['email'], 'plan' => $req['plan'], 'note' => $reason]);
         portail_flash('Demande refusée. Le commerçant a été prévenu par e-mail.');
     } elseif ($action === 'forget' && in_array($req['status'], ['rejected', 'approved'], true)) {
+        saas_event('request_forgotten', ['ref' => $req['id'], 'email' => $req['email'], 'slug' => $req['slug'] ?? '', 'plan' => $req['plan']]);
         @unlink(saas_requests_dir() . '/' . $req['id'] . '.json');
         portail_flash('Demande retirée de la liste (la boutique créée, elle, reste en place).');
     }
@@ -94,7 +98,7 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
 
     <?php foreach ($pending as $r): ?>
       <section class="icard">
-        <h2><?= e($r['shop_name']) ?> <span class="pill sent"><?= e($planNames[$r['plan']] ?? $r['plan']) ?></span>
+        <h2><?= e($r['shop_name']) ?> <span class="pill sent"><?= e(saas_offer_badge($r)) ?></span>
           <?php if (($r['payment']['state'] ?? '') === 'paid'): ?><span class="pill done">Payée</span><?php endif; ?> <small class="meta">reçue le <?= e($dt((int) $r['created'])) ?></small></h2>
         <?php if (!empty($r['error'])): ?><p class="flash" data-kind="error" style="margin:0"><?= e($r['error']) ?></p><?php endif; ?>
         <dl class="d">
@@ -126,7 +130,7 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
       <p class="meta">Le client a payé et doit créer sa boutique avec le lien reçu par e-mail. Vous pouvez lui renvoyer ce lien ; si son formulaire est rempli mais la création a échoué, vous pouvez la lancer ici.</p>
       <?php foreach ($paidOpen as $r): $filled = $r['shop_name'] !== '' && !empty($r['password_hash']); ?>
         <section class="icard">
-          <div><strong><?= e($r['shop_name'] !== '' ? $r['shop_name'] : '(nom pas encore choisi)') ?></strong> <span class="pill sent"><?= e($planNames[$r['plan']] ?? $r['plan']) ?></span> <span class="pill done">Payée</span>
+          <div><strong><?= e($r['shop_name'] !== '' ? $r['shop_name'] : '(nom pas encore choisi)') ?></strong> <span class="pill sent"><?= e(saas_offer_badge($r)) ?></span> <span class="pill done">Payée</span>
             <small class="meta"><?= e($r['email']) ?> · payée le <?= e($dt((int) ($r['payment']['paid_at'] ?? $r['created']))) ?></small></div>
           <?php if (!empty($r['error'])): ?><p class="flash" data-kind="error" style="margin:0"><?= e($r['error']) ?></p><?php endif; ?>
           <div class="row">
@@ -141,7 +145,7 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
       <h2 style="margin:18px 0 0"><?= count($awaiting) ?> en attente de paiement</h2>
       <p class="meta">Le client est sur la page de paiement Stripe (ou l'a quittée). Dès que le paiement est confirmé, il reçoit le lien pour créer sa boutique ; sans paiement, la demande se libère au bout de 24 h.</p>
       <?php foreach ($awaiting as $r): ?>
-        <div class="icard" style="padding:12px 16px"><div><strong><?= e($r['shop_name']) ?></strong> <span class="pill sent"><?= e($planNames[$r['plan']] ?? $r['plan']) ?></span>
+        <div class="icard" style="padding:12px 16px"><div><strong><?= e($r['shop_name']) ?></strong> <span class="pill sent"><?= e(saas_offer_badge($r)) ?></span>
           <small class="meta"><?= e($r['email']) ?> · demande du <?= e($dt((int) $r['created'])) ?><?= saas_request_active($r) ? '' : ' · expirée' ?></small></div></div>
       <?php endforeach; ?>
     <?php endif; ?>
@@ -155,7 +159,7 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
               <span class="pill <?= $r['status'] === 'approved' ? 'done' : 'sent' ?>"><?= $r['status'] === 'approved' ? 'Boutique créée' : 'Refusée' ?></span>
               <?php if (($r['payment']['state'] ?? '') === 'paid'): ?><span class="pill done">Payée</span><?php endif; ?>
               <?php if (($r['payment']['state'] ?? '') === 'canceled'): ?><span class="pill sent">Abonnement résilié</span><?php endif; ?>
-              <small class="meta"><?= e($r['email']) ?> · <?= e($planNames[$r['plan']] ?? $r['plan']) ?> · <?= e($dt((int) ($r['approved'] ?? $r['rejected'] ?? $r['created']))) ?></small>
+              <small class="meta"><?= e($r['email']) ?> · <?= e(saas_offer_badge($r)) ?> · <?= e($dt((int) ($r['approved'] ?? $r['rejected'] ?? $r['created']))) ?></small>
               <?php if ($r['status'] === 'approved' && !empty($r['shop_url'])): ?> · <a href="<?= e($r['shop_url']) ?>" target="_blank" rel="noopener">ouvrir la boutique</a><?php endif; ?>
               <?php if ($r['status'] === 'rejected' && !empty($r['reason'])): ?><br><small class="meta">Motif : <?= e($r['reason']) ?></small><?php endif; ?></span>
             <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="id" value="<?= e($r['id']) ?>"><input type="hidden" name="action" value="forget"><button class="btn small" type="submit">Retirer de la liste</button></form>

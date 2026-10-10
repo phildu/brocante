@@ -60,6 +60,7 @@ switch ($action) {
         if (!$files || !is_array($files['tmp_name']) || !array_filter($files['tmp_name'])) {
             quick_add_reply(['ok' => false, 'error' => 'Aucune photo reçue.'], 400);
         }
+        if (!shop_can_add_items()) quick_add_reply(['ok' => false, 'error' => shop_limit_message()], 403);
         $labels = (array) ($_POST['labels'] ?? []);
         $main = (int) ($_POST['main'] ?? 0);
         if (count(array_filter($files['tmp_name'])) > STUDIO_MAX_PHOTOS) {

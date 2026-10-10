@@ -353,6 +353,7 @@ switch ($action) {
         if (!$batch || !isset($batch['groups'][$groupIndex])) { flash_set('Groupe introuvable.', 'error'); break; }
         $group = $batch['groups'][$groupIndex];
         if ($group['status'] !== 'pending') break;
+        if (!shop_can_add_items()) { flash_set(shop_limit_message(), 'error'); break; }
 
         $usageStart = gmdate('Y-m-d H:i:s');
         $chosenPhoto = $group['photos'][$group['chosen_index']] ?? $group['photos'][0];

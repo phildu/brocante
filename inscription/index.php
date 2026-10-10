@@ -10,9 +10,14 @@ session_start();
 if (empty($_SESSION['saas_csrf'])) $_SESSION['saas_csrf'] = bin2hex(random_bytes(16));
 
 $cfg = saas_config();
-$plans = $cfg['plans'];
-$plansByKey = array_column($plans, null, 'key');
 $origin = saas_origin();
+// La galerie choisie détermine la grille de tarifs (formules et tranches, mensuel et annuel) ; sans galerie, la grille par défaut.
+$galleries = saas_signup_galleries();
+$gallery = strtolower(trim((string) ($_POST['galerie'] ?? $_GET['galerie'] ?? '')));
+if (!isset($galleries[$gallery])) $gallery = '';
+$grid = saas_grid($gallery);
+$offers = saas_grid_offers($grid);
+$offersByKey = array_column($offers, null, 'key');
 $stripeOn = saas_stripe_configured();
 $errors = [];
 if (!empty($_SESSION['inscription_flash'])) {   // message laissé par la connexion sociale (oauth/finish.php)
@@ -20,7 +25,10 @@ if (!empty($_SESSION['inscription_flash'])) {   // message laissé par la connex
     unset($_SESSION['inscription_flash']);
 }
 $resumable = null;
-$v = ['email' => '', 'plan' => (string) ($_GET['formule'] ?? ($plans[1]['key'] ?? $plans[0]['key']))];
+$featured = array_values(array_filter($offers, static fn ($o) => $o['featured']))[0] ?? ($offers[1] ?? $offers[0] ?? null);
+$v = ['email' => trim((string) ($_GET['email'] ?? '')), 'plan' => (string) ($_GET['formule'] ?? ($featured['key'] ?? '')),
+    'billing' => ($_GET['facturation'] ?? '') === 'year' && $grid['yearly'] ? 'year' : 'month'];
+if (!isset($offersByKey[$v['plan']]) && $featured) $v['plan'] = $featured['key'];
 
 // Retour d'un paiement annulé : la demande reste réservée 24 h et peut être reprise.
 if (isset($_GET['annule']) && ($r = saas_request_load((string) $_GET['annule'])) && ($r['status'] ?? '') === 'awaiting_payment' && saas_request_active($r)) {
@@ -30,13 +38,14 @@ if (isset($_GET['annule']) && ($r = saas_request_load((string) $_GET['annule']))
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $v['email'] = trim((string) ($_POST['email'] ?? ''));
     $v['plan'] = trim((string) ($_POST['plan'] ?? $v['plan']));
+    $v['billing'] = ($_POST['facturation'] ?? '') === 'year' && $grid['yearly'] ? 'year' : 'month';
     if (!hash_equals((string) $_SESSION['saas_csrf'], (string) ($_POST['csrf'] ?? ''))) {
         $errors['form'] = 'Le formulaire a expiré : rechargez la page et recommencez.';
     } elseif (isset($_POST['resume'])) {
         // Reprendre le paiement d'une demande annulée.
         $r = saas_request_load((string) $_POST['resume']);
-        if ($r && ($r['status'] ?? '') === 'awaiting_payment' && saas_request_active($r) && isset($plansByKey[$r['plan']]) && saas_plan_payable($plansByKey[$r['plan']])) {
-            header('Location: ' . saas_payment_url($r, $plansByKey[$r['plan']], $origin), true, 303);
+        if ($r && ($r['status'] ?? '') === 'awaiting_payment' && saas_request_active($r) && saas_req_payable($r)) {
+            header('Location: ' . saas_payment_url($r, $origin), true, 303);
             exit;
         }
         $errors['form'] = 'Cette demande ne peut plus être reprise : refaites-la ci-dessous.';
@@ -46,10 +55,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     } elseif (saas_rate_limited()) {
         $errors['form'] = 'Trop de demandes depuis votre connexion : réessayez dans une heure.';
-    } elseif ((saas_plan_cents($plansByKey[$v['plan']] ?? []) ?? 0) === 0 && saas_free_cap_reached()) {
+    } elseif (isset($offersByKey[$v['plan']]) && (saas_offer_cents($offersByKey[$v['plan']], $v['billing']) ?? 1) === 0 && saas_free_cap_reached()) {
         $errors['form'] = "Les créations de boutiques gratuites sont complètes pour aujourd'hui : revenez demain, ou choisissez une formule payante.";
     } else {
-        $res = saas_request_start($_POST);
+        $res = saas_request_start($_POST + ['galerie' => $gallery]);
         if ($res['ok']) {
             $req = $res['request'];
             $_SESSION['saas_csrf'] = bin2hex(random_bytes(16));
@@ -85,14 +94,18 @@ saas_page_start('Créer ma boutique — ' . $cfg['name'], 'Choisissez votre form
       <div class="hp" aria-hidden="true"><label>Ne pas remplir<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
 
       <div class="form-grid">
-        <fieldset class="field full<?= isset($errors['plan']) ? ' has-error' : '' ?>" style="border:0;padding:0;margin:0"><span style="font-size:.82rem;font-weight:600">Votre formule</span>
-          <div class="plan-pick tall">
-            <?php foreach ($plans as $p): ?>
-              <label><input type="radio" name="plan" value="<?= saas_e($p['key']) ?>"<?= $v['plan'] === $p['key'] ? ' checked' : '' ?>>
-                <strong><?= saas_e($p['name']) ?> — <?= saas_e($p['price']) ?> <?= saas_e($p['period']) ?></strong>
-                <?php foreach (array_slice($p['features'], 0, 3) as $f): ?><span>✓ <?= saas_e($f) ?></span><?php endforeach; ?></label>
-            <?php endforeach; ?>
-          </div><?= $err('plan') ?><?php if ($stripeOn): ?><small>Formule payante : paiement par carte (Stripe), abonnement mensuel résiliable. Formule gratuite : aucun paiement.</small><?php endif; ?></fieldset>
+        <?php if ($galleries): ?>
+          <div class="field full"><label for="galerie-pick" style="font-size:.82rem;font-weight:600">Galerie commerciale <small>(les tarifs peuvent y être différents)</small></label>
+            <select id="galerie-pick" onchange="location.href='/inscription/?galerie='+encodeURIComponent(this.value)+(this.form.email.value?'&email='+encodeURIComponent(this.form.email.value):'')">
+              <option value="">Aucune : ma boutique seule</option>
+              <?php foreach ($galleries as $slug => $name): ?><option value="<?= saas_e($slug) ?>"<?= $slug === $gallery ? ' selected' : '' ?>><?= saas_e($name) ?></option><?php endforeach; ?>
+            </select>
+            <?php if ($gallery !== ''): ?><small><?= $grid['own'] ? 'Tarifs propres à cette galerie.' : 'Cette galerie applique les tarifs habituels.' ?></small><?php endif; ?></div>
+        <?php endif; ?>
+        <input type="hidden" name="galerie" value="<?= saas_e($gallery) ?>">
+        <fieldset class="field full<?= isset($errors['plan']) ? ' has-error' : '' ?>" style="border:0;padding:0;margin:0"><span style="font-size:.82rem;font-weight:600">Votre offre</span>
+          <?= saas_offer_picker_html($grid, $v['plan'], $v['billing']) ?>
+          <?= $err('plan') ?><?php if ($stripeOn): ?><small>Offre payante : paiement par carte (Stripe), abonnement résiliable. Offre gratuite : aucun paiement.</small><?php endif; ?></fieldset>
 
         <label class="field full<?= isset($errors['email']) ? ' has-error' : '' ?>"><span>Votre e-mail (ce sera votre identifiant d'administration)</span>
           <input type="email" name="email" value="<?= saas_e($v['email']) ?>" required maxlength="60" autocomplete="email"><?= $err('email') ?></label>

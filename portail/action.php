@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/_bootstrap.php';
+require_once PORTAIL_ROOT . '/includes/saas.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /portail/');
@@ -30,12 +31,14 @@ switch ($_POST['action'] ?? '') {
             break;
         }
         $count = seed_tenant($shops[$slug]);
+        saas_event('shop_reset', ['slug' => $slug, 'note' => $count . ' produits de démonstration']);
         portail_flash('« ' . $shops[$slug]['name'] . " » remis à zéro : $count produits.");
         break;
 
     case 'acces':
         try {
             $user = set_tenant_admin_access($slug, (string) ($_POST['admin_user'] ?? ''), (string) ($_POST['admin_password'] ?? ''));
+            saas_event('access_changed', ['slug' => $slug, 'note' => 'identifiant « ' . $user . ' »']);
             portail_flash('Accès admin de « ' . $shops[$slug]['name'] . " » changé : identifiant « $user » et le nouveau mot de passe.");
         } catch (InvalidArgumentException $ex) {
             portail_flash($ex->getMessage(), 'error');
@@ -57,6 +60,7 @@ switch ($_POST['action'] ?? '') {
         }
         try {
             $trash = delete_tenant($slug);
+            saas_event('shop_deleted', ['slug' => $slug, 'trash' => $trash, 'note' => (string) ($shops[$slug]['name'] ?? '')]);
             portail_flash('« ' . $shops[$slug]['name'] . " » supprimé de ce serveur. Ses fichiers sont conservés dans $trash (déplacés, pas effacés).");
             header('Location: /portail/');
             exit;

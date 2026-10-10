@@ -50,17 +50,10 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Créez votre boutique
 <section class="block" id="formules"><div class="wrap">
   <div class="sec-head"><p class="eyebrow">Nos formules</p><h2>Choisissez celle qui vous ressemble</h2>
     <p class="lede">Une boutique seule, ou réunie avec d'autres dans une galerie commerciale : à vous de voir.</p></div>
-  <div class="plans">
-    <?php foreach ($cfg['plans'] as $p): ?>
-      <article class="plan<?= $p['featured'] ? ' is-featured' : '' ?>">
-        <?php if ($p['featured']): ?><span class="tag">La plus choisie</span><?php endif; ?>
-        <h3><?= saas_e($p['name']) ?></h3>
-        <p class="price"><?= saas_e($p['price']) ?> <small><?= saas_e($p['period']) ?></small></p>
-        <ul><?php foreach ($p['features'] as $f): ?><li><?= saas_e($f) ?></li><?php endforeach; ?></ul>
-        <a class="btn<?= $p['featured'] ? '' : ' ghost' ?>" href="/inscription/?formule=<?= saas_e($p['key']) ?>">Choisir <?= saas_e($p['name']) ?></a>
-      </article>
-    <?php endforeach; ?>
-  </div>
+  <?= saas_pricing_html(saas_grid(''), 'home', static fn (array $o, string $billing): string => '/inscription/?formule=' . rawurlencode($o['key']) . ($billing === 'year' ? '&facturation=year' : '')) ?>
+  <?php $ownPricing = array_filter($galleries, static fn ($g) => isset(saas_pricing()['galleries'][$g['slug']])); if ($ownPricing): ?>
+    <p class="lede" style="margin-top:18px">Certaines galeries commerciales ont leurs propres tarifs : <?= implode(', ', array_map(static fn ($g) => '<a href="/inscription/?galerie=' . saas_e($g['slug']) . '">' . saas_e($g['name']) . '</a> (' . saas_e(saas_grid_from_text(saas_grid($g['slug']))) . ')', $ownPricing)) ?>.</p>
+  <?php endif; ?>
 </div></section>
 
 <?php if ($galleries): ?>

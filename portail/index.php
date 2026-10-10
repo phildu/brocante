@@ -40,6 +40,8 @@ $shopLabel = static fn (string $slug): string => portail_shop_label($slug, $shop
       <a class="btn btn-primary" href="/portail/nouveau.php">Nouveau commerce</a>
       <?php require_once PORTAIL_ROOT . '/includes/saas.php'; $pendingRequests = count(array_filter(saas_requests(), static fn ($r) => $r['status'] === 'pending')); ?>
       <a class="btn<?= $pendingRequests ? ' btn-primary' : '' ?>" href="/portail/inscriptions.php">Inscriptions<?= $pendingRequests ? ' (' . $pendingRequests . ')' : '' ?></a>
+      <a class="btn" href="/portail/activite.php">Activité</a>
+      <a class="btn" href="/portail/tarifs.php">Tarifs</a>
       <a class="btn" href="/portail/offres.php">Offres et annuaire</a>
       <a class="btn" href="/portail/galeries.php">Galeries commerciales</a>
       <a class="btn" href="/portail/social.php">Connexion sociale</a>

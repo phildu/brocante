@@ -6,7 +6,6 @@ require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas.php';
 
 $shops = tenant_list();
-const PLAN_ROWS = 4;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -14,23 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $cfg = saas_config();
 
     if ($action === 'save') {
-        $plans = [];
-        $featured = (int) ($_POST['featured'] ?? -1);
-        for ($i = 0; $i < PLAN_ROWS; $i++) {
-            $name = trim((string) ($_POST['plan_name'][$i] ?? ''));
-            if ($name === '') continue;
-            $plans[] = [
-                'key' => saas_slug($name), 'name' => $name, 'price' => trim((string) ($_POST['plan_price'][$i] ?? '')),
-                'period' => trim((string) ($_POST['plan_period'][$i] ?? '')), 'featured' => $featured === $i,
-                'features' => preg_split('/\R/', trim((string) ($_POST['plan_features'][$i] ?? '')), -1, PREG_SPLIT_NO_EMPTY),
-            ];
-        }
-        if (!$plans) { portail_flash('Gardez au moins une formule.', 'error'); header('Location: /portail/offres.php'); exit; }
         $visible = (array) ($_POST['listed'] ?? []);
         $cfg = array_merge($cfg, [
             'name' => trim((string) ($_POST['name'] ?? '')), 'tagline' => trim((string) ($_POST['tagline'] ?? '')),
             'contact' => trim((string) ($_POST['contact'] ?? '')), 'accent' => (string) ($_POST['accent'] ?? ''),
-            'plans' => $plans,
             'free_daily_cap' => max(0, min(1000, (int) ($_POST['free_daily_cap'] ?? 10))),
             'hidden' => array_values(array_diff(array_keys($shops), $visible)),
         ]);
@@ -74,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         @unlink(saas_data_dir() . '/saas/cache.json');
         portail_flash('Annuaire actualisé : il relit les commerces à la prochaine visite.');
     }
+    saas_audit_flash('Offres et annuaire');
     header('Location: /portail/offres.php');
     exit;
 }
@@ -81,8 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $flash = portail_flash();
 $cfg = saas_config();
 $origin = saas_origin();
-$plans = $cfg['plans'];
-while (count($plans) < PLAN_ROWS) $plans[] = ['name' => '', 'price' => '', 'period' => '/mois', 'featured' => false, 'features' => []];
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -127,19 +112,8 @@ while (count($plans) < PLAN_ROWS) $plans[] = ['name' => '', 'price' => '', 'peri
       <label class="f" style="max-width:360px">Plafond de boutiques gratuites par 24 h (0 = aucun plafond)<input type="text" name="free_daily_cap" inputmode="numeric" pattern="[0-9]{1,4}" value="<?= (int) $cfg['free_daily_cap'] ?>"></label>
       <p class="meta" style="margin:-4px 0 0">Les boutiques se créent sans validation de votre part : ce plafond limite les créations gratuites en masse (par défaut 10 par jour). Les formules payantes ne sont pas concernées.</p>
 
-      <h2 style="margin-top:8px">Formules</h2>
-      <p class="meta">Une ligne vide retire la formule. Un avantage par ligne. ⚠ Les limites (« jusqu'à 20 pièces ») sont du texte affiché : la plateforme ne les applique pas encore.</p>
-      <?php foreach ($plans as $i => $p): ?>
-        <div class="plan-edit">
-          <div class="row">
-            <label class="f">Nom de la formule<input type="text" name="plan_name[<?= $i ?>]" maxlength="40" value="<?= e($p['name']) ?>"></label>
-            <label class="f">Prix<input type="text" name="plan_price[<?= $i ?>]" maxlength="20" value="<?= e($p['price']) ?>" placeholder="19,90 €"></label>
-            <label class="f">Période<input type="text" name="plan_period[<?= $i ?>]" maxlength="20" value="<?= e($p['period']) ?>"></label>
-            <label class="meta" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="radio" name="featured" value="<?= $i ?>"<?= !empty($p['featured']) ? ' checked' : '' ?>> La plus choisie</label>
-          </div>
-          <label class="f">Avantages (un par ligne)<textarea name="plan_features[<?= $i ?>]"><?= e(implode("\n", $p['features'])) ?></textarea></label>
-        </div>
-      <?php endforeach; ?>
+      <h2 style="margin-top:8px">Tarifs</h2>
+      <p class="meta">Les formules, les prix mensuels et annuels, les tranches par nombre d'articles et les tarifs propres à chaque galerie se règlent dans <a href="/portail/tarifs.php"><strong>Tarifs</strong></a>.</p>
 
       <h2 style="margin-top:8px">Annuaire : commerces de ce serveur</h2>
       <p class="meta">Cochez ceux qui apparaissent dans l'annuaire public et sur l'accueil.</p>

@@ -2,6 +2,7 @@
 // Connexion par les réseaux sociaux (Google, Facebook, Microsoft, Apple) : clés OAuth de la plateforme, communes à tous les commerces.
 // Enregistrées dans .secrets/oauth_plateforme.json (jamais déployé, jamais affiché en clair) ; voir includes/oauth.php pour le principe.
 require __DIR__ . '/_bootstrap.php';
+require_once PORTAIL_ROOT . '/includes/saas-events.php';
 require_once PORTAIL_ROOT . '/includes/oauth.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -38,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         oauth_config_save($cfg);
         portail_flash('Nouvelle clé de signature générée : les connexions en cours doivent être recommencées.');
     }
+    saas_audit_flash('Connexion sociale');
     header('Location: /portail/social.php');
     exit;
 }
