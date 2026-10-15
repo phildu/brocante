@@ -48,6 +48,7 @@ $size = trim((string) ($product['size_text'] ?? ''));
       <?php endif; ?>
 
       <div class="md-pdp-buy"><?= $buyHtml() ?></div>
+      <div class="md-share"><?= $shareBtn ?></div>
       <p class="md-unique"><?= in_stock($product) ? 'Pièce unique : une fois partie, elle ne reviendra pas.' : '' ?></p>
 
       <details class="md-acc" open><summary>Description</summary><div><?= nl2br(h($product['description'])) ?></div></details>

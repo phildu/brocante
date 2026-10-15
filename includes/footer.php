@@ -26,6 +26,7 @@
   </div>
   <div class="wrap footer-bottom">
     <span>© 2026 <?= h($siteName ?? tenant('name')) ?></span>
+    <?= share_button_html(shop_abs_url('/'), (string) ($siteName ?? tenant('name')), (string) ($siteTagline ?? ''), '', 'share-link') ?>
     <span>Prototype de boutique — déploiement local</span>
   </div>
 </footer>

@@ -2,6 +2,7 @@
 // Page publique d'une galerie commerciale : /galerie/<identifiant>/ (réécrit vers ce fichier, voir .htaccess et router.php).
 // Sans identifiant : la liste des galeries publiées. Les données viennent de includes/galleries.php (catalogue regroupé, mis en cache).
 require_once __DIR__ . '/../includes/galleries.php';
+require_once __DIR__ . '/../includes/share.php';
 
 function e($s): string
 {
@@ -126,7 +127,9 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 <meta name="description" content="<?= e($metaDescription) ?>">
 <meta property="og:title" content="<?= e($pageTitle) ?>">
 <meta property="og:description" content="<?= e($metaDescription) ?>">
-<?php if ($gallery && !empty($st['banner'])): ?><meta property="og:image" content="<?= e($origin . '/' . $st['banner']) ?>"><?php endif; ?>
+<?php if ($gallery): echo share_og_html($pageTitle, $metaDescription, $origin . '/galerie/' . $gallery['slug'] . '/', !empty($st['banner']) ? $origin . '/' . $st['banner'] : '', 'website', $pageTitle); endif; ?>
+<link rel="stylesheet" href="/assets/share.css">
+<script src="/assets/share.js" defer></script>
 <?php if (!empty($notFound) || ($gallery && !$gallery['published'])): ?><meta name="robots" content="noindex, nofollow"><?php endif; ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -222,6 +225,9 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   .gcard .band { height: 10px; }
   .gcard div.in { padding: 18px; } .gcard h3 { margin: 0 0 6px; font-family: var(--display); font-size: 1.25rem; } .gcard p { margin: 0; color: var(--ink-soft); }
 
+  .hero-share { margin: 18px 0 0; } .hero .share-btn { color: inherit; border-color: color-mix(in srgb, currentColor 55%, transparent); } .hero .share-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); border-color: currentColor; }
+  .hero.a-center .hero-share { display: flex; justify-content: center; }
+  .share-dialog { --bg: var(--surface, #fff); }
   .hero-cta { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin: 24px 0 0; }
   .btn-cta { font: inherit; font-weight: 700; font-size: 1.02rem; border-radius: 12px; padding: 14px 24px; background: var(--hero-ink, var(--accent-ink)); color: var(--hero-bg, var(--accent)); text-decoration: none; display: inline-block; box-shadow: 0 8px 22px -10px rgba(0,0,0,.45); }
   .btn-cta:hover { transform: translateY(-1px); box-shadow: 0 12px 26px -10px rgba(0,0,0,.5); }
@@ -296,6 +302,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       <li><strong><?= count($data['products']) ?></strong>pièce<?= count($data['products']) > 1 ? 's' : '' ?> en ligne</li>
       <li><strong><?= count($universes) ?></strong>univers</li>
     </ul><?php endif; ?>
+    <?php if ($gallery['published']): ?><p class="hero-share"><?= share_button_html($origin . '/galerie/' . $gallery['slug'] . '/', $gallery['name'], $gallery['tagline'] ?: 'Les pièces de ' . count($shops) . ' commerces réunies au même endroit.', $st['banner'] !== '' ? $origin . '/' . $st['banner'] : '') ?></p><?php endif; ?>
     <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
       <p class="hero-cta"><a class="btn-cta" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><?= e($st['cta_label'] !== '' ? $st['cta_label'] : 'Créer ma boutique dans cette galerie') ?></a>
         <span class="from"><?= e(saas_grid_from_text(saas_grid($gallery['slug']))) ?> · sans engagement</span><a class="alt" href="#cta-boutique">En savoir plus</a></p>

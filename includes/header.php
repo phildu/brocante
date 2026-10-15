@@ -2,6 +2,7 @@
 require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/oauth.php';
+require_once __DIR__ . '/share.php';
 $activeNav = $activeNav ?? '';
 $cartCount = cart_count();
 $siteContent = get_content();
@@ -15,7 +16,15 @@ $siteTagline = $siteContent['site_tagline'] ?: tenant('tagline');
 <title><?= isset($pageTitle) ? h($pageTitle) . ' — ' . h($siteName) : h($siteName) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<?php
+// Prévisualisation d'un lien partagé (réseaux sociaux, messageries) : les pages peuvent poser $ogDescription, $ogImage (chemin ou adresse), $ogType, $ogUrl avant d'inclure l'en-tête.
+$ogTitle = isset($pageTitle) ? $pageTitle . ' — ' . $siteName : $siteName;
+$ogImageUrl = share_media_url((string) ($ogImage ?? logo_url('square')));
+echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteName)), (string) ($ogUrl ?? shop_abs_url(strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/')), $ogImageUrl, (string) ($ogType ?? 'website'), $siteName);
+?>
 <?= tenant_head_html() ?>
+<link rel="stylesheet" href="/assets/share.css">
+<script src="/assets/share.js" defer></script>
 <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>

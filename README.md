@@ -413,6 +413,16 @@ Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
 dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
 `tenants/`, `includes/`…).
 
+## Partager : réseaux sociaux, lien et code QR
+
+Les pages publiques portent un bouton **Partager** et un bouton **QR code** (`includes/share.php`, `assets/share.js`, `assets/share.css`) : sur chaque **fiche de pièce**
+(à côté de l'achat, dans les trois modèles de boutique), en **bas de chaque page** de la boutique (pour la boutique elle-même) et dans l'en-tête de la **page d'une galerie**.
+- **Fenêtre de partage** : WhatsApp, Facebook, X, Pinterest (avec la photo), LinkedIn, Telegram, SMS, e-mail, champ « Copier le lien ».
+  Sur téléphone, « Partager » ouvre d'abord le **menu de partage du système** (qui propose aussi Instagram, Messages…) ; Instagram n'a pas de lien de partage web, d'où ce menu et le lien à copier.
+- **Code QR** de la page, fabriqué dans le navigateur : **téléchargeable en PNG ou SVG** et **imprimable** (étiquette de rayon, vitrine, carte de visite).
+- **Aperçu du lien partagé** : les pages émettent les balises Open Graph / Twitter (titre, description, prix et photo de la pièce, adresse canonique), pour que Facebook,
+  WhatsApp, etc. affichent une carte soignée. Une page peut poser `$ogImage`, `$ogDescription`, `$ogType`, `$ogUrl` avant d'inclure `includes/header.php`.
+
 ## Scanner un code-barres ou un QR pour créer l'article (livres, CD, vinyles, DVD)
 
 Une barre **« Scanner un code-barres / QR »** s'ouvre en tête du formulaire « Ajouter une pièce » (catalogue) et de la relecture de l'ajout rapide / du **Studio**

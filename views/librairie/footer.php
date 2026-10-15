@@ -37,6 +37,7 @@ $fc = get_content();
   </div>
   <div class="wrap footer-bottom">
     <span>© <?= date('Y') ?> <?= h($siteName ?? tenant('name')) ?></span>
+    <?= share_button_html(shop_abs_url('/'), (string) ($siteName ?? tenant('name')), (string) ($siteTagline ?? ''), '', 'share-link') ?>
     <a href="/admin/" class="footer-admin-link">Administration</a>
   </div>
 </footer>

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/share.php';
 
 $ref = (string) ($_GET['ref'] ?? '');
 $product = get_product($ref);
@@ -20,7 +21,13 @@ $related = array_slice(array_values($related), 0, 3);
 
 $activeNav = 'boutique';
 $pageTitle = $product['name'];
+// Aperçu du lien partagé : photo, description et prix de la pièce.
+$ogType = 'product';
+$ogUrl = shop_abs_url('/produit.php?ref=' . urlencode($product['ref']));
+$ogImage = shop_cover($product, $gallery) ?: null;
+$ogDescription = trim(($product['price'] !== '' ? $product['price'] . ' — ' : '') . mb_substr(trim(preg_replace('/\s+/', ' ', (string) $product['description'])), 0, 200));
 include __DIR__ . '/includes/header.php';
+$shareBtn = share_button_html($ogUrl, $product['name'] . ' — ' . $siteName, $ogDescription, $ogImage ? share_media_url($ogImage) : '');
 
 // Prix et boutons d'achat, rendus deux fois : dans la fiche, et dans la barre collée en haut sur smartphone.
 $priceHtml = has_promo_price($product)
@@ -124,6 +131,7 @@ if ($view = shop_view('product')) {
         <span class="price-group"><?= $priceHtml ?></span>
         <?= $buyHtml() ?>
       </div>
+      <p class="share-row" style="margin:14px 0 0;"><?= $shareBtn ?></p>
     </div>
   </div>
 </section>

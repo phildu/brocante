@@ -70,6 +70,7 @@ $details['Référence'] = 'N°' . h($product['ref']);
         <p class="lb-buy-price"><?= $priceHtml ?></p>
         <p class="lb-stock <?= in_stock($product) ? 'is-in' : 'is-out' ?>"><?= in_stock($product) ? 'Disponible — pièce unique' : 'Vendue' ?></p>
         <div class="lb-buy-actions"><?= $buyHtml() ?></div>
+        <div class="lb-share"><?= $shareBtn ?></div>
         <ul class="lb-assure">
           <?php if (trim((string) ($fc['contact_delivery'] ?? '')) !== ''): ?><li><b>Livraison</b> <?= h($fc['contact_delivery']) ?></li><?php endif; ?>
           <?php if (trim((string) ($fc['pickup_label'] ?? '')) !== ''): ?><li><b>Sur place</b> <?= h($fc['pickup_label']) ?></li><?php endif; ?>
