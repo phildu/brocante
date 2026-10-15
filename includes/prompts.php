@@ -83,8 +83,27 @@ function multi_photo_prompt_fr(int $count): string
         . "Produis une seule image.";
 }
 
-function build_ambiance_prompt_fr(string $keywords): string
+function build_ambiance_prompt_fr(string $keywords, ?array $scene = null): string
 {
+    if ($scene !== null) {
+        $rule = !empty($scene['person'])
+            ? "La personne doit porter ou tenir exactement cet article. Rendu naturel et fidèle, sans texte, sans filigrane."
+            : "Photoréaliste, lumière naturelle, sans texte, sans filigrane.";
+        if ($keywords === '') {
+            return "Voici une vraie photo d'un objet d'occasion / vintage pour une boutique en ligne. "
+                . "Génère une photo lifestyle mise en scène, photoréaliste, montrant exactement le MÊME objet (forme, couleurs, "
+                . "matières, motifs et détails identiques — ne jamais le redessiner), comme pour une photo de produit lifestyle. "
+                . "SCÈNE : " . $scene['fr'] . ". " . $rule . " "
+                . "Réponds uniquement avec l'image générée, sans texte dans ta réponse.";
+        }
+        return "Voici une vraie photo d'un objet d'occasion / vintage pour une boutique en ligne. "
+            . "Génère une photo lifestyle mise en scène, photoréaliste, montrant exactement le MÊME objet (forme, couleurs, "
+            . "matières, motifs et détails identiques — ne jamais le redessiner), comme pour une photo de produit lifestyle, "
+            . "lumière naturelle, sans texte, sans filigrane. Scène par défaut, à utiliser UNIQUEMENT si la consigne du vendeur "
+            . "ci-dessous ne décrit ni décor, ni action, ni personne : " . $scene['fr'] . ". " . $rule
+            . owner_direction_prompt_fr($keywords)
+            . " Réponds uniquement avec l'image générée, sans texte dans ta réponse.";
+    }
     if ($keywords === '') {
         return "Voici une vraie photo d'un objet d'occasion / vintage pour une boutique d'antiquités en ligne. "
             . "Génère une photo mise en scène montrant exactement le MÊME objet, placé naturellement dans un intérieur "
@@ -159,10 +178,13 @@ function generated_framing_prompt_fr(string $aspectRatio, bool $directed = false
  * automatiquement. Sert à l'aperçu affiché sous le champ « Mots-clés / précisions ». $kind : ambiance, angle,
  * complete ou notes (indications de fiche : la mise en situation ET la rédaction de la fiche).
  */
-function prompt_preview_parts(string $kind, string $text, string $anglePreset = 'auto'): ?array
+function prompt_preview_parts(string $kind, string $text, string $anglePreset = 'auto', ?array $product = null): ?array
 {
     $text = trim($text);
-    $directed = $text !== '';
+    // Décor automatique selon la nature de la pièce : l'aperçu en donne un exemple (le vrai tirage se fait à la génération).
+    $sceneInfo = ambiance_scene_preview($product);
+    $scene = $sceneInfo ? ambiance_scene($product) : null;
+    $directed = $text !== '' || $scene !== null;
     $label = "Prompt envoyé à l'IA";
     $framing = static fn (bool $d): array => [
         'label' => 'Cadrage ajouté automatiquement (format 3:2)',
@@ -171,7 +193,11 @@ function prompt_preview_parts(string $kind, string $text, string $anglePreset = 
     ];
     switch ($kind) {
         case 'ambiance':
-            return [['label' => $label, 'text' => build_ambiance_prompt($text), 'text_fr' => build_ambiance_prompt_fr($text)], $framing($directed)];
+            return array_merge(
+                [['label' => $label, 'text' => build_ambiance_prompt($text, $scene), 'text_fr' => build_ambiance_prompt_fr($text, $scene)]],
+                $sceneInfo ? [['label' => 'Décor automatique selon la nature de la pièce', 'text' => $sceneInfo['en'], 'text_fr' => $sceneInfo['fr']]] : [],
+                [$framing($directed)]
+            );
         case 'angle':
             return [['label' => $label, 'text' => build_angle_prompt($anglePreset, $text), 'text_fr' => build_angle_prompt_fr($anglePreset, $text)], $framing(false)];
         case 'complete':
@@ -182,7 +208,7 @@ function prompt_preview_parts(string $kind, string $text, string $anglePreset = 
             // Le prompt de la fiche est déjà rédigé en français.
             $sheet = build_product_sheet_prompt(1, $text);
             return [
-                ['label' => 'Mise en situation', 'text' => build_ambiance_prompt($text), 'text_fr' => build_ambiance_prompt_fr($text)],
+                ['label' => 'Mise en situation', 'text' => build_ambiance_prompt($text, $scene), 'text_fr' => build_ambiance_prompt_fr($text, $scene)],
                 $framing($directed),
                 ['label' => 'Fiche (nom, description, catégorie, prix)', 'text' => $sheet, 'text_fr' => $sheet],
             ];

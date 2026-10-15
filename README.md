@@ -265,6 +265,40 @@ Le champ **Matières** (colonne `materials`, ajoutée automatiquement aux bases 
 fiche produit, rempli par la génération de fiche (Studio, ajout rapide, import par lot) et modifiable à la
 relecture.
 
+## Recto / verso automatique (galerie d'une pièce)
+
+Bloc « ↔ Recto / verso automatique » de `admin/gallery.php` : un seul bouton enchaîne, étape par étape (une requête
+par étape, donc pas de délai dépassé sur un hébergement mutualisé) :
+
+1. **détourage de chaque angle** (photos de départ, 6 au plus ; fal.ai si configuré, sinon repli Gemini sur fond blanc).
+   Chaque détourage est rattaché à sa photo (`product_photos.cutout_of`) : relancer ne détoure pas deux fois la même photo ;
+2. **envoi de tous les détourages ensemble** à Gemini (4 au plus, la photo principale d'abord, mis à plat sur fond blanc) ;
+3. génération de deux visuels de studio : **Recto (IA)** et **Verso (IA)**, ajoutés à la galerie comme illustrations, avec
+   leur version smartphone 9:16. Si aucune photo ne montre le dos, l'IA le déduit prudemment (sans inventer logo ni texte) ;
+   avec une seule photo, le verso est donc deviné — l'écran le rappelle.
+
+Code : `includes/recto-verso.php` (logique), `admin/recto-verso-action.php` (étapes `plan`, `cutout`, `generate`).
+
+## Décor automatique de la photo d'ambiance (selon la nature de l'objet)
+
+Sans consigne du vendeur, la mise en situation n'est plus toujours « un salon français » : `includes/ambiance-scenes.php`
+(`ambiance_scene()`) choisit un décor d'après la **nature** de la pièce (`nature` / `sous_categorie` de la fiche, à défaut
+les mots du nom et de la description) et **tire au hasard** parmi plusieurs décors adaptés à chaque génération :
+
+- vêtement, chaussure, accessoire, bijou → **porté par une personne** (femme / homme d'après le nom, la description ou
+  la sous-catégorie ; sinon selon le public de l'article) dans un jardin, sur un chemin de campagne, dans un bureau, une rue
+  de vieille ville, une terrasse de café, un parc ou un marché ; chaussures cadrées sur les pieds, bijoux en portrait rapproché ;
+- lingerie, maillots et vêtements d'enfant → jamais portés : posés dans une chambre (ou une chambre d'enfant), sans personne ;
+- meubles, décoration, luminaires, linge, arts de la table, livres, disques, outils, alimentaire, informatique… → posés
+  dans une pièce ou un lieu qui leur correspond (coin lecture pour un livre, table dressée pour la vaisselle, jardin pour le
+  jardinage, atelier pour les outils, etc.), sans personne ;
+- nature inconnue → l'IA choisit elle-même un décor adapté à ce qu'elle voit.
+
+La consigne du vendeur reste prioritaire : si elle décrit un décor, une action ou une personne, elle remplace ce décor ;
+une simple précision le laisse en place. Le décor tiré est mémorisé avec la version smartphone (9:16) pour que les deux formats
+restent cohérents. Dans le lot (import par lots), la fiche est désormais créée par l'IA **avant** la photo d'ambiance, afin
+que la nature de la pièce soit connue. L'aperçu du prompt (galerie) liste les décors possibles pour la pièce.
+
 ## La consigne du vendeur prime sur le décor par défaut
 
 Les « Mots-clés / précisions » (galerie) et « Indications pour l'IA » (ajout rapide, lot du Studio) sont

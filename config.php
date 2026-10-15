@@ -101,6 +101,7 @@ function db(): PDO
         veo_ensure_schema($pdo);
         // Prompts (mots-clés / précisions) enregistrés pour la génération IA.
         require_once __DIR__ . '/includes/prompts.php';
+        require_once __DIR__ . '/includes/ambiance-scenes.php';
         prompts_ensure_schema($pdo);
         // Univers enregistrés avec d'anciens rayons (« Hauts et t-shirts »…) : ramenés aux grands domaines, une fois.
         require_once __DIR__ . '/includes/universes.php';
@@ -135,6 +136,11 @@ function db(): PDO
         if ($photoColumns && !in_array('mobile_pending', $photoColumns, true)) {
             $pdo->exec('ALTER TABLE product_photos ADD COLUMN mobile_pending TEXT');
         }
+        // Détourage rattaché à la photo de départ dont il est tiré (recto / verso automatique).
+        if ($photoColumns && !in_array('cutout_of', $photoColumns, true)) {
+            $pdo->exec('ALTER TABLE product_photos ADD COLUMN cutout_of INTEGER');
+        }
+        require_once __DIR__ . '/includes/recto-verso.php';
     }
     return $pdo;
 }

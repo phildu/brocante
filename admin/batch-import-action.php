@@ -374,15 +374,7 @@ switch ($action) {
             break;
         }
 
-        // 2) Mise en situation à partir du détourage, format 3:2 ; la version
-        // smartphone 9:16 suit à part (queue_mobile_variant).
-        $ambiancePath = null;
-        if (GEMINI_API_KEY) {
-            @set_time_limit(120);
-            $ambiancePath = generate_desktop_image($root . '/' . $detourePath, build_ambiance_prompt(''), 'batch-ambiance');
-        }
-
-        // 3) Fiche produit suggérée par l'IA à partir de la photo choisie —
+        // 2) Fiche produit suggérée par l'IA à partir de la photo choisie —
         // en cas d'échec, une fiche minimale est tout de même créée (nom
         // générique) puisque la pièce reste masquée jusqu'à relecture.
         $sheet = null;
@@ -393,6 +385,16 @@ switch ($action) {
             $sheet = $text ? parse_product_sheet_response($text) : null;
         }
         $sheet ??= ['name' => 'Pièce à décrire', 'description' => 'Description à compléter.', 'category' => default_category_key(), 'price_hint' => ''];
+
+        // 3) Mise en situation à partir du détourage, format 3:2 ; la version
+        // smartphone 9:16 suit à part (queue_mobile_variant).
+        // Décor choisi d'après la nature de la pièce détectée dans la fiche ci-dessus (vêtement porté, meuble dans une pièce…).
+        $scene = ambiance_scene($sheet + ['cat' => $sheet['category'] ?? '']);
+        $ambiancePath = null;
+        if (GEMINI_API_KEY) {
+            @set_time_limit(120);
+            $ambiancePath = generate_desktop_image($root . '/' . $detourePath, build_ambiance_prompt('', $scene), 'batch-ambiance', 1, ambiance_is_directed('', $scene));
+        }
 
         // 4) Création de la fiche produit, masquée jusqu'à relecture par
         // l'admin (nom/description/prix suggérés par l'IA à corriger).
@@ -429,7 +431,7 @@ switch ($action) {
         }
         add_product_photo($ref, $detourePath, $detoure['label'], $detoure['illustration']);
         if ($ambiancePath) {
-            queue_mobile_variant(add_product_photo($ref, $ambiancePath, 'Ambiance', true), $ambiancePath, $detourePath);
+            queue_mobile_variant(add_product_photo($ref, $ambiancePath, 'Ambiance', true), $ambiancePath, $detourePath, '', $scene);
         }
 
         // Le catalogue d'abord : assez de pièces comparables imposent leur poids médian.

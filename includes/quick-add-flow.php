@@ -61,7 +61,7 @@
     <ol class="qa-progress" id="progress">
       <li data-step="create"><span class="dot"></span><b>Envoi des photos</b><small>Enregistrement dans le catalogue</small></li>
       <li data-step="detoure"><span class="dot"></span><b>Détourage</b><small>Photo principale sur fond neutre</small></li>
-      <li data-step="ambiance"><span class="dot"></span><b>Mise en situation</b><small>La pièce dans un intérieur</small></li>
+      <li data-step="ambiance"><span class="dot"></span><b>Mise en situation</b><small>La pièce dans un décor adapté</small></li>
       <li data-step="sheet"><span class="dot"></span><b>Rédaction de la fiche</b><small>Nom, description, catégorie, prix</small></li>
     </ol>
     <p class="qa-note">Comptez 30 secondes à 1 minute. Gardez cette page ouverte.</p>

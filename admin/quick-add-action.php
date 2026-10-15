@@ -132,10 +132,11 @@ switch ($action) {
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à mettre en situation.']);
         // Version 3:2 maintenant ; la 9:16 suit à part (queue_mobile_variant).
         $notes = quick_add_notes($product['ref']);
-        $desktop = generate_desktop_image($root . '/' . $source['path'], build_ambiance_prompt($notes), generated_photo_basename('product-' . $product['ref'] . '-ambiance', $notes), 1, $notes !== '');
+        $scene = ambiance_scene($product);
+        $desktop = generate_desktop_image($root . '/' . $source['path'], build_ambiance_prompt($notes, $scene), generated_photo_basename('product-' . $product['ref'] . '-ambiance', $notes), 1, ambiance_is_directed($notes, $scene));
         if (!$desktop) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
         $label = generated_photo_label('Ambiance', $notes);
-        queue_mobile_variant(add_product_photo($product['ref'], $desktop, $label, true), $desktop, $source['path'], $notes);
+        queue_mobile_variant(add_product_photo($product['ref'], $desktop, $label, true), $desktop, $source['path'], $notes, $scene);
         quick_add_reply(['ok' => true, 'path' => $desktop, 'label' => $label]);
     }
 

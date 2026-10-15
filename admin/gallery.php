@@ -302,6 +302,67 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         renderSources();
       })();
     </script>
+    <?php
+      $rvSources = recto_verso_sources($ref);
+      $rvCutCount = count(array_filter($rvSources, static fn ($s) => recto_verso_cutout_of($ref, (int) $s['id'])));
+      $rvToCut = count($rvSources) - $rvCutCount;
+      $rvCut = ai_cutout_counts();
+      $rvEur = ai_estimate_label(['image' => 2 + $rvToCut * ($rvCut['image'] ?? 0)] + (isset($rvCut['cutout']) && $rvToCut ? ['cutout' => $rvToCut] : []));
+    ?>
+    <div class="admin-block" style="margin-bottom:24px;" id="rv-block" data-csrf="<?= h(admin_csrf_token()) ?>" data-ref="<?= h($ref) ?>">
+      <h2 style="font-size:1.1rem;">↔ Recto / verso automatique</h2>
+      <p class="hint">Détoure <strong>chaque angle</strong> photographié (<?= count($rvSources) ?> photo<?= count($rvSources) > 1 ? 's' : '' ?> de départ<?= $rvCutCount ? ', ' . $rvCutCount . ' déjà détourée' . ($rvCutCount > 1 ? 's' : '') : '' ?>), puis envoie <strong>tous les détourages ensemble</strong> à l'IA pour produire deux visuels de studio : le <strong>recto</strong> et le <strong>verso</strong> de l'objet. Ils sont ajoutés à la galerie, marqués « (IA) ».
+        <?= count($rvSources) < 2 ? "Avec une seule photo, le verso est deviné : ajoutez une photo du dos pour un résultat fidèle." : '' ?></p>
+      <p class="publish-status" id="rv-status" role="status" aria-live="polite" hidden style="margin:0 0 12px;"></p>
+      <div class="field" style="max-width:520px;">
+        <label>Précisions (optionnel)</label>
+        <input type="text" id="rv-keywords" maxlength="300" placeholder="ex : bien montrer l'étiquette, fermeture éclair ouverte…">
+      </div>
+      <button type="button" class="btn btn-primary" id="rv-run"<?= $rvSources && GEMINI_API_KEY ? '' : ' disabled' ?>>↔ Détourer et générer recto / verso</button>
+      <span class="hint" style="margin:0 0 0 12px;">Coût estimé <?= h($rvEur) ?> · 1 à 3 minutes</span>
+      <?php if (!GEMINI_API_KEY): ?><p class="hint" style="margin-top:8px;">Clé Gemini absente (réglages du site) : fonction indisponible.</p><?php endif; ?>
+    </div>
+    <script>
+      (function () {
+        var box = document.getElementById('rv-block'), btn = document.getElementById('rv-run'), st = document.getElementById('rv-status');
+        if (!btn) return;
+        function say(msg, kind) { st.hidden = !msg; st.textContent = msg || ''; if (kind) st.setAttribute('data-kind', kind); else st.removeAttribute('data-kind'); }
+        function call(data) {
+          var fd = new FormData();
+          fd.append('csrf', box.dataset.csrf); fd.append('ref', box.dataset.ref);
+          Object.keys(data).forEach(function (k) { fd.append(k, data[k]); });
+          return fetch('/admin/recto-verso-action.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Réponse inattendue du serveur (délai dépassé ?). Relancez : les étapes déjà faites sont conservées.' }; }); })
+            .catch(function () { return { ok: false, error: 'Connexion perdue. Relancez : les étapes déjà faites sont conservées.' }; });
+        }
+        btn.addEventListener('click', function () {
+          btn.disabled = true; say('Préparation…');
+          call({ action: 'plan' }).then(function (plan) {
+            if (!plan.ok) throw new Error(plan.error || 'Échec.');
+            if (!plan.sources.length) throw new Error('Aucune photo de départ à détourer.');
+            var chain = Promise.resolve(), total = plan.sources.length;
+            plan.sources.forEach(function (src, i) {
+              chain = chain.then(function () {
+                if (src.done) return null;
+                say('Détourage de l\'angle ' + (i + 1) + ' sur ' + total + '…');
+                return call({ action: 'cutout', photo_id: src.id }).then(function (r) { if (!r.ok) throw new Error(r.error || 'Détourage échoué.'); });
+              });
+            });
+            var kw = document.getElementById('rv-keywords').value;
+            ['recto', 'verso'].forEach(function (side) {
+              chain = chain.then(function () {
+                say('Envoi des ' + total + ' détourage' + (total > 1 ? 's' : '') + ' à l\'IA : génération du ' + side + '…');
+                return call({ action: 'generate', side: side, keywords: kw }).then(function (r) { if (!r.ok) throw new Error(r.error || 'Génération échouée.'); });
+              });
+            });
+            return chain;
+          }).then(function () {
+            say('Recto et verso ajoutés à la galerie.', 'ok');
+            setTimeout(function () { location.href = '?ref=' + encodeURIComponent(box.dataset.ref); }, 900);
+          }).catch(function (e) { say(e.message, 'error'); btn.disabled = false; });
+        });
+      })();
+    </script>
     <?php if (!GEMINI_API_KEY): ?>
       <p class="publish-status" data-kind="error" style="margin-bottom:20px;">Clé Gemini absente — les générations "ambiance", "autre angle" et "compléter l'objet" ne fonctionneront pas tant que la clé n'est pas renseignée dans Réglages du site. La vidéo « zoom, travelling » fonctionne sans elle ; la vidéo IA Veo la demande (la vidéo IA Wan 2.2 demande plutôt une clé SiliconFlow).</p>
     <?php endif; ?>

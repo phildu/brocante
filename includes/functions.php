@@ -1201,9 +1201,9 @@ function generate_shadow_image(string $cutoutAbsPath, string $aspectRatio, strin
  * consigne du vendeur de la mise en situation, pour la regénérer directement en 9:16 quand le modèle refuse de
  * recadrer l'image finie (il le fait pour une photo réaliste de personne).
  */
-function queue_mobile_variant(int $photoId, string $desktopRelPath, ?string $regenSrc = null, string $keywords = ''): void
+function queue_mobile_variant(int $photoId, string $desktopRelPath, ?string $regenSrc = null, string $keywords = '', ?array $scene = null): void
 {
-    queue_format_job($photoId, $desktopRelPath, 'mobile', null, null, $regenSrc ? ['src' => $regenSrc, 'keywords' => $keywords] : null);
+    queue_format_job($photoId, $desktopRelPath, 'mobile', null, null, $regenSrc ? ['src' => $regenSrc, 'keywords' => $keywords, 'scene' => $scene] : null);
 }
 
 /**
@@ -1296,7 +1296,8 @@ function run_mobile_variant(int $photoId): array
         if (!$bytes && $regenAbs && is_file($regenAbs)) {
             $keywords = (string) ($job['regen']['keywords'] ?? '');
             $smallSrc = downscale_for_ai($regenAbs, 1280, 85) ?? $regenAbs;
-            $bytes = generate_image_for_ratio($smallSrc, build_ambiance_prompt($keywords), $aspect, 0, $keywords !== '');
+            $regenScene = is_array($job['regen']['scene'] ?? null) ? $job['regen']['scene'] : null;
+            $bytes = generate_image_for_ratio($smallSrc, build_ambiance_prompt($keywords, $regenScene), $aspect, 0, ambiance_is_directed($keywords, $regenScene));
             if ($smallSrc !== $regenAbs) @unlink($smallSrc);
         }
         $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
@@ -2253,8 +2254,29 @@ function build_angle_prompt(string $anglePreset, string $keywords): string
         . owner_direction_prompt($keywords);
 }
 
-function build_ambiance_prompt(string $keywords): string
+function build_ambiance_prompt(string $keywords, ?array $scene = null): string
 {
+    // Décor automatique selon la nature de la pièce (includes/ambiance-scenes.php) : il remplace l'intérieur par défaut.
+    if ($scene !== null) {
+        $person = !empty($scene['person']);
+        $rule = $person
+            ? "The person must wear or carry exactly this item. Faithful, natural look, no text, no watermark."
+            : "Photorealistic, natural light, no text, no watermark.";
+        if ($keywords === '') {
+            return "This is a real secondhand/vintage product photo for an online shop. "
+                . "Generate a styled, photorealistic lifestyle photo showing the SAME exact object (identical shape, colors, "
+                . "materials, patterns and details — never redesign it), as if staged for a lifestyle product photo. "
+                . "SCENE: " . $scene['en'] . ". " . $rule . " "
+                . "Respond with the generated image only, no text in your reply.";
+        }
+        return "This is a real secondhand/vintage product photo for an online shop. "
+            . "Generate a styled, photorealistic lifestyle photo showing the SAME exact object (identical shape, colors, "
+            . "materials, patterns and details — never redesign it), as if staged for a lifestyle product photo, natural light, "
+            . "no text, no watermark. Default scene, to use ONLY if the owner's direction below does not describe a setting, "
+            . "an action or a person: " . $scene['en'] . ". " . $rule
+            . owner_direction_prompt($keywords)
+            . " Respond with the generated image only, no text in your reply.";
+    }
     if ($keywords === '') {
         return "This is a real secondhand/vintage product photo for an online antiques shop. "
             . "Generate a styled photo showing the SAME exact object placed naturally in a cozy "
@@ -2273,6 +2295,12 @@ function build_ambiance_prompt(string $keywords): string
         . "accessory the item may then be worn or carried, wearing exactly this item."
         . owner_direction_prompt($keywords)
         . " Respond with the generated image only, no text in your reply.";
+}
+
+/** Faut-il traiter la génération d'ambiance comme « dirigée » (décor non standard : le cadrage prolonge la scène demandée) ? */
+function ambiance_is_directed(string $keywords, ?array $scene): bool
+{
+    return $keywords !== '' || $scene !== null;
 }
 
 /**

@@ -38,7 +38,7 @@ switch ($action) {
         saved_prompt_delete((int) ($_POST['id'] ?? 0));
         break;
     case 'preview':
-        $parts = prompt_preview_parts((string) ($_POST['kind'] ?? ''), mb_substr((string) ($_POST['text'] ?? ''), 0, SAVED_PROMPT_MAX_LENGTH), (string) ($_POST['angle'] ?? 'auto'));
+        $parts = prompt_preview_parts((string) ($_POST['kind'] ?? ''), mb_substr((string) ($_POST['text'] ?? ''), 0, SAVED_PROMPT_MAX_LENGTH), (string) ($_POST['angle'] ?? 'auto'), get_product((string) ($_POST['ref'] ?? '')));
         if ($parts === null) prompts_reply(['ok' => false, 'error' => 'Type de prompt inconnu.'], 400);
         prompts_reply(['ok' => true, 'parts' => $parts]);
     case 'suggest':

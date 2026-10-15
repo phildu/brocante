@@ -145,7 +145,7 @@
     var seq = 0, timer = null;
     function refresh() {
       var my = ++seq;
-      call({ action: 'preview', kind: kind(), text: input.value, angle: angleSelect ? angleSelect.value : 'auto' }).then(function (res) {
+      call({ action: 'preview', kind: kind(), ref: refInput ? refInput.value : '', text: input.value, angle: angleSelect ? angleSelect.value : 'auto' }).then(function (res) {
         if (my !== seq) return;
         last = res;
         draw();

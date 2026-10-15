@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS product_photos (
   path TEXT NOT NULL,
   path_mobile TEXT, -- version smartphone (9:16) des visuels générés, sinon NULL
   mobile_pending TEXT, -- version smartphone à générer (JSON : source, prompt), sinon NULL
+  cutout_of INTEGER, -- id de la photo de départ dont ce détourage est tiré (recto / verso automatique), sinon NULL
   type TEXT NOT NULL DEFAULT 'photo',
   label TEXT NOT NULL DEFAULT 'Photo',
   is_illustration INTEGER NOT NULL DEFAULT 0,
