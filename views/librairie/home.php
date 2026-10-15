@@ -25,7 +25,7 @@ if (!$shelves && $products) $shelves[] = ['Le catalogue', 'À découvrir', array
         <input type="search" name="q" placeholder="Un titre, un auteur, un mot-clé…" aria-label="Rechercher dans le catalogue">
         <button class="btn btn-primary" type="submit">Chercher</button>
       </form>
-      <p class="lb-hero-links"><a href="/boutique.php">Parcourir tout le catalogue →</a></p>
+      <p class="lb-hero-links"><a href="/boutique.php">Parcourir tout le catalogue →</a> &nbsp; <?= share_page_button((string) ($content['site_name'] ?: tenant('name')), (string) $content['hero_subtitle']) ?></p>
     </div>
     <?php if ($spot): $spotCover = shop_cover($spot); ?>
       <article class="lb-spot">

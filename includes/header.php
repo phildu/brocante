@@ -23,8 +23,8 @@ $ogImageUrl = share_media_url((string) ($ogImage ?? logo_url('square')));
 echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteName)), (string) ($ogUrl ?? shop_abs_url(strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/')), $ogImageUrl, (string) ($ogType ?? 'website'), $siteName);
 ?>
 <?= tenant_head_html() ?>
-<link rel="stylesheet" href="/assets/share.css">
-<script src="/assets/share.js" defer></script>
+<link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.css') ?>">
+<script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>
 <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>

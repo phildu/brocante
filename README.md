@@ -416,7 +416,7 @@ dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
 ## Partager : réseaux sociaux, lien et code QR
 
 Les pages publiques portent un bouton **Partager** et un bouton **QR code** (`includes/share.php`, `assets/share.js`, `assets/share.css`) : sur chaque **fiche de pièce**
-(à côté de l'achat, dans les trois modèles de boutique), en **bas de chaque page** de la boutique (pour la boutique elle-même) et dans l'en-tête de la **page d'une galerie**.
+(à côté de l'achat), sur l'**accueil** (à côté des boutons de l'en-tête), sur la **boutique** (le lien partagé garde l'univers et la recherche en cours), en **bas de chaque page**, et dans l'en-tête de la **liste des galeries** et de la **page d'une galerie** ; dans les trois modèles de boutique.
 - **Fenêtre de partage** : WhatsApp, Facebook, X, Pinterest (avec la photo), LinkedIn, Telegram, SMS, e-mail, champ « Copier le lien ».
   Sur téléphone, « Partager » ouvre d'abord le **menu de partage du système** (qui propose aussi Instagram, Messages…) ; Instagram n'a pas de lien de partage web, d'où ce menu et le lien à copier.
 - **Code QR** de la page, fabriqué dans le navigateur : **téléchargeable en PNG ou SVG** et **imprimable** (étiquette de rayon, vitrine, carte de visite).

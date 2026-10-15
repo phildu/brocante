@@ -61,6 +61,7 @@ if ($view = shop_view('home')) {
       <div class="hero-ctas">
         <a class="btn btn-primary" href="/boutique.php">Voir la boutique</a>
         <a class="btn btn-ghost" href="#histoire">Notre histoire</a>
+        <?= share_page_button($content['site_name'] ?: tenant('name'), (string) $content['hero_subtitle']) ?>
       </div>
     </div>
     <div class="hero-scene hero-polaroid-scene">

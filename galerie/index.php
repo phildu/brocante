@@ -128,8 +128,8 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 <meta property="og:title" content="<?= e($pageTitle) ?>">
 <meta property="og:description" content="<?= e($metaDescription) ?>">
 <?php if ($gallery): echo share_og_html($pageTitle, $metaDescription, $origin . '/galerie/' . $gallery['slug'] . '/', !empty($st['banner']) ? $origin . '/' . $st['banner'] : '', 'website', $pageTitle); endif; ?>
-<link rel="stylesheet" href="/assets/share.css">
-<script src="/assets/share.js" defer></script>
+<link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.css') ?>">
+<script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>
 <?php if (!empty($notFound) || ($gallery && !$gallery['published'])): ?><meta name="robots" content="noindex, nofollow"><?php endif; ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -261,6 +261,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <p class="eyebrow">Des commerçants réunis</p>
     <h1>Galeries commerciales</h1>
     <p class="tagline">Une rue, un village, un groupe d'amis : leurs boutiques réunies au même endroit.</p>
+    <p class="hero-share"><?= share_button_html($origin . '/galerie/', 'Galeries commerciales', "Des commerçants réunis au même endroit.") ?></p>
     <?php if ($canSignup): ?>
       <p class="hero-cta"><a class="btn-cta" href="/inscription/">Créer ma boutique</a>
         <span class="from"><?= e(saas_grid_from_text(saas_grid(''))) ?> · sans engagement</span><a class="alt" href="/#formules">Voir les tarifs</a></p>

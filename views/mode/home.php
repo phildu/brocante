@@ -19,7 +19,7 @@ $ticker = array_values(array_filter(array_map(static fn (int $i): string => trim
     <p class="md-kicker"><?= h($content['hero_eyebrow']) ?></p>
     <h1><?= h($content['hero_title']) ?></h1>
     <p class="md-hero-sub"><?= h($content['hero_subtitle']) ?></p>
-    <p class="md-hero-ctas"><a class="md-btn md-btn-light" href="/boutique.php">Découvrir la collection</a> <a class="md-link-light" href="#histoire">Notre histoire</a></p>
+    <p class="md-hero-ctas"><a class="md-btn md-btn-light" href="/boutique.php">Découvrir la collection</a> <a class="md-link-light" href="#histoire">Notre histoire</a> <span class="md-hero-share"><?= share_page_button((string) ($content['site_name'] ?: tenant('name')), (string) $content['hero_subtitle']) ?></span></p>
   </div>
 </section>
 

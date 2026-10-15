@@ -62,6 +62,7 @@ if ($q !== '') $active[] = ['« ' . $q . ' »', shop_url_with(['q' => null])];
       <div class="lb-results">
         <div class="lb-toolbar">
           <span><?= count($products) ?> résultat<?= count($products) > 1 ? 's' : '' ?><?= $q !== '' ? ' pour « ' . h($q) . ' »' : '' ?></span>
+          <?= share_page_button($title . ' — ' . (get_content()['site_name'] ?: tenant('name')), count($products) . ' résultat(s)') ?>
           <span class="lb-views" role="group" aria-label="Affichage">
             <a href="<?= h(shop_url_with(['vue' => null])) ?>"<?= $vue === 'grille' ? ' aria-current="true"' : '' ?>>Grille</a>
             <a href="<?= h(shop_url_with(['vue' => 'liste'])) ?>"<?= $vue === 'liste' ? ' aria-current="true"' : '' ?>>Liste</a>

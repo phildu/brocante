@@ -49,6 +49,7 @@ if ($view = shop_view('shop')) {
       <?php if ($banner): ?><?php render_page_banner('boutique'); ?><?php endif; ?>
       <h1 class="shop-title">La boutique</h1>
     </div>
+    <p class="share-row" style="margin:-4px 0 14px;"><?= share_page_button('La boutique — ' . ($content['site_name'] ?? tenant('name')), $cat !== 'tous' ? category_label($cat) : 'Toute la boutique') ?></p>
     <form method="get" action="/boutique.php" class="shop-search" role="search">
       <?php if ($cat !== 'tous'): ?><input type="hidden" name="cat" value="<?= h($cat) ?>"><?php endif; ?>
       <?php if ($nature !== ''): ?><input type="hidden" name="nature" value="<?= h($nature) ?>"><?php if ($sous !== ''): ?><input type="hidden" name="sous" value="<?= h($sous) ?>"><?php endif; ?><?php endif; ?>

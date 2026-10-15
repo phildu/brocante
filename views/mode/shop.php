@@ -11,6 +11,7 @@ $title = $cat !== 'tous' ? category_label($cat) : 'Toute la collection';
     <header class="md-shop-head">
       <h1><?= h($title) ?></h1>
       <p><?= count($products) ?> <?= h(tenant_text(count($products) === 1 ? 'item_singular' : 'item_plural')) ?></p>
+      <span class="md-shop-share"><?= share_page_button($title . ' — ' . (get_content()['site_name'] ?: tenant('name')), '') ?></span>
     </header>
   </div>
   <div class="md-bar2" id="md-bar2">

@@ -51,3 +51,17 @@ function share_og_html(string $title, string $description, string $url, string $
         . $n('twitter:card', $image !== '' ? 'summary_large_image' : 'summary') . $n('twitter:title', $title) . $n('twitter:description', mb_substr($description, 0, 200)) . $n('twitter:image', $image)
         . ($url !== '' ? '<link rel="canonical" href="' . share_h($url) . '">' . "\n" : '');
 }
+
+/** Adresse de la page courante sans les paramètres d'aperçu (?modele=…), filtres conservés : on partage ce que le visiteur voit. */
+function share_page_url(): string
+{
+    $q = $_GET;
+    unset($q['modele']);
+    return share_origin() . (strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?') ?: '/') . ($q ? '?' . http_build_query($q) : '');
+}
+
+/** Boutons « Partager » + « QR code » de la page courante (accueil, boutique, listes…). $title : titre partagé ; $text : phrase d'accompagnement. */
+function share_page_button(string $title, string $text = '', string $class = ''): string
+{
+    return share_button_html(share_page_url(), $title, $text, '', $class);
+}

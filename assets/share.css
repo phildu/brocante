@@ -37,3 +37,16 @@ html[data-layout="mode"] .share-btn { text-transform: uppercase; letter-spacing:
 html[data-layout="librairie"] .lb-foot .share-link .share-btn, html[data-layout="mode"] .md-foot .share-link .share-btn { color: inherit; }
 html[data-layout="librairie"] .lb-share .share-btn { background: var(--bg); width: auto; }
 footer.site .footer-bottom .share-link { margin-left: auto; }
+
+/* Boutons de page : accueil, boutique, listes. */
+.hero-ctas .share-group { margin-left: 4px; }
+.md-hero-share { margin-left: 18px; vertical-align: middle; display: inline-block; }
+.md-hero-share .share-btn { color: #fff; border-color: rgba(255,255,255,.6); background: transparent; }
+.md-hero-share .share-btn:hover { background: rgba(255,255,255,.14); border-color: #fff; }
+.md-shop-share { margin-left: auto; } .md-shop-head { flex-wrap: wrap; }
+.lb-toolbar .share-group { margin-left: auto; margin-right: 12px; } .lb-hero-links .share-btn { display: inline-flex; vertical-align: middle; }
+.shop-head .share-row { margin-top: 6px; }
+/* Accueil classique : boutons de partage lisibles sur la photo d'en-tête. */
+.hero-ctas { flex-wrap: wrap; }
+section.hero.has-page-banner .share-btn { color: #fff; border-color: rgba(255,255,255,.6); background: transparent; }
+section.hero.has-page-banner .share-btn:hover { background: rgba(255,255,255,.14); border-color: #fff; }
