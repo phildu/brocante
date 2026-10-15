@@ -23,14 +23,20 @@ function recto_verso_cutout_of(string $ref, int $sourceId): ?array
     return $row && is_file(__DIR__ . '/../' . $row['path']) ? $row : null;
 }
 
-/** Détourages de tous les angles de la pièce, dans l'ordre des photos de départ : [[source, cutout], …]. */
-function recto_verso_cutouts(string $ref): array
+/**
+ * Images de tous les angles de la pièce, dans l'ordre des photos de départ : le détourage de chaque angle s'il existe, sinon
+ * la photo elle-même (l'IA refuse parfois de détourer une photo, p. ex. avec une personne : le recto / verso se fait alors
+ * quand même avec elle). [[source, image, détouré ?], …]
+ */
+function recto_verso_inputs(string $ref): array
 {
-    $pairs = [];
+    $inputs = [];
     foreach (recto_verso_sources($ref) as $source) {
-        if ($cut = recto_verso_cutout_of($ref, (int) $source['id'])) $pairs[] = [$source, $cut];
+        $cut = recto_verso_cutout_of($ref, (int) $source['id']);
+        if ($cut) $inputs[] = [$source, $cut, true];
+        elseif (is_file(__DIR__ . '/../' . $source['path'])) $inputs[] = [$source, $source, false];
     }
-    return $pairs;
+    return $inputs;
 }
 
 /** Détourage d'une photo de départ, enregistré dans la galerie et rattaché à elle : ['ok', 'cutout' => ligne] ou ['ok' => false, 'error']. */
@@ -84,9 +90,9 @@ function recto_verso_flatten(string $srcAbs, int $maxDim = 1280): ?string
 function build_recto_verso_prompt(string $side, int $count, string $keywords = ''): string
 {
     $views = $count > 1
-        ? "These $count images are cut-outs of the SAME real secondhand/vintage object, each photographed from a different angle (the first one is the main photo). "
+        ? "These $count images show the SAME real secondhand/vintage object, each photographed from a different angle (the first one is the main photo; some are cut-outs on a plain background). "
             . "Study ALL of them to understand its true shape, colors, patterns, materials, labels and small details. "
-        : "This image is a cut-out of a real secondhand/vintage object. ";
+        : "This image shows a real secondhand/vintage object. ";
     $face = $side === 'verso'
         ? "the BACK (verso) of this exact object, seen perfectly from behind, i.e. the face opposite to the main photo. Show it exactly as the photos reveal it; "
             . "if no photo shows the back, infer it conservatively from the visible edges, seams, fasteners and construction — plain and plausible — "
@@ -100,26 +106,40 @@ function build_recto_verso_prompt(string $side, int $count, string $keywords = '
         . " Respond with the generated image only, no text in your reply.";
 }
 
-/** Génère le recto ou le verso à partir des détourages de tous les angles ; ['ok' => true, 'path', 'label', 'sent'] ou ['ok' => false, 'error']. */
+/**
+ * Génère le recto ou le verso à partir de tous les angles (détourage de chacun s'il existe, sinon sa photo) ;
+ * ['ok' => true, 'path', 'label', 'sent'] ou ['ok' => false, 'error']. Si l'IA refuse l'ensemble (une photo avec une
+ * personne, p. ex.), elle est redemandée avec les seuls détourages, ou avec la photo principale seule.
+ */
 function recto_verso_generate(string $ref, string $side, string $keywords = ''): array
 {
     if (!GEMINI_API_KEY) return ['ok' => false, 'error' => 'Clé Gemini manquante (réglages du site).'];
-    $pairs = array_slice(recto_verso_cutouts($ref), 0, RECTO_VERSO_MAX_SENT);
-    if (!$pairs) return ['ok' => false, 'error' => "Aucun détourage : détourez d'abord les photos."];
-    $temps = [];
-    foreach ($pairs as $i => [, $cut]) {
-        $tmp = recto_verso_flatten(__DIR__ . '/../' . $cut['path'], $i === 0 ? 1280 : 1024);
-        if ($tmp) $temps[] = $tmp;
+    $inputs = array_slice(recto_verso_inputs($ref), 0, RECTO_VERSO_MAX_SENT);
+    if (!$inputs) return ['ok' => false, 'error' => "Aucune photo à envoyer à l'IA."];
+    $sets = [$inputs];
+    if (count($inputs) > 1) {
+        $cutsOnly = array_values(array_filter($inputs, static fn (array $i): bool => $i[2]));
+        $sets[] = $cutsOnly && count($cutsOnly) < count($inputs) ? $cutsOnly : [$inputs[0]];
     }
-    if (!$temps) return ['ok' => false, 'error' => 'Détourages illisibles.'];
-    $main = array_shift($temps);
     $label = $side === 'verso' ? 'Verso (IA)' : 'Recto (IA)';
-    $desktop = generate_desktop_image($main, build_recto_verso_prompt($side, count($temps) + 1, $keywords) . multi_photo_prompt(count($temps) + 1),
-        'product-' . $ref . '-' . $side, 1, false, $temps);
-    @unlink($main);
-    foreach ($temps as $t) @unlink($t);
-    if (!$desktop) return ['ok' => false, 'error' => 'La génération du ' . ($side === 'verso' ? 'verso' : 'recto') . " a échoué (service IA indisponible ou image refusée) — réessayez."];
-    $photoId = add_product_photo($ref, $desktop, $label, true);
-    queue_mobile_variant($photoId, $desktop);
-    return ['ok' => true, 'path' => $desktop, 'label' => $label, 'sent' => count($temps) + 1];
+    foreach ($sets as $n => $set) {
+        $temps = [];
+        foreach ($set as $i => [, $img]) {
+            $tmp = recto_verso_flatten(__DIR__ . '/../' . $img['path'], $i === 0 ? 1280 : 1024);
+            if ($tmp) $temps[] = $tmp;
+        }
+        if (!$temps) continue;
+        $count = count($temps);
+        $main = array_shift($temps);
+        // Un seul essai par jeu d'images tant qu'il en reste un autre à tenter (durée d'une requête limitée).
+        $desktop = generate_desktop_image($main, build_recto_verso_prompt($side, $count, $keywords) . multi_photo_prompt($count),
+            'product-' . $ref . '-' . $side, $n === count($sets) - 1 ? 1 : 0, false, $temps);
+        @unlink($main);
+        foreach ($temps as $t) @unlink($t);
+        if (!$desktop) continue;
+        $photoId = add_product_photo($ref, $desktop, $label, true);
+        queue_mobile_variant($photoId, $desktop);
+        return ['ok' => true, 'path' => $desktop, 'label' => $label, 'sent' => $count];
+    }
+    return ['ok' => false, 'error' => 'La génération du ' . ($side === 'verso' ? 'verso' : 'recto') . " a échoué (service IA indisponible ou image refusée) — réessayez."];
 }

@@ -225,3 +225,23 @@ function ambiance_scene_preview(?array $product): ?array
     return ['en' => 'Automatic setting (random draw at each generation), one of: ' . implode('; ', array_column($options, 0)),
         'fr' => 'Décor tiré au hasard à chaque génération parmi : ' . implode(' · ', array_column($options, 1))];
 }
+
+/** Réglage « Taille de l'objet dans l'image » : [libellé, facteur appliqué à la place qu'il prend sur la toile de départ]. */
+const AMBIANCE_SIZE_PRESETS = [
+    'auto' => ['Selon la pièce (automatique)', 1.0],
+    'reduit' => ['Plus petit (−20 %)', 0.8],
+    'tres_reduit' => ['Beaucoup plus petit (−40 %)', 0.6],
+];
+
+/**
+ * Part de la toile qu'occupe la photo de départ envoyée à l'IA. Un vêtement porté, sur une toile 3:2, prenait 82 % de la
+ * hauteur : l'IA habillait alors un mannequin à la taille du vêtement, qui paraissait trop grand. Il est donc posé plus petit
+ * (le 9:16 se règle sur la largeur, il n'en avait pas besoin) ; $sizePreset permet de le réduire encore à la demande.
+ */
+function ambiance_subject_fill(?array $scene, string $sizePreset, string $aspect): float
+{
+    $base = GENERATED_IMAGE_SUBJECT_FILL;
+    if ($scene && !empty($scene['person']) && aspect_ratio_value($aspect) >= 1) $base = 0.55;
+    $factor = AMBIANCE_SIZE_PRESETS[$sizePreset][1] ?? 1.0;
+    return max(0.25, round($base * $factor, 2));
+}

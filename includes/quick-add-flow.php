@@ -61,10 +61,13 @@
     <ol class="qa-progress" id="progress">
       <li data-step="create"><span class="dot"></span><b>Envoi des photos</b><small>Enregistrement dans le catalogue</small></li>
       <li data-step="detoure"><span class="dot"></span><b>Détourage</b><small>Photo principale sur fond neutre</small></li>
-      <li data-step="ambiance"><span class="dot"></span><b>Mise en situation</b><small>La pièce dans un décor adapté</small></li>
       <li data-step="sheet"><span class="dot"></span><b>Rédaction de la fiche</b><small>Nom, description, catégorie, prix</small></li>
+      <li data-step="ambiance"><span class="dot"></span><b>Mise en situation</b><small>La pièce dans un décor adapté</small></li>
+      <li data-step="angles"><span class="dot"></span><b>Détourage des autres angles</b><small>Chaque photo sur fond neutre</small></li>
+      <li data-step="recto"><span class="dot"></span><b>Recto</b><small>Visuel de studio fait par l'IA</small></li>
+      <li data-step="verso"><span class="dot"></span><b>Verso</b><small>Visuel de studio fait par l'IA</small></li>
     </ol>
-    <p class="qa-note">Comptez 30 secondes à 1 minute. Gardez cette page ouverte.</p>
+    <p class="qa-note">Comptez 1 à 3 minutes (davantage avec plusieurs angles). Gardez cette page ouverte.</p>
   </section>
 
   <!-- Étape 3 : vérification -->

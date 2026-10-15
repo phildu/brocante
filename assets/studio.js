@@ -306,17 +306,34 @@
   });
 
   // ── Traitement d'une pièce (toutes les étapes IA) ─────────────────────────
-  var STEP_LABEL = { detoure: 'Détourage', ambiance: 'Mise en situation', sheet: 'Rédaction de la fiche' };
+  var STEP_LABEL = { detoure: 'Détourage', ambiance: 'Mise en situation', sheet: 'Rédaction de la fiche', angles: 'Détourage des autres angles', recto: 'Recto', verso: 'Verso' };
   function processPiece(ref, onStep) {
     var failed = [];
-    var chain = ['detoure', 'ambiance', 'sheet'];
+    // La fiche avant la mise en situation (la nature de la pièce décide du décor) ; avec 2 photos ou plus, détourage des
+    // autres angles (un par appel) puis recto et verso générés à partir de tous les détourages.
+    var chain = ['detoure', 'sheet', 'ambiance', 'angles', 'recto', 'verso'];
     return chain.reduce(function (p, step) {
       return p.then(function () {
         onStep(STEP_LABEL[step] + '…');
-        return api({ action: step, ref: ref }).then(function (res) {
-          must(res);
-          if (!res.ok) failed.push(step);
-        });
+        var skipIds = [];
+        function run() {
+          var data = { action: step, ref: ref };
+          if (step === 'angles' && skipIds.length) data.skip = skipIds.join(',');
+          return api(data).then(function (res) {
+            must(res);
+            if (!res.ok) {
+              // Un angle impossible à détourer : on passe aux suivants (le recto / verso utilisera sa photo telle quelle).
+              if (step === 'angles' && res.photo_id) {
+                skipIds.push(res.photo_id);
+                if (res.remaining > 0) return run();
+              }
+              failed.push(step);
+              return;
+            }
+            if (step === 'angles' && res.remaining > 0) return run();
+          });
+        }
+        return run();
       });
     }, Promise.resolve()).then(function () {
       return api({ action: 'finish', ref: ref, failed: failed.join(',') }).then(function (res) { must(res); return failed; });

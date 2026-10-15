@@ -277,7 +277,22 @@ par étape, donc pas de délai dépassé sur un hébergement mutualisé) :
    leur version smartphone 9:16. Si aucune photo ne montre le dos, l'IA le déduit prudemment (sans inventer logo ni texte) ;
    avec une seule photo, le verso est donc deviné — l'écran le rappelle.
 
-Code : `includes/recto-verso.php` (logique), `admin/recto-verso-action.php` (étapes `plan`, `cutout`, `generate`).
+**Automatique à la création d'une pièce** (Ajout rapide et Studio, `admin/quick-add-action.php`) : dès qu'une pièce a **2 photos
+ou plus**, l'enchaînement devient `detoure` (photo principale) → `sheet` (fiche, **avant** la mise en situation pour que la
+nature de la pièce décide du décor) → `ambiance` → `angles` (détourage des autres angles, un par appel) → `recto` → `verso`.
+Avec une seule photo, ces trois dernières étapes sont sautées (le verso serait deviné). Un angle que l'IA refuse de détourer est
+passé : le recto / verso utilise alors sa photo telle quelle ; si l'IA refuse l'ensemble des photos, la génération est redemandée
+avec les seuls détourages, puis avec la photo principale seule. L'import par lots (un seul appel par groupe) ne le fait pas.
+
+Code : `includes/recto-verso.php` (logique), `admin/recto-verso-action.php` (étapes `plan`, `cutout`, `generate` du bouton de la galerie).
+
+## Taille du vêtement dans la photo d'ambiance
+
+Une pièce portée est posée sur la toile 3:2 à **55 %** de la hauteur (82 % sinon) et le prompt impose une **échelle réelle** (le
+vêtement doit aller à la personne, jamais plus grand que son torse) : avant, un vêtement très grand donnait un mannequin
+trop petit pour lui en 3:2 (le 9:16, réglé sur la largeur, était correct). Dans la galerie, « Mise en situation » propose en plus
+**Taille de l'objet dans l'image** : automatique, plus petit (−20 %) ou beaucoup plus petit (−40 %) ; le réglage est repris
+pour la version 9:16 (`ambiance_subject_fill()`).
 
 ## Décor automatique de la photo d'ambiance (selon la nature de l'objet)
 

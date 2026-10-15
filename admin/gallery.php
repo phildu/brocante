@@ -166,6 +166,15 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
               <option value="arriere">Arrière</option>
             </select>
           </div>
+          <div class="field" id="gen-size-field" style="display:none;">
+            <label>Taille de l'objet dans l'image</label>
+            <select name="size_preset">
+              <?php foreach (AMBIANCE_SIZE_PRESETS as $key => $preset): ?>
+                <option value="<?= h($key) ?>"><?= h($preset[0]) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <p class="hint" style="margin:4px 0 0;">Vêtement trop grand pour le mannequin ? Réduisez-le.</p>
+          </div>
           <div class="field" id="gen-video-field" style="display:none;">
             <label>Effet vidéo</label>
             <select name="video_effect">
@@ -230,6 +239,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
       (function () {
         var kindSelect = document.getElementById('gen-kind');
         var angleField = document.getElementById('gen-angle-field');
+        var sizeField = document.getElementById('gen-size-field');
         var videoField = document.getElementById('gen-video-field');
         var keywordsField = document.getElementById('gen-keywords-field');
         var cost = document.getElementById('gen-cost');
@@ -292,6 +302,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
             cost.textContent = eur[k] ? 'Coût estimé ' + fmt(eur[k] * (k === 'detoure' ? n : 1)) + costNote[k] : (k === 'video' ? 'Vidéo : gratuite' + (ffmpegOk ? '' : ' (fabriquée dans votre navigateur)') : '');
           }
           angleField.style.display = k === 'angle' ? '' : 'none';
+          sizeField.style.display = k === 'ambiance' ? '' : 'none';
           videoField.style.display = k === 'video' ? '' : 'none';
           veoField.style.display = k === 'video_ai' ? '' : 'none';
           keywordsField.style.display = (k === 'detoure' || k === 'video') ? 'none' : '';
@@ -324,6 +335,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
     </div>
     <script>
       (function () {
+        var skipped = 0;
         var box = document.getElementById('rv-block'), btn = document.getElementById('rv-run'), st = document.getElementById('rv-status');
         if (!btn) return;
         function say(msg, kind) { st.hidden = !msg; st.textContent = msg || ''; if (kind) st.setAttribute('data-kind', kind); else st.removeAttribute('data-kind'); }
@@ -340,12 +352,12 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
           call({ action: 'plan' }).then(function (plan) {
             if (!plan.ok) throw new Error(plan.error || 'Échec.');
             if (!plan.sources.length) throw new Error('Aucune photo de départ à détourer.');
-            var chain = Promise.resolve(), total = plan.sources.length;
+            var chain = Promise.resolve(), total = plan.sources.length; skipped = 0;
             plan.sources.forEach(function (src, i) {
               chain = chain.then(function () {
                 if (src.done) return null;
                 say('Détourage de l\'angle ' + (i + 1) + ' sur ' + total + '…');
-                return call({ action: 'cutout', photo_id: src.id }).then(function (r) { if (!r.ok) throw new Error(r.error || 'Détourage échoué.'); });
+                return call({ action: 'cutout', photo_id: src.id }).then(function (r) { if (!r.ok) skipped++; });
               });
             });
             var kw = document.getElementById('rv-keywords').value;
@@ -357,7 +369,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
             });
             return chain;
           }).then(function () {
-            say('Recto et verso ajoutés à la galerie.', 'ok');
+            say('Recto et verso ajoutés à la galerie.' + (skipped ? ' ' + skipped + ' angle' + (skipped > 1 ? 's' : '') + ' n\'a pas pu être détouré (refus de l\'IA) : sa photo a été utilisée telle quelle.' : ''), 'ok');
             setTimeout(function () { location.href = '?ref=' + encodeURIComponent(box.dataset.ref); }, 900);
           }).catch(function (e) { say(e.message, 'error'); btn.disabled = false; });
         });

@@ -4,8 +4,11 @@
 // sous la limite de durée d'exécution des hébergements mutualisés :
 //   create   → photos enregistrées, fiche masquée créée
 //   detoure  → photo principale détourée (fal.ai, sinon Gemini)
+//   sheet    → nom, description, catégorie et prix suggérés d'après tous les angles (avant la mise en situation : la
+//              nature de la pièce décide du décor)
 //   ambiance → mise en situation à partir du détourage (Gemini)
-//   sheet    → nom, description, catégorie et prix suggérés d'après tous les angles
+//   angles   → détourage des autres angles, un par appel (2 photos ou plus)
+//   recto, verso → deux visuels de studio générés à partir de tous les détourages (2 photos ou plus)
 //   finish   → traitement terminé (la fiche passe « à relire »)
 //   save     → corrections du vendeur et publication éventuelle
 //   jobs     → liste « Mes pièces » de l'application smartphone (studio.php)
@@ -111,29 +114,52 @@ switch ($action) {
         $product = quick_add_product();
         $source = product_source_photos($product['ref'])[0] ?? null;
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Photo principale introuvable.']);
-        $detoure = detoure_photo_synchronous($root . '/' . $source['path']);
-        if (!$detoure) {
-            quick_add_reply(['ok' => false, 'error' => 'Détourage indisponible : configurez fal.ai ou Gemini dans les réglages du site.']);
-        }
-        $path = save_binary_photo($detoure['bytes'], 'product-' . $product['ref'] . '-detoure', $detoure['ext']);
-        if (!$path) quick_add_reply(['ok' => false, 'error' => 'Échec de l\'enregistrement de l\'image détourée.']);
-        add_product_photo($product['ref'], $path, $detoure['label'], $detoure['illustration']);
-        quick_add_reply(['ok' => true, 'path' => $path, 'label' => $detoure['label']]);
+        // Détourage rattaché à la photo principale (comme ceux des autres angles : voir l'étape « angles »).
+        $cut = recto_verso_make_cutout($product['ref'], (int) $source['id']);
+        if (!$cut['ok']) quick_add_reply($cut);
+        quick_add_reply(['ok' => true, 'path' => $cut['cutout']['path'], 'label' => $cut['cutout']['label']]);
+    }
+
+    // Détourage des AUTRES angles, un par appel (« remaining » : combien il en reste) ; sans effet avec une seule photo.
+    case 'angles': {
+        $product = quick_add_product();
+        $sources = recto_verso_sources($product['ref']);
+        if (count($sources) < 2) quick_add_reply(['ok' => true, 'skipped' => true, 'remaining' => 0]);
+        // « skip » : angles dont le détourage a déjà échoué dans cette série (on passe au suivant, sans boucler dessus).
+        $skip = array_map('intval', array_filter(explode(',', preg_replace('/[^0-9,]/', '', (string) ($_POST['skip'] ?? '')))));
+        $todo = array_values(array_filter($sources, static fn (array $s): bool => !in_array((int) $s['id'], $skip, true) && !recto_verso_cutout_of($product['ref'], (int) $s['id'])));
+        if (!$todo) quick_add_reply(['ok' => true, 'remaining' => 0]);
+        $cut = recto_verso_make_cutout($product['ref'], (int) $todo[0]['id']);
+        if (!$cut['ok']) quick_add_reply($cut + ['photo_id' => (int) $todo[0]['id'], 'remaining' => count($todo) - 1]);
+        quick_add_reply(['ok' => true, 'path' => $cut['cutout']['path'], 'label' => $cut['cutout']['label'], 'remaining' => count($todo) - 1]);
+    }
+
+    // Recto et verso : tous les détourages envoyés ensemble à l'IA ; sans effet avec une seule photo (le verso serait deviné).
+    case 'recto':
+    case 'verso': {
+        $product = quick_add_product();
+        if (count(recto_verso_sources($product['ref'])) < 2) quick_add_reply(['ok' => true, 'skipped' => true]);
+        $r = recto_verso_generate($product['ref'], $action);
+        quick_add_reply($r['ok'] ? ['ok' => true, 'path' => $r['path'], 'label' => $r['label']] : $r);
     }
 
     case 'ambiance': {
         $product = quick_add_product();
         if (!GEMINI_API_KEY) quick_add_reply(['ok' => false, 'error' => 'Mise en situation indisponible : clé Gemini manquante (réglages du site).']);
-        $detoure = null;
-        foreach (product_photos_list($product['ref']) as $p) {
-            if (str_starts_with($p['label'], 'Détourée')) $detoure = $p;
+        // Détourage de la photo principale ; à défaut, la photo principale elle-même.
+        $main = product_source_photos($product['ref'])[0] ?? null;
+        $detoure = $main ? recto_verso_cutout_of($product['ref'], (int) $main['id']) : null;
+        if (!$detoure) {
+            foreach (product_photos_list($product['ref']) as $p) {
+                if (str_starts_with($p['label'], 'Détourée')) { $detoure = $p; break; }
+            }
         }
-        $source = $detoure ?? (product_source_photos($product['ref'])[0] ?? null);
+        $source = $detoure ?? $main;
         if (!$source) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à mettre en situation.']);
         // Version 3:2 maintenant ; la 9:16 suit à part (queue_mobile_variant).
         $notes = quick_add_notes($product['ref']);
         $scene = ambiance_scene($product);
-        $desktop = generate_desktop_image($root . '/' . $source['path'], build_ambiance_prompt($notes, $scene), generated_photo_basename('product-' . $product['ref'] . '-ambiance', $notes), 1, ambiance_is_directed($notes, $scene));
+        $desktop = generate_desktop_image($root . '/' . $source['path'], build_ambiance_prompt($notes, $scene), generated_photo_basename('product-' . $product['ref'] . '-ambiance', $notes), 1, ambiance_is_directed($notes, $scene), [], ambiance_subject_fill($scene, 'auto', GENERATED_IMAGE_FORMATS['desktop']));
         if (!$desktop) quick_add_reply(['ok' => false, 'error' => 'La mise en situation a échoué, réessayez plus tard depuis le catalogue.']);
         $label = generated_photo_label('Ambiance', $notes);
         queue_mobile_variant(add_product_photo($product['ref'], $desktop, $label, true), $desktop, $source['path'], $notes, $scene);

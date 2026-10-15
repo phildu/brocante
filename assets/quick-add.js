@@ -156,22 +156,38 @@
       ref = res.ref;
       step('create', 'ok', res.photos.length + ' photo(s) enregistrée(s) — Réf. N°' + ref);
       res.photos.forEach(function (p, n) { visuals.push({ path: p, label: n === 0 ? 'Photo principale' : 'Photo' }); });
-      var chain = ['detoure', 'ambiance', 'sheet'];
+      // La fiche avant la mise en situation : la nature de la pièce (vêtement, meuble…) décide du décor. Avec 2 photos ou
+      // plus : détourage des autres angles, puis recto et verso générés à partir de tous les détourages.
+      var chain = ['detoure', 'sheet', 'ambiance', 'angles', 'recto', 'verso'];
       (function next() {
         var name = chain.shift();
         if (!name) { review(); return; }
         step(name, 'run');
-        post(stepData(name)).then(function (r) {
-          if (r.ok) {
-            step(name, 'ok', name === 'sheet' ? 'Fiche rédigée : « ' + r.sheet.name + ' »' : 'Terminé');
-            if (r.path) visuals.unshift({ path: r.path, label: r.label });
-            if (r.sheet) sheet = r.sheet;
-          } else {
-            step(name, 'err', r.error);
-            failedSteps.push(name);
-          }
-          next();
-        });
+        var skipIds = [];
+        (function run() {
+          var fd = stepData(name);
+          if (name === 'angles' && skipIds.length) fd.append('skip', skipIds.join(','));
+          post(fd).then(function (r) {
+            if (r.ok && r.skipped) {
+              var skipLi = document.querySelector('#progress li[data-step="' + name + '"]');
+              if (skipLi) skipLi.hidden = true;
+            } else if (r.ok) {
+              step(name, 'ok', name === 'sheet' ? 'Fiche rédigée : « ' + r.sheet.name + ' »' : (name === 'angles' ? 'Tous les angles détourés' : 'Terminé'));
+              if (r.path) visuals.unshift({ path: r.path, label: r.label });
+              if (r.sheet) sheet = r.sheet;
+              if (name === 'angles' && r.remaining > 0) { step(name, 'run', r.remaining + ' angle(s) restant(s)…'); run(); return; }
+            } else {
+              // Un angle impossible à détourer : on passe aux suivants (le recto / verso utilisera sa photo telle quelle).
+              if (name === 'angles' && r.photo_id) {
+                skipIds.push(r.photo_id);
+                if (r.remaining > 0) { run(); return; }
+              }
+              step(name, 'err', r.error);
+              failedSteps.push(name);
+            }
+            next();
+          });
+        })();
       })();
     });
   }

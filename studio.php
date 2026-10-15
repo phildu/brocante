@@ -266,8 +266,8 @@ $siteName = (string) $content['site_name'];
   <script src="/assets/saved-prompts.js"></script>
   <script src="/assets/prompt-helper.js"></script>
   <script src="/assets/barcode-scan.js"></script>
-  <script src="/assets/quick-add.js"></script>
-  <script src="/assets/studio.js" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
+  <script src="/assets/quick-add.js?v=<?= (int) @filemtime(__DIR__ . '/assets/quick-add.js') ?>"></script>
+  <script src="/assets/studio.js?v=<?= (int) @filemtime(__DIR__ . '/assets/studio.js') ?>" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>
 </body>
 </html>

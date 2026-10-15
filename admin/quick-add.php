@@ -80,6 +80,6 @@ $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/admin/quick-a
 <script src="/assets/saved-prompts.js"></script>
 <script src="/assets/prompt-helper.js"></script>
 <script src="/assets/barcode-scan.js"></script>
-<script src="/assets/quick-add.js"></script>
+<script src="/assets/quick-add.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/quick-add.js') ?>"></script>
 </body>
 </html>

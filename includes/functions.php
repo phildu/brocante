@@ -1078,18 +1078,18 @@ function fit_generated_to_ratio(string $binary, string $aspectRatio, bool $allow
  * Un visuel au format donné : source préparée (photo posée entière avec marge
  * sur une toile à ce format), consigne de cadrage, format vérifié.
  */
-function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries, bool $directed = false, array $extraAbsPaths = []): ?string
+function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries, bool $directed = false, array $extraAbsPaths = [], ?float $fill = null): ?string
 {
-    $prepared = prepare_generation_source($srcAbsPath, $aspectRatio);
+    $prepared = prepare_generation_source($srcAbsPath, $aspectRatio, $fill ?? GENERATED_IMAGE_SUBJECT_FILL);
     $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio, $directed), $retries, $aspectRatio, $extraAbsPaths);
     if ($prepared) @unlink($prepared);
     return $bytes ? fit_generated_to_ratio($bytes, $aspectRatio) : null;
 }
 
 /** Visuel au format ordinateur (3:2), enregistré dans uploads/ : chemin, ou null. */
-function generate_desktop_image(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1, bool $directed = false, array $extraAbsPaths = []): ?string
+function generate_desktop_image(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1, bool $directed = false, array $extraAbsPaths = [], ?float $fill = null): ?string
 {
-    $bytes = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries, $directed, $extraAbsPaths);
+    $bytes = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries, $directed, $extraAbsPaths, $fill);
     return $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
 }
 
@@ -1201,9 +1201,9 @@ function generate_shadow_image(string $cutoutAbsPath, string $aspectRatio, strin
  * consigne du vendeur de la mise en situation, pour la regénérer directement en 9:16 quand le modèle refuse de
  * recadrer l'image finie (il le fait pour une photo réaliste de personne).
  */
-function queue_mobile_variant(int $photoId, string $desktopRelPath, ?string $regenSrc = null, string $keywords = '', ?array $scene = null): void
+function queue_mobile_variant(int $photoId, string $desktopRelPath, ?string $regenSrc = null, string $keywords = '', ?array $scene = null, string $sizePreset = 'auto'): void
 {
-    queue_format_job($photoId, $desktopRelPath, 'mobile', null, null, $regenSrc ? ['src' => $regenSrc, 'keywords' => $keywords, 'scene' => $scene] : null);
+    queue_format_job($photoId, $desktopRelPath, 'mobile', null, null, $regenSrc ? ['src' => $regenSrc, 'keywords' => $keywords, 'scene' => $scene, 'size' => $sizePreset] : null);
 }
 
 /**
@@ -1297,7 +1297,7 @@ function run_mobile_variant(int $photoId): array
             $keywords = (string) ($job['regen']['keywords'] ?? '');
             $smallSrc = downscale_for_ai($regenAbs, 1280, 85) ?? $regenAbs;
             $regenScene = is_array($job['regen']['scene'] ?? null) ? $job['regen']['scene'] : null;
-            $bytes = generate_image_for_ratio($smallSrc, build_ambiance_prompt($keywords, $regenScene), $aspect, 0, ambiance_is_directed($keywords, $regenScene));
+            $bytes = generate_image_for_ratio($smallSrc, build_ambiance_prompt($keywords, $regenScene), $aspect, 0, ambiance_is_directed($keywords, $regenScene), [], ambiance_subject_fill($regenScene, (string) ($job['regen']['size'] ?? 'auto'), $aspect));
             if ($smallSrc !== $regenAbs) @unlink($smallSrc);
         }
         $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
@@ -2260,7 +2260,8 @@ function build_ambiance_prompt(string $keywords, ?array $scene = null): string
     if ($scene !== null) {
         $person = !empty($scene['person']);
         $rule = $person
-            ? "The person must wear or carry exactly this item. Faithful, natural look, no text, no watermark."
+            ? "The person must wear or carry exactly this item. REAL-LIFE SCALE (mandatory): the item must fit the person naturally, sized to their body "
+                . "— never oversized, never bigger than their torso or frame; ignore how large the item appears in the input image. Faithful, natural look, no text, no watermark."
             : "Photorealistic, natural light, no text, no watermark.";
         if ($keywords === '') {
             return "This is a real secondhand/vintage product photo for an online shop. "

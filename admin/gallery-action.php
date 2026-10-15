@@ -430,6 +430,7 @@ switch ($action) {
             $extras[] = $tmp ?? $extraAbs;
         }
         $scene = $kind === 'ambiance' ? ambiance_scene($product) : null;
+        $sizePreset = isset(AMBIANCE_SIZE_PRESETS[$_POST['size_preset'] ?? '']) ? (string) $_POST['size_preset'] : 'auto';
         $prompt = match ($kind) {
             'ambiance' => build_ambiance_prompt($keywords, $scene),
             'angle' => build_angle_prompt($anglePreset, $keywords),
@@ -439,7 +440,7 @@ switch ($action) {
         // suit dans une requête séparée (queue_mobile_variant), pour rester
         // sous le délai du serveur.
         @set_time_limit(120);
-        $desktop = generate_desktop_image($small, $prompt, generated_photo_basename('product-' . $ref . '-' . $kind, $keywords), 1, $kind === 'ambiance' && ambiance_is_directed($keywords, $scene), $extras);
+        $desktop = generate_desktop_image($small, $prompt, generated_photo_basename('product-' . $ref . '-' . $kind, $keywords), 1, $kind === 'ambiance' && ambiance_is_directed($keywords, $scene), $extras, $kind === 'ambiance' ? ambiance_subject_fill($scene, $sizePreset, GENERATED_IMAGE_FORMATS['desktop']) : null);
         if ($small !== $srcAbs) @unlink($small);
         foreach ($extraTemps as $tmp) @unlink($tmp);
 
@@ -450,7 +451,7 @@ switch ($action) {
         // La photo prend le nom de la consigne (« Ambiance — portée par une femme en mouvement ») : renommable ensuite.
         $label = generated_photo_label(['ambiance' => 'Ambiance', 'angle' => 'Autre angle', 'complete' => 'Objet complété'][$kind], $keywords);
         $photoId = add_product_photo($ref, $desktop, $label, true);
-        queue_mobile_variant($photoId, $desktop, $kind === 'ambiance' ? $sourcePath : null, $kind === 'ambiance' ? $keywords : '', $scene);
+        queue_mobile_variant($photoId, $desktop, $kind === 'ambiance' ? $sourcePath : null, $kind === 'ambiance' ? $keywords : '', $scene, $sizePreset);
         $doneLabel = ['ambiance' => "La photo d'ambiance", 'angle' => 'La vue sous un autre angle', 'complete' => "Le complément de l'objet"][$kind];
         flash_set("$doneLabel a été générée et ajoutée à la galerie (format ordinateur 3:2) sous le nom « $label »" . ($keywords !== '' ? ' d\'après votre consigne' : '') . '. La version smartphone 9:16 se génère maintenant, sans rien bloquer.' . ($extras ? ' (à partir de ' . (1 + count($extras)) . ' photos de la pièce)' : ''));
         break;

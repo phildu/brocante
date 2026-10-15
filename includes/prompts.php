@@ -87,7 +87,8 @@ function build_ambiance_prompt_fr(string $keywords, ?array $scene = null): strin
 {
     if ($scene !== null) {
         $rule = !empty($scene['person'])
-            ? "La personne doit porter ou tenir exactement cet article. Rendu naturel et fidèle, sans texte, sans filigrane."
+            ? "La personne doit porter ou tenir exactement cet article. ÉCHELLE RÉELLE (impératif) : l'article doit aller naturellement à la personne, à la taille de son corps "
+                . "— jamais trop grand, jamais plus grand que son torse ou sa silhouette ; ignore la taille de l'article sur l'image de départ. Rendu naturel et fidèle, sans texte, sans filigrane."
             : "Photoréaliste, lumière naturelle, sans texte, sans filigrane.";
         if ($keywords === '') {
             return "Voici une vraie photo d'un objet d'occasion / vintage pour une boutique en ligne. "
