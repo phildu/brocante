@@ -15,7 +15,7 @@ const RECTO_VERSO_MAX_SENT = 4;
  */
 function recto_verso_is_closeup(array $photo): bool
 {
-    return (bool) preg_match('/^(étiquette|etiquette|texture|détail|detail)/iu', trim((string) $photo['label']));
+    return (bool) preg_match('/^(étiquette|etiquette|texture|détail|detail|mesure)/iu', trim((string) $photo['label']));
 }
 
 function recto_verso_sources(string $ref): array

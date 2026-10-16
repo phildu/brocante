@@ -5,6 +5,7 @@
 //   create   → photos enregistrées, fiche masquée créée (+ type de pièce, code-barres et pochette d'un média)
 //   video    → vidéo de la pièce, envoyée par morceaux
 //   objects  → objets distincts d'une photo (ensemble), pour en isoler un
+//   measure  → estimation des dimensions par l'IA, d'après un repère de taille connue (règle, pièce…)
 //   detoure  → photo principale détourée (fal.ai, sinon Gemini)
 //   sheet    → nom, description, catégorie et prix suggérés d'après tous les angles (avant la mise en situation : la
 //              nature de la pièce décide du décor)
@@ -79,8 +80,10 @@ switch ($action) {
         }
 
         $ref = next_ref();
-        db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, price, badge, is_hidden, featured, sort_order, nature, barcode)
-                       VALUES (:ref, :name, :cat, NULL, NULL, :description, :price, :badge, 1, 0, :sort_order, :nature, :barcode)')
+        // Taille mesurée sur une photo (assets/measure-tool.js) : elle prime sur l'estimation de l'IA.
+        $sizeText = mb_substr(trim((string) ($_POST['size_text'] ?? '')), 0, 60);
+        db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, price, badge, is_hidden, featured, sort_order, nature, barcode, size_text)
+                       VALUES (:ref, :name, :cat, NULL, NULL, :description, :price, :badge, 1, 0, :sort_order, :nature, :barcode, :size_text)')
             ->execute([
                 'ref' => $ref,
                 'name' => 'Pièce à décrire',
@@ -91,6 +94,7 @@ switch ($action) {
                 'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),
                 'nature' => ['vetement' => 'vetements', 'media' => 'livres_medias'][$kind] ?? null,
                 'barcode' => $barcode !== '' ? $barcode : null,
+                'size_text' => $sizeText,
             ]);
 
         // Photo principale d'abord : elle sert de couverture et de source aux générations.
@@ -105,7 +109,9 @@ switch ($action) {
                 $path = copy_photo_into_uploads($files['tmp_name'][$i], 'product-' . $ref);
                 if (!$path) continue;
                 $label = trim((string) ($labels[$i] ?? '')) ?: 'Photo';
-                add_product_photo($ref, $path, $i === $main ? 'Photo principale' : mb_substr($label, 0, 40), false);
+                $photoId = add_product_photo($ref, $path, $i === $main ? 'Photo principale' : mb_substr($label, 0, 40), false);
+                // Photo de mesure (repère posé à côté de la pièce) : gardée pour mémoire, masquée dans la boutique.
+                if ($i !== $main && preg_match('/^mesure/iu', $label)) db()->prepare('UPDATE product_photos SET is_hidden = 1 WHERE id = ?')->execute([$photoId]);
                 $saved[] = $path;
             }
         }
@@ -171,6 +177,29 @@ switch ($action) {
         if (!$path) { @unlink($part); quick_add_reply(['ok' => false, 'error' => 'Format de vidéo non pris en charge (mp4, mov ou webm).'], 415); }
         add_product_photo($product['ref'], $path, 'Vidéo de la pièce', false, 'video');
         quick_add_reply(['ok' => true, 'done' => true, 'path' => $path]);
+    }
+
+    // Estimation des dimensions d'une pièce par l'IA, d'après un repère de taille connue posé à côté d'elle (photo + ref + ref_cm).
+    case 'measure': {
+        $file = $_FILES['photo'] ?? null;
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !@getimagesize($file['tmp_name'])) {
+            quick_add_reply(['ok' => false, 'error' => 'Photo non reçue.'], 400);
+        }
+        if (!GEMINI_API_KEY) quick_add_reply(['ok' => false, 'error' => 'Estimation indisponible : clé Gemini manquante (réglages du site).']);
+        $ref = mb_substr(trim((string) ($_POST['ref'] ?? 'repère')), 0, 60);
+        $refCm = max(0.1, min(300.0, (float) ($_POST['ref_cm'] ?? 0)));
+        $small = downscale_for_ai($file['tmp_name'], 1280, 85);
+        $prompt = "Tu regardes la photo d'" . tenant('ai.item') . ' pour ' . tenant('ai.shop') . ', posé à côté d\'un repère de taille connue : ' . $ref . ' (longueur ou diamètre réel : ' . $refCm . ' cm). '
+            . "Estime les dimensions RÉELLES de l'objet en centimètres, en prenant le repère pour échelle et en tenant compte de la perspective (le repère et l'objet ne sont pas toujours au même niveau). "
+            . "Si le repère ou l'objet n'est pas visible, réponds null. Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown : "
+            . '{"hauteur_cm": nombre ou null, "largeur_cm": nombre ou null, "profondeur_cm": nombre ou null, "fiabilite": "haute" ou "moyenne" ou "faible", "remarque": "une phrase courte"}.';
+        $text = $small ? gemini_describe_image($small, $prompt, 1) : null;
+        if ($small) @unlink($small);
+        $data = $text ? json_decode(preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)), true) : null;
+        if (!is_array($data)) quick_add_reply(['ok' => false, 'error' => "L'IA n'a pas pu estimer les dimensions : tracez-les à la main."]);
+        $num = static fn ($v): float => is_numeric($v) ? max(0.0, min(500.0, round((float) $v, 1))) : 0.0;
+        quick_add_reply(['ok' => true, 'dims' => ['hauteur' => $num($data['hauteur_cm'] ?? null), 'largeur' => $num($data['largeur_cm'] ?? null), 'profondeur' => $num($data['profondeur_cm'] ?? null)],
+            'reliability' => in_array($data['fiabilite'] ?? '', ['haute', 'moyenne', 'faible'], true) ? 'fiabilité ' . $data['fiabilite'] : '', 'note' => mb_substr(trim((string) ($data['remarque'] ?? '')), 0, 160)]);
     }
 
     // Objets distincts d'une photo (un ensemble) : l'IA les repère, le vendeur en choisit un (assets/object-picker.js).
@@ -262,18 +291,20 @@ switch ($action) {
         if ($kind === 'vetement') $hint .= ' Cette pièce est un vêtement (recto et verso photographiés) : indique sa nature et sa sous-catégorie de vêtement, et lis la taille sur l\'étiquette si elle est visible.';
         if ($lookup) $hint .= ' Informations vérifiées d\'après le code-barres ' . $lookup['code'] . ' : ' . barcode_cut(trim(($lookup['label'] ?? '') . ' « ' . ($lookup['name'] ?? '') . ' ». ' . ($lookup['description'] ?? '')), 400);
 
+        $measured = trim((string) ($product['size_text'] ?? ''));
         $text = gemini_describe_image($smalls[0], build_product_sheet_prompt(count($smalls), trim(quick_add_notes($product['ref']) . $hint)), 1, array_slice($smalls, 1));
         foreach ($smalls as $i => $small) {
             if (str_starts_with($small, sys_get_temp_dir())) @unlink($small);
         }
         $sheet = $text ? parse_product_sheet_response($text) : null;
         if (!$sheet) quick_add_reply(['ok' => false, 'error' => 'La rédaction automatique a échoué : complétez la fiche à la main.']);
+        if ($measured !== '') $sheet['size_text'] = $measured;   // la taille mesurée prime sur l'estimation de l'IA
         // Les faits du catalogue (titre, auteur, éditeur, pistes…) priment sur ce que l'IA devine d'après les photos.
         if ($lookup) {
             if (!empty($lookup['name'])) $sheet['name'] = mb_substr((string) $lookup['name'], 0, 120);
             if (!empty($lookup['description'])) $sheet['description'] = (string) $lookup['description'];
             if (!empty($lookup['materials'])) $sheet['materials'] = mb_substr((string) $lookup['materials'], 0, 200);
-            if (!empty($lookup['size_text'])) $sheet['size_text'] = mb_substr((string) $lookup['size_text'], 0, 60);
+            if (!empty($lookup['size_text']) && $measured === '') $sheet['size_text'] = mb_substr((string) $lookup['size_text'], 0, 60);
             if (!empty($lookup['weight_grams'])) $sheet['weight_grams'] = (int) $lookup['weight_grams'];
             if (!empty($lookup['nature'])) {
                 $pair = product_nature_resolve((string) $lookup['nature'], (string) ($lookup['sous_categorie'] ?? ''));

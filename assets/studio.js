@@ -123,13 +123,14 @@
   function shotLabels(piece) {
     var guided = KIND_SHOTS[meta(piece).kind].labels, v = 0, d = 0;
     return piece.map(function (x) {
+      if (x.measure) return 'Mesure (photo de référence)';
       if (x.detail) return 'Détail ' + (++d);
       v++;
       return guided ? (guided[v - 1] || 'Vue ' + v) : (v === 1 ? 'Photo principale' : 'Vue ' + v);
     });
   }
   function mainIndexOf(piece) { var i = piece.findIndex(function (x) { return !x.detail; }); return i < 0 ? 0 : i; }
-  function meta(p) { return p.meta || (p.meta = { kind: 'objet', scan: null, video: null, detail: false }); }
+  function meta(p) { return p.meta || (p.meta = { kind: 'objet', scan: null, video: null, detail: false, size: '' }); }
   function pieceMax(p) { return KIND_SHOTS[meta(p).kind].max; }
   /** Une pièce compte si elle a des photos, ou si c'est un média scanné avec sa pochette (sans photo). */
   function pieceValid(p) { var m = meta(p); return p.length > 0 || (m.kind === 'media' && !!(m.scan && m.scan.cover)); }
@@ -137,13 +138,14 @@
   function validCount() { return pieces.filter(pieceValid).length; }
   function saveLayout() {
     return idbDo('meta', 'readwrite', function (s) {
-      return s.put(pieces.map(function (p) { var m = meta(p); return { ids: p.map(function (x) { return x.id; }), details: p.filter(function (x) { return x.detail; }).map(function (x) { return x.id; }), kind: m.kind, scan: m.scan, video: m.video ? m.video.id : null }; }), 'layout');
+      return s.put(pieces.map(function (p) { var m = meta(p); return { ids: p.map(function (x) { return x.id; }), details: p.filter(function (x) { return x.detail; }).map(function (x) { return x.id; }), measures: p.filter(function (x) { return x.measure; }).map(function (x) { return x.id; }), size: m.size || '', kind: m.kind, scan: m.scan, video: m.video ? m.video.id : null }; }), 'layout');
     });
   }
-  function addShot(blob) {
+  function addShot(blob, flags) {
     var piece = pieces[pieces.length - 1];
     if (piece.length >= pieceMax(piece)) { toast('Déjà ' + MAX_PER_PIECE + ' photos : passez à la pièce suivante.'); return false; }
     var shot = { id: nextId++, blob: blob, url: URL.createObjectURL(blob), detail: !!meta(piece).detail };
+    if (flags) { shot.detail = !!flags.detail; shot.measure = !!flags.measure; }
     piece.push(shot);
     idbDo('blobs', 'readwrite', function (s) { return s.put(blob, shot.id); }).then(saveLayout);
     renderShoot();
@@ -238,6 +240,12 @@
       x.addEventListener('click', function () { m.scan = null; saveLayout(); renderShoot(); });
       sc.appendChild(x); chip.appendChild(sc);
     }
+    if (m.size) {
+      var zc = el('span', 'sb-chip', '📏 ' + m.size);
+      var zx = el('button', 'sb-chip-x', '×'); zx.type = 'button'; zx.setAttribute('aria-label', 'Retirer la taille');
+      zx.addEventListener('click', function () { m.size = ''; saveLayout(); renderShoot(); });
+      zc.appendChild(zx); chip.appendChild(zc);
+    }
     if (m.video) {
       var vc = el('span', 'sb-chip', '🎬 Vidéo ' + (m.video.seconds ? m.video.seconds + ' s' : '') + ' (' + sizeText(m.video.blob.size) + ')');
       var vx = el('button', 'sb-chip-x', '×'); vx.type = 'button'; vx.setAttribute('aria-label', 'Retirer la vidéo');
@@ -269,6 +277,23 @@
 
   // « Gros plan » : les photos suivantes sont des détails (étiquette, défaut, signature, texture…), autant qu'on veut.
   $('sb-detail').addEventListener('click', function () { var m = meta(pieces[pieces.length - 1]); m.detail = !m.detail; renderShoot(); });
+
+  // Mesure : repère de taille connue (règle, mètre, pièce de monnaie) tracé au doigt sur une photo de la pièce.
+  $('sb-measure').addEventListener('click', function () {
+    if (!window.studioMeasure) return;
+    var piece = pieces[pieces.length - 1];
+    var imgs = piece.filter(function (x) { return !x.measure; }).map(function (x, i) { return { blob: x.blob, label: 'Photo ' + (i + 1) }; });
+    var qa = document.querySelector('.qa');
+    stopCamera();
+    window.studioMeasure({ images: imgs, ai: !!(qa && qa.dataset.ai === '1') }).then(function (r) {
+      resumeCameraIfShooting();
+      if (!r) return;
+      meta(piece).size = r.text;
+      // Photo prise pour l'occasion : gardée avec la pièce (masquée dans la boutique), jamais comptée comme une vue.
+      if (r.newBlob && piece.length < pieceMax(piece)) addShot(r.newBlob, { detail: true, measure: true });
+      saveLayout(); renderShoot(); toast('Taille notée : ' + r.text);
+    });
+  });
 
   // Scan d'un code-barres / QR (livre, CD, vinyle, DVD) : la fiche et la pochette sont cherchées au catalogue.
   function applyScan(piece, code) {
@@ -405,7 +430,7 @@
       var pm = meta(piece);
       var card = el('section', 'sb-piece');
       var head = el('div', 'sb-piece-head');
-      head.appendChild(el('b', '', 'Pièce ' + (pi + 1) + ' · ' + { objet: 'objet', vetement: 'vêtement', media: 'média' }[pm.kind] + ' · ' + plural(piece.length, 'photo', 'photos') + (pm.video ? ' · 🎬 vidéo' : '')));
+      head.appendChild(el('b', '', 'Pièce ' + (pi + 1) + ' · ' + { objet: 'objet', vetement: 'vêtement', media: 'média' }[pm.kind] + ' · ' + plural(piece.length, 'photo', 'photos') + (pm.video ? ' · 🎬 vidéo' : '') + (pm.size ? ' · 📏 ' + pm.size : '')));
       var tools = el('span', 'sb-piece-tools');
       if (pi > 0 && pieces[pi - 1].length) {
         var merge = el('button', 'sb-link', 'Fusionner avec la précédente'); merge.type = 'button';
@@ -532,6 +557,7 @@
     fd.append('action', 'create'); fd.append('source', 'batch'); fd.append('notes', lotNotes); fd.append('main', String(mainIndexOf(job.piece))); fd.append('kind', m.kind);
     if (m.scan && m.scan.code) fd.append('barcode', m.scan.code);
     if (m.scan && m.scan.cover) fd.append('cover_url', m.scan.cover);
+    if (m.size) fd.append('size_text', m.size);
     job.piece.forEach(function (s, i) { fd.append('photos[]', s.blob, 'photo-' + i + '.jpg'); fd.append('labels[]', labels[i]); });
     return api(fd);
   }
@@ -748,7 +774,7 @@
   $('sl-refresh').addEventListener('click', loadList);
 
   // ── Relecture d'une pièce ─────────────────────────────────────────────────
-  var sheetRef = null;
+  var sheetRef = null, sheetPhotos = [];
   var dlg = $('sr');
   function openSheet(ref) {
     sheetRef = ref;
@@ -759,6 +785,7 @@
       $('sr-ref').textContent = 'Réf. N°' + p.ref;
       $('sr-body').dataset.aiRef = p.ref; // boutons « ↻ IA » (assets/product-ai.js)
       $('sr-body').querySelector('[data-ai-status]').textContent = '';
+      sheetPhotos = res.photos;
       var box = $('sr-photos'); box.textContent = '';
       res.photos.forEach(function (ph) {
         var fig = el('figure'); var img = el('img'); img.src = '/' + ph.path; img.alt = ph.label; img.loading = 'lazy';
@@ -776,6 +803,14 @@
       dlg.querySelector('.sr-body').scrollTop = 0;
     });
   }
+  $('sr-measure').addEventListener('click', function () {
+    if (!window.studioMeasure) return;
+    var qa = document.querySelector('.qa');
+    window.studioMeasure({ images: sheetPhotos.map(function (ph) { return { url: '/' + ph.path, label: ph.label }; }), ai: !!(qa && qa.dataset.ai === '1') }).then(function (r) {
+      if (!r) return;
+      var f = $('sr-size'); f.value = r.text; f.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
   $('sr-save').addEventListener('click', function () {
     var btn = this; btn.disabled = true; btn.textContent = 'Enregistrement…';
     var fd = new FormData();
@@ -876,9 +911,9 @@
       ids.forEach(function (id, i) { if (blobs[i]) byId[id] = { id: id, blob: blobs[i], url: URL.createObjectURL(blobs[i]) }; });
       var restored = layout.map(function (p) {
         var arr = p.ids.map(function (id) { return byId[id]; }).filter(Boolean);
-        arr.forEach(function (x) { x.detail = (p.details || []).indexOf(x.id) >= 0; });
+        arr.forEach(function (x) { x.detail = (p.details || []).indexOf(x.id) >= 0; x.measure = (p.measures || []).indexOf(x.id) >= 0; });
         var v = p.video && byId[p.video] ? { id: p.video, blob: byId[p.video].blob, url: byId[p.video].url, seconds: 0 } : null;
-        arr.meta = { kind: KIND_SHOTS[p.kind] ? p.kind : 'objet', scan: p.scan || null, video: v };
+        arr.meta = { kind: KIND_SHOTS[p.kind] ? p.kind : 'objet', scan: p.scan || null, video: v, detail: false, size: p.size || '' };
         return arr;
       }).filter(pieceValid);
       if (!restored.length) return;

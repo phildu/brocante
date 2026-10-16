@@ -132,7 +132,8 @@
     e.preventDefault();
     var tab = btn.dataset.shareOpen === 'qr' ? 'qr' : 'share';
     // Téléphone : le menu de partage du système d'abord (WhatsApp, Messages, Instagram…) ; la fenêtre reste accessible si on l'annule.
-    if (tab === 'share' && navigator.share && window.matchMedia('(pointer: coarse)').matches) {
+    // [data-share-dialog] : on veut la fenêtre complète (réseaux, WhatsApp, SMS, code QR) même sur téléphone.
+    if (tab === 'share' && !btn.hasAttribute('data-share-dialog') && navigator.share && window.matchMedia('(pointer: coarse)').matches) {
       current = { url: btn.dataset.shareUrl || location.href, title: btn.dataset.shareTitle || document.title, text: btn.dataset.shareText || '' };
       nativeShare().catch(function (err) { if (err && err.name !== 'AbortError') open(btn, 'share'); });
       return;

@@ -6,6 +6,7 @@
 // 30 jours sur le téléphone. Les envois passent par admin/quick-add-action.php.
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/share.php';
 
 header('Cache-Control: no-store');
 $content = get_content();
@@ -61,7 +62,10 @@ $angles = [
 ];
 $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/studio.php', 'list' => '/studio.php#pieces', 'list_label' => 'Voir mes pièces', 'title' => false, 'later' => true];
 $ico = static fn (string $d): string => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
-$siteName = (string) $content['site_name'];
+$siteName = trim((string) $content['site_name']) ?: (string) tenant('name');
+// Adresse de l'application et texte partagé (réseaux, WhatsApp, SMS, e-mail, code QR) : le menu et la page de connexion les proposent.
+[$studioUrl, $studioReachable] = studio_public_url();
+$shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('Studio — ' . $siteName) . '" data-share-text="' . h("Studio de $siteName : photographiez vos pièces avec votre téléphone, l'application prépare les fiches de la boutique. Ouvrez le lien, connectez-vous, puis « Ajouter à l'écran d'accueil ».") . '" data-share-dialog="1"';
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -71,7 +75,7 @@ $siteName = (string) $content['site_name'];
 <meta name="theme-color" content="#f4eee1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Studio">
+<meta name="apple-mobile-web-app-title" content="<?= h($siteName) ?>">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="/studio-manifest.php">
 <link rel="apple-touch-icon" href="/studio-icon.php?s=180">
@@ -81,6 +85,8 @@ $siteName = (string) $content['site_name'];
 <link rel="stylesheet" href="/assets/studio.css">
 <link rel="stylesheet" href="/assets/barcode-scan.css">
 <link rel="stylesheet" href="/assets/object-picker.css">
+<link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/assets/share.css') ?>">
+<link rel="stylesheet" href="/assets/measure-tool.css">
 </head>
 <body class="studio">
 <?php if (!$account): ?>
@@ -102,6 +108,7 @@ $siteName = (string) $content['site_name'];
       <label class="qa-switch"><input type="checkbox" name="remember" value="1" checked> <span>Rester connecté sur ce téléphone<br><small class="qa-note">30 jours. Décochez sur un appareil partagé.</small></span></label>
       <button class="btn btn-primary" type="submit">Se connecter</button>
     </form>
+    <p class="st-share-row"><button type="button" class="btn btn-ghost"<?= $shareAttrs ?> data-share-open="share">Partager l'application</button></p>
   </main>
 <?php elseif (!$isAdmin): ?>
   <main class="st-login">
@@ -113,11 +120,15 @@ $siteName = (string) $content['site_name'];
 <?php else: ?>
   <header class="st-top">
     <img class="st-top-logo" src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($siteName) ?>">
+    <button type="button" class="st-share" data-share-open="share"<?= $shareAttrs ?> aria-label="Partager l'application Studio" title="Partager l'application"><?= $ico('<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.3M8.3 13.2l7.4 4.3"/>') ?></button>
     <details class="st-menu">
       <summary aria-label="Menu"><?= $ico('<circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/>') ?></summary>
       <div class="st-menu-box">
         <p class="qa-note"><?= h($account['name'] ?? '') ?: 'Connecté' ?></p>
         <button type="button" class="btn btn-ghost" id="st-install" hidden>Installer l'application</button>
+        <button type="button" class="btn btn-ghost" data-share-open="share"<?= $shareAttrs ?>>Partager l'application</button>
+        <button type="button" class="btn btn-ghost" data-share-open="qr"<?= $shareAttrs ?>>Code QR de l'application</button>
+        <?php if (!$studioReachable): ?><p class="qa-note">Adresse locale : un téléphone ne peut pas l'ouvrir. En ligne, le lien fonctionne.</p><?php endif; ?>
         <a class="btn btn-ghost" href="/admin/catalog.php">Administration</a>
         <form method="post"><input type="hidden" name="action" value="logout"><button class="btn btn-ghost" type="submit">Se déconnecter</button></form>
       </div>
@@ -169,6 +180,7 @@ $siteName = (string) $content['site_name'];
             <div class="sb-extras">
               <button type="button" class="sb-extra" id="sb-scan" hidden><?= $ico('<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M11 9v6M15 9v6"/>') ?><span>Scanner le code</span></button>
               <button type="button" class="sb-extra" id="sb-detail" aria-pressed="false"><?= $ico('<circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2M11 8.5v5M8.5 11h5"/>') ?><span>Gros plan</span></button>
+              <button type="button" class="sb-extra" id="sb-measure"><?= $ico('<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>') ?><span>Mesure</span></button>
               <button type="button" class="sb-extra" id="sb-rec"><?= $ico('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>') ?><span>Vidéo</span></button>
               <input type="file" id="sb-video-file" accept="video/*" capture="environment" hidden>
             </div>
@@ -246,7 +258,7 @@ $siteName = (string) $content['site_name'];
         <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button><input type="text" id="sr-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
         <label class="qa-field">Poids (g) <button type="button" class="ai-btn" data-ai-field="weight" title="Estimer le poids (à vérifier avec une balance)">↻ IA</button><input type="number" id="sr-weight" data-ai-input="weight_grams" min="0" step="10" inputmode="numeric" placeholder="500"></label>
       </div>
-      <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button><input type="text" id="sr-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>
+      <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button> <button type="button" class="ai-btn" id="sr-measure" title="Mesurer la pièce sur une photo, avec un repère de taille connue">📏 Mesurer</button><input type="text" id="sr-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>
       <label class="qa-field">Catégorie <button type="button" class="ai-btn" data-ai-field="category" title="Choisir la catégorie d'après la pièce">↻ IA</button>
         <select id="sr-cat" data-ai-input="cat">
           <?php foreach (category_list() as $c): ?>
@@ -281,9 +293,11 @@ $siteName = (string) $content['site_name'];
   <script src="/assets/saved-prompts.js"></script>
   <script src="/assets/prompt-helper.js"></script>
   <script src="/assets/barcode-scan.js"></script>
+  <script src="/assets/measure-tool.js?v=<?= (int) @filemtime(__DIR__ . '/assets/measure-tool.js') ?>"></script>
   <script src="/assets/object-picker.js?v=<?= (int) @filemtime(__DIR__ . '/assets/object-picker.js') ?>"></script>
   <script src="/assets/quick-add.js?v=<?= (int) @filemtime(__DIR__ . '/assets/quick-add.js') ?>"></script>
   <script src="/assets/studio.js?v=<?= (int) @filemtime(__DIR__ . '/assets/studio.js') ?>" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>
+<script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/assets/share.js') ?>" defer></script>
 </body>
 </html>

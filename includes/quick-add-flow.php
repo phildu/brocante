@@ -74,6 +74,11 @@
       <span class="qa-video-state" id="qa-video-state" role="status"></span>
       <button type="button" class="btn-small" id="qa-video-remove" hidden>Retirer la vidéo</button>
     </div>
+    <div class="qa-measure" id="qa-measure">
+      <button type="button" class="qa-measure-btn" id="qa-measure-btn"><span aria-hidden="true">📏</span> Mesurer la pièce <small>(facultatif — un double décimètre, un mètre ou une pièce de monnaie posé à côté)</small></button>
+      <span class="qa-video-state" id="qa-measure-state" role="status"></span>
+      <button type="button" class="btn-small" id="qa-measure-remove" hidden>Retirer la taille</button>
+    </div>
     <label class="qa-field">Indications pour l'IA (facultatif)
       <textarea id="notes" rows="2" maxlength="300" data-saved-prompts="notes" data-prompt-helper="notes" placeholder="Ex. : années 70, grès, petit éclat au pied, 32 cm de haut"></textarea>
     </label>
@@ -109,7 +114,7 @@
       <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button><input type="text" id="f-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
       <label class="qa-field">Poids (g) <button type="button" class="ai-btn" data-ai-field="weight" title="Estimer le poids (à vérifier avec une balance)">↻ IA</button><input type="number" id="f-weight" data-ai-input="weight_grams" min="0" step="10" inputmode="numeric" placeholder="500"></label>
     </div>
-    <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button><input type="text" id="f-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>
+    <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button> <button type="button" class="ai-btn" id="f-measure" title="Mesurer la pièce sur une photo, avec un repère de taille connue">📏 Mesurer</button><input type="text" id="f-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>
     <label class="qa-field">Catégorie <button type="button" class="ai-btn" data-ai-field="category" title="Choisir la catégorie d'après la pièce">↻ IA</button>
       <select id="f-cat" data-ai-input="cat">
         <?php foreach (category_list() as $c): ?>

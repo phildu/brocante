@@ -15,6 +15,7 @@
   var laterMode = false; // « Shooting d'abord » : la pièce est enregistrée sans traitement (Studio)
   var aiReady = root.dataset.ai === '1';
   var VIDEO_MAX = 200 * 1048576;
+  var measure = null;   // taille mesurée sur une photo : {text, blob (photo de mesure, si nouvelle)}
 
   function $(id) { return document.getElementById(id); }
 
@@ -283,6 +284,27 @@
     })(0);
   }
 
+  // ── Mesure de la pièce : repère de taille connue (règle, mètre, pièce de monnaie) tracé au doigt sur une photo ──
+  function showMeasure() {
+    $('qa-measure-state').textContent = measure ? '✓ Taille : ' + measure.text : '';
+    $('qa-measure-remove').hidden = !measure;
+  }
+  $('qa-measure-btn').addEventListener('click', function () {
+    if (!window.studioMeasure) return;
+    var imgs = Object.keys(photos).map(Number).sort(function (a, b) { return a - b; }).filter(function (i) { return !slot(i).hidden; })
+      .map(function (i) { return { blob: photos[i], label: slot(i).dataset.label }; });
+    window.studioMeasure({ images: imgs, ai: aiReady }).then(function (r) { if (r) { measure = { text: r.text, blob: r.newBlob || null }; showMeasure(); } });
+  });
+  $('qa-measure-remove').addEventListener('click', function () { measure = null; showMeasure(); });
+  // Relecture : mesurer sur l'une des photos de la pièce (la taille remplit le champ « Taille »).
+  $('f-measure').addEventListener('click', function () {
+    if (!window.studioMeasure) return;
+    window.studioMeasure({ images: visuals.map(function (v) { return { url: '/' + v.path, label: v.label }; }), ai: aiReady }).then(function (r) {
+      if (!r) return;
+      var f = $('f-size'); f.value = r.text; f.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
+
   // ── Mode de travail (Studio) : tout de suite, ou shooting d'abord puis traitement par lot ──
   if (root.dataset.later === '1' && $('qa-mode')) {
     try { laterMode = localStorage.getItem('studio-mode') === 'later'; } catch (e) {}
@@ -338,12 +360,15 @@
     fd.append('notes', $('notes').value);
     if (scan && scan.code) fd.append('barcode', scan.code);
     if (scan && scan.cover) fd.append('cover_url', scan.cover);
+    if (measure) fd.append('size_text', measure.text);
     var keys = Object.keys(photos).map(Number).sort(function (a, b) { return a - b; });
     keys.forEach(function (i, n) {
       fd.append('photos[]', photos[i], 'photo-' + i + '.jpg');
       fd.append('labels[]', slot(i).dataset.label);
       if (i === mainIndex) fd.append('main', n);
     });
+    // Photo de mesure (repère posé à côté de la pièce) : gardée pour mémoire, masquée dans la boutique.
+    if (measure && measure.blob && keys.length < 10) { fd.append('photos[]', measure.blob, 'mesure.jpg'); fd.append('labels[]', 'Mesure (photo de référence)'); }
     // Shooting d'abord : seuls l'envoi (et la vidéo) sont affichés, le traitement se fera plus tard, par lot.
     if (laterMode) document.querySelectorAll('#progress li').forEach(function (li) { li.hidden = li.dataset.step !== 'create' && !(li.dataset.step === 'video' && video); });
     if (video) { var vli = document.querySelector('#progress li[data-step="video"]'); if (vli) vli.hidden = false; }

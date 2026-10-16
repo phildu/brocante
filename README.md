@@ -275,6 +275,18 @@ Application smartphone `studio.php` (parcours « Une pièce » : `quick-add.js` 
 - **Plusieurs détails** : dans le parcours d'une pièce, « + Un détail de plus » ajoute autant d'emplacements « Détail 1, 2, 3… » que voulu (10 photos au plus
   par pièce), pour tous les types ; dans le lot, le bouton **Gros plan** fait des photos suivantes des détails (numérotés « Détail n »). Les détails ne sont ni
   détourés ni envoyés pour le recto / verso (`recto_verso_is_closeup()`) ; ils restent des photos de la fiche.
+- **Mesurer une pièce** (`assets/measure-tool.js`) : bouton « 📏 Mesurer la pièce » (parcours d'une pièce), « Mesure » (viseur du lot), « 📏 Mesurer » à côté du champ
+  « Taille » (relecture). On choisit un **repère de taille connue** posé à côté de la pièce — double décimètre (20 cm), mètre (100 cm), pièce de 2 €, 1 €, 50 c, 20 c ou 10 c
+  (diamètres officiels), ou une longueur libre — on le **trace au doigt** (glisser-déposer, avec une loupe sous le doigt) pour étalonner la photo, puis on **trace la hauteur, la largeur,
+  la profondeur, le diamètre**… ; les valeurs (modifiables à la main) composent la taille (« H 30 × L 25 × P 12 cm », arrondie au demi-centimètre sous 20 cm). La photo peut être
+  une des photos de la pièce ou une nouvelle photo de mesure, gardée avec la pièce mais **masquée** dans la boutique (« Mesure (photo de référence) »). Option « Estimer avec l'IA » :
+  Gemini estime les dimensions d'après le repère (action `measure`, écart de l'ordre de 5 à 10 % sur un test) ; le tracé reste plus juste. La taille mesurée est enregistrée
+  (`products.size_text`) et **prime sur l'estimation de l'IA** à l'étape « fiche ». La mesure n'est exacte que si l'appareil est parallèle à la pièce (point de vue fixe, support) et le repère au même niveau qu'elle.
+- **Nom de l'application et partage** : l'application installée porte le nom de la boutique (« Studio <boutique> » dans le manifeste, nom court = la boutique,
+  titre iOS = la boutique ; `studio-manifest.php`, `studio.php`). Une icône « Partager » dans l'en-tête, « Partager l'application » et « Code QR de l'application » dans le menu, un bouton
+  sur la page de connexion et, dans l'administration (Prise de vue), « Partager le lien » / « Code QR » ouvrent la fenêtre de partage (`assets/share.js`, forcée en fenêtre complète
+  même sur téléphone) : **WhatsApp, SMS, e-mail, Facebook, X, Telegram, LinkedIn, Pinterest, lien à copier, code QR** (PNG, SVG, impression). L'adresse partagée est celle de l'application
+  de la boutique (avec son préfixe quand elle est servie sous `/identifiant/`). Une application déjà installée garde son ancien nom jusqu'à sa réinstallation.
 - **Scan pour les médias** : en choisissant « Livre, CD, vinyle, DVD », barre de scan (code-barres, ISBN, QR : `barcode-scan.js`,
   recherche `admin/barcode-lookup.php`) ; dans le lot, bouton « Scanner le code » devant le viseur. Le code est enregistré sur la pièce
   (`products.barcode`), la **pochette trouvée tient lieu de photo** si le média n'est pas photographié, et à l'étape « fiche » les faits du catalogue

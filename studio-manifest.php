@@ -5,13 +5,14 @@ require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/studio-theme.php';
 
 $theme = studio_theme_colors();
-$site = (string) get_content()['site_name'];
+$site = trim((string) get_content()['site_name']) ?: (string) tenant('name');
 $base = tenant_base_path();
 header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: public, max-age=3600');
 echo json_encode([
-    'name' => $site . ' — Studio',
-    'short_name' => 'Studio',
+    // Nommée d'après la boutique : « Studio La Fripe » sous l'icône, comme dans la liste des applications.
+    'name' => 'Studio ' . $site,
+    'short_name' => mb_substr($site, 0, 24),
     'description' => 'Photographier ses pièces et préparer les fiches de la boutique.',
     'lang' => 'fr',
     'start_url' => $base . '/studio.php',
