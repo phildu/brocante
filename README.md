@@ -193,6 +193,20 @@ Chaque emplacement porte un **jeton** (HMAC, `data/saas/promo.secret`) : sans lu
 Les chiffres se lisent dans le back-office de la boutique (**Mises en avant (promos)** : par article et par emplacement, 7 j à 12 mois, export CSV ; et sur la fiche de l'article) et, pour l'exploitant, dans le portail
 (**Mises en avant** : par galerie, par boutique, par article, export CSV) — de quoi facturer ces mises en avant (tarif par affichage ou par clic, à définir). Les compteurs sont ceux du déploiement qui sert la page.
 
+## Sélecteur du diaporama
+
+Dans la galerie d'une pièce (`admin/gallery.php`), le bloc **Diaporama de la fiche** montre une vignette par image ou vidéo : un clic l'ajoute au diaporama ou l'en retire, un glisser-déposer (ou ◀ ▶ / les flèches du clavier)
+change l'ordre, la première étant l'image principale. L'enregistrement est automatique (`admin/diaporama-action.php` : `is_hidden` et `sort_order`, une image au moins reste montrée, la photo de couverture du catalogue est recalculée).
+Raccourcis : « Seulement les images générées » (et les gros plans étiquette / texture / détail) et « Tout afficher » (hors mesures). Les vignettes indiquent « IA », « vidéo » et, pour un visuel qui n'existe
+qu'à un seul format, « ordinateur » ou « smartphone ».
+
+## Couleurs
+
+Champ `products.colors` (colonne ajoutée automatiquement) : les **couleurs dominantes** de l'objet, en noms français séparés par des virgules (« bleu marine, blanc cassé », 6 au plus, normalisées par
+`product_colors_clean()`). Saisie dans le catalogue (modification et ajout) et dans l'ajout rapide / le Studio, avec le bouton « ↻ IA » (et la rédaction automatique de la fiche, qui les lit sur les photos).
+La **fiche publique** (trois modèles) les affiche avec une pastille de couleur quand le nom est connu (`product_colors_html()`), la recherche de la boutique les prend en compte et elles
+alimentent le contexte de la recherche de prix.
+
 ## Marque et distributeur
 
 Deux champs de la fiche article (`products.brand`, `products.distributor`, colonnes ajoutées automatiquement aux bases existantes) : la **marque** (Levi's, Olivetti, Le Creuset…, lue sur l'objet ou son étiquette)

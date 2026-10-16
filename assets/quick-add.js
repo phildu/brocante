@@ -449,6 +449,7 @@
       $('f-name').value = sheet.name;
       $('f-desc').value = sheet.description;
       $('f-materials').value = sheet.materials || '';
+      $('f-colors').value = sheet.colors || '';
       $('f-brand').value = sheet.brand || '';
       $('f-distributor').value = sheet.distributor || '';
       $('f-etat').value = sheet.etat || '';
@@ -480,6 +481,7 @@
     fd.append('cat', $('f-cat').value);
     fd.append('description', $('f-desc').value);
     fd.append('materials', $('f-materials').value);
+    fd.append('colors', $('f-colors').value);
     fd.append('brand', $('f-brand').value);
     fd.append('distributor', $('f-distributor').value);
     fd.append('etat', $('f-etat').value);

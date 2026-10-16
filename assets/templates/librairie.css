@@ -18,6 +18,7 @@ html[data-layout="librairie"] .lb-search button:hover { background: var(--accent
 html[data-layout="librairie"] .lb-tools { display: flex; align-items: center; gap: 18px; font-size: .9rem; white-space: nowrap; }
 html[data-layout="librairie"] .lb-tools a { text-decoration: none; color: var(--ink); }
 html[data-layout="librairie"] .lb-tools a:hover { color: var(--accent); }
+html[data-layout="librairie"] .lb-tools a.lb-cart { color: var(--bg); } html[data-layout="librairie"] .lb-tools a.lb-cart:hover { color: var(--accent-ink); }
 html[data-layout="librairie"] .lb-cart b { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; margin-left: 2px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: .74rem; }
 html[data-layout="librairie"] nav.primary.lb-rayons { max-width: 1120px; margin: 0 auto; padding: 0 28px; justify-content: flex-start; gap: 0 2px; border-top: 1px solid var(--line); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 html[data-layout="librairie"] nav.primary.lb-rayons a { padding: 11px 14px; font-size: .86rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink); border-bottom: 3px solid transparent; }

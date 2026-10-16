@@ -9,6 +9,7 @@ $fc = get_content();
 $details = [];
 $details['Rayon'] = '<a href="/boutique.php?cat=' . urlencode($product['cat']) . '">' . h(category_label($product['cat'])) . '</a>';
 if ($nat) $details['Type'] = '<a href="/boutique.php?nature=' . urlencode($product['nature']) . '">' . h($nat[0]) . '</a>' . ($nat[1] ? ' › ' . h($nat[1]) : '');
+if (!empty($product['colors'])) $details['Couleurs'] = product_colors_html($product['colors']);
 if (!empty($product['brand'])) $details['Marque'] = h($product['brand']);
 if (!empty($product['distributor'])) $details['Distributeur'] = h($product['distributor']);
 if ($etat) $details['État'] = h($etat[0]) . ' <span class="etat-hint">— ' . h($etat[1]) . '</span>';

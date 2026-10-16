@@ -127,7 +127,7 @@ function db(): PDO
             }
         }
         // Marque et distributeur de l'article (fiche, recherche, page publique).
-        foreach (['brand', 'distributor'] as $extraColumn) {
+        foreach (['brand', 'distributor', 'colors'] as $extraColumn) {
             if ($productColumns && !in_array($extraColumn, $productColumns, true)) {
                 $pdo->exec('ALTER TABLE products ADD COLUMN ' . $extraColumn . ' TEXT');
             }

@@ -29,7 +29,7 @@ $over = $activeNav === 'accueil';
     <div class="md-tools">
       <a href="/boutique.php#recherche" class="md-tool-search">Rechercher</a>
       <?php if ($accountLink): ?><a href="/compte.php"<?= $activeNav === 'compte' ? ' aria-current="page"' : '' ?>>Compte</a><?php endif; ?>
-      <a href="/cart.php">Panier<?= $cartCount ? ' (' . (int) $cartCount . ')' : '' ?></a>
+      <?= cart_nav_link((int) $cartCount) ?>
     </div>
   </div>
 </header>

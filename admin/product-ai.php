@@ -34,7 +34,7 @@ $fields = $requested ?: PRODUCT_AI_FIELDS;
 
 // Valeurs actuelles du formulaire : contexte, bornées.
 $current = [];
-foreach (['name', 'description', 'materials', 'brand', 'distributor', 'price', 'size_text'] as $key) {
+foreach (['name', 'description', 'materials', 'colors', 'brand', 'distributor', 'price', 'size_text'] as $key) {
     $current[$key] = mb_substr(trim((string) ($_POST[$key] ?? '')), 0, 1200);
 }
 $weightG = (int) ($_POST['weight_grams'] ?? 0);

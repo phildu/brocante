@@ -45,7 +45,7 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
       <a href="/boutique.php"<?= $activeNav === 'boutique' ? ' aria-current="page"' : '' ?>>La boutique</a>
       <a href="/index.php#histoire">Notre histoire</a>
       <a href="/index.php#contact">Contact</a>
-      <a href="/cart.php">Panier<?= $cartCount ? ' (' . $cartCount . ')' : '' ?></a>
+      <?= cart_nav_link((int) $cartCount) ?>
       <?php if (oauth_enabled_providers('customer') || customer_session()): ?><a href="/compte.php"<?= $activeNav === 'compte' ? ' aria-current="page"' : '' ?>>Mon compte</a><?php endif; ?>
       <?php if (is_admin_logged_in()): ?>
         <a class="nav-cta" href="/admin/catalog.php">Administration</a>

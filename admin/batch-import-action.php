@@ -401,8 +401,8 @@ switch ($action) {
         // l'admin (nom/description/prix suggérés par l'IA à corriger).
         $ref = next_ref();
         $coverPhoto = $ambiancePath ?? $detourePath;
-        $stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, brand, etat, nature, sous_categorie, size_text, weight_text, weight_grams, price, badge, is_hidden, featured, sort_order)
-                                VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :brand, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :price, :badge, 1, 0, :sort_order)');
+        $stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, colors, brand, etat, nature, sous_categorie, size_text, weight_text, weight_grams, price, badge, is_hidden, featured, sort_order)
+                                VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :colors, :brand, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :price, :badge, 1, 0, :sort_order)');
         $stmt->execute([
             'ref' => $ref,
             'name' => $sheet['name'],
@@ -410,6 +410,7 @@ switch ($action) {
             'photo' => $coverPhoto,
             'description' => $sheet['description'] ?: 'Description à compléter.',
             'materials' => $sheet['materials'] ?? '',
+            'colors' => $sheet['colors'] ?? '',
             'brand' => $sheet['brand'] ?? '',
             'etat' => ($sheet['etat'] ?? '') ?: null,
             'nature' => ($sheet['nature'] ?? '') ?: null,

@@ -263,6 +263,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
       <label class="qa-field">Description <button type="button" class="ai-btn" data-ai-field="description" title="Générer / régénérer la description">↻ IA</button><textarea id="sr-desc" data-ai-input="description" rows="5" maxlength="1200"></textarea></label>
       <label class="qa-field">Matières <button type="button" class="ai-btn" data-ai-field="materials" title="Reconnaître les matières visibles">↻ IA</button><input type="text" id="sr-materials" data-ai-input="materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
       <div class="qa-two">
+        <label class="qa-field">Couleurs <button type="button" class="ai-btn" data-ai-field="colors" title="Lire les couleurs dominantes sur la photo">↻ IA</button><input type="text" id="sr-colors" data-ai-input="colors" maxlength="120" placeholder="bleu marine, blanc"></label>
         <label class="qa-field">Marque <button type="button" class="ai-btn" data-ai-field="brand" title="Lire la marque sur l'objet ou son étiquette">↻ IA</button><input type="text" id="sr-brand" data-ai-input="brand" maxlength="80" placeholder="Levi's, Olivetti…"></label>
         <label class="qa-field">Distributeur<input type="text" id="sr-distributor" data-ai-input="distributor" maxlength="80" placeholder="éditeur, revendeur…"></label>
       </div>

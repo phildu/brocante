@@ -69,9 +69,9 @@ function get_products(?string $cat = null, bool $includeHidden = false, string $
     if ($cat && $cat !== 'tous') { $where[] = 'cat = ?'; $params[] = $cat; }
     if (!$includeHidden) { $where[] = 'is_hidden = 0'; $where[] = 'stock > 0'; }
     if ($search !== '') {
-        $where[] = '(name LIKE ? OR description LIKE ? OR brand LIKE ? OR distributor LIKE ?)';
+        $where[] = '(name LIKE ? OR description LIKE ? OR brand LIKE ? OR distributor LIKE ? OR colors LIKE ?)';
         $like = '%' . $search . '%';
-        $params = array_merge($params, [$like, $like, $like, $like]);
+        $params = array_merge($params, [$like, $like, $like, $like, $like]);
     }
     $sql = 'SELECT * FROM products' . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY sort_order, ref';
     $stmt = db()->prepare($sql);
@@ -259,6 +259,45 @@ function render_page_banner(string $pageKey): void
 }
 
 /** Code-barres / ISBN saisi : chiffres (et X final des ISBN-10) uniquement, 8 à 14 caractères ; '' sinon. */
+/** Lien « Panier » de la barre du haut : icône de caddie, libellé et pastille du nombre d'articles. */
+function cart_nav_link(int $count, string $class = ''): string
+{
+    $svg = '<svg class="cart-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.2a1.6 1.6 0 0 0 1.6 1.3h8.4a1.6 1.6 0 0 0 1.6-1.2L21 8H6"/></svg>';
+    return '<a href="/cart.php" class="nav-cart' . ($class !== '' ? ' ' . h($class) : '') . '"' . ($count > 0 ? ' aria-label="Panier, ' . $count . ' article' . ($count > 1 ? 's' : '') . '"' : '') . '>'
+        . $svg . '<span class="cart-label">Panier</span>' . ($count > 0 ? '<b class="cart-count">' . $count . '</b>' : '') . '</a>';
+}
+
+/** Couleurs saisies ou lues par l'IA → « bleu marine, blanc » : minuscules, séparées par des virgules, 6 au plus, 40 caractères chacune. */
+function product_colors_clean(string $value): string
+{
+    $parts = [];
+    foreach (preg_split('/\s*[,;\/]\s*|\s+et\s+/u', mb_strtolower(trim($value))) as $c) {
+        $c = trim(preg_replace('/\s+/u', ' ', (string) $c));
+        if ($c !== '' && mb_strlen($c) <= 40 && !in_array($c, $parts, true)) $parts[] = $c;
+    }
+    return implode(', ', array_slice($parts, 0, 6));
+}
+
+/** Pastilles de couleur d'une fiche (« Couleurs : ● bleu marine ● blanc ») : une pastille quand le nom est connu, le texte seul sinon. Chaîne vide sans couleur. */
+function product_colors_html(?string $colors): string
+{
+    $colors = product_colors_clean((string) $colors);
+    if ($colors === '') return '';
+    static $hex = [
+        'noir' => '#1b1b1b', 'blanc' => '#ffffff', 'blanc cassé' => '#f3efe6', 'écru' => '#efe6d2', 'ivoire' => '#f5f0e1', 'crème' => '#f3ead2', 'beige' => '#d8c3a0', 'gris' => '#8a8a8a', 'gris clair' => '#c9c9c9', 'gris foncé' => '#555555', 'anthracite' => '#383e42', 'argent' => '#c0c0c0', 'argenté' => '#c0c0c0',
+        'rouge' => '#c0392b', 'bordeaux' => '#6d1a2b', 'rose' => '#e88fb0', 'fuchsia' => '#d02090', 'corail' => '#f0735a', 'orange' => '#e8801c', 'rouille' => '#a8481f', 'jaune' => '#f1c40f', 'moutarde' => '#c9a227', 'doré' => '#c9a227', 'or' => '#c9a227',
+        'vert' => '#3b8f4a', 'vert foncé' => '#1f5a32', 'vert clair' => '#9bd18a', 'kaki' => '#7b7b3a', 'olive' => '#6b6b2a', 'menthe' => '#a4dcc0', 'turquoise' => '#2bb5b0', 'bleu' => '#2a6fc4', 'bleu marine' => '#14284b', 'marine' => '#14284b', 'bleu ciel' => '#8ec5ee', 'bleu clair' => '#8ec5ee', 'bleu foncé' => '#14284b', 'denim' => '#3a5a85',
+        'violet' => '#7b3fa0', 'mauve' => '#b392d0', 'lilas' => '#c9b1e0', 'marron' => '#6f4a2e', 'chocolat' => '#4a2c1a', 'camel' => '#c19a6b', 'cuivre' => '#b8693a', 'bronze' => '#8c6a2f', 'taupe' => '#8b7b6b', 'terracotta' => '#c4623a', 'multicolore' => 'conic-gradient(#d33,#e9a,#fc3,#3b4,#27c,#73a,#d33)', 'bois' => '#a8794a', 'naturel' => '#d9c29a',
+    ];
+    $out = '';
+    foreach (explode(', ', $colors) as $c) {
+        $bg = $hex[$c] ?? null;
+        $dot = $bg ? '<span class="color-dot" style="background:' . htmlspecialchars($bg, ENT_QUOTES, 'UTF-8') . '" aria-hidden="true"></span>' : '';
+        $out .= '<span class="color-chip">' . $dot . htmlspecialchars($c, ENT_QUOTES, 'UTF-8') . '</span> ';
+    }
+    return trim($out);
+}
+
 function product_barcode_clean($value): string
 {
     $v = strtoupper(preg_replace('/[^0-9Xx]/', '', (string) $value));
@@ -1712,7 +1751,7 @@ function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): st
         . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "la clé exacte (avant le signe =) de l\'UNIVERS du produit, son grand domaine, parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "brand": "marque lisible sur l\'objet ou son étiquette (logo, signature, poinçon), vide si aucune n\'est lisible — n\'en invente jamais", "etat": "' . product_condition_prompt_list() . '", "size_text": "vêtement ou chaussure : taille de l\'étiquette, sinon taille probable écrite « M (probable) » ; objet : dimensions estimées ; très courte", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "la clé exacte (avant le signe =) de l\'UNIVERS du produit, son grand domaine, parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "brand": "marque lisible sur l\'objet ou son étiquette (logo, signature, poinçon), vide si aucune n\'est lisible — n\'en invente jamais", "colors": "couleurs dominantes de l\'objet, 1 à 4 noms français simples séparés par des virgules (ex : bleu marine, blanc cassé)", "etat": "' . product_condition_prompt_list() . '", "size_text": "vêtement ou chaussure : taille de l\'étiquette, sinon taille probable écrite « M (probable) » ; objet : dimensions estimées ; très courte", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1733,6 +1772,7 @@ function parse_product_sheet_response(string $text): ?array
         'description' => trim((string) ($data['description'] ?? '')),
         'category' => $cat,
         'brand' => mb_substr(trim((string) ($data['brand'] ?? '')), 0, 80),
+        'colors' => product_colors_clean(is_array($data['colors'] ?? null) ? implode(', ', $data['colors']) : (string) ($data['colors'] ?? '')),
         'materials' => mb_substr(trim((string) (is_array($data['materials'] ?? null) ? implode(', ', $data['materials']) : ($data['materials'] ?? ''))), 0, 200),
         'etat' => product_condition_key((string) ($data['etat'] ?? '')),
         'size_text' => mb_substr(trim((string) ($data['size_text'] ?? '')), 0, 60),
@@ -2006,7 +2046,7 @@ function product_nature_prompt_list(): string
 }
 
 /** Champs d'une fiche que l'IA sait (re)générer, dans l'ordre du formulaire. */
-const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'nature', 'materials', 'brand', 'etat', 'size', 'weight', 'price'];
+const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'nature', 'materials', 'colors', 'brand', 'etat', 'size', 'weight', 'price'];
 
 /**
  * Photos d'origine d'une pièce (hors détourage et illustrations IA), principale
@@ -2040,6 +2080,7 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
         'description' => '"description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible"',
         'category' => '"category": "la clé exacte (avant le signe =) parmi : ' . $cats . ' ; si aucune ne convient vraiment à cet objet, laisse une chaîne vide"',
         'materials' => '"materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne) ; chaîne vide si elles ne se voient pas"',
+        'colors' => '"colors": "les COULEURS dominantes de l\'objet (1 à 4), en noms français simples séparés par des virgules (ex : bleu marine, blanc cassé) ; chaîne vide s\'il est incolore ou transparent"',
         'brand' => '"brand": "la MARQUE lisible sur l\'objet ou son étiquette (logo, signature, poinçon, étiquette cousue, fond de pièce) ; chaîne vide si aucune marque n\'est lisible — n\'en devine jamais une d\'après le style seul"',
         'nature' => '"nature": "la clé de la NATURE de l\'objet (ce qu\'il EST) et, dans le même objet JSON, "sous_categorie": "la clé de sa sous-catégorie, qui doit appartenir à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '"',
         'etat' => '"etat": "' . product_condition_prompt_list() . '"',
@@ -2047,7 +2088,7 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
         'weight' => '"weight_grams": "nombre entier : poids estimé en grammes de l\'objet seul, sans emballage, d\'après sa nature, ses matières et sa taille apparente (ordres de grandeur : sweat 600, robe 450, pichet en grès 900, chaise en bois 4500) ; 0 si impossible à estimer"',
         'price' => '"price": "prix de vente indicatif : UN SEUL montant en euros, ex : 30 €"',
     ];
-    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'nature' => 'Nature', 'materials' => 'Matières', 'brand' => 'Marque', 'distributor' => 'Distributeur', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille', 'weight_text' => 'Poids'];
+    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'nature' => 'Nature', 'materials' => 'Matières', 'colors' => 'Couleurs', 'brand' => 'Marque', 'distributor' => 'Distributeur', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille', 'weight_text' => 'Poids'];
     $known = [];
     $vary = [];
     // Taille et poids se régénèrent par les champs « size » et « weight ».
@@ -2108,6 +2149,7 @@ function parse_product_fields_response(string $text, array $fields): array
             case 'description': $value = mb_substr($value, 0, 1200); break;
             case 'materials': $value = mb_substr($value, 0, 200); break;
             case 'brand': $value = mb_substr($value, 0, 80); break;
+            case 'colors': $value = product_colors_clean($value); break;
             case 'etat': $value = product_condition_key($value); break;
             case 'size':
                 $size = mb_substr($str($data['size_text'] ?? ''), 0, 60);

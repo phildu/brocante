@@ -146,7 +146,7 @@ function price_research_emmaus_search(string $query): ?array
 function price_research(array $ctx, array $imagePaths, array $comparables, ?array $emmaus = null): ?array
 {
     $known = [];
-    foreach (['name' => 'Nom', 'nature' => 'Nature', 'description' => 'Description', 'brand' => 'Marque', 'materials' => 'Matières', 'size_text' => 'Taille', 'etat' => 'État'] as $key => $label) {
+    foreach (['name' => 'Nom', 'nature' => 'Nature', 'description' => 'Description', 'brand' => 'Marque', 'colors' => 'Couleurs', 'materials' => 'Matières', 'size_text' => 'Taille', 'etat' => 'État'] as $key => $label) {
         if (trim((string) ($ctx[$key] ?? '')) !== '') $known[] = $label . ' : ' . trim((string) $ctx[$key]);
     }
     $own = [];

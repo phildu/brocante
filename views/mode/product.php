@@ -56,6 +56,7 @@ $size = trim((string) ($product['size_text'] ?? ''));
       <details class="md-acc"><summary>Détails</summary>
         <div><ul class="md-details">
           <?php if ($nat): ?><li><b>Type</b> <?= h($nat[0]) ?><?= $nat[1] ? ' › ' . h($nat[1]) : '' ?></li><?php endif; ?>
+          <?php if (!empty($product['colors'])): ?><li><b>Couleurs</b> <?= product_colors_html($product['colors']) ?></li><?php endif; ?>
           <?php if (!empty($product['brand'])): ?><li><b>Marque</b> <?= h($product['brand']) ?></li><?php endif; ?>
           <?php if (!empty($product['distributor'])): ?><li><b>Distributeur</b> <?= h($product['distributor']) ?></li><?php endif; ?>
           <?php if ($etat): ?><li><b>État</b> <?= h($etat[0]) ?> — <?= h($etat[1]) ?></li><?php endif; ?>

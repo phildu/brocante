@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS products (
   new_url TEXT, -- lien vers le prix du neuf
   new_price TEXT, -- prix du neuf constaté
   new_show INTEGER NOT NULL DEFAULT 0, -- afficher le prix et le lien du neuf sur la fiche
+  colors TEXT, -- couleurs dominantes, séparées par des virgules (« bleu marine, blanc »)
   brand TEXT, -- marque de l'article (lue sur l'objet ou son étiquette)
   distributor TEXT, -- distributeur, éditeur ou revendeur d'origine
   etat TEXT,

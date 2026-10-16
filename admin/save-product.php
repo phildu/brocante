@@ -45,12 +45,13 @@ if ($promoPrice !== '' && (price_to_cents($promoPrice) ?? 0) >= (price_to_cents(
     $promoPrice = '';
 }
 
-$set = 'name = :name, cat = :cat, description = :description, materials = :materials, brand = :brand, distributor = :distributor, etat = :etat, nature = :nature, sous_categorie = :sous_categorie, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock';
+$set = 'name = :name, cat = :cat, description = :description, materials = :materials, colors = :colors, brand = :brand, distributor = :distributor, etat = :etat, nature = :nature, sous_categorie = :sous_categorie, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock';
 $params = [
     'name' => trim((string) ($_POST['name'] ?? $product['name'])),
     'cat' => $cat,
     'description' => trim((string) ($_POST['description'] ?? $product['description'])),
     'materials' => trim((string) ($_POST['materials'] ?? $product['materials'])),
+    'colors' => product_colors_clean((string) ($_POST['colors'] ?? ($product['colors'] ?? ''))),
     'brand' => mb_substr(trim((string) ($_POST['brand'] ?? ($product['brand'] ?? ''))), 0, 80),
     'distributor' => mb_substr(trim((string) ($_POST['distributor'] ?? ($product['distributor'] ?? ''))), 0, 80),
     'etat' => isset($_POST['etat']) ? (product_condition_key($_POST['etat']) ?: null) : $product['etat'],

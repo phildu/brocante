@@ -189,6 +189,21 @@
     color: var(--accent-ink);
   }
 
+  /* Panier : icône de caddie + pastille, plein contraste (encre sur fond clair, fond sur encre). */
+  .nav-cart {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--ink); color: var(--bg); font-weight: 600;
+    padding: 7px 13px; border-radius: 999px; text-decoration: none; white-space: nowrap;
+  }
+  nav.primary a.nav-cart { background: var(--ink); color: var(--bg); padding: 7px 13px; border-bottom: none; margin-left: 6px; }
+  nav.primary a.nav-cart:hover, nav.primary a.nav-cart:focus-visible, .nav-cart:hover { background: var(--accent); color: var(--accent-ink); }
+  .nav-cart .cart-ico { flex: none; }
+  .nav-cart .cart-count {
+    display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px;
+    border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: .74rem; font-weight: 700;
+  }
+  .nav-cart:hover .cart-count { background: var(--bg); color: var(--ink); }
+
   /* ---------- menu burger (mobile) ---------- */
 
   .burger-btn {
@@ -258,6 +273,7 @@
       padding: 16px 4px;
       border-bottom: 1px solid var(--line);
     }
+    nav.primary a.nav-cart { margin: 14px 0 0; padding: 12px 16px; justify-content: center; border-bottom: none; }
     nav.primary a.nav-cta {
       margin: 20px 0 0;
       padding: 12px 16px;
@@ -1401,6 +1417,29 @@
   .pg-thumb.is-active { border-color: var(--accent); }
   .pg-thumb.is-active span { color: var(--accent); }
 
+  /* Ordinateur : prix en haut à droite de la fiche (celui du pied reste pour le smartphone) ;
+     intitulés des vignettes masqués, visibles seulement au survol. */
+  .pi-head { display: block; }
+  .product-info .pi-price { display: none; }
+  @media (min-width: 861px) {
+    .pi-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .pi-head .ref { margin: 0; }
+    .product-info .pi-price { display: inline-flex; justify-content: flex-end; text-align: right; }
+    .product-info .pi-price .price { font-size: 1.7rem; }
+    .product-info .card-foot .price-group { display: none; }
+    .product-info .card-foot { justify-content: flex-end; }
+  }
+  @media (min-width: 861px) and (hover: hover) {
+    .pg-thumb { position: relative; }
+    .pg-thumb span {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,.65); color: #fff;
+      opacity: 0; pointer-events: none; transition: opacity .15s;
+    }
+    .pg-thumb:hover span, .pg-thumb:focus-visible span { opacity: 1; }
+    .pg-thumb.is-active span { color: #fff; }
+  }
+
   .shipping-choice-option {
     display: flex;
     align-items: center;
@@ -1592,6 +1631,8 @@
 .product-info .price-group .price { font-size: 1.4rem; }
 .product-info .price-group .price-old { font-size: 1rem; }
 .etat-hint { color: var(--ink-soft); font-size: 0.88em; }
+.color-chip { display: inline-flex; align-items: center; gap: 5px; margin-right: 10px; white-space: nowrap; }
+.color-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); display: inline-block; flex: none; }
 .product-admin-fields .field select, .admin-block .field select { width: 100%; box-sizing: border-box; }
 
 /* Filtre « type de produit » de la boutique et lien de la fiche (nature › sous-catégorie). */

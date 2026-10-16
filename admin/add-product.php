@@ -28,8 +28,8 @@ if (!$photoPath && !empty($_POST['use_cover']) && trim((string) ($_POST['cover_u
     $photoPath = product_photo_from_cover_url(trim((string) $_POST['cover_url']), 'product-' . $ref);
 }
 
-$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, brand, distributor, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, badge, featured, sort_order)
-                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :brand, :distributor, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :badge, 0, :sort_order)');
+$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, colors, brand, distributor, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, badge, featured, sort_order)
+                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :colors, :brand, :distributor, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :badge, 0, :sort_order)');
 $stmt->execute([
     'ref' => $ref,
     'name' => $name,
@@ -37,6 +37,7 @@ $stmt->execute([
     'photo' => $photoPath,
     'description' => trim((string) ($_POST['description'] ?? '')) ?: 'Description à compléter.',
     'materials' => trim((string) ($_POST['materials'] ?? '')),
+    'colors' => product_colors_clean((string) ($_POST['colors'] ?? '')),
     'brand' => mb_substr(trim((string) ($_POST['brand'] ?? '')), 0, 80),
     'distributor' => mb_substr(trim((string) ($_POST['distributor'] ?? '')), 0, 80),
     'etat' => product_condition_key($_POST['etat'] ?? '') ?: null,

@@ -137,7 +137,7 @@
     var refInput = root.querySelector('[name="ref"]');
     var ref = (refInput && refInput.value) || root.dataset.aiRef || '';
     if (ref) fd.append('ref', ref);
-    ['name', 'description', 'cat', 'materials', 'brand', 'etat', 'nature', 'sous_categorie', 'size_text'].forEach(function (n) {
+    ['name', 'description', 'cat', 'materials', 'colors', 'brand', 'etat', 'nature', 'sous_categorie', 'size_text'].forEach(function (n) {
       var c = field(root, n); if (c && c.value) fd.append(n, c.value);
     });
     var file = root.querySelector('input[type="file"][name="photo"]');

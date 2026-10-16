@@ -232,7 +232,9 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                           <div></div>
                         </div>
                         <div class="field-row-3">
-                          <div class="field"><label>Marque <?= $aiBtn('brand', 'Lire la marque sur l\'objet ou son étiquette') ?></label><input type="text" name="brand" maxlength="80" value="<?= h($p['brand'] ?? '') ?>" placeholder="ex : Levi's, Olivetti, Le Creuset"></div>
+                          <div class="field"><label>Couleurs <?= $aiBtn('colors', 'Lire les couleurs dominantes sur la photo') ?></label><input type="text" name="colors" maxlength="120" value="<?= h($p['colors'] ?? '') ?>" placeholder="ex : bleu marine, blanc"></div>
+                          <div class="field"><label>Couleurs <?= $aiBtn('colors', 'Lire les couleurs dominantes sur la photo') ?></label><input type="text" name="colors" maxlength="120" placeholder="ex : bleu marine, blanc"></div>
+            <div class="field"><label>Marque <?= $aiBtn('brand', 'Lire la marque sur l\'objet ou son étiquette') ?></label><input type="text" name="brand" maxlength="80" value="<?= h($p['brand'] ?? '') ?>" placeholder="ex : Levi's, Olivetti, Le Creuset"></div>
                           <div class="field"><label>Distributeur</label><input type="text" name="distributor" maxlength="80" value="<?= h($p['distributor'] ?? '') ?>" placeholder="ex : éditeur, revendeur, importateur"></div>
                           <div></div>
                         </div>

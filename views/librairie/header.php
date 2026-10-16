@@ -17,7 +17,7 @@ $accountLink = oauth_enabled_providers('customer') || customer_session();
     </form>
     <div class="lb-tools">
       <?php if ($accountLink): ?><a href="/compte.php"<?= $activeNav === 'compte' ? ' aria-current="page"' : '' ?>>Mon compte</a><?php endif; ?>
-      <a href="/cart.php" class="lb-cart">Panier<?= $cartCount ? ' <b>' . (int) $cartCount . '</b>' : '' ?></a>
+      <?= cart_nav_link((int) $cartCount, 'lb-cart') ?>
       <?php if (is_admin_logged_in()): ?><a href="/admin/catalog.php">Administration</a><?php else: ?><a href="/admin/login.php">Connexion</a><?php endif; ?>
     </div>
     <button type="button" class="burger-btn" id="burger-btn" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="primary-nav">

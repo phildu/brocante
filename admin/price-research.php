@@ -37,6 +37,7 @@ $ctx = [
     'description' => $text('description', (string) ($product['description'] ?? '')),
     'materials' => $text('materials', (string) ($product['materials'] ?? '')),
     'brand' => $text('brand', (string) ($product['brand'] ?? '')),
+    'colors' => $text('colors', (string) ($product['colors'] ?? '')),
     'size_text' => $text('size_text', (string) ($product['size_text'] ?? '')),
     'nature' => product_nature_text($pair['nature'], $pair['sous_categorie']),
     'etat' => $etat ? $etat[0] . ' (' . $etat[1] . ')' : '',

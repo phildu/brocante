@@ -23,6 +23,7 @@ html[data-layout="mode"] nav.primary.md-nav a { padding: 6px 0; font-size: .7rem
 html[data-layout="mode"] nav.primary.md-nav a:hover, html[data-layout="mode"] nav.primary.md-nav a[aria-current="page"] { color: inherit; border-bottom-color: currentColor; }
 html[data-layout="mode"] .md-logo { font-family: var(--font-display); font-size: clamp(.95rem, 1.6vw, 1.35rem); letter-spacing: .2em; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; font-weight: 600; text-decoration: none; text-align: center; white-space: nowrap; color: inherit; }
 html[data-layout="mode"] .md-tools { display: flex; justify-content: flex-end; gap: 22px; }
+html[data-layout="mode"] .md-tools a.nav-cart { background: var(--ink); color: var(--bg); padding: 8px 14px; border: 0; border-radius: 0; } html[data-layout="mode"] .md-tools a.nav-cart:hover { background: var(--accent); color: var(--accent-ink); }
 html[data-layout="mode"] .md-tools a { font-size: .74rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 600; text-decoration: none; color: inherit; border-bottom: 1px solid transparent; } html[data-layout="mode"] .md-tools a:hover { border-bottom-color: currentColor; }
 html[data-layout="mode"] .md-mobile-only { display: none; }
 html[data-layout="mode"] header.site.md-over { position: fixed; left: 0; right: 0; top: 0; background: transparent; border-bottom-color: transparent; color: #fff; }

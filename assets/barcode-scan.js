@@ -9,7 +9,7 @@
   var ENDPOINT = (window.APP_BASE || '') + '/admin/barcode-lookup.php';
   var LIB = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
   var FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'];
-  var IDS = { brand: 'f-brand', distributor: 'f-distributor', name: 'f-name', description: 'f-desc', materials: 'f-materials', size_text: 'f-size', weight_grams: 'f-weight', nature: 'f-nature', sous_categorie: 'f-sous', cat: 'f-cat', barcode: 'f-barcode' };
+  var IDS = { colors: 'f-colors', brand: 'f-brand', distributor: 'f-distributor', name: 'f-name', description: 'f-desc', materials: 'f-materials', size_text: 'f-size', weight_grams: 'f-weight', nature: 'f-nature', sous_categorie: 'f-sous', cat: 'f-cat', barcode: 'f-barcode' };
 
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function field(root, name) {

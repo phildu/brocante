@@ -93,7 +93,7 @@ if ($view = shop_view('product')) {
         <?php if (count($gallery) > 1): ?>
           <div class="pg-thumbs">
             <?php foreach ($gallery as $i => $g): ?>
-              <button type="button" class="pg-thumb<?= $i === 0 ? ' is-active' : '' ?><?= $g['only'] ? ' pg-only-' . $g['only'] : '' ?>" data-goto="<?= $i ?>">
+              <button type="button" class="pg-thumb<?= $i === 0 ? ' is-active' : '' ?><?= $g['only'] ? ' pg-only-' . $g['only'] : '' ?>" data-goto="<?= $i ?>" title="<?= h($g['label']) ?>">
                 <?php if ($g['type'] === 'video'): ?>
                   <video src="/<?= h($g['src']) ?>" muted></video>
                 <?php else: ?>
@@ -110,15 +110,19 @@ if ($view = shop_view('product')) {
     </div>
 
     <div class="product-info">
-      <p class="ref">Réf. N°<?= h($product['ref']) ?></p>
+      <div class="pi-head">
+        <p class="ref">Réf. N°<?= h($product['ref']) ?></p>
+        <span class="pi-price price-group"><?= $priceHtml ?></span>
+      </div>
       <h1 style="font-size:clamp(1.6rem,3vw,2.2rem);margin:8px 0 14px;"><?= h($product['name']) ?></h1>
       <span class="badge" style="margin-bottom:16px;display:inline-block;"><?= h($product['badge']) ?></span>
       <p class="lede" style="margin-bottom:24px;"><?= nl2br(h($product['description'])) ?></p>
 
       <?php $etat = product_condition($product['etat'] ?? ''); $nature = product_nature_labels($product['nature'] ?? '', $product['sous_categorie'] ?? ''); ?>
-      <?php if ($nature || $etat || !empty($product['brand']) || !empty($product['distributor']) || !empty($product['materials']) || !empty($product['size_text']) || !empty($product['weight_text']) || !empty($product['barcode'])): ?>
+      <?php if ($nature || $etat || !empty($product['colors']) || !empty($product['brand']) || !empty($product['distributor']) || !empty($product['materials']) || !empty($product['size_text']) || !empty($product['weight_text']) || !empty($product['barcode'])): ?>
         <ul class="info-list" style="margin-bottom:24px;">
           <?php if ($nature): ?><li><strong>Type</strong> <a href="/boutique.php?nature=<?= urlencode($product['nature']) ?>" class="nature-link"><?= h($nature[0]) ?></a><?php if ($nature[1]): ?> › <a href="/boutique.php?nature=<?= urlencode($product['nature']) ?>&amp;sous=<?= urlencode($product['sous_categorie']) ?>" class="nature-link"><?= h($nature[1]) ?></a><?php endif; ?></li><?php endif; ?>
+          <?php if (!empty($product['colors'])): ?><li><strong>Couleurs</strong> <?= product_colors_html($product['colors']) ?></li><?php endif; ?>
           <?php if (!empty($product['brand'])): ?><li><strong>Marque</strong> <?= h($product['brand']) ?></li><?php endif; ?>
           <?php if (!empty($product['distributor'])): ?><li><strong>Distributeur</strong> <?= h($product['distributor']) ?></li><?php endif; ?>
           <?php if ($etat): ?><li><strong>État</strong> <?= h($etat[0]) ?> <span class="etat-hint">— <?= h($etat[1]) ?></span></li><?php endif; ?>
