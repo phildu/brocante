@@ -11,6 +11,11 @@ if (is_admin_logged_in()) {
 
 $content = get_content();
 $error = null;
+$notice = null;
+if (!empty($_SESSION['login_notice'])) {   // « Mot de passe modifié » (admin/reinitialiser.php)
+    $notice = (string) $_SESSION['login_notice'];
+    unset($_SESSION['login_notice']);
+}
 if (!empty($_SESSION['login_error'])) {   // message laissé par la connexion sociale (oauth/finish.php)
     $error = (string) $_SESSION['login_error'];
     unset($_SESSION['login_error']);
@@ -56,6 +61,8 @@ if (!admin_password_configured()) {
     width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--ink);
     padding: 12px 14px; font-family: var(--font-body); font-size: 0.95rem; margin-bottom: 16px;
   }
+  .login-notice { font-size: 0.88rem; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--line); background: var(--bg); }
+  .login-forgot { margin: 14px 0 0; font-size: 0.88rem; text-align: center; }
   .login-error { color: var(--accent); font-size: 0.85rem; margin-bottom: 14px; font-family: var(--font-mono); }
   .password-field { position: relative; margin-bottom: 16px; }
   .login-box .password-field input { margin-bottom: 0; padding-right: 92px; }
@@ -73,6 +80,7 @@ if (!admin_password_configured()) {
     <p class="eyebrow">Espace boutique</p>
     <h1>Administration</h1>
     <p class="lede">Connectez-vous pour gérer les contenus et le catalogue.</p>
+    <?php if ($notice): ?><p class="login-notice" role="status"><?= h($notice) ?></p><?php endif; ?>
     <?php if ($error): ?><p class="login-error"><?= h($error) ?></p><?php endif; ?>
     <?php if ($social = oauth_buttons_html('admin')): ?>
       <?= $social ?>
@@ -86,6 +94,7 @@ if (!admin_password_configured()) {
       </div>
       <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Se connecter</button>
     </form>
+    <p class="login-forgot"><a href="/admin/mot-de-passe-oublie.php">Mot de passe oublié ?</a></p>
     <script>
     (function () {
       var input = document.getElementById('password');

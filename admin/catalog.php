@@ -439,5 +439,6 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
 <script src="/assets/price-field.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/price-field.js') ?>"></script>
 <script src="/assets/price-research.js"></script>
 <script src="/assets/barcode-scan.js"></script>
+<script src="/assets/lightbox.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/lightbox.js') ?>" defer></script>
 </body>
 </html>

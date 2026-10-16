@@ -236,5 +236,6 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
 })();
 </script>
 <script src="/assets/admin-upload-check.js"></script>
+<script src="/assets/lightbox.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/lightbox.js') ?>" defer></script>
 </body>
 </html>

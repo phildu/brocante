@@ -193,6 +193,23 @@ Chaque emplacement porte un **jeton** (HMAC, `data/saas/promo.secret`) : sans lu
 Les chiffres se lisent dans le back-office de la boutique (**Mises en avant (promos)** : par article et par emplacement, 7 j à 12 mois, export CSV ; et sur la fiche de l'article) et, pour l'exploitant, dans le portail
 (**Mises en avant** : par galerie, par boutique, par article, export CSV) — de quoi facturer ces mises en avant (tarif par affichage ou par clic, à définir). Les compteurs sont ceux du déploiement qui sert la page.
 
+## Mot de passe oublié et connexion par les réseaux sociaux (administration et Studio)
+
+- **Mot de passe oublié** : lien « Mot de passe oublié ? » sous la connexion de l'administration et du Studio (`admin/mot-de-passe-oublie.php`). Un lien à usage unique, valable 1 heure, est envoyé par e-mail
+  (`admin/reinitialiser.php` : nouveau mot de passe de 8 caractères au moins, avec confirmation). Jeton haché en base (table `password_resets`), réponse toujours identique (on ne révèle pas si un compte existe), limites
+  de demandes par compte et par adresse IP. Un compte de l'équipe reçoit le lien sur son e-mail. Le **compte principal** (`admin_user` de `tenant.php`) le reçoit sur son identifiant s'il s'agit d'une adresse e-mail, sinon
+  sur `admin_email` de `tenant.php`, sinon sur un administrateur de l'équipe ; son nouveau mot de passe est gardé dans les réglages de la base et cesse de valoir si `tenant.php` change de mot de passe (portail).
+  En local (hôte `localhost`, `.test`, adresse IP), les e-mails sont aussi écrits dans `data/mail-outbox.log`. Le code est dans `includes/password-reset.php`.
+- **Réseaux sociaux** : les boutons « Continuer avec Google / Facebook / Microsoft / Apple » (fournisseurs activés dans Administration → Connexion sociale) s'affichent maintenant aussi sur la connexion du Studio
+  (`oauth/start.php` et `oauth/finish.php` : paramètre `next=/studio.php`, retour et messages d'erreur sur le Studio, téléphone gardé connecté 30 jours).
+
+## Agrandir et télécharger une image
+
+`assets/lightbox.js` (+ `lightbox.css`), chargé par le pied de page de la boutique et par les pages d'administration à images (galerie, médiathèque, catalogue, promos, bandeaux, diaporamas) :
+au survol d'une image (ordinateur), deux boutons apparaissent dans son coin, **⤢ Agrandir** (fenêtre plein écran) et **⬇ Télécharger** (le fichier tel qu'il est publié). Dans le diaporama d'une fiche
+et les listes de la galerie, ◀ ▶ (ou les flèches du clavier) passent d'une image à l'autre ; Échap, la croix ou un clic à côté referment. Le script repère lui-même les images d'au moins 110 × 80 px ;
+`data-no-lightbox` (sur l'image ou un parent) l'exclut, `data-full` indique une version plus grande. Sans survol (tablette, smartphone), rien ne change.
+
 ## Sélecteur du diaporama
 
 Dans la galerie d'une pièce (`admin/gallery.php`), le bloc **Diaporama de la fiche** montre une vignette par image ou vidéo : un clic l'ajoute au diaporama ou l'en retire, un glisser-déposer (ou ◀ ▶ / les flèches du clavier)

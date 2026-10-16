@@ -784,5 +784,6 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
 <script src="/assets/saved-prompts.js"></script>
 <script src="/assets/prompt-helper.js"></script>
 <script src="/assets/video-gen.js"></script>
+<script src="/assets/lightbox.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/lightbox.js') ?>" defer></script>
 </body>
 </html>

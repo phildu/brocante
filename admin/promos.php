@@ -121,5 +121,6 @@ $flash = flash_get();
   </div>
 </section>
 </main>
+<script src="/assets/lightbox.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/lightbox.js') ?>" defer></script>
 </body>
 </html>

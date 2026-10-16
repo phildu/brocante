@@ -23,7 +23,9 @@ function oauth_start_fail(string $ctx, string $message): never
         header('Location: /inscription/', true, 303);
     } elseif ($ctx === 'admin') {
         $_SESSION['login_error'] = $message;
-        header('Location: /admin/login.php', true, 303);
+        $back = ($_SESSION['oauth_next'] ?? '') === '/studio.php' ? '/studio.php' : '/admin/login.php';
+        unset($_SESSION['oauth_next']);
+        header('Location: ' . $back, true, 303);
     } else {
         $_SESSION['customer_error'] = $message;
         header('Location: /compte.php', true, 303);
@@ -46,6 +48,11 @@ if ($ctx === 'signup') {
     if (!isset($plans[$plan])) oauth_start_fail($ctx, 'Choisissez une formule.');
     if (empty($_POST['terms'])) oauth_start_fail($ctx, 'Acceptez les conditions (case à cocher) avant de continuer avec ' . OAUTH_PROVIDERS[$provider]['label'] . '.');
     $_SESSION['oauth_signup'] = ['plan' => $plan];
+}
+if ($ctx === 'admin') {
+    // Seule autre page d'arrivée possible : le Studio (sa propre fenêtre de connexion).
+    if (($_POST['next'] ?? $_GET['next'] ?? '') === '/studio.php') $_SESSION['oauth_next'] = '/studio.php';
+    else unset($_SESSION['oauth_next']);
 }
 if ($ctx === 'customer') {
     // Page où revenir après la connexion : un chemin du site, jamais une adresse extérieure.

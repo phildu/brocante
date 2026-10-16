@@ -11,6 +11,7 @@ require_once __DIR__ . '/ai-usage.php';
 require_once __DIR__ . '/price-research.php';
 require_once __DIR__ . '/pricing-extras.php';
 require_once __DIR__ . '/ai-usage.php';
+require_once __DIR__ . '/password-reset.php';
 require_once __DIR__ . '/veo.php';
 require_once __DIR__ . '/siliconflow-video.php';
 require_once __DIR__ . '/modal-video.php';
@@ -2861,8 +2862,13 @@ function flash_get(): ?array
 function admin_accounts(): array
 {
     $configUser = defined('ADMIN_USER') ? ADMIN_USER : (getenv('ADMIN_USER') ?: 'admin');
+    $mainPassword = (string) tenant('admin_password');
+    try {
+        $mainPassword = password_reset_override() ?? $mainPassword; // choisi par « mot de passe oublié »
+    } catch (Throwable $e) {
+    }
     return [
-        [(string) tenant('admin_user'), (string) tenant('admin_password')],
+        [(string) tenant('admin_user'), $mainPassword],
         [(string) $configUser, ADMIN_PASSWORD],
     ];
 }

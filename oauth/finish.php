@@ -25,7 +25,9 @@ function oauth_finish_fail(string $ctx, string $message): never
         header('Location: /inscription/', true, 303);
     } elseif ($ctx === 'admin') {
         $_SESSION['login_error'] = $message;
-        header('Location: /admin/login.php', true, 303);
+        $back = ($_SESSION['oauth_next'] ?? '') === '/studio.php' ? '/studio.php' : '/admin/login.php';
+        unset($_SESSION['oauth_next']);
+        header('Location: ' . $back, true, 303);
     } else {
         $_SESSION['customer_error'] = $message;
         header('Location: /compte.php', true, 303);
@@ -88,7 +90,18 @@ if ($ctx === 'admin') {
     $_SESSION['is_admin'] = tenant_slug();
     if ($login['id'] === null) unset($_SESSION['admin_account_id']);
     else $_SESSION['admin_account_id'] = $login['id'];
-    header('Location: ' . admin_home_for_role($login['role']), true, 303);
+    // Connexion lancée depuis le Studio : on y revient ; sinon, page d'arrivée de l'administration.
+    $toStudio = ($_SESSION['oauth_next'] ?? '') === '/studio.php';
+    unset($_SESSION['oauth_next']);
+    if ($toStudio && defined('STUDIO_REMEMBER_DAYS')) {
+        // Comme la connexion du Studio : le téléphone reste connecté.
+        $params = session_get_cookie_params();
+        setcookie(session_name(), session_id(), [
+            'expires' => time() + STUDIO_REMEMBER_DAYS * 86400, 'path' => $params['path'] ?: '/',
+            'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off', 'httponly' => true, 'samesite' => 'Lax',
+        ]);
+    }
+    header('Location: ' . ($toStudio ? '/studio.php' : admin_home_for_role($login['role'])), true, 303);
     exit;
 }
 
