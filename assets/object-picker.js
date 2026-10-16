@@ -59,6 +59,7 @@
       var url = URL.createObjectURL(blob);
       var dlg = el('dialog', 'op'); dlg.setAttribute('aria-label', 'Choisir un objet dans la photo');
       var title = el('p', 'op-title', 'Quel objet vendez-vous ?');
+      var closeX = el('button', 'op-close', '×'); closeX.type = 'button'; closeX.setAttribute('aria-label', 'Fermer');
       var note = el('p', 'op-note', 'Recherche des objets de la photo…');
       var stage = el('div', 'op-stage'); var img = el('img'); img.src = url; img.alt = ''; img.draggable = false; stage.appendChild(img);
       var layer = el('div', 'op-layer'); stage.appendChild(layer);
@@ -68,7 +69,7 @@
       var all = el('button', 'btn btn-ghost', 'Garder toute la photo'); all.type = 'button';
       var cancel = el('button', 'btn btn-ghost', 'Annuler'); cancel.type = 'button';
       bar.appendChild(use); bar.appendChild(all); bar.appendChild(cancel);
-      dlg.appendChild(title); dlg.appendChild(note); dlg.appendChild(stage); dlg.appendChild(bar);
+      dlg.appendChild(closeX); dlg.appendChild(title); dlg.appendChild(note); dlg.appendChild(stage); dlg.appendChild(bar);
       document.body.appendChild(dlg);
       var chosen = null, done = false;
 
@@ -108,6 +109,8 @@
       use.addEventListener('click', function () { if (chosen) crop(blob, chosen).then(finish); });
       all.addEventListener('click', function () { finish(null); });
       cancel.addEventListener('click', function () { finish(null); });
+      closeX.addEventListener('click', function () { finish(null); });
+      dlg.addEventListener('click', function (e) { if (e.target !== dlg) return; var r = dlg.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) finish(null); });
       dlg.addEventListener('cancel', function (e) { e.preventDefault(); finish(null); });
       dlg.showModal();
 

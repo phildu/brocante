@@ -45,7 +45,11 @@
       var urls = [];
       var state = { src: 0, newBlob: null, ref: null, refCm: 20, items: [], kind: 0, text: '', textEdited: false, aiNote: '' };
       var dlg = el('dialog', 'mt'); dlg.setAttribute('aria-label', 'Mesurer la pièce');
-      dlg.appendChild(el('p', 'mt-title', 'Mesurer la pièce'));
+      var head = el('div', 'mt-head');
+      head.appendChild(el('p', 'mt-title', 'Mesurer la pièce'));
+      var closeX = el('button', 'mt-close', '×'); closeX.type = 'button'; closeX.setAttribute('aria-label', 'Fermer sans enregistrer');
+      head.appendChild(closeX);
+      dlg.appendChild(head);
       dlg.appendChild(el('p', 'mt-note', 'Photographiez la pièce de face (téléphone parallèle à la pièce, sur un support fixe si possible), avec un repère posé à côté d\'elle, au même niveau : double décimètre, mètre ou pièce de monnaie. Tracez ensuite le repère, puis les dimensions.'));
 
       // Photo à mesurer : une des photos de la pièce, ou une nouvelle photo.
@@ -87,9 +91,10 @@
       var bar = el('div', 'mt-bar');
       var ok = el('button', 'btn btn-primary', 'Utiliser cette taille'); ok.type = 'button';
       var ai = el('button', 'btn btn-ghost', 'Estimer avec l\'IA'); ai.type = 'button'; ai.hidden = !opts.ai;
+      var undo = el('button', 'btn btn-ghost', '↶ Annuler le dernier tracé'); undo.type = 'button';
       var redo = el('button', 'btn btn-ghost', 'Retracer le repère'); redo.type = 'button';
       var cancel = el('button', 'btn btn-ghost', 'Annuler'); cancel.type = 'button';
-      bar.appendChild(ok); bar.appendChild(ai); bar.appendChild(redo); bar.appendChild(cancel);
+      bar.appendChild(ok); bar.appendChild(undo); bar.appendChild(redo); bar.appendChild(ai); bar.appendChild(cancel);
       dlg.appendChild(bar);
       document.body.appendChild(dlg);
 
@@ -112,8 +117,10 @@
         ln.setAttribute('x1', l.a[0] * 100 + '%'); ln.setAttribute('y1', l.a[1] * 100 + '%'); ln.setAttribute('x2', l.b[0] * 100 + '%'); ln.setAttribute('y2', l.b[1] * 100 + '%');
         ln.setAttribute('stroke', color); ln.setAttribute('stroke-width', '3'); if (dash) ln.setAttribute('stroke-dasharray', '6 4');
         g.appendChild(ln);
-        [l.a, l.b].forEach(function (p) {
-          var c = document.createElementNS(NS, 'circle'); c.setAttribute('cx', p[0] * 100 + '%'); c.setAttribute('cy', p[1] * 100 + '%'); c.setAttribute('r', '6'); c.setAttribute('fill', color); c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', '2'); g.appendChild(c);
+        // Points A et B : on peut les saisir et les déplacer pour corriger le tracé.
+        [[l.a, 'A'], [l.b, 'B']].forEach(function (q) {
+          var c = document.createElementNS(NS, 'circle'); c.setAttribute('cx', q[0][0] * 100 + '%'); c.setAttribute('cy', q[0][1] * 100 + '%'); c.setAttribute('r', '11'); c.setAttribute('fill', color); c.setAttribute('fill-opacity', '.85'); c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', '2'); g.appendChild(c);
+          var t = document.createElementNS(NS, 'text'); t.setAttribute('x', q[0][0] * 100 + '%'); t.setAttribute('y', q[0][1] * 100 + '%'); t.setAttribute('dy', '4'); t.setAttribute('text-anchor', 'middle'); t.setAttribute('fill', '#fff'); t.setAttribute('font-size', '11'); t.setAttribute('font-weight', '700'); t.setAttribute('pointer-events', 'none'); t.textContent = q[1]; g.appendChild(t);
         });
         return g;
       }
@@ -128,7 +135,7 @@
         // Boutons de dimension.
         Array.prototype.forEach.call(kinds.children, function (b, i) { b.setAttribute('aria-pressed', String(i === state.kind)); });
         kinds.hidden = !refLine && !state.items.some(function (it) { return !it.line; });
-        step.textContent = mode === 'ref' ? '1. Tracez le repère sur la photo, d\'un bout à l\'autre (' + (REFS.filter(function (r) { return r.key === sel.value; })[0].label.split(' (')[0].toLowerCase()) + ').' : '2. Choisissez la dimension, puis tracez-la sur la pièce. Recommencez pour chaque dimension.';
+        step.textContent = mode === 'ref' ? '1. Tracez le repère sur la photo, d\'un bout à l\'autre (' + (REFS.filter(function (r) { return r.key === sel.value; })[0].label.split(' (')[0].toLowerCase()) + ').' : '2. Choisissez la dimension, puis tracez-la sur la pièce. Pour corriger : glissez le point A ou B, ou « Annuler le dernier tracé ».';
         // Tracés.
         while (svg.firstChild) svg.removeChild(svg.firstChild);
         var k = pxPerCm();
@@ -147,10 +154,16 @@
           var n = document.createElement('input'); n.type = 'number'; n.step = '0.5'; n.min = '0'; n.inputMode = 'decimal'; n.value = it.cm ? String(round(it.cm)) : '';
           n.addEventListener('input', function () { it.cm = parseFloat(n.value) || 0; it.line = null; if (!state.textEdited) { state.text = composeText(); outIn.value = state.text; } });
           row.appendChild(n); row.appendChild(el('span', '', 'cm'));
-          var x = el('button', 'mt-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Retirer'); x.addEventListener('click', function () { state.items.splice(i, 1); sync(); });
+          if (it.line) {
+            var rt = el('button', 'mt-redo', 'Retracer'); rt.type = 'button'; rt.title = 'Tracer de nouveau cette dimension';
+            rt.addEventListener('click', function () { pushHistory(); state.items.splice(i, 1); state.kind = it.kind; sync(); });
+            row.appendChild(rt);
+          }
+          var x = el('button', 'mt-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Retirer cette dimension'); x.addEventListener('click', function () { pushHistory(); state.items.splice(i, 1); sync(); });
           row.appendChild(x); list.appendChild(row);
         });
         redo.hidden = !refLine;
+        undo.disabled = !hist.length;
         if (!state.textEdited) { state.text = composeText(); outIn.value = state.text; }
         ok.disabled = !outIn.value.trim();
       }
@@ -170,7 +183,7 @@
       }
       function hasWork() { return !!refLine || state.items.some(function (it) { return it.line; }); }
       function load() {
-        refLine = null; temp = null; mode = 'ref'; state.items = state.items.filter(function (it) { return !it.line; });
+        refLine = null; temp = null; mode = 'ref'; state.items = state.items.filter(function (it) { return !it.line; }); hist.length = 0;
         var s = images[state.src];
         if (!s) { stage.hidden = true; step.textContent = 'Prenez d\'abord une photo de la pièce avec son repère.'; drawSources(); return; }
         stage.hidden = false; img.src = srcUrl(s); drawSources(); render();
@@ -188,7 +201,13 @@
       // Choix du repère.
       sel.addEventListener('change', function () { var r = REFS.filter(function (x) { return x.key === sel.value; })[0]; cmIn.value = String(r.cm); state.refCm = r.cm; render(); });
       cmIn.addEventListener('input', function () { state.refCm = parseFloat(cmIn.value) || 0; if (!state.textEdited) render(); else render(); });
-      redo.addEventListener('click', function () { refLine = null; mode = 'ref'; state.items = state.items.filter(function (it) { return !it.line; }); sync(); });
+      // Historique : chaque tracé, déplacement de point ou suppression peut être annulé.
+      var hist = [];
+      function snapshot() { return JSON.stringify({ refLine: refLine, items: state.items, mode: mode, kind: state.kind }); }
+      function pushHistory() { hist.push(snapshot()); if (hist.length > 40) hist.shift(); }
+      function restore(str) { var o = JSON.parse(str); refLine = o.refLine; state.items = o.items; mode = o.mode; state.kind = o.kind; }
+      undo.addEventListener('click', function () { if (!hist.length) return; restore(hist.pop()); sync(); });
+      redo.addEventListener('click', function () { pushHistory(); refLine = null; mode = 'ref'; state.items = state.items.filter(function (it) { return !it.line; }); sync(); });
 
       // Tracé au doigt, avec loupe.
       function pt(e) { var r = stage.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; }
@@ -202,13 +221,37 @@
         var top = p[1] * r.height - S - 28; if (top < 0) top = p[1] * r.height + 28;
         loupe.style.left = Math.min(r.width - S, Math.max(0, p[0] * r.width - S / 2)) + 'px'; loupe.style.top = top + 'px';
       }
-      var drawing = false;
-      svg.addEventListener('pointerdown', function (e) { if (!img.naturalWidth) return; drawing = true; svg.setPointerCapture(e.pointerId); var p = pt(e); temp = { a: p, b: p }; showLoupe(p); render(); });
-      svg.addEventListener('pointermove', function (e) { if (!drawing) return; var p = pt(e); temp.b = p; showLoupe(p); render(); });
+      var drawing = false, dragging = null;
+      /** Point A ou B d'un tracé existant sous le doigt (à 26 px près), pour le déplacer. */
+      function hitPoint(e) {
+        var r = stage.getBoundingClientRect(), best = null, bestD = 26;
+        var lines = (refLine ? [refLine] : []).concat(state.items.filter(function (it) { return it.line; }).map(function (it) { return it.line; }));
+        lines.forEach(function (l) {
+          ['a', 'b'].forEach(function (end) {
+            var d = Math.hypot(l[end][0] * r.width + r.left - e.clientX, l[end][1] * r.height + r.top - e.clientY);
+            if (d < bestD) { bestD = d; best = { line: l, end: end }; }
+          });
+        });
+        return best;
+      }
+      svg.addEventListener('pointerdown', function (e) {
+        if (!img.naturalWidth) return;
+        svg.setPointerCapture(e.pointerId);
+        var hit = hitPoint(e), p = pt(e);
+        if (hit) { pushHistory(); dragging = hit; hit.line[hit.end] = p; showLoupe(p); render(); return; }
+        drawing = true; temp = { a: p, b: p }; showLoupe(p); render();
+      });
+      svg.addEventListener('pointermove', function (e) {
+        var p = pt(e);
+        if (dragging) { dragging.line[dragging.end] = p; showLoupe(p); render(); return; }
+        if (!drawing) return; temp.b = p; showLoupe(p); render();
+      });
       function end() {
+        if (dragging) { dragging = null; loupe.hidden = true; sync(); return; }
         if (!drawing) return; drawing = false; loupe.hidden = true;
         var l = temp; temp = null;
         if (l && lenPx(l) > 12) {
+          pushHistory();
           if (mode === 'ref') { refLine = l; mode = 'measure'; }
           else {
             // Une seule ligne par dimension (sauf « Autre ») : la nouvelle remplace la précédente.
@@ -254,6 +297,13 @@
         finish({ text: text, dims: state.items.filter(function (it) { return it.cm > 0; }).map(function (it) { return { kind: KINDS[it.kind][1], cm: round(it.cm) }; }), newBlob: state.newBlob });
       });
       cancel.addEventListener('click', function () { finish(null); });
+      closeX.addEventListener('click', function () { finish(null); });
+      // Un clic en dehors de la fenêtre la ferme aussi.
+      dlg.addEventListener('click', function (e) {
+        if (e.target !== dlg) return;
+        var r = dlg.getBoundingClientRect();
+        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) finish(null);
+      });
       dlg.addEventListener('cancel', function (e) { e.preventDefault(); finish(null); });
       dlg.showModal();
       state.refCm = REFS[0].cm;

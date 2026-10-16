@@ -10,3 +10,6 @@
 .op-box span { position: absolute; left: -2px; top: -2px; max-width: 100%; padding: 2px 6px; background: var(--accent); color: var(--accent-ink, #fff); font: 600 .72rem/1.3 var(--font-body, inherit); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .op-rect { position: absolute; border: 2px dashed #fff; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45); pointer-events: none; }
 .op-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.op { position: relative; }
+.op-close { position: absolute; right: 4px; top: 4px; width: 44px; height: 44px; border: 0; background: none; color: var(--ink); font-size: 1.9rem; line-height: 1; cursor: pointer; }
+.op-title { padding-right: 44px; }
