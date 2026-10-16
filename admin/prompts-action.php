@@ -55,6 +55,7 @@ switch ($action) {
         }
         $path ??= product_source_photos($product['ref'])[0]['path'] ?? ($product['photo'] ?: null);
         if (!$path || !is_file($root . '/' . $path)) prompts_reply(['ok' => false, 'error' => "Cette pièce n'a pas de photo à analyser."]);
+        if ($gate = ai_gate()) prompts_reply(['ok' => false, 'quota' => true, 'error' => $gate]);
         session_write_close();
         @set_time_limit(90);
         $ideas = prompt_suggestions_from_photo($root . '/' . $path, (string) ($_POST['kind'] ?? 'ambiance'));

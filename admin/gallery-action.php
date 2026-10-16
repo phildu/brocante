@@ -51,6 +51,18 @@ switch ($action) {
         break;
     }
 
+    // Ne montrer que les images générées (photos du shooting masquées), ou tout réafficher.
+    case 'generated_only': {
+        $n = apply_generated_only($ref, true);
+        flash_set($n ? $n . ' photo(s) du shooting masquée(s) : la fiche montre les images générées (réaffichez-les à tout moment).' : 'Rien à masquer : aucune image générée n\'est encore visible, ou les photos du shooting le sont déjà.', $n ? 'ok' : 'error');
+        break;
+    }
+    case 'show_all': {
+        show_all_photos($ref);
+        flash_set('Toutes les photos sont réaffichées.');
+        break;
+    }
+
     case 'rename': {
         $id = (int) ($_POST['photo_id'] ?? 0);
         $label = trim((string) ($_POST['label'] ?? ''));
@@ -283,6 +295,7 @@ switch ($action) {
     case 'generate': {
         $kind = (string) ($_POST['kind'] ?? '');
         if (!in_array($kind, ['detoure', 'ambiance', 'angle', 'complete', 'video'], true)) break;
+        if ($kind !== 'video' && ($gate = ai_gate())) { flash_set($gate, 'error'); break; }
 
         $sourcePhotoId = (int) ($_POST['source_photo_id'] ?? 0);
         $anglePreset = (string) ($_POST['angle_preset'] ?? 'auto');

@@ -404,6 +404,9 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
         gallery_save($g);
         $galleryName = $g['name'];
     }
+    // IA gratuite de l'offre choisie : le quota mensuel de la boutique (sans quota dans l'offre, l'IA reste illimitée).
+    $aiQuota = saas_req_offer($req)['ai_quota_eur'] ?? null;
+    if ($aiQuota !== null) saas_ai_policy_set($slug, (float) $aiQuota, 'offre');
     @unlink(saas_data_dir() . '/saas/cache.json');
     $shopUrl = rtrim(gallery_local_shop_url($slug, tenant_load($slug), $origin), '/') . '/';
     $adminUrl = $shopUrl . 'admin/';

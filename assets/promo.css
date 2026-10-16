@@ -1,0 +1,10 @@
+/* Visuels promo (photo + encart CTA) : accueil de la boutique et promos des galeries. */
+.promo-section { padding-top: 8px; }
+.promo-title { margin: 0 0 14px; font-size: clamp(1.3rem, 3vw, 1.8rem); }
+.promo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 520px)); gap: 16px; justify-content: start; }
+.promo-visual { display: block; overflow: hidden; border: 1px solid var(--line, #ddd); background: var(--surface, #f4f4f4); transition: transform .2s ease, box-shadow .2s ease; }
+.promo-visual:hover, .promo-visual:focus-visible { transform: translateY(-3px); box-shadow: 0 14px 30px -16px rgba(0, 0, 0, .45); }
+.promo-visual img { display: block; width: 100%; height: auto; }
+@media (max-width: 700px) { .promo-grid { grid-template-columns: 1fr 1fr; gap: 10px; } }
+@media (max-width: 460px) { .promo-grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .promo-visual { transition: none; } }

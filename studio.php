@@ -53,13 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $account = admin_session();
 $isAdmin = $account !== null && $account['role'] === 'admin';
 $aiReady = (bool) GEMINI_API_KEY;
-$angles = [
-    ['face', 'Face', "L'objet entier, de face, sur un fond simple", true],
-    ['profil', 'Profil', 'De côté, pour montrer la forme et l’épaisseur', false],
-    ['dos', 'Dos', 'L’arrière de la pièce', false],
-    ['detail', 'Détail', 'Marque, signature, poinçon ou défaut', false],
-    ['dessous', 'Dessous', 'Le dessous ou l’intérieur', false],
-];
+$angles = studio_object_angles();
 $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/studio.php', 'list' => '/studio.php#pieces', 'list_label' => 'Voir mes pièces', 'title' => false, 'later' => true];
 $ico = static fn (string $d): string => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
 $siteName = trim((string) $content['site_name']) ?: (string) tenant('name');
@@ -255,7 +249,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
       </div>
       <label class="qa-field">Nom <button type="button" class="ai-btn" data-ai-field="name" title="Générer / régénérer le nom">↻ IA</button><input type="text" id="sr-name" data-ai-input="name" maxlength="120"></label>
       <div class="qa-two">
-        <label class="qa-field">Prix <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button><input type="text" id="sr-price" data-ai-input="price" maxlength="30" inputmode="decimal" placeholder="25 €"></label>
+        <label class="qa-field">Prix affiché (€) <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button><input type="number" id="sr-price" data-ai-input="price" data-price min="0" step="0.01" inputmode="decimal" placeholder="25"></label>
         <label class="qa-field">Poids (g) <button type="button" class="ai-btn" data-ai-field="weight" title="Estimer le poids (à vérifier avec une balance)">↻ IA</button><input type="number" id="sr-weight" data-ai-input="weight_grams" min="0" step="10" inputmode="numeric" placeholder="500"></label>
       </div>
       <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button> <button type="button" class="ai-btn" id="sr-measure" title="Mesurer la pièce sur une photo, avec un repère de taille connue">📏 Mesurer</button><input type="text" id="sr-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>
@@ -268,6 +262,10 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
       </label>
       <label class="qa-field">Description <button type="button" class="ai-btn" data-ai-field="description" title="Générer / régénérer la description">↻ IA</button><textarea id="sr-desc" data-ai-input="description" rows="5" maxlength="1200"></textarea></label>
       <label class="qa-field">Matières <button type="button" class="ai-btn" data-ai-field="materials" title="Reconnaître les matières visibles">↻ IA</button><input type="text" id="sr-materials" data-ai-input="materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
+      <div class="qa-two">
+        <label class="qa-field">Marque <button type="button" class="ai-btn" data-ai-field="brand" title="Lire la marque sur l'objet ou son étiquette">↻ IA</button><input type="text" id="sr-brand" data-ai-input="brand" maxlength="80" placeholder="Levi's, Olivetti…"></label>
+        <label class="qa-field">Distributeur<input type="text" id="sr-distributor" data-ai-input="distributor" maxlength="80" placeholder="éditeur, revendeur…"></label>
+      </div>
       <label class="qa-field">État <button type="button" class="ai-btn" data-ai-field="etat" title="Estimer l'état d'après les photos">↻ IA</button><select id="sr-etat" data-ai-input="etat"><?= product_condition_select_html(null) ?></select></label>
       <label class="qa-field">Nature <button type="button" class="ai-btn" data-ai-field="nature" title="Détecter la nature et la sous-catégorie">↻ IA</button><select id="sr-nature" data-ai-input="nature"><?= product_nature_select_html(null) ?></select></label>
       <label class="qa-field">Sous-catégorie<select id="sr-sous" data-ai-input="sous_categorie"><?= product_subcategory_select_html(null) ?></select></label>
@@ -287,6 +285,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
     <button type="button" data-go="pieces"><?= $ico('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>') ?><span>Mes pièces</span><i class="st-count" id="st-count" hidden></i></button>
   </nav>
 
+  <script src="/assets/price-field.js?v=<?= (int) @filemtime(__DIR__ . '/assets/price-field.js') ?>"></script>
   <script src="/assets/product-ai.js"></script>
   <script src="/assets/nature-select.js"></script>
   <script src="/assets/price-research.js"></script>

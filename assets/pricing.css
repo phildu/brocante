@@ -13,6 +13,7 @@
 .pricing:has(input[id$="-mp"]:checked) .plan-tier, .pricing:has(input[id$="-mt"]:checked) .plan-plan,
 .picker:has(#pk-mp:checked) .offer-tier, .picker:has(#pk-mt:checked) .offer-plan { display: none; }
 .plan .save, .offer .save { display: inline-block; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-size: .74rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.plan-ai, .offer .lim.ai { font-size: .84rem; color: var(--accent, #b5502e); margin: 0 0 6px; line-height: 1.35; }
 .plan-limit, .offer .lim { font-size: .86rem; font-weight: 600; color: var(--ink-soft); margin: 0 0 6px; }
 .picker .op { display: block; font-weight: 600; color: var(--ink); }
 .picker .op.py { display: none; }

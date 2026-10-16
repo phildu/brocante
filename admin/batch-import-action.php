@@ -354,6 +354,7 @@ switch ($action) {
         $group = $batch['groups'][$groupIndex];
         if ($group['status'] !== 'pending') break;
         if (!shop_can_add_items()) { flash_set(shop_limit_message(), 'error'); break; }
+        if ($gate = ai_gate()) { flash_set($gate, 'error'); break; }
 
         $usageStart = gmdate('Y-m-d H:i:s');
         $chosenPhoto = $group['photos'][$group['chosen_index']] ?? $group['photos'][0];
@@ -400,8 +401,8 @@ switch ($action) {
         // l'admin (nom/description/prix suggérés par l'IA à corriger).
         $ref = next_ref();
         $coverPhoto = $ambiancePath ?? $detourePath;
-        $stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, etat, nature, sous_categorie, size_text, weight_text, weight_grams, price, badge, is_hidden, featured, sort_order)
-                                VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :price, :badge, 1, 0, :sort_order)');
+        $stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, brand, etat, nature, sous_categorie, size_text, weight_text, weight_grams, price, badge, is_hidden, featured, sort_order)
+                                VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :brand, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :price, :badge, 1, 0, :sort_order)');
         $stmt->execute([
             'ref' => $ref,
             'name' => $sheet['name'],
@@ -409,6 +410,7 @@ switch ($action) {
             'photo' => $coverPhoto,
             'description' => $sheet['description'] ?: 'Description à compléter.',
             'materials' => $sheet['materials'] ?? '',
+            'brand' => $sheet['brand'] ?? '',
             'etat' => ($sheet['etat'] ?? '') ?: null,
             'nature' => ($sheet['nature'] ?? '') ?: null,
             'sous_categorie' => ($sheet['sous_categorie'] ?? '') ?: null,
@@ -434,6 +436,8 @@ switch ($action) {
             queue_mobile_variant(add_product_photo($ref, $ambiancePath, 'Ambiance', true), $ambiancePath, $detourePath, '', $scene);
         }
 
+        // La fiche montre les images générées ; les photos du shooting sont masquées (réglage, réversible dans la galerie).
+        apply_generated_only($ref);
         // Le catalogue d'abord : assez de pièces comparables imposent leur poids médian.
         catalog_refine_weight($ref);
         // Les appels IA de ce traitement (avant la création de la fiche) sont rattachés à la pièce.

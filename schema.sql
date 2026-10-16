@@ -46,6 +46,16 @@ CREATE TABLE IF NOT EXISTS products (
   size_text TEXT,
   weight_text TEXT,
   materials TEXT,
+  price_floor TEXT, -- prix de vente minimum (interne, jamais affiché)
+  est_min REAL, -- fourchette de prix estimée (euros)
+  est_max REAL,
+  est_show INTEGER NOT NULL DEFAULT 0, -- afficher la fourchette sur la fiche
+  negotiable INTEGER NOT NULL DEFAULT 0, -- prix négociable (bouton « Faire une offre »)
+  new_url TEXT, -- lien vers le prix du neuf
+  new_price TEXT, -- prix du neuf constaté
+  new_show INTEGER NOT NULL DEFAULT 0, -- afficher le prix et le lien du neuf sur la fiche
+  brand TEXT, -- marque de l'article (lue sur l'objet ou son étiquette)
+  distributor TEXT, -- distributeur, éditeur ou revendeur d'origine
   etat TEXT,
   nature TEXT,
   sous_categorie TEXT,

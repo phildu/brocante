@@ -105,6 +105,8 @@ if ($view = shop_view('home')) {
   </div>
 </section>
 
+<?= promo_section_html() ?>
+
 <section class="tight" id="histoire">
   <div class="wrap story-grid">
     <div>

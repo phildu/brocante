@@ -7,7 +7,9 @@ require_once __DIR__ . '/studio.php';
 require_once __DIR__ . '/prompts.php';
 require_once __DIR__ . '/universes.php';
 require_once __DIR__ . '/comparables.php';
+require_once __DIR__ . '/ai-usage.php';
 require_once __DIR__ . '/price-research.php';
+require_once __DIR__ . '/pricing-extras.php';
 require_once __DIR__ . '/ai-usage.php';
 require_once __DIR__ . '/veo.php';
 require_once __DIR__ . '/siliconflow-video.php';
@@ -67,10 +69,9 @@ function get_products(?string $cat = null, bool $includeHidden = false, string $
     if ($cat && $cat !== 'tous') { $where[] = 'cat = ?'; $params[] = $cat; }
     if (!$includeHidden) { $where[] = 'is_hidden = 0'; $where[] = 'stock > 0'; }
     if ($search !== '') {
-        $where[] = '(name LIKE ? OR description LIKE ?)';
+        $where[] = '(name LIKE ? OR description LIKE ? OR brand LIKE ? OR distributor LIKE ?)';
         $like = '%' . $search . '%';
-        $params[] = $like;
-        $params[] = $like;
+        $params = array_merge($params, [$like, $like, $like, $like]);
     }
     $sql = 'SELECT * FROM products' . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY sort_order, ref';
     $stmt = db()->prepare($sql);
@@ -371,7 +372,9 @@ function sync_cover_photo(string $ref): void
     // cards, even if an AI-generated illustration was reordered or added ahead
     // of it — the catalogue thumbnail should never default to a staged shot,
     // nor to a photo the shop owner has chosen to hide.
-    $stmt = db()->prepare("SELECT path FROM product_photos WHERE product_ref = ? AND is_hidden = 0 AND type = 'photo' ORDER BY is_illustration ASC, sort_order ASC, id ASC LIMIT 1");
+    // Jamais un gros plan (étiquette, texture, détail, mesure) comme couverture tant qu'une autre image existe.
+    $stmt = db()->prepare("SELECT path FROM product_photos WHERE product_ref = ? AND is_hidden = 0 AND type = 'photo'
+        ORDER BY (label LIKE 'Étiquette%' OR label LIKE 'Etiquette%' OR label LIKE 'Texture%' OR label LIKE 'Détail%' OR label LIKE 'Detail%' OR label LIKE 'Mesure%') ASC, is_illustration ASC, sort_order ASC, id ASC LIMIT 1");
     $stmt->execute([$ref]);
     $cover = $stmt->fetchColumn();
     $upd = db()->prepare('UPDATE products SET photo = ? WHERE ref = ?');
@@ -718,7 +721,7 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
  */
 function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3, ?string $aspectRatio = null, array $extraAbsPaths = []): ?string
 {
-    if (!GEMINI_API_KEY) return null;
+    if (!GEMINI_API_KEY || ai_gate() !== null) return null;   // quota d'IA épuisé : voir ai_gate()
 
     $imgData = @file_get_contents($srcAbsPath);
     if ($imgData === false) return null;
@@ -1336,7 +1339,7 @@ function responsive_image_html(string $src, ?string $srcMobile, string $alt, str
  */
 function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1, array $extraAbsPaths = []): ?string
 {
-    if (!GEMINI_API_KEY) return null;
+    if (!GEMINI_API_KEY || ai_gate() !== null) return null;
 
     $parts = [['text' => $prompt]];
     // $srcAbsPath vide : consigne en texte seul (pas d'image).
@@ -1709,7 +1712,7 @@ function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): st
         . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
         . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "la clé exacte (avant le signe =) de l\'UNIVERS du produit, son grand domaine, parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "etat": "' . product_condition_prompt_list() . '", "size_text": "vêtement ou chaussure : taille de l\'étiquette, sinon taille probable écrite « M (probable) » ; objet : dimensions estimées ; très courte", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "la clé exacte (avant le signe =) de l\'UNIVERS du produit, son grand domaine, parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "brand": "marque lisible sur l\'objet ou son étiquette (logo, signature, poinçon), vide si aucune n\'est lisible — n\'en invente jamais", "etat": "' . product_condition_prompt_list() . '", "size_text": "vêtement ou chaussure : taille de l\'étiquette, sinon taille probable écrite « M (probable) » ; objet : dimensions estimées ; très courte", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1729,13 +1732,14 @@ function parse_product_sheet_response(string $text): ?array
         'name' => trim((string) $data['name']),
         'description' => trim((string) ($data['description'] ?? '')),
         'category' => $cat,
+        'brand' => mb_substr(trim((string) ($data['brand'] ?? '')), 0, 80),
         'materials' => mb_substr(trim((string) (is_array($data['materials'] ?? null) ? implode(', ', $data['materials']) : ($data['materials'] ?? ''))), 0, 200),
         'etat' => product_condition_key((string) ($data['etat'] ?? '')),
         'size_text' => mb_substr(trim((string) ($data['size_text'] ?? '')), 0, 60),
         'weight_grams' => max(0, min(300000, (int) preg_replace('/\D/', '', (string) ($data['weight_grams'] ?? '')))),
         'nature' => product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['nature'],
         'sous_categorie' => product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['sous_categorie'],
-        'price_hint' => trim((string) ($data['price_hint'] ?? '')),
+        'price_hint' => price_single(trim((string) ($data['price_hint'] ?? ''))),
     ];
 }
 
@@ -2002,7 +2006,7 @@ function product_nature_prompt_list(): string
 }
 
 /** Champs d'une fiche que l'IA sait (re)générer, dans l'ordre du formulaire. */
-const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'nature', 'materials', 'etat', 'size', 'weight', 'price'];
+const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'nature', 'materials', 'brand', 'etat', 'size', 'weight', 'price'];
 
 /**
  * Photos d'origine d'une pièce (hors détourage et illustrations IA), principale
@@ -2036,13 +2040,14 @@ function build_product_fields_prompt(array $fields, array $current, int $photoCo
         'description' => '"description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible"',
         'category' => '"category": "la clé exacte (avant le signe =) parmi : ' . $cats . ' ; si aucune ne convient vraiment à cet objet, laisse une chaîne vide"',
         'materials' => '"materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne) ; chaîne vide si elles ne se voient pas"',
+        'brand' => '"brand": "la MARQUE lisible sur l\'objet ou son étiquette (logo, signature, poinçon, étiquette cousue, fond de pièce) ; chaîne vide si aucune marque n\'est lisible — n\'en devine jamais une d\'après le style seul"',
         'nature' => '"nature": "la clé de la NATURE de l\'objet (ce qu\'il EST) et, dans le même objet JSON, "sous_categorie": "la clé de sa sous-catégorie, qui doit appartenir à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '"',
         'etat' => '"etat": "' . product_condition_prompt_list() . '"',
         'size' => '"size_text": "taille ou dimensions, COURTES. VÊTEMENT, chaussure ou accessoire porté : donne TOUJOURS une taille — celle de l\'étiquette si elle est lisible (« M », « 38 », « 42 FR »), sinon la taille la plus probable d\'après la coupe et les proportions, écrite avec « (probable) » (ex : « M (probable) », « 40 (probable) »), plus la longueur ou la largeur approximatives si elles se devinent. OBJET : ses dimensions estimées (ex : « env. 20 × 15 × 30 cm », hauteur ou diamètre selon la forme). Chaîne vide seulement si la photo ne permet vraiment aucune estimation"',
         'weight' => '"weight_grams": "nombre entier : poids estimé en grammes de l\'objet seul, sans emballage, d\'après sa nature, ses matières et sa taille apparente (ordres de grandeur : sweat 600, robe 450, pichet en grès 900, chaise en bois 4500) ; 0 si impossible à estimer"',
         'price' => '"price": "prix de vente indicatif : UN SEUL montant en euros, ex : 30 €"',
     ];
-    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'nature' => 'Nature', 'materials' => 'Matières', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille', 'weight_text' => 'Poids'];
+    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'nature' => 'Nature', 'materials' => 'Matières', 'brand' => 'Marque', 'distributor' => 'Distributeur', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille', 'weight_text' => 'Poids'];
     $known = [];
     $vary = [];
     // Taille et poids se régénèrent par les champs « size » et « weight ».
@@ -2102,6 +2107,7 @@ function parse_product_fields_response(string $text, array $fields): array
             case 'name': $value = mb_substr($value, 0, 120); break;
             case 'description': $value = mb_substr($value, 0, 1200); break;
             case 'materials': $value = mb_substr($value, 0, 200); break;
+            case 'brand': $value = mb_substr($value, 0, 80); break;
             case 'etat': $value = product_condition_key($value); break;
             case 'size':
                 $size = mb_substr($str($data['size_text'] ?? ''), 0, 60);
@@ -2394,7 +2400,7 @@ function detoure_photo_synchronous(string $srcAbsPath): ?array
  */
 function fal_remove_background(string $srcAbsPath, int $retries = 1): ?string
 {
-    if (!FAL_API_KEY) return null;
+    if (!FAL_API_KEY || ai_gate() !== null) return null;
 
     $imgData = @file_get_contents($srcAbsPath);
     if ($imgData === false) return null;
@@ -2980,6 +2986,38 @@ function price_to_cents(?string $price): ?int
     $euros = (int) str_replace(' ', '', $m[1]);
     $cents = isset($m[2]) ? (int) str_pad($m[2], 2, '0') : 0;
     return $euros * 100 + $cents;
+}
+
+/**
+ * Prix saisi dans un champ numérique du back-office (« 25 », « 25,5 », « 25.50 ») → texte enregistré (« 25 € », « 25,50 € »). Champ vide : $fallback.
+ * Un ancien texte (« 25-35 € », « sur devis ») envoyé tel quel est gardé, pour ne rien casser.
+ */
+function price_from_input($raw, string $fallback = ''): string
+{
+    $raw = trim((string) $raw);
+    if ($raw === '') return $fallback;
+    $n = str_replace([' ', "\xc2\xa0", ','], ['', '', '.'], preg_replace('/€|euros?$/iu', '', $raw));
+    if (is_numeric($n)) return (float) $n >= 0 && (float) $n < 10000000 ? price_research_format(round((float) $n, 2)) : $fallback;
+    return mb_substr($raw, 0, 40);
+}
+
+/** Valeur d'un champ <input type="number"> (point décimal) pour un prix enregistré en texte ; '' s'il n'a pas un seul montant (« 25-35 € », « sur devis »). */
+function price_input_value(?string $price): string
+{
+    $price = trim((string) $price);
+    if ($price === '' || preg_match('/d[eè]s|à partir|environ|sur devis/iu', $price)) return '';
+    if (!preg_match_all('/\d[\d\s]*(?:[,.]\d{1,2})?/', $price, $m) || count($m[0]) !== 1) return '';
+    $v = (float) str_replace([' ', ','], ['', '.'], $m[0][0]);
+    return $v > 0 ? rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.') : '';
+}
+
+/** Prix indicatif de l'IA (« 25-35 € ») → un seul montant (« 30 € ») : la moyenne des deux bornes. */
+function price_single(string $hint): string
+{
+    if (!preg_match_all('/\d+(?:[.,]\d{1,2})?/', str_replace(' ', '', $hint), $m) || !$m[0]) return '';
+    $vals = array_map(static fn ($v): float => (float) str_replace(',', '.', $v), array_slice($m[0], 0, 2));
+    $mean = array_sum($vals) / count($vals);
+    return price_research_format($mean >= 10 ? round($mean) : round($mean * 2) / 2);
 }
 
 function format_cents(int $cents): string

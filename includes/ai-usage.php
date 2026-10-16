@@ -41,6 +41,11 @@ function ai_pricing(): array
     } catch (Throwable $e) {
     }
     $cache = array_merge(AI_PRICING_DEFAULTS, array_intersect_key(array_map('floatval', $saved), AI_PRICING_DEFAULTS));
+    // Une boutique dont l'IA est comptée (quota de sa formule) est mesurée au barème de la plateforme : elle ne peut pas baisser ses propres tarifs.
+    if (ai_policy()) {
+        require_once __DIR__ . '/ai-plans.php';
+        $cache = array_merge($cache, array_intersect_key(saas_ai_pricing(), AI_PRICING_DEFAULTS));
+    }
     return $cache;
 }
 
@@ -215,4 +220,68 @@ function ai_balance(): ?array
     if (!$b) return null;
     $spent = ai_usage_spent($b['since']);
     return ['amount' => $b['amount'], 'since' => $b['since'], 'spent' => $spent, 'remaining' => $b['amount'] - $spent];
+}
+
+
+// ── Quota d'IA gratuite et crédit racheté (voir includes/ai-plans.php) ──
+
+/** Quota affecté à CETTE boutique par la plateforme (['quota_eur', 'since', 'source']) ou par son tenant.php (ai_quota_eur) ; null : IA non limitée. */
+function ai_policy(): ?array
+{
+    static $cache = false;
+    if ($cache !== false) return $cache;
+    $cache = null;
+    try {
+        require_once __DIR__ . '/ai-plans.php';
+        $cache = saas_ai_policy(tenant_slug());
+        if (!$cache) {
+            $q = tenant('ai_quota_eur', null);
+            if ($q !== null && $q !== '') $cache = ['quota_eur' => max(0.0, (float) $q), 'since' => gmdate('Y-m'), 'source' => 'tenant'];
+        }
+    } catch (Throwable $e) {
+        $cache = null;
+    }
+    return $cache;
+}
+
+/**
+ * État du quota : ['quota', 'month_spent', 'free_left', 'purchased', 'overflow', 'credit_left', 'available', 'blocked', 'month'] (montants en euros) ; null si l'IA de la boutique n'est pas limitée.
+ * Le dépassement (consommation du mois au-delà du quota, cumulé depuis le début du décompte) est prélevé sur le crédit racheté.
+ */
+function ai_quota_state(): ?array
+{
+    $pol = ai_policy();
+    if (!$pol) return null;
+    $rate = ai_pricing()['usd_eur'];
+    $month = gmdate('Y-m');
+    $spent = [];
+    try {
+        $stmt = db()->prepare("SELECT strftime('%Y-%m', at) AS m, SUM(cost_usd) AS c FROM ai_usage WHERE at >= ? GROUP BY m");
+        $stmt->execute([$pol['since'] . '-01 00:00:00']);
+        foreach ($stmt->fetchAll() as $r) $spent[(string) $r['m']] = (float) $r['c'] * $rate;
+    } catch (Throwable $e) {
+    }
+    $quota = $pol['quota_eur'];
+    $monthSpent = $spent[$month] ?? 0.0;
+    $overflow = 0.0;
+    foreach ($spent as $v) $overflow += max(0.0, $v - $quota);
+    $purchased = saas_ai_credits(tenant_slug())['purchased_eur'];
+    $creditLeft = $purchased - $overflow;
+    $freeLeft = max(0.0, $quota - $monthSpent);
+    $available = $freeLeft + max(0.0, $creditLeft);
+    return ['quota' => $quota, 'month_spent' => $monthSpent, 'free_left' => $freeLeft, 'purchased' => $purchased, 'overflow' => $overflow,
+        'credit_left' => $creditLeft, 'available' => $available, 'blocked' => $available < 0.005, 'month' => $month];
+}
+
+/** Message à montrer quand les générations IA sont suspendues (quota du mois épuisé et plus de crédit), ou null si l'IA est disponible. */
+function ai_gate(): ?string
+{
+    try {
+        $s = ai_quota_state();
+    } catch (Throwable $e) {
+        return null;
+    }
+    if (!$s || !$s['blocked']) return null;
+    return 'Le quota d\'IA gratuite de ce mois est épuisé (' . ai_format_eur($s['month_spent']) . ' consommés pour ' . ai_format_eur($s['quota']) . ' inclus)'
+        . ($s['purchased'] > 0 ? ' et votre crédit racheté aussi' : '') . '. Rachetez du crédit IA depuis « Consommation IA », ou attendez le début du mois prochain.';
 }

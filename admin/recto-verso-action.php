@@ -20,6 +20,7 @@ function rv_reply(array $data, int $status = 200): never
 if (!admin_access_ok()) rv_reply(['ok' => false, 'error' => 'Session expirée : reconnectez-vous.'], 401);
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') rv_reply(['ok' => false, 'error' => 'Méthode non autorisée.'], 405);
 if (!hash_equals(admin_csrf_token(), (string) ($_POST['csrf'] ?? ''))) rv_reply(['ok' => false, 'error' => 'Page expirée : rechargez-la et recommencez.'], 400);
+if (in_array((string) ($_POST['action'] ?? ''), ['cutout', 'generate'], true) && ($gate = ai_gate())) rv_reply(['ok' => false, 'quota' => true, 'error' => $gate]);
 session_write_close();
 @set_time_limit(150);
 

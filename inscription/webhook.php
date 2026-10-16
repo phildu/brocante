@@ -30,7 +30,12 @@ $requestOf = static function (array $o): ?array {
     return null;
 };
 
-if ($event['type'] === 'checkout.session.completed') {
+if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'] ?? '') === 'ai_credit')) {
+    // Rachat de crédit IA d'une boutique (admin/ai-credit-action.php) : crédit ajouté une seule fois, même si la page de retour est déjà passée.
+    $res = saas_ai_credit_apply_session($obj);
+    if ($res['state'] === 'added') saas_event('ai_credit_purchased', ['slug' => $res['slug'], 'amount' => $res['amount'] ?? 0, 'note' => 'Pack ' . ($res['pack'] ?? '') . ' : ' . number_format($res['credit_eur'], 2, ',', '') . ' € de crédit IA', 'actor' => 'stripe']);
+    error_log('webhook stripe ai_credit ' . ($res['slug'] ?? '?') . ' → ' . $res['state']);
+} elseif ($event['type'] === 'checkout.session.completed') {
     $reqId = (string) ($obj['client_reference_id'] ?? '');
     if (preg_match('/^[a-f0-9]{16}$/', $reqId)) {
         // Enregistre le paiement et envoie au client le lien de création de sa boutique (la boutique, elle, se crée à l'étape 3).

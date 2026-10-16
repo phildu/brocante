@@ -114,6 +114,7 @@ function modal_video_size(string $aspect, string $srcAbsPath): ?array
 /** Lance la génération : ['ok' => true, 'operation' => identifiant] ou ['ok' => false, 'error' => message]. */
 function modal_video_start(string $srcAbsPath, string $prompt, string $aspect): array
 {
+    if ($g = ai_gate()) return ['ok' => false, 'error' => $g];
     if (!modal_video_available()) return ['ok' => false, 'error' => 'Service Modal non configuré : renseignez son adresse et son jeton dans les réglages du site.'];
     $size = modal_video_size($aspect, $srcAbsPath);
     if (!$size) return ['ok' => false, 'error' => 'Impossible de lire la photo de départ.'];

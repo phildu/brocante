@@ -17,6 +17,7 @@ const SAAS_EVENT_TYPES = [
     'payment_manual'        => ['Paiement à régler à part', 'paiement', 'warn'],
     'payment_confirmed'     => ['Paiement confirmé', 'paiement', 'ok'],
     'payment_renewed'       => ['Abonnement renouvelé', 'paiement', 'ok'],
+    'ai_credit_purchased'   => ['Crédit IA racheté', 'paiement', 'ok'],
     'payment_failed'        => ['Paiement refusé', 'paiement', 'bad'],
     'payment_refunded'      => ['Paiement remboursé', 'paiement', 'warn'],
     'subscription_canceled' => ['Abonnement résilié', 'suppression', 'bad'],

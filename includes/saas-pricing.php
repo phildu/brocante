@@ -12,6 +12,8 @@
 // car c'est elle qui détermine les prix ; l'offre choisie est « figée » dans la demande (request['offer']) : un changement de tarif ne modifie pas
 // ce qui a été vendu. Stockage : data/saas/tarifs.json.
 
+require_once __DIR__ . '/ai-plans.php';
+
 const SAAS_BILLING = ['month' => ['mois', 'mensuel'], 'year' => ['an', 'annuel']];
 
 function saas_pricing_file(): string
@@ -32,6 +34,8 @@ function saas_offer_normalize(array $o, string $model): ?array
     return [
         'key' => $key, 'model' => $model, 'name' => $name, 'max_items' => $max,
         'monthly' => $cents($o['monthly'] ?? null), 'yearly' => $cents($o['yearly'] ?? null),
+        // IA gratuite incluse chaque mois, en euros de consommation (null : IA non limitée ; 0 : aucune IA incluse, crédit à acheter) : voir includes/ai-plans.php.
+        'ai_quota_eur' => ($o['ai_quota_eur'] ?? '') === '' || !is_numeric(str_replace(',', '.', (string) $o['ai_quota_eur'])) ? null : max(0.0, min(10000.0, round((float) str_replace(',', '.', (string) $o['ai_quota_eur']), 2))),
         'featured' => !empty($o['featured']),
         'features' => array_slice(array_values(array_filter(array_map(static fn ($f) => mb_substr(trim((string) $f), 0, 120), (array) ($o['features'] ?? [])))), 0, 10),
     ];
@@ -193,7 +197,7 @@ function saas_offer_snapshot(string $gallery, string $key, string $billing): ?ar
     if (!$offer) return null;
     if ($billing !== 'year' || saas_offer_cents($offer, 'year') === null) $billing = 'month';
     return ['key' => $offer['key'], 'name' => $offer['name'], 'model' => $offer['model'], 'billing' => $billing, 'cents' => saas_offer_cents($offer, $billing),
-        'max_items' => $offer['max_items'], 'gallery' => $gallery];
+        'max_items' => $offer['max_items'], 'ai_quota_eur' => $offer['ai_quota_eur'] ?? null, 'gallery' => $gallery];
 }
 
 /** Galeries publiées (identifiant => nom) où l'on peut s'inscrire. */
@@ -243,6 +247,7 @@ function saas_pricing_html(array $grid, string $id, callable $ctaUrl): string
             . ($o['featured'] ? '<span class="tag">La plus choisie</span>' : '')
             . '<h3>' . $e($o['name']) . '</h3>'
             . ($limit !== '' && $o['model'] === 'plan' ? '<p class="plan-limit">' . $e($limit) . '</p>' : '')
+            . (($aiLine = saas_ai_offer_line($o['ai_quota_eur'] ?? null)) !== '' ? '<p class="plan-ai">' . $e($aiLine) . '</p>' : '')
             . '<p class="price pm">' . ($o['monthly'] === null ? 'Sur devis' : ($o['monthly'] === 0 ? 'Gratuit' : $e(saas_money($o['monthly'])) . ' <small>/ mois</small>')) . '</p>'
             . ($yearly !== null ? '<p class="price py">' . ($o['yearly_eff'] === 0 ? 'Gratuit' : $e(saas_money($o['yearly_eff'])) . ' <small>/ an</small>') . ($saving !== '' ? ' <span class="save">' . $e($saving) . '</span>' : '') . '</p>' : '')
             . ($o['features'] ? '<ul>' . implode('', array_map(static fn ($f) => '<li>' . saas_e($f) . '</li>', $o['features'])) . '</ul>' : '')
@@ -282,7 +287,8 @@ function saas_offer_picker_html(array $grid, string $selected, string $billing):
             . '<strong>' . $e($o['name']) . '</strong>'
             . '<span class="op pm">' . $e(saas_price_text($o['monthly'], 'month')) . '</span>'
             . ($o['yearly_eff'] !== null ? '<span class="op py">' . $e(saas_price_text($o['yearly_eff'], 'year')) . ($saving !== '' ? ' <b class="save">' . $e($saving) . '</b>' : '') . '</span>' : ($grid['yearly'] ? '<span class="op py">' . $e(saas_price_text($o['monthly'], 'month')) . '</span>' : ''))
-            . ($limit !== '' ? '<span class="lim">' . $e($limit) . '</span>' : '');
+            . ($limit !== '' ? '<span class="lim">' . $e($limit) . '</span>' : '')
+            . (($aiLine = saas_ai_offer_line($o['ai_quota_eur'] ?? null)) !== '' ? '<span class="lim ai">' . $e($aiLine) . '</span>' : '');
         foreach (array_slice($o['features'], 0, 3) as $f) $html .= '<span>✓ ' . $e($f) . '</span>';
         $html .= '</label>';
     }

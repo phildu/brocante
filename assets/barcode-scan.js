@@ -9,7 +9,7 @@
   var ENDPOINT = (window.APP_BASE || '') + '/admin/barcode-lookup.php';
   var LIB = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
   var FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'];
-  var IDS = { name: 'f-name', description: 'f-desc', materials: 'f-materials', size_text: 'f-size', weight_grams: 'f-weight', nature: 'f-nature', sous_categorie: 'f-sous', cat: 'f-cat', barcode: 'f-barcode' };
+  var IDS = { brand: 'f-brand', distributor: 'f-distributor', name: 'f-name', description: 'f-desc', materials: 'f-materials', size_text: 'f-size', weight_grams: 'f-weight', nature: 'f-nature', sous_categorie: 'f-sous', cat: 'f-cat', barcode: 'f-barcode' };
 
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
   function field(root, name) {
@@ -49,7 +49,7 @@
       if (!overwrite && String(f.value || '').trim() !== '' && !(name === 'weight_grams' && Number(f.value) === 0)) return;
       setValue(f, value); changed.push(label);
     }
-    put('name', res.name, 'nom'); put('description', res.description, 'description'); put('materials', res.materials, 'matières'); put('size_text', res.size_text, 'taille');
+    put('name', res.name, 'nom'); put('brand', res.brand, 'marque'); put('distributor', res.distributor, 'distributeur'); put('description', res.description, 'description'); put('materials', res.materials, 'matières'); put('size_text', res.size_text, 'taille');
     put('weight_grams', res.weight_grams, 'poids');
     if (res.nature) { put('nature', res.nature, 'nature'); var s = field(root, 'sous_categorie'); if (s && res.sous_categorie && (overwrite || !s.value)) { setValue(s, res.sous_categorie); } }
     var cat = guessCategory(root, res); if (cat) { var cf = field(root, 'cat'); if (cf && (overwrite || changed.length)) setValue(cf, cat); }

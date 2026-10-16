@@ -13,6 +13,20 @@ const STUDIO_REMEMBER_DAYS = 30;
 /** Types de pièce choisis au shooting : l'objet (5 angles), le vêtement (recto et verso seulement), le média (livre, CD, vinyle, DVD : scan). */
 const STUDIO_KINDS = ['objet', 'vetement', 'media'];
 
+/** Vues proposées pour un objet : [clé, titre, conseil de prise de vue, obligatoire]. Les gros plans (« Détail ») ne sont pas des angles : voir recto_verso_is_closeup(). */
+function studio_object_angles(): array
+{
+    return [
+        ['face', 'Face', "L'objet entier, de face, sur un fond simple", true],
+        ['profil-droit', 'Profil droit', 'Le côté droit, pour montrer la forme et l’épaisseur', false],
+        ['profil-gauche', 'Profil gauche', 'Le côté gauche', false],
+        ['dos', 'Dos', 'L’arrière de la pièce', false],
+        ['dessus', 'Dessus', 'Le dessus, vu d’en haut (ouverture, couvercle, plateau)', false],
+        ['dessous', 'Dessous', 'Le dessous ou l’intérieur : marque, poinçon, étiquette', false],
+        ['detail', 'Détail', 'Marque, signature, poinçon ou défaut', false],
+    ];
+}
+
 function studio_kind(?string $kind): string
 {
     return in_array($kind, STUDIO_KINDS, true) ? $kind : 'objet';

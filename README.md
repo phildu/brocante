@@ -148,6 +148,68 @@ consignés gardent le coût calculé à l'époque. Les estimations sont annoncé
 estimé ≈ 0,07 € : image 3:2 + version 9:16 »), Studio (coût du lot, par pièce), ajout rapide, bouton « Marché ». Seuls les appels
 faits depuis la mise en service du suivi sont comptés ; le portail de création de boutiques a son propre appel Gemini, non suivi.
 
+## Gestion du prix de vente : prix affiché, minimum, fourchette, négociable, prix du neuf
+
+Dans la fiche du catalogue, le bloc **Gestion du prix de vente** complète le champ **Prix affiché** (celui que voit et paie le client, inchangé : panier, promos, galeries) :
+
+- **Prix de vente minimum** (`price_floor`) : **interne, jamais affiché** ; il sert à juger les offres (« au-dessus / sous le minimum ») et la marge. Un minimum supérieur au prix affiché est ignoré, avec un message.
+- **Fourchette estimée** (`est_min` / `est_max`) : remplie en un clic depuis la recherche « Marché » (bouton « Appliquer la fourchette estimée »), avec une case **« Afficher sur la fiche »** (« Estimation du marché (occasion) : 20 € à 35 € »).
+- **Prix négociable** (`negotiable`) : la fiche affiche « Prix négociable » et un bouton **« Faire une offre »** (fenêtre : offre, nom, e-mail, message → `offre.php`). L'offre est enregistrée (`price_offers`), les administrateurs de la boutique sont **prévenus par e-mail**
+  (avec le rappel du minimum interne) et la retrouvent dans **Administration → Offres de prix** (répondre par e-mail, marquer traitée, supprimer ; le menu indique le nombre d'offres à traiter). Rien n'est débité : le client achète ensuite au prix convenu, que le vendeur applique à la fiche.
+  Garde-fous : champ piège anti-robot, 5 offres par heure et par visiteur, doublons ignorés, offre ≥ prix affiché refusée.
+- **Prix du neuf et lien** (`new_price`, `new_url`) avec une case **« Afficher le prix et le lien du neuf sur la fiche »** (lien « Voir le prix du neuf (site) ↗ », en `nofollow`). Le panneau de la recherche « Marché » propose **« Chercher le lien du prix du neuf »** : une recherche web à part ouvre les trois premières pages marchandes
+  (les redirections de Google sont suivies aussitôt, c'est l'adresse finale qui est gardée) et propose la première où un prix du neuf plausible est retrouvé (« page ouverte : prix retrouvé ✓ »), sinon une page marchande à contrôler. Rien n'est enregistré sans le clic « Utiliser ce lien du neuf » puis l'enregistrement de la fiche.
+
+## IA des formules : quota gratuit, calculateur de coûts, rachat de crédit
+
+Toute la logique est dans `includes/ai-plans.php` (autonome : portail, inscription et boutiques l'utilisent) ; fichiers dans `data/saas/` : `ai-costs.json` (barème et packs), `ai-policy.json` (quota de chaque boutique), `ai-credits.json` (crédit racheté).
+
+- **Portail → Coûts IA** (`portail/ia.php`) : **1. Barème** des coûts (dollar → euro, texte, image, recherche, détourage, vidéos Veo / Wan / Modal) avec les coûts de référence en euros ; **2. Calculateur de forfait** :
+  on saisit un nombre de fiches complètes, de textes, d'images, de vidéos de 6 s et de recherches de prix par mois, il donne le **coût** de cette IA offerte et son **équivalent** en textes / images / vidéos, la **marge brute** de l'offre visée, et l'**affecte**
+  à une offre (formule ou tranche, tarifs par défaut ou d'une galerie) ou à une boutique existante ; un tableau montre le quota et la marge de chaque offre ; **3. Packs de crédit** à racheter (nom, crédit en euros de consommation, prix payé, marge) ;
+  **4. Boutiques** : quota, consommation du mois, crédit restant, état (active / suspendue), avec « affecter un quota », « offrir du crédit » et « illimitée ».
+- **Quota dans les formules** : colonne **« IA offerte / mois »** de Portail → Tarifs (euros de consommation ; vide = IA non limitée, 0 = aucune IA incluse, crédit à acheter), avec l'**équivalent estimé** en direct. Le quota est un budget mensuel unique, que la boutique dépense en textes, images ou vidéos ;
+  les offres l'affichent (« IA incluse chaque mois, au choix : ≈ 1 315 textes · ≈ 134 images · ≈ 8 vidéos de 6 s ») sur l'accueil, l'inscription et l'aperçu des tarifs. À l'inscription, le quota de l'offre choisie est affecté à la nouvelle boutique (`saas_generate_shop()`).
+- **Décompte et suspension** (`ai_quota_state()`, `ai_gate()` dans `includes/ai-usage.php`) : la consommation du mois est mesurée au **barème de la plateforme** ; le dépassement du quota (cumulé depuis le début du décompte) est prélevé sur le **crédit racheté**, qui n'expire pas.
+  Sans quota restant ni crédit, les générations IA (images, textes, détourage, recherche de prix, vidéo, Studio, import par lot, boutons « ↻ IA ») répondent par un message clair au lieu d'appeler l'IA. Une boutique sans quota affecté n'est pas limitée (comportement d'avant).
+- **Rachat de crédit** : dans **Consommation IA** de la boutique, un bloc montre le quota du mois (barre, reste, équivalent), le crédit restant et les **packs** à acheter (paiement unique Stripe sur le compte de la **plateforme** : `admin/ai-credit-action.php`, retour `admin/ai-credit-merci.php`, et webhook
+  `checkout.session.completed` de `inscription/webhook.php`). Le crédit est ajouté une seule fois par session de paiement (idempotent) ; l'achat apparaît dans le journal d'activité. Sans Stripe configuré sur le serveur, la page invite à contacter l'exploitant.
+  Le pied du menu d'administration affiche « IA restante : X € » (ou « IA suspendue »).
+
+## Visuels promo et compteur des mises en avant
+
+Pour un article en promo (mention « Promo » + prix promo enregistrés), le bouton **🎨 Générer le visuel promo** de sa fiche (catalogue) ouvre une fenêtre qui fabrique, **dans le navigateur**
+(canvas, avec les couleurs et les polices de la boutique : `assets/promo-visual.js`), la photo choisie avec un **encart en overlay** — pastille de remise (« −30 % », modifiable), légende, **prix promo** et ancien
+prix barré, **bouton d'appel à l'action** (« Voir l'offre », modifiable) — en deux formats : **3:2** (ordinateur) et **9:16** (smartphone). `admin/promo-visual-action.php` les range (`uploads/promo-…`, table `promo_visuals`)
+avec une copie des prix affichés : si le prix de l'article change, le visuel est **périmé** et n'est plus montré tant qu'il n'est pas refait (`promo_visual_fresh()`).
+
+Il s'affiche :
+- sur la **page d'accueil** de la boutique (section « À saisir en ce moment », pour les trois modèles de page : `promo_section_html()`) ;
+- dans les **promos de la galerie commerciale** dont la boutique fait partie (section « Les promos du moment » de `galerie/index.php`, reprise du catalogue de la galerie : les visuels apparaissent au plus tard après les 10 minutes de cache).
+
+**Compteur** (`includes/promo.php`, base `data/saas/promo.db`, par jour / boutique / article / emplacement) : un **affichage** est compté une fois par visite quand au moins la moitié du visuel est visible pendant une seconde
+(`assets/promo-track.js` → `promo-track.php`) ; un **clic** passe par `promo-click.php` (accueil) ou `galerie/clic.php` (galerie, destination lue dans le catalogue de la galerie : pas de redirection libre) avant d'ouvrir la fiche.
+Chaque emplacement porte un **jeton** (HMAC, `data/saas/promo.secret`) : sans lui, rien n'est compté ; robots exclus, 240 événements par minute et par adresse au plus ; l'aperçu d'une galerie non publiée n'est pas compté.
+Les chiffres se lisent dans le back-office de la boutique (**Mises en avant (promos)** : par article et par emplacement, 7 j à 12 mois, export CSV ; et sur la fiche de l'article) et, pour l'exploitant, dans le portail
+(**Mises en avant** : par galerie, par boutique, par article, export CSV) — de quoi facturer ces mises en avant (tarif par affichage ou par clic, à définir). Les compteurs sont ceux du déploiement qui sert la page.
+
+## Marque et distributeur
+
+Deux champs de la fiche article (`products.brand`, `products.distributor`, colonnes ajoutées automatiquement aux bases existantes) : la **marque** (Levi's, Olivetti, Le Creuset…, lue sur l'objet ou son étiquette)
+et le **distributeur** (éditeur, importateur ou revendeur d'origine). Ils figurent dans le formulaire du catalogue (modification et ajout), dans l'ajout rapide / le Studio (relecture), sur la **fiche publique**
+(« Marque », « Distributeur », pour les trois modèles de page) et dans la **recherche** de la boutique. L'IA lit la marque sur les photos (bouton « ↻ IA » du champ, et rédaction automatique de la fiche) sans jamais
+en deviner une d'après le style seul ; elle sert aussi à la recherche de prix. Le scan d'un code-barres remplit le distributeur (éditeur d'un livre, label d'un disque) et la marque d'un article du commerce (UPCitemdb).
+
+## Prix numériques et « Mettre en promo »
+
+Les champs **Prix** du back-office (fiche du catalogue, ajout, relecture du Studio et de l'ajout rapide, tarifs de livraison) sont des **champs numériques en euros**
+(`<input type="number" step="0.01">`, plus de « € » à saisir). Le texte reste enregistré tel quel dans la base (`25 €`, `25,50 €`) : `price_from_input()` met en forme la valeur
+envoyée ; un champ laissé vide **conserve** l'ancien prix ; un ancien prix non numérique (« 25-35 € », « sur devis ») s'affiche en note sous le champ jusqu'à ce qu'on saisisse un montant.
+Ce que l'IA ou la recherche de prix écrit dans le champ (« 25-35 € » → 30, « 24 € » → 24) est converti en montant (`assets/price-field.js`, `price_single()` côté serveur pour les prix indicatifs).
+
+Dans la fiche du catalogue, le bouton **🏷 Mettre en promo** à côté du prix donne la mention « Promo », affiche le **prix promo** (−20 % proposé), des remises rapides **−10 / −20 / −30 / −50 %**
+et le pourcentage de remise ; **✕ Retirer la promo** remet la mention d'avant et vide le prix promo. Le prix promo doit être inférieur au prix, sinon `admin/save-product.php` l'ignore et le dit.
+
 ## Prix du marché : le même article, neuf et d'occasion
 
 Le bouton **Marché** à côté du champ Prix (catalogue, relectures du Studio et de l'ajout rapide) lance une vraie recherche
@@ -157,7 +219,12 @@ et modèle, de son nom, de ses matières, de sa nature, de sa taille et de son �
 l'article reconnu, un tableau **votre catalogue** (pièces similaires déjà enregistrées : fourchette et médiane) /
 **neuf (web)** / **occasion (web)**, un **prix conseillé** pour CET exemplaire dans son état avec sa justification, la
 fiabilité de la recherche (« faible » quand peu de prix comparables existent : l'IA doit le dire plutôt qu'inventer) et les
-sources et recherches effectuées. « Utiliser » écrit le prix dans le champ, sans rien enregistrer. Une recherche prend 20 à
+sources et recherches effectuées. **Marketplace d'Emmaüs** : la recherche lit aussi, côté serveur, les annonces réelles de Label Emmaüs (`label-emmaus.co`, articles d'occasion des
+communautés, comités d'amis et ressourceries : `price_research_emmaus()`). Le moteur du site cherche tous les mots, donc le nom de la pièce est réduit à ses mots utiles
+(5, puis 3, 2, enfin 1 mot) jusqu'à obtenir au moins 3 annonces ; les 12 premières donnent une ligne **Marketplace Emmaüs** (nombre d'annonces, fourchette, médiane) et la
+liste des 6 premières (titre, prix demandé, vendeur, lien). Ces annonces sont aussi transmises à l'IA comme repères d'occasion (prix demandés, pas des ventes conclues) ;
+à défaut de tout autre repère, leur médiane sert de prix conseillé. Résultat gardé un jour (une seule requête au site par recherche, `data/barcode-cache/`).
+« Utiliser » écrit le prix dans le champ, sans rien enregistrer. Une recherche prend 20 à
 40 secondes ; les recherches web de l'API Gemini peuvent être facturées au-delà du quota gratuit. Sans clé Gemini, seul le
 tableau du catalogue est disponible.
 
@@ -269,7 +336,7 @@ relecture.
 
 Application smartphone `studio.php` (parcours « Une pièce » : `quick-add.js` ; « En lot » : `studio.js`).
 
-- **Type de pièce** : Objet (5 angles, comme avant), **Vêtement** (**recto, verso, étiquette et texture en gros plan** : quatre emplacements, pas d'« autre angle » ; les gros plans ne sont ni détourés ni envoyés pour fabriquer le recto / verso, mais l'IA les lit pour la taille, la marque et la matière)
+- **Type de pièce** : Objet (**7 vues : face, profil droit, profil gauche, dos, dessus, dessous, détail** — `studio_object_angles()` ; dans le lot, ces vues sont guidées dans l'ordre, puis les gros plans), **Vêtement** (**recto, verso, étiquette et texture en gros plan** : quatre emplacements, pas d'« autre angle » ; les gros plans ne sont ni détourés ni envoyés pour fabriquer le recto / verso, mais l'IA les lit pour la taille, la marque et la matière)
   ou **Livre / CD / vinyle / DVD** (couverture et dos). Le type est enregistré (`studio_jobs.kind`) : le vêtement reçoit la nature
   « Vêtements » d'office et une consigne à l'IA (nature, sous-catégorie, taille de l'étiquette) ; la nouvelle pièce d'un lot garde le type de la précédente.
 - **Plusieurs détails** : dans le parcours d'une pièce, « + Un détail de plus » ajoute autant d'emplacements « Détail 1, 2, 3… » que voulu (10 photos au plus
@@ -287,6 +354,12 @@ Application smartphone `studio.php` (parcours « Une pièce » : `quick-add.js` 
   sur la page de connexion et, dans l'administration (Prise de vue), « Partager le lien » / « Code QR » ouvrent la fenêtre de partage (`assets/share.js`, forcée en fenêtre complète
   même sur téléphone) : **WhatsApp, SMS, e-mail, Facebook, X, Telegram, LinkedIn, Pinterest, lien à copier, code QR** (PNG, SVG, impression). L'adresse partagée est celle de l'application
   de la boutique (avec son préfixe quand elle est servie sous `/identifiant/`). Une application déjà installée garde son ancien nom jusqu'à sa réinstallation.
+- **Photos du shooting masquées, images générées affichées** : une fois une pièce traitée (étape `finish` du Studio / ajout rapide, ou import par lot), `apply_generated_only()`
+  masque les **photos du shooting** (face, profils, dos, recto, verso…) et les détourages des autres angles, **s'il existe au moins une image générée visible** (sinon la pièce n'aurait plus de photo).
+  Restent visibles : les **gros plans** (étiquette, texture, détail), le **détourage de la photo principale** (fond blanc), l'**ambiance**, le **recto / verso (IA)** et les vidéos ; la couverture des cartes
+  ne prend jamais un gros plan (`sync_cover_photo()`). Les photos restent dans la galerie (sources de toute nouvelle génération) : « Masquer / Afficher » photo par photo, **« Montrer seulement les images
+  générées »** et **« Tout réafficher »** dans la galerie de la pièce, et réglage du commerce « Masquer par défaut les photos du shooting… » dans Réglages du site (`settings.hide_shooting_photos`, activé par défaut).
+  Les images générées gardent leur mention « Vue d'illustration générée par IA » sur la fiche publique.
 - **Scan pour les médias** : en choisissant « Livre, CD, vinyle, DVD », barre de scan (code-barres, ISBN, QR : `barcode-scan.js`,
   recherche `admin/barcode-lookup.php`) ; dans le lot, bouton « Scanner le code » devant le viseur. Le code est enregistré sur la pièce
   (`products.barcode`), la **pochette trouvée tient lieu de photo** si le média n'est pas photographié, et à l'étape « fiche » les faits du catalogue

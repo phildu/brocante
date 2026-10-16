@@ -60,6 +60,11 @@ function quick_add_notes(string $ref): string
     return $posted !== '' ? $posted : (string) (studio_job_get($ref)['ai_notes'] ?? '');
 }
 
+// Quota d'IA gratuite épuisé et plus de crédit racheté : les étapes qui appellent l'IA répondent d'emblée (« quota » : le Studio propose alors de racheter du crédit).
+if (in_array($action, ['detoure', 'sheet', 'ambiance', 'angles', 'recto', 'verso', 'objects', 'measure'], true) && ($gate = ai_gate())) {
+    quick_add_reply(['ok' => false, 'quota' => true, 'error' => $gate]);
+}
+
 switch ($action) {
     case 'create': {
         $files = $_FILES['photos'] ?? null;
@@ -303,6 +308,8 @@ switch ($action) {
         if ($lookup) {
             if (!empty($lookup['name'])) $sheet['name'] = mb_substr((string) $lookup['name'], 0, 120);
             if (!empty($lookup['description'])) $sheet['description'] = (string) $lookup['description'];
+            if (!empty($lookup['brand'])) $sheet['brand'] = mb_substr((string) $lookup['brand'], 0, 80);
+            if (!empty($lookup['distributor'])) $sheet['distributor'] = mb_substr((string) $lookup['distributor'], 0, 80);
             if (!empty($lookup['materials'])) $sheet['materials'] = mb_substr((string) $lookup['materials'], 0, 200);
             if (!empty($lookup['size_text']) && $measured === '') $sheet['size_text'] = mb_substr((string) $lookup['size_text'], 0, 60);
             if (!empty($lookup['weight_grams'])) $sheet['weight_grams'] = (int) $lookup['weight_grams'];
@@ -313,8 +320,8 @@ switch ($action) {
                 if ($cat = universe_key_for_nature($pair['nature'])) $sheet['category'] = $cat;
             }
         }
-        db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ?, materials = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, weight_text = ? WHERE ref = ?')
-            ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $sheet['materials'], $sheet['etat'] ?: null, $sheet['nature'] ?: null, $sheet['sous_categorie'] ?: null, $sheet['size_text'], $sheet['weight_grams'], product_weight_text($sheet['weight_grams']), $product['ref']]);
+        db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ?, materials = ?, brand = ?, distributor = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, weight_text = ? WHERE ref = ?')
+            ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $sheet['materials'], $sheet['brand'] ?? '', $sheet['distributor'] ?? '', $sheet['etat'] ?: null, $sheet['nature'] ?: null, $sheet['sous_categorie'] ?: null, $sheet['size_text'], $sheet['weight_grams'], product_weight_text($sheet['weight_grams']), $product['ref']]);
         // Le catalogue d'abord : assez de pièces comparables (même nature et sous-catégorie) imposent leur poids médian.
         if (catalog_refine_weight($product['ref'])) {
             $fresh = get_product($product['ref']);
@@ -329,6 +336,8 @@ switch ($action) {
         // Étapes échouées (« detoure,ambiance »), gardées pour l'afficher dans la liste.
         $failed = preg_replace('/[^a-z,]/', '', (string) ($_POST['failed'] ?? ''));
         studio_job_set($product['ref'], 'ready', $failed);
+        // La fiche montre les images générées ; les photos du shooting sont masquées (réglage, réversible dans la galerie).
+        apply_generated_only($product['ref']);
         quick_add_reply(['ok' => true]);
     }
 
@@ -345,7 +354,7 @@ switch ($action) {
         $job = studio_job_get($product['ref']);
         quick_add_reply(['ok' => true, 'product' => [
             'ref' => $product['ref'], 'name' => $product['name'], 'price' => $product['price'], 'cat' => $product['cat'],
-            'description' => $product['description'], 'materials' => (string) $product['materials'], 'etat' => (string) ($product['etat'] ?? ''), 'nature' => (string) ($product['nature'] ?? ''), 'sous_categorie' => (string) ($product['sous_categorie'] ?? ''), 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'], 'size_text' => (string) ($product['size_text'] ?? ''),
+            'description' => $product['description'], 'materials' => (string) $product['materials'], 'brand' => (string) ($product['brand'] ?? ''), 'distributor' => (string) ($product['distributor'] ?? ''), 'etat' => (string) ($product['etat'] ?? ''), 'nature' => (string) ($product['nature'] ?? ''), 'sous_categorie' => (string) ($product['sous_categorie'] ?? ''), 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'], 'size_text' => (string) ($product['size_text'] ?? ''),
             'hidden' => (bool) $product['is_hidden'],
         ], 'photos' => $photos, 'status' => $job['status'] ?? 'reviewed', 'note' => $job['note'] ?? '']);
     }
@@ -368,14 +377,16 @@ switch ($action) {
         $pair = product_nature_resolve($_POST['nature'] ?? '', $_POST['sous_categorie'] ?? '');
         $validCats = array_column(category_list(), 'key');
         $cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : $product['cat'];
-        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, materials = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, is_hidden = ?, barcode = ? WHERE ref = ?')
+        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, materials = ?, brand = ?, distributor = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, is_hidden = ?, barcode = ? WHERE ref = ?')
             ->execute([
                 trim((string) ($_POST['name'] ?? '')) ?: $product['name'],
                 $cat,
-                trim((string) ($_POST['price'] ?? '')) ?: $product['price'],
+                price_from_input($_POST['price'] ?? '', (string) $product['price']),
                 trim((string) ($_POST['badge'] ?? '')),
                 trim((string) ($_POST['description'] ?? '')) ?: $product['description'],
                 trim((string) ($_POST['materials'] ?? $product['materials'])),
+                mb_substr(trim((string) ($_POST['brand'] ?? ($product['brand'] ?? ''))), 0, 80),
+                mb_substr(trim((string) ($_POST['distributor'] ?? ($product['distributor'] ?? ''))), 0, 80),
                 isset($_POST['etat']) ? (product_condition_key($_POST['etat']) ?: null) : $product['etat'],
                 isset($_POST['nature']) ? ($pair['nature'] ?: null) : $product['nature'],
                 isset($_POST['nature']) ? ($pair['sous_categorie'] ?: null) : $product['sous_categorie'],

@@ -25,6 +25,7 @@ if (!admin_access_ok()) {
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     product_ai_reply(['ok' => false, 'error' => 'Méthode non autorisée.'], 405);
 }
+if ($gate = ai_gate()) product_ai_reply(['ok' => false, 'quota' => true, 'error' => $gate]);
 session_write_close(); // ne bloque pas la navigation pendant l'appel à l'IA
 @set_time_limit(90);
 
@@ -33,7 +34,7 @@ $fields = $requested ?: PRODUCT_AI_FIELDS;
 
 // Valeurs actuelles du formulaire : contexte, bornées.
 $current = [];
-foreach (['name', 'description', 'materials', 'price', 'size_text'] as $key) {
+foreach (['name', 'description', 'materials', 'brand', 'distributor', 'price', 'size_text'] as $key) {
     $current[$key] = mb_substr(trim((string) ($_POST[$key] ?? '')), 0, 1200);
 }
 $weightG = (int) ($_POST['weight_grams'] ?? 0);

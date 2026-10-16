@@ -174,6 +174,7 @@ function veo_auto_aspect(string $srcAbsPath): string
 /** Lance la génération. Retourne ['ok' => true, 'operation' => nom] ou ['ok' => false, 'error' => message]. */
 function veo_start(string $srcAbsPath, string $prompt, string $aspect, string $modelKey, int $seconds): array
 {
+    if ($g = ai_gate()) return ['ok' => false, 'error' => $g];
     if (!GEMINI_API_KEY) return ['ok' => false, 'error' => 'Clé Gemini absente : renseignez-la dans les réglages du site.'];
     $model = VEO_MODELS[$modelKey] ?? null;
     if (!$model || !in_array($seconds, VEO_SECONDS, true) || !in_array($aspect, ['16:9', '9:16'], true)) {

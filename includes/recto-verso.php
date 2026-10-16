@@ -153,3 +153,70 @@ function recto_verso_generate(string $ref, string $side, string $keywords = ''):
     }
     return ['ok' => false, 'error' => 'La génération du ' . ($side === 'verso' ? 'verso' : 'recto') . " a échoué (service IA indisponible ou image refusée) — réessayez."];
 }
+
+// ── Photos du shooting masquées par défaut : la fiche montre les images générées ───────────────────────────────────────────
+
+/** Réglage du commerce (table settings) ; $default si absent. */
+function shop_setting(string $name, string $default = ''): string
+{
+    try {
+        db()->exec('CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
+        $stmt = db()->prepare('SELECT value FROM settings WHERE name = ?');
+        $stmt->execute([$name]);
+        $v = $stmt->fetchColumn();
+        return $v === false ? $default : (string) $v;
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+function shop_setting_set(string $name, string $value): void
+{
+    db()->exec('CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    db()->prepare('INSERT INTO settings (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value')->execute([$name, $value]);
+}
+
+/** Les photos du shooting sont-elles masquées d'office une fois les images générées ? (oui tant que le réglage n'est pas décoché) */
+function hide_shooting_photos_enabled(): bool
+{
+    return shop_setting('hide_shooting_photos', '1') !== '0';
+}
+
+/** Libellés des gros plans et photos de mesure : voir recto_verso_is_closeup(). */
+function photo_is_cutout(array $row): bool
+{
+    return str_starts_with((string) $row['label'], 'Détourée');
+}
+
+/**
+ * Ne montre que les images générées : masque les photos du shooting (vues de face, profil, dos…) et les détourages des autres angles. Restent visibles :
+ * les gros plans (étiquette, texture, détail), le détourage de la photo principale et toutes les images générées (ambiance, recto, verso…), vidéos comprises.
+ * Sans effet s'il n'existe encore aucune image générée visible (la pièce n'aurait plus de photo) ou, hors $force, si le réglage est décoché.
+ * Retourne le nombre de photos masquées.
+ */
+function apply_generated_only(string $ref, bool $force = false): int
+{
+    if (!$force && !hide_shooting_photos_enabled()) return 0;
+    $rows = product_photos_list($ref);
+    $generated = array_filter($rows, static fn (array $r): bool => ($r['type'] ?? 'photo') === 'photo' && $r['is_illustration'] && !photo_is_cutout($r));
+    if (!$generated) return 0;
+    $sources = product_source_photos($ref);
+    $mainId = $sources ? (int) $sources[0]['id'] : 0;
+    $ids = [];
+    foreach ($rows as $r) {
+        if (($r['type'] ?? 'photo') !== 'photo' || $r['is_hidden']) continue;
+        $isRaw = !$r['is_illustration'] && !photo_is_cutout($r) && !recto_verso_is_closeup($r);
+        $isOtherCutout = photo_is_cutout($r) && !empty($r['cutout_of']) && (int) $r['cutout_of'] !== $mainId;
+        if ($isRaw || $isOtherCutout) $ids[] = (int) $r['id'];
+    }
+    foreach ($ids as $id) db()->prepare('UPDATE product_photos SET is_hidden = 1 WHERE id = ?')->execute([$id]);
+    sync_cover_photo($ref);
+    return count($ids);
+}
+
+/** Réaffiche toutes les photos (sauf les photos de mesure, toujours masquées). */
+function show_all_photos(string $ref): void
+{
+    db()->prepare("UPDATE product_photos SET is_hidden = 0 WHERE product_ref = ? AND label NOT LIKE 'Mesure%'")->execute([$ref]);
+    sync_cover_photo($ref);
+}

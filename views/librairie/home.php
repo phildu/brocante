@@ -73,6 +73,8 @@ if (!$shelves && $products) $shelves[] = ['Le catalogue', 'À découvrir', array
   </div>
 </section>
 
+<?= promo_section_html('À saisir en ce moment', 'lb-promo-visuals') ?>
+
 <section class="lb-word" id="histoire">
   <div class="wrap lb-word-grid">
     <div>

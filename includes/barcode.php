@@ -283,7 +283,7 @@ function barcode_book(array $in): ?array
     }
     return [
         'kind' => 'livre', 'label' => 'Livre', 'name' => barcode_cut($title . ($authors ? ' — ' . implode(', ', array_slice($authors, 0, 2)) : ''), 120),
-        'description' => $desc, 'nature' => 'livres_medias', 'sous_categorie' => $sous, 'materials' => '', 'size_text' => $pages > 0 ? $pages . ' pages' : '',
+        'description' => $desc, 'brand' => '', 'distributor' => $publisher, 'nature' => 'livres_medias', 'sous_categorie' => $sous, 'materials' => '', 'size_text' => $pages > 0 ? $pages . ' pages' : '',
         'weight_grams' => ($ol['weight'] ?? 0) ?: ($pages > 0 ? max(80, (int) round($pages * 1.0)) : 0), 'weight_estimated' => empty($ol['weight']) && $pages > 0,
         'cover' => $cover, 'sources' => array_values(array_filter([$bnf ? 'BnF' : '', $ol ? 'Open Library' : '', $gb ? 'Google Books' : ''])),
         'facts' => array_filter(['Titre' => $title, 'Auteur' => implode(', ', $authors), 'Éditeur' => $publisher, 'Année' => $year, 'Pages' => $pages ?: '', 'Langue' => $lang]),
@@ -356,7 +356,7 @@ function barcode_music_item(array $m): array
     if ($m['tracks']) $desc .= "\n\nPistes :\n" . implode("\n", array_slice($m['tracks'], 0, 40));
     return [
         'kind' => $kind, 'label' => ['cd' => 'CD', 'vinyle' => 'Vinyle', 'cassette' => 'Cassette', 'dvd' => 'DVD'][$kind] ?? 'Disque', 'name' => barcode_cut(($m['artist'] !== '' ? $m['artist'] . ' — ' : '') . $m['title'], 120),
-        'description' => $desc, 'nature' => 'livres_medias', 'sous_categorie' => $sous, 'materials' => $matLabel, 'size_text' => $m['tracks'] ? count($m['tracks']) . ' pistes' : '',
+        'description' => $desc, 'brand' => '', 'distributor' => (string) $m['label'], 'nature' => 'livres_medias', 'sous_categorie' => $sous, 'materials' => $matLabel, 'size_text' => $m['tracks'] ? count($m['tracks']) . ' pistes' : '',
         'weight_grams' => $grams * max(1, $m['discs']), 'weight_estimated' => true, 'cover' => $m['cover'], 'sources' => [$m['source']],
         'facts' => array_filter(['Titre' => $m['title'], 'Artiste' => $m['artist'], 'Label' => $m['label'], 'Année' => $m['year'], 'Support' => $matLabel, 'Pistes' => count($m['tracks']) ?: '']),
     ];
@@ -375,7 +375,7 @@ function barcode_upcitemdb(string $code): ?array
     return [
         'kind' => 'autre', 'label' => 'Article', 'name' => barcode_cut((string) $i['title'], 120),
         'description' => trim(($i['brand'] ?? '') !== '' ? 'Marque : ' . $i['brand'] . "\n" . barcode_cut($desc, 900) : barcode_cut($desc, 900)),
-        'nature' => '', 'sous_categorie' => '', 'materials' => '', 'size_text' => (string) ($i['dimension'] ?? ''), 'weight_grams' => 0, 'weight_estimated' => false, 'cover' => $img,
+        'brand' => mb_substr(trim((string) ($i['brand'] ?? '')), 0, 80), 'distributor' => '', 'nature' => '', 'sous_categorie' => '', 'materials' => '', 'size_text' => (string) ($i['dimension'] ?? ''), 'weight_grams' => 0, 'weight_estimated' => false, 'cover' => $img,
         'sources' => ['UPCitemdb'], 'facts' => array_filter(['Titre' => $i['title'], 'Marque' => $i['brand'] ?? '', 'Modèle' => $i['model'] ?? '']),
     ];
 }

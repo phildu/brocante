@@ -20,6 +20,12 @@ function tarif_cents(string $s): ?int
     return is_numeric($s) ? max(0, (int) round((float) $s * 100)) : null;
 }
 
+/** Quota d'IA (euros) → texte d'un champ, '' si null (illimitée). */
+function tarif_ai_field(?float $eur): string
+{
+    return $eur === null ? '' : rtrim(rtrim(number_format($eur, 2, ',', ''), '0'), ',');
+}
+
 /** Montant en centimes → texte d'un champ (« 19,90 », « 19 »), '' si null. */
 function tarif_field(?int $cents): string
 {
@@ -38,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ((array) ($_POST['plan_name'] ?? []) as $i => $name) {
             if (trim((string) $name) === '') continue;
             $grid['plans'][] = ['key' => (string) ($_POST['plan_key'][$i] ?? ''), 'name' => (string) $name, 'monthly' => tarif_cents((string) ($_POST['plan_monthly'][$i] ?? '')),
-                'yearly' => tarif_cents((string) ($_POST['plan_yearly'][$i] ?? '')), 'max_items' => (string) ($_POST['plan_max'][$i] ?? ''),
+                'yearly' => tarif_cents((string) ($_POST['plan_yearly'][$i] ?? '')), 'max_items' => (string) ($_POST['plan_max'][$i] ?? ''), 'ai_quota_eur' => (string) ($_POST['plan_ai'][$i] ?? ''),
                 'featured' => (string) ($_POST['featured_plan'] ?? '') === (string) $i, 'features' => preg_split('/\R/', trim((string) ($_POST['plan_features'][$i] ?? '')), -1, PREG_SPLIT_NO_EMPTY)];
         }
         foreach ((array) ($_POST['tier_monthly'] ?? []) as $i => $m) {
@@ -46,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $label = trim((string) ($_POST['tier_name'][$i] ?? ''));
             if (trim((string) $m) === '' && $max === '' && $label === '' && trim((string) ($_POST['tier_yearly'][$i] ?? '')) === '' && empty($_POST['tier_unlimited'][$i])) continue;
             $grid['tiers'][] = ['key' => '', 'name' => $label, 'max_items' => !empty($_POST['tier_unlimited'][$i]) ? '' : $max, 'monthly' => tarif_cents((string) $m),
-                'yearly' => tarif_cents((string) ($_POST['tier_yearly'][$i] ?? '')), 'featured' => (string) ($_POST['featured_tier'] ?? '') === (string) $i,
+                'yearly' => tarif_cents((string) ($_POST['tier_yearly'][$i] ?? '')), 'ai_quota_eur' => (string) ($_POST['tier_ai'][$i] ?? ''), 'featured' => (string) ($_POST['featured_tier'] ?? '') === (string) $i,
                 'features' => preg_split('/\R/', trim((string) ($_POST['tier_features'][$i] ?? '')), -1, PREG_SPLIT_NO_EMPTY)];
         }
         $norm = saas_grid_normalize($grid);
@@ -120,6 +126,7 @@ $signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' .
   .grid-t td { padding: 5px 6px; vertical-align: top; border-top: 1px solid var(--line); }
   .grid-t input[type=text], .grid-t input[type=number], .grid-t textarea, .ocard input[type=number] { padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; font: inherit; width: 100%; }
   .grid-t textarea { min-height: 62px; font-size: .84rem; } .grid-t td.n { width: 108px; } .grid-t td.c { text-align: center; width: 70px; }
+  .grid-t td.ai { width: 150px; } .grid-t td.ai small { display: block; margin-top: 3px; font-size: .72rem; line-height: 1.3; }
   .grid-t .eur { position: relative; } .grid-t .eur::after { content: "€"; position: absolute; right: 10px; top: 7px; color: var(--muted); pointer-events: none; } .grid-t .eur input { padding-right: 24px; }
   .hint { color: var(--muted); font-size: .84rem; margin: 0; } .muted { color: var(--muted); }
   .preview { background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 18px; overflow-x: auto; }
@@ -169,13 +176,14 @@ $signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' .
 
         <h2>Formules <small>un nom, un prix par mois, un prix par an, une limite d'articles facultative</small></h2>
         <div style="overflow-x:auto"><table class="grid-t">
-          <thead><tr><th>Nom</th><th>Par mois</th><th>Par an</th><th>Articles max.</th><th class="c">Mise en avant</th><th>Avantages (un par ligne)</th></tr></thead>
+          <thead><tr><th>Nom</th><th>Par mois</th><th>Par an</th><th>Articles max.</th><th>IA offerte / mois</th><th class="c">Mise en avant</th><th>Avantages (un par ligne)</th></tr></thead>
           <tbody>
           <?php foreach ($plans as $i => $o): ?>
             <tr><td><input type="text" name="plan_name[<?= $i ?>]" maxlength="40" value="<?= e($o['name']) ?>" placeholder="Nom de la formule"><input type="hidden" name="plan_key[<?= $i ?>]" value="<?= e($o['key']) ?>"></td>
               <td class="n"><span class="eur"><input type="text" inputmode="decimal" name="plan_monthly[<?= $i ?>]" value="<?= e(tarif_field($o['monthly'])) ?>" placeholder="devis"></span></td>
               <td class="n"><span class="eur"><input type="text" inputmode="decimal" name="plan_yearly[<?= $i ?>]" value="<?= e(tarif_field($o['yearly'])) ?>" placeholder="auto"></span></td>
               <td class="n"><input type="number" min="1" name="plan_max[<?= $i ?>]" value="<?= e((string) ($o['max_items'] ?? '')) ?>" placeholder="illimité"></td>
+              <td class="n ai"><span class="eur"><input type="text" inputmode="decimal" name="plan_ai[<?= $i ?>]" value="<?= e(tarif_ai_field($o['ai_quota_eur'] ?? null)) ?>" placeholder="illimitée" data-ai-quota></span><small class="muted" data-ai-est></small></td>
               <td class="c"><input type="radio" name="featured_plan" value="<?= $i ?>"<?= !empty($o['featured']) ? ' checked' : '' ?> aria-label="La plus choisie"></td>
               <td><textarea name="plan_features[<?= $i ?>]"><?= e(implode("\n", $o['features'])) ?></textarea></td></tr>
           <?php endforeach; ?>
@@ -185,7 +193,7 @@ $signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' .
 
         <h2>Alternative : tarifs par tranche d'articles <small>le client choisit sa tranche selon le nombre d'articles qu'il vendra</small></h2>
         <div style="overflow-x:auto"><table class="grid-t">
-          <thead><tr><th>Jusqu'à (articles)</th><th>Illimité</th><th>Intitulé (facultatif)</th><th>Par mois</th><th>Par an</th><th class="c">Mise en avant</th><th>Avantages (un par ligne)</th></tr></thead>
+          <thead><tr><th>Jusqu'à (articles)</th><th>Illimité</th><th>Intitulé (facultatif)</th><th>Par mois</th><th>Par an</th><th>IA offerte / mois</th><th class="c">Mise en avant</th><th>Avantages (un par ligne)</th></tr></thead>
           <tbody>
           <?php foreach ($tiers as $i => $o): $isTier = $o['monthly'] !== null || $o['max_items'] !== null || $o['name'] !== '' || $o['key'] !== ''; ?>
             <tr><td class="n"><input type="number" min="1" name="tier_max[<?= $i ?>]" value="<?= e((string) ($o['max_items'] ?? '')) ?>" placeholder="ex. 50"></td>
@@ -193,6 +201,7 @@ $signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' .
               <td><input type="text" name="tier_name[<?= $i ?>]" maxlength="40" value="<?= e(preg_match('/^(Jusqu\'à|Articles illimités)/u', $o['name']) ? '' : $o['name']) ?>" placeholder="auto : « Jusqu'à 50 articles »"></td>
               <td class="n"><span class="eur"><input type="text" inputmode="decimal" name="tier_monthly[<?= $i ?>]" value="<?= e(tarif_field($o['monthly'])) ?>" placeholder="devis"></span></td>
               <td class="n"><span class="eur"><input type="text" inputmode="decimal" name="tier_yearly[<?= $i ?>]" value="<?= e(tarif_field($o['yearly'])) ?>" placeholder="auto"></span></td>
+              <td class="n ai"><span class="eur"><input type="text" inputmode="decimal" name="tier_ai[<?= $i ?>]" value="<?= e(tarif_ai_field($o['ai_quota_eur'] ?? null)) ?>" placeholder="illimitée" data-ai-quota></span><small class="muted" data-ai-est></small></td>
               <td class="c"><input type="radio" name="featured_tier" value="<?= $i ?>"<?= !empty($o['featured']) ? ' checked' : '' ?> aria-label="La plus choisie"></td>
               <td><textarea name="tier_features[<?= $i ?>]"><?= e(implode("\n", $o['features'])) ?></textarea></td></tr>
           <?php endforeach; ?>
@@ -222,5 +231,19 @@ $signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' .
     </main>
   </div>
 </div>
+<script>
+// Équivalent estimé du quota d'IA saisi (barème : portail → Coûts IA).
+(function () {
+  var cost = <?= json_encode(saas_ai_unit_costs()) ?>;
+  function fmt(n) { return n.toLocaleString('fr-FR'); }
+  function show(inp) {
+    var out = inp.closest('td').querySelector('[data-ai-est]'), v = inp.value.trim().replace(',', '.');
+    if (v === '' || isNaN(parseFloat(v))) { out.textContent = 'IA non limitée'; return; }
+    var e = parseFloat(v);
+    out.textContent = e <= 0 ? 'Aucune IA incluse (crédit à acheter)' : '≈ ' + fmt(Math.floor(e / cost.text)) + ' textes · ≈ ' + fmt(Math.floor(e / cost.image)) + ' images · ≈ ' + fmt(Math.floor(e / cost.video)) + ' vidéos de 6 s';
+  }
+  document.querySelectorAll('[data-ai-quota]').forEach(function (i) { i.addEventListener('input', function () { show(i); }); show(i); });
+})();
+</script>
 </body>
 </html>

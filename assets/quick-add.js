@@ -449,6 +449,8 @@
       $('f-name').value = sheet.name;
       $('f-desc').value = sheet.description;
       $('f-materials').value = sheet.materials || '';
+      $('f-brand').value = sheet.brand || '';
+      $('f-distributor').value = sheet.distributor || '';
       $('f-etat').value = sheet.etat || '';
       $('f-size').value = sheet.size_text || '';
       if (sheet.weight_grams) $('f-weight').value = sheet.weight_grams;
@@ -478,6 +480,8 @@
     fd.append('cat', $('f-cat').value);
     fd.append('description', $('f-desc').value);
     fd.append('materials', $('f-materials').value);
+    fd.append('brand', $('f-brand').value);
+    fd.append('distributor', $('f-distributor').value);
     fd.append('etat', $('f-etat').value);
     fd.append('size_text', $('f-size').value);
     fd.append('nature', $('f-nature').value);

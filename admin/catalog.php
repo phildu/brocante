@@ -26,6 +26,12 @@ $products = $stmt->fetchAll();
 $missingNature = db()->query("SELECT ref FROM products WHERE nature IS NULL OR nature = '' ORDER BY ref")->fetchAll(PDO::FETCH_COLUMN);
 $currentUrl = '/admin/catalog.php?' . http_build_query(array_filter(['sort' => $sortKey, 'dir' => $dir, 'q' => $q]));
 $badgeOptions = ['Chiné', 'Fait main', 'Pièce unique', 'Promo'];
+// Compteurs des visuels promo (30 derniers jours) par article de cette boutique.
+$promoCounts = [];
+foreach (promo_stats(gmdate('Y-m-d', time() - 29 * 86400), gmdate('Y-m-d'), 'ref', ['shop' => tenant_slug()]) as $row) {
+    $promoCounts[$row['ref']]['impressions'] = ($promoCounts[$row['ref']]['impressions'] ?? 0) + $row['impressions'];
+    $promoCounts[$row['ref']]['clicks'] = ($promoCounts[$row['ref']]['clicks'] ?? 0) + $row['clicks'];
+}
 
 /** Petit bouton « ↻ IA » à côté d'une étiquette de champ (assets/product-ai.js). */
 $aiBtn = static fn (string $field, string $title): string =>
@@ -49,7 +55,16 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="/assets/barcode-scan.css">
+<link rel="stylesheet" href="/assets/promo-visual.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/promo-visual.css') ?>">
 <style>
+  .price-mgmt { border: 1px solid var(--line); padding: 10px 14px; margin: 6px 0 14px; background: var(--surface); } .price-mgmt summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+  .price-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .price-line input { flex: 1 1 90px; min-width: 0; }
+  .promo-btn { white-space: nowrap; }
+  .promo-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .promo-pcts { display: flex; flex-wrap: wrap; gap: 6px; }
+  [data-promo-info][data-kind="error"] { color: #b3261e; }
+  [data-promo-row][hidden] { display: none; }
   .catalog-table { width: 100%; border-collapse: collapse; }
   .catalog-table th { text-align: left; font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); padding: 10px 12px; border-bottom: 1px solid var(--line); }
   .catalog-table td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -157,12 +172,68 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                               <?php endforeach; ?>
                             </select>
                           </div>
-                          <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button></label><input type="text" name="price" value="<?= h($p['price']) ?>"></div>
+                          <div class="field"><label>Prix affiché (€) <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button></label>
+                            <div class="price-line"><input type="number" name="price" min="0" step="0.01" inputmode="decimal" data-price value="<?= h(price_input_value($p['price'])) ?>" placeholder="ex : 25">
+                              <button type="button" class="btn-small promo-btn" data-promo-toggle aria-pressed="false">🏷 Mettre en promo</button></div>
+                            <?php if (price_input_value($p['price']) === '' && trim((string) $p['price']) !== ''): ?><p class="hint" style="margin:4px 0 0;">Prix actuel non numérique : « <?= h($p['price']) ?> ». Saisissez un montant pour le remplacer (laissé vide, il est conservé).</p><?php endif; ?>
+                          </div>
                         </div>
+                        <div class="field-row-3" data-promo-row<?= $p['badge'] === 'Promo' ? '' : ' hidden' ?>>
+                          <div class="field"><label>Prix promo (€)</label><input type="number" name="promo_price" min="0" step="0.01" inputmode="decimal" data-price value="<?= h(price_input_value($p['promo_price'])) ?>" placeholder="ex : 20"></div>
+                          <div class="field"><label>Remise rapide</label><div class="promo-pcts"><?php foreach ([10, 20, 30, 50] as $pct): ?><button type="button" class="btn-small" data-promo-pct="<?= $pct ?>">−<?= $pct ?> %</button><?php endforeach; ?></div></div>
+                          <div class="field"><label>&nbsp;</label><p class="hint" data-promo-info style="margin:0;"></p>
+                            <?php
+                              $pvRow = promo_visual_get($p['ref']);
+                              $pvLive = has_promo_price($p);
+                              $pvFresh = $pvLive && promo_visual_fresh($p, $pvRow);
+                              $pvPhotos = array_values(array_map(static fn ($ph) => ['path' => $ph['path'], 'label' => $ph['label']], array_filter(product_photos_list($p['ref']), static fn ($ph) => ($ph['type'] ?? 'photo') === 'photo')));
+                              if (!empty($p['photo'])) array_unshift($pvPhotos, ['path' => $p['photo'], 'label' => 'Couverture']);
+                            ?>
+                            <div class="promo-visual-box">
+                              <?php if (!$pvLive): ?>
+                                <p class="hint" style="margin:6px 0 0;">Enregistrez la promo (mention « Promo » et prix promo) pour créer son visuel.</p>
+                              <?php else: ?>
+                                <button type="button" class="btn-small" data-promo-visual data-csrf="<?= h(admin_csrf_token()) ?>" data-ref="<?= h($p['ref']) ?>" data-name="<?= h($p['name']) ?>" data-price="<?= h($p['price']) ?>" data-promo="<?= h($p['promo_price']) ?>" data-headline="<?= h($pvRow['headline'] ?? '') ?>" data-cta="<?= h($pvRow['cta'] ?? '') ?>" data-photos="<?= h(json_encode($pvPhotos)) ?>">🎨 <?= $pvRow ? 'Refaire le visuel promo' : 'Générer le visuel promo' ?></button>
+                                <?php if ($pvRow): ?>
+                                  <a href="/<?= h($pvRow['path']) ?>" target="_blank" rel="noopener"><img src="/<?= h($pvRow['path']) ?>" alt="Visuel promo" style="display:block;max-width:100%;margin-top:6px;border:1px solid var(--line);"></a>
+                                  <p class="hint" style="margin:4px 0 0;"><?= $pvFresh ? 'À jour : affiché sur l\'accueil et dans les galeries.' : 'Périmé (le prix a changé) : refaites-le, il n\'est plus affiché.' ?>
+                                    <?php $c = $promoCounts[$p['ref']] ?? null; if ($c): ?> · 30 j : <?= (int) $c['impressions'] ?> affichage<?= $c['impressions'] > 1 ? 's' : '' ?>, <?= (int) $c['clicks'] ?> clic<?= $c['clicks'] > 1 ? 's' : '' ?>.<?php endif; ?>
+                                    <a href="#" data-promo-visual-remove data-csrf="<?= h(admin_csrf_token()) ?>" data-ref="<?= h($p['ref']) ?>">Retirer</a></p>
+                                <?php endif; ?>
+                              <?php endif; ?>
+                            </div>
+                          </div>
+                        </div>
+                        <?php
+                          $offerCount = (int) db()->query("SELECT COUNT(*) FROM price_offers WHERE ref = " . db()->quote($p['ref']) . " AND status = 'new'")->fetchColumn();
+                          $estMin = $p['est_min'] !== null ? rtrim(rtrim(number_format((float) $p['est_min'], 2, '.', ''), '0'), '.') : '';
+                          $estMax = $p['est_max'] !== null ? rtrim(rtrim(number_format((float) $p['est_max'], 2, '.', ''), '0'), '.') : '';
+                        ?>
+                        <details class="price-mgmt" open>
+                          <summary>Gestion du prix de vente<?= $offerCount ? ' — ' . $offerCount . ' offre' . ($offerCount > 1 ? 's' : '') . ' à traiter' : '' ?></summary>
+                          <input type="hidden" name="price_fields" value="1">
+                          <div class="field-row-3">
+                            <div class="field"><label>Prix de vente minimum (€)</label><input type="number" name="price_floor" min="0" step="0.01" inputmode="decimal" data-price value="<?= h(price_input_value($p['price_floor'] ?? '')) ?>" placeholder="ex : 18"><p class="hint" style="margin:4px 0 0;">Interne : jamais affiché. Sert à juger les offres et la marge.</p></div>
+                            <div class="field"><label>Négociation</label><label class="featured-check"><input type="checkbox" name="negotiable" value="1"<?= !empty($p['negotiable']) ? ' checked' : '' ?>> Prix négociable</label><p class="hint" style="margin:4px 0 0;">La fiche indique « Prix négociable » et propose « Faire une offre » au client.<?php if ($offerCount): ?> <a href="/admin/offers.php">Voir les <?= $offerCount ?> offre<?= $offerCount > 1 ? 's' : '' ?></a>.<?php endif; ?></p></div>
+                            <div class="field"><label>Fourchette estimée (€)</label>
+                              <div class="price-line"><input type="number" name="est_min" min="0" step="0.01" inputmode="decimal" value="<?= h($estMin) ?>" placeholder="de" style="max-width:90px"><span>à</span><input type="number" name="est_max" min="0" step="0.01" inputmode="decimal" value="<?= h($estMax) ?>" placeholder="à" style="max-width:90px"></div>
+                              <label class="featured-check" style="margin-top:6px;"><input type="checkbox" name="est_show" value="1"<?= !empty($p['est_show']) ? ' checked' : '' ?>> Afficher sur la fiche</label></div>
+                          </div>
+                          <div class="field-row-3">
+                            <div class="field"><label>Prix du neuf (€)</label><input type="number" name="new_price" min="0" step="0.01" inputmode="decimal" data-price value="<?= h(price_input_value($p['new_price'] ?? '')) ?>" placeholder="si trouvé"></div>
+                            <div class="field" style="grid-column: span 2;"><label>Lien vers le prix du neuf</label><input type="url" name="new_url" maxlength="500" value="<?= h($p['new_url'] ?? '') ?>" placeholder="https://… (rempli par « Marché » quand il est trouvé)">
+                              <label class="featured-check" style="margin-top:6px;"><input type="checkbox" name="new_show" value="1"<?= !empty($p['new_show']) ? ' checked' : '' ?>> Afficher le prix et le lien du neuf sur la fiche</label></div>
+                          </div>
+                        </details>
                         <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"><?= h($p['description']) ?></textarea></div>
                         <div class="field-row-3">
                           <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" value="<?= h($p['materials'] ?? '') ?>" placeholder="ex : grès émaillé, bois de chêne"></div>
                           <div class="field"><label>État <?= $aiBtn('etat', 'Estimer l\'état d\'après les photos') ?></label><select name="etat"><?= product_condition_select_html($p['etat'] ?? null) ?></select></div>
+                          <div></div>
+                        </div>
+                        <div class="field-row-3">
+                          <div class="field"><label>Marque <?= $aiBtn('brand', 'Lire la marque sur l\'objet ou son étiquette') ?></label><input type="text" name="brand" maxlength="80" value="<?= h($p['brand'] ?? '') ?>" placeholder="ex : Levi's, Olivetti, Le Creuset"></div>
+                          <div class="field"><label>Distributeur</label><input type="text" name="distributor" maxlength="80" value="<?= h($p['distributor'] ?? '') ?>" placeholder="ex : éditeur, revendeur, importateur"></div>
                           <div></div>
                         </div>
                         <div class="field-row-3">
@@ -179,12 +250,6 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                           </div>
                           <div class="field"><label>Mention</label><input type="text" name="badge" value="<?= h($p['badge']) ?>" list="badge-options"></div>
                         </div>
-                        <?php if ($p['badge'] === 'Promo'): ?>
-                          <div class="field-row-3">
-                            <div class="field"><label>Prix promo</label><input type="text" name="promo_price" value="<?= h($p['promo_price']) ?>" placeholder="ex : 32 €"></div>
-                            <div></div><div></div>
-                          </div>
-                        <?php endif; ?>
                         <div class="field-row-3">
                           <label class="featured-check"><input type="checkbox" name="featured" value="1"<?= $p['featured'] ? ' checked' : '' ?>> Mise en avant (accueil)</label>
                           <label class="featured-check"><input type="checkbox" name="is_hidden" value="1"<?= $p['is_hidden'] ? ' checked' : '' ?>> Masquer (hors boutique)</label>
@@ -248,12 +313,17 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                 <?php endforeach; ?>
               </select>
             </div>
-            <div class="field"><label>Prix <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button></label><input type="text" name="price" placeholder="0 €"></div>
+            <div class="field"><label>Prix affiché (€) <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button></label><input type="number" name="price" min="0" step="0.01" inputmode="decimal" data-price placeholder="ex : 25"></div>
           </div>
           <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"></textarea></div>
           <div class="field-row-3">
             <div class="field"><label>Matières <?= $aiBtn('materials', 'Reconnaître les matières visibles') ?></label><input type="text" name="materials" placeholder="ex : grès émaillé, bois de chêne"></div>
             <div class="field"><label>État <?= $aiBtn('etat', 'Estimer l\'état d\'après la photo') ?></label><select name="etat"><?= product_condition_select_html(null) ?></select></div>
+            <div></div>
+          </div>
+          <div class="field-row-3">
+            <div class="field"><label>Marque <?= $aiBtn('brand', 'Lire la marque sur l\'objet ou son étiquette') ?></label><input type="text" name="brand" maxlength="80" placeholder="ex : Levi's, Olivetti, Le Creuset"></div>
+            <div class="field"><label>Distributeur</label><input type="text" name="distributor" maxlength="80" placeholder="ex : éditeur, revendeur, importateur"></div>
             <div></div>
           </div>
           <div class="field-row-3">
@@ -363,6 +433,8 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
 <script src="/assets/product-ai.js"></script>
 <script src="/assets/nature-select.js"></script>
 <script src="/assets/nature-detect.js"></script>
+<script src="/assets/promo-visual.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/promo-visual.js') ?>"></script>
+<script src="/assets/price-field.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/price-field.js') ?>"></script>
 <script src="/assets/price-research.js"></script>
 <script src="/assets/barcode-scan.js"></script>
 </body>

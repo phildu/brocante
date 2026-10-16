@@ -302,9 +302,18 @@ function catalogue_export(PDO $pdo, array $config, string $shopUrl, string $asse
     } catch (Throwable $e) {
         $rows = [];
     }
+    // Visuels promo (photo + encart CTA) des articles en promo : repris par les galeries tant qu'ils disent le prix actuel.
+    $visuals = [];
+    try {
+        foreach ($pdo->query('SELECT ref, path, path_mobile, headline, cta, price, promo_price FROM promo_visuals')->fetchAll(PDO::FETCH_ASSOC) as $v) $visuals[(string) $v['ref']] = $v;
+    } catch (Throwable $e) {
+        $visuals = [];
+    }
     foreach ($rows as $r) {
         $price = trim((string) $r['price']);
         $promo = trim((string) $r['promo_price']);
+        $pv = $visuals[(string) $r['ref']] ?? null;
+        $pvFresh = $pv && (string) $r['badge'] === 'Promo' && $promo !== '' && $price === (string) $pv['price'] && $promo === (string) $pv['promo_price'];
         $effective = gallery_price_cents($promo !== '' ? $promo : $price);
         $desc = trim(preg_replace('/\s+/', ' ', strip_tags((string) $r['description'])));
         $products[] = [
@@ -320,6 +329,9 @@ function catalogue_export(PDO $pdo, array $config, string $shopUrl, string $asse
             'description' => mb_substr($desc, 0, 160),
             'created_at' => (int) $r['created_at'],
             'url' => rtrim($shopUrl, '/') . '/produit.php?ref=' . rawurlencode((string) $r['ref']),
+            'promo_visual' => $pvFresh ? $assetOrigin . '/' . ltrim((string) $pv['path'], '/') : '',
+            'promo_visual_mobile' => $pvFresh && !empty($pv['path_mobile']) ? $assetOrigin . '/' . ltrim((string) $pv['path_mobile'], '/') : '',
+            'promo_cta' => $pvFresh ? (string) $pv['cta'] : '',
         ];
     }
     return [
@@ -447,6 +459,9 @@ function gallery_catalogue(array $gallery, string $requestOrigin, bool $refresh 
                 'description' => mb_substr((string) ($p['description'] ?? ''), 0, 160),
                 'created_at' => (int) ($p['created_at'] ?? 0),
                 'url' => gallery_safe_url($p['url']),
+                'promo_visual' => gallery_safe_url($p['promo_visual'] ?? ''),
+                'promo_visual_mobile' => gallery_safe_url($p['promo_visual_mobile'] ?? ''),
+                'promo_cta' => mb_substr((string) ($p['promo_cta'] ?? ''), 0, 40),
             ];
             $shop['count']++;
         }

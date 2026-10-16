@@ -15,6 +15,8 @@ $adminNavItems = [
     'univers' => ['/admin/universes.php', 'Univers', 'folder'],
     'prise' => ['/admin/quick-add.php', 'Nouvelle pièce (photo)', 'camera'],
     'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
+    'promos' => ['/admin/promos.php', 'Mises en avant (promos)', 'banner'],
+    'offres' => ['/admin/offers.php', 'Offres de prix', 'receipt'],
     'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
     'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
     'social' => ['/admin/social.php', 'Connexion sociale', 'user'],
@@ -29,6 +31,11 @@ $adminNavItems = [
     'reglages' => ['/admin/index.php', 'Réglages du site', 'gear'],
     'profil' => ['/admin/profile.php', 'Mon profil', 'user'],
 ];
+// Offres de prix à traiter, en regard du menu.
+try {
+    if ($pendingOffers = (int) db()->query("SELECT COUNT(*) FROM price_offers WHERE status = 'new'")->fetchColumn()) $adminNavItems['offres'][1] .= ' (' . $pendingOffers . ')';
+} catch (Throwable $e) {
+}
 // Chaque rôle ne voit que les pages qu'il peut ouvrir (voir admin_role_can_access()).
 $adminNavItems = array_filter($adminNavItems, static fn (array $item): bool => admin_role_can_access(admin_role(), $item[0]));
 $adminNav = $adminNav ?? '';
@@ -86,7 +93,7 @@ $adminIcon = static fn (string $name): string =>
   <div class="admin-sidebar-foot">
     <?php $adminWho = admin_session(); ?>
     <?php if ($adminWho && admin_role_can_access($adminWho['role'], '/admin/ai-usage.php')): $aiBalance = ai_balance(); ?>
-      <a class="admin-ai-chip" href="/admin/ai-usage.php" title="Coût estimé de l'IA : voir le détail"><span class="admin-label"><?= $aiBalance ? 'Solde IA : ' . h(ai_format_eur($aiBalance['remaining'])) : 'IA ce mois : ' . h(ai_format_eur(ai_usage_spent(gmdate('Y-m-01 00:00:00')))) ?></span></a>
+      <a class="admin-ai-chip" href="/admin/ai-usage.php" title="Coût estimé de l'IA : voir le détail"><?php $aiQuota = ai_quota_state(); ?><span class="admin-label"><?= $aiQuota ? ($aiQuota['blocked'] ? 'IA suspendue : quota épuisé' : 'IA restante : ' . h(ai_format_eur($aiQuota['available']))) : ($aiBalance ? 'Solde IA : ' . h(ai_format_eur($aiBalance['remaining'])) : 'IA ce mois : ' . h(ai_format_eur(ai_usage_spent(gmdate('Y-m-01 00:00:00'))))) ?></span></a>
     <?php endif; ?>
     <?php if ($adminWho): ?>
       <span class="admin-whoami admin-label"><?= h($adminWho['name'] !== '' ? $adminWho['name'] : 'Compte principal') ?> · <?= h(account_role_label($adminWho['role'])) ?></span>

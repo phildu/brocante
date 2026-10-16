@@ -54,6 +54,7 @@ function sf_error_message(int $status, array $data): string
 /** Lance la génération : ['ok' => true, 'operation' => requestId] ou ['ok' => false, 'error' => message]. */
 function sf_video_start(string $srcAbsPath, string $prompt, string $aspect): array
 {
+    if ($g = ai_gate()) return ['ok' => false, 'error' => $g];
     if (!sf_available()) return ['ok' => false, 'error' => 'Clé SiliconFlow absente : renseignez-la dans les réglages du site.'];
     $size = ['16:9' => '1280x720', '9:16' => '720x1280'][$aspect] ?? null;
     if (!$size) return ['ok' => false, 'error' => 'Format de vidéo non valide.'];

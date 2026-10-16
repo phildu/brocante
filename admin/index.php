@@ -163,6 +163,13 @@ $flash = flash_get();
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
       </form>
 
+      <form class="admin-block" method="post" action="/admin/save-photo-visibility.php" id="photo-visibility-settings">
+        <h2>Photos des pièces créées avec le Studio</h2>
+        <p class="hint">Quand une pièce vient d'être traitée (détourage, mise en situation, recto/verso), sa fiche montre les <strong>images générées</strong> ; les photos du shooting restent dans la galerie, masquées (sauf les gros plans : étiquette, texture, détail). Décochez pour garder toutes les photos visibles. Chaque pièce se règle ensuite dans sa galerie.</p>
+        <label class="featured-check"><input type="checkbox" name="hide_shooting_photos" value="1"<?= hide_shooting_photos_enabled() ? ' checked' : '' ?>> Masquer par défaut les photos du shooting une fois les images générées</label>
+        <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer</button>
+      </form>
+
       <form class="admin-block" method="post" action="/admin/save-fal-key.php" id="fal-settings">
         <h2>Réglages IA (fal.ai — détourage)</h2>
         <p class="hint">Clé depuis <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">fal.ai/dashboard/keys</a> — utilisée pour le détourage à vrai fond transparent dans la galerie photo, quand rembg local n'est pas disponible (hébergement mutualisé). Un champ laissé vide conserve la clé déjà enregistrée.</p>

@@ -38,6 +38,7 @@ $size = trim((string) ($product['size_text'] ?? ''));
       <p class="md-crumbs"><a href="/boutique.php">Boutique</a> / <a href="/boutique.php?cat=<?= urlencode($product['cat']) ?>"><?= h(category_label($product['cat'])) ?></a></p>
       <h1><?= h($product['name']) ?></h1>
       <p class="md-pdp-price"><?= $priceHtml ?></p>
+      <?= product_price_extras_html($product) ?>
       <?php if (trim((string) $product['badge']) !== ''): ?><p class="md-pdp-badge"><?= h($product['badge']) ?></p><?php endif; ?>
 
       <?php if ($size !== '' || $etat): ?>
@@ -55,6 +56,8 @@ $size = trim((string) ($product['size_text'] ?? ''));
       <details class="md-acc"><summary>Détails</summary>
         <div><ul class="md-details">
           <?php if ($nat): ?><li><b>Type</b> <?= h($nat[0]) ?><?= $nat[1] ? ' › ' . h($nat[1]) : '' ?></li><?php endif; ?>
+          <?php if (!empty($product['brand'])): ?><li><b>Marque</b> <?= h($product['brand']) ?></li><?php endif; ?>
+          <?php if (!empty($product['distributor'])): ?><li><b>Distributeur</b> <?= h($product['distributor']) ?></li><?php endif; ?>
           <?php if ($etat): ?><li><b>État</b> <?= h($etat[0]) ?> — <?= h($etat[1]) ?></li><?php endif; ?>
           <?php if (!empty($product['materials'])): ?><li><b>Matières</b> <?= h($product['materials']) ?></li><?php endif; ?>
           <?php if ($size !== ''): ?><li><b>Taille</b> <?= h($size) ?></li><?php endif; ?>

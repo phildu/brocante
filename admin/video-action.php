@@ -46,6 +46,7 @@ switch ($action) {
     }
 
     case 'veo_start': {
+        if ($gate = ai_gate()) video_reply(['ok' => false, 'error' => $gate], 402);
         $sourceId = (int) ($_POST['source_photo_id'] ?? 0);
         $stmt = db()->prepare("SELECT * FROM product_photos WHERE id = ? AND product_ref = ? AND COALESCE(type, 'photo') = 'photo'");
         $stmt->execute([$sourceId, $ref]);

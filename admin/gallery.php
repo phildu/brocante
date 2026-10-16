@@ -313,6 +313,15 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         renderSources();
       })();
     </script>
+    <div class="admin-block" style="margin-bottom:24px;">
+      <h2 style="font-size:1.1rem;">Photos visibles sur la fiche</h2>
+      <p class="hint">Par défaut, une pièce créée avec le Studio ne montre que ses <strong>images générées</strong> (ambiance, recto, verso…) : les photos du shooting sont masquées, sauf les gros plans (étiquette, texture, détail). Elles restent dans la galerie, réaffichables une à une (« Masquer / Afficher » sur chaque photo) ou toutes d'un coup.</p>
+      <form method="post" action="/admin/gallery-action.php" style="display:flex;flex-wrap:wrap;gap:8px;">
+        <input type="hidden" name="ref" value="<?= h($ref) ?>">
+        <button type="submit" class="btn btn-ghost" name="action" value="generated_only">Montrer seulement les images générées</button>
+        <button type="submit" class="btn btn-ghost" name="action" value="show_all">Tout réafficher</button>
+      </form>
+    </div>
     <?php
       $rvSources = recto_verso_sources($ref);
       $rvCutCount = count(array_filter($rvSources, static fn ($s) => recto_verso_cutout_of($ref, (int) $s['id'])));

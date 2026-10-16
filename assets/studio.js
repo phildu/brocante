@@ -6,7 +6,7 @@
   var script = document.currentScript;
   var ACTION = script.dataset.action;
   var VARIANTS = script.dataset.variants;
-  var MAX_PER_PIECE = 8;          // photos par pièce (le serveur en accepte 10)
+  var MAX_PER_PIECE = 10;         // photos par pièce (le serveur en accepte 10)
   var MAX_REQUEST_BYTES = 9 * 1048576; // OVH coupe les requêtes plus lourdes (~16 Mo mesurés)
 
   function $(id) { return document.getElementById(id); }
@@ -117,7 +117,7 @@
 
   // Type de pièce (objet, vêtement : recto et verso seulement, média : scan), code scanné et vidéo, portés par la pièce (tableau de photos).
   // labels : les vues guidées, dans l'ordre ; au-delà (et à tout moment avec « Gros plan »), les photos sont des détails.
-  var KIND_SHOTS = { objet: { max: MAX_PER_PIECE }, vetement: { max: MAX_PER_PIECE, labels: ['Recto', 'Verso', 'Étiquette', 'Texture (gros plan)'] }, media: { max: MAX_PER_PIECE, labels: ['Couverture', 'Dos / tranche'] } };
+  var KIND_SHOTS = { objet: { max: MAX_PER_PIECE, labels: ['Face', 'Profil droit', 'Profil gauche', 'Dos', 'Dessus', 'Dessous'] }, vetement: { max: MAX_PER_PIECE, labels: ['Recto', 'Verso', 'Étiquette', 'Texture (gros plan)'] }, media: { max: MAX_PER_PIECE, labels: ['Couverture', 'Dos / tranche'] } };
   /** Photos de la pièce qui sont des vues (pas des gros plans), et libellé de chaque photo envoyée au serveur. */
   function viewCount(p) { return p.filter(function (x) { return !x.detail; }).length; }
   function shotLabels(piece) {
@@ -126,7 +126,7 @@
       if (x.measure) return 'Mesure (photo de référence)';
       if (x.detail) return 'Détail ' + (++d);
       v++;
-      return guided ? (guided[v - 1] || 'Vue ' + v) : (v === 1 ? 'Photo principale' : 'Vue ' + v);
+      return guided[v - 1] || 'Vue ' + v;
     });
   }
   function mainIndexOf(piece) { var i = piece.findIndex(function (x) { return !x.detail; }); return i < 0 ? 0 : i; }
@@ -226,12 +226,11 @@
     // Consigne de la prochaine photo selon le type de pièce.
     var guide = $('sb-guide'), views = viewCount(piece), guided = cfg.labels;
     if (m.detail) guide.textContent = 'Gros plans : chaque photo est un détail (marque, défaut, couture, signature…). Touchez « Gros plan » pour revenir aux vues.';
-    else if (m.kind === 'objet') guide.textContent = 'Objet : plusieurs vues (face, profil, dos…) et autant de gros plans que nécessaire (bouton « Gros plan »). Un ensemble ? Isolez l\'objet à la relecture.';
-    else if (views < guided.length) guide.textContent = (m.kind === 'vetement' ? 'Vêtement : ' : 'Média : ') + 'prochaine photo — ' + guided[views] + (views ? '' : (m.kind === 'media' ? ' (après le scan du code)' : '')) + '.';
-    else guide.textContent = 'Vues prises : ajoutez autant de gros plans que vous voulez (bouton « Gros plan »), filmez la pièce, ou « Pièce suivante ».';
+    else if (views < guided.length) guide.textContent = ({ objet: 'Objet : ', vetement: 'Vêtement : ', media: 'Média : ' })[m.kind] + 'prochaine photo — ' + guided[views] + (views ? '' : (m.kind === 'media' ? ' (après le scan du code)' : '')) + '.';
+    else guide.textContent = 'Vues prises : ajoutez autant de gros plans que vous voulez (bouton « Gros plan »), filmez la pièce, ou « Pièce suivante ».' + (m.kind === 'objet' ? ' Un ensemble ? Isolez l\'objet à la relecture.' : '');
     $('sb-detail').classList.toggle('is-on', !!m.detail);
     $('sb-detail').setAttribute('aria-pressed', String(!!m.detail));
-    $('sb-next').classList.toggle('is-ready', m.kind !== 'objet' && views >= guided.length);
+    $('sb-next').classList.toggle('is-ready', views >= guided.length);
     $('sb-scan').hidden = m.kind !== 'media';
     var chip = $('sb-chips'); chip.textContent = '';
     if (m.scan) {
@@ -795,7 +794,7 @@
       $('sr-warn').hidden = !w;
       if (w) $('sr-warn').textContent = 'Génération incomplète (' + w + '). Complétez la fiche à la main ou relancez depuis le catalogue.';
       $('sr-name').value = p.name; $('sr-price').value = p.price; $('sr-weight').value = p.weight_grams || '';
-      $('sr-cat').value = p.cat; $('sr-desc').value = p.description; $('sr-materials').value = p.materials || ''; $('sr-etat').value = p.etat || ''; $('sr-size').value = p.size_text || ''; $('sr-nature').value = p.nature || ''; $('sr-nature').dispatchEvent(new Event('change')); $('sr-sous').value = p.sous_categorie || ''; $('sr-badge').value = p.badge;
+      $('sr-cat').value = p.cat; $('sr-desc').value = p.description; $('sr-materials').value = p.materials || ''; $('sr-brand').value = p.brand || ''; $('sr-distributor').value = p.distributor || ''; $('sr-etat').value = p.etat || ''; $('sr-size').value = p.size_text || ''; $('sr-nature').value = p.nature || ''; $('sr-nature').dispatchEvent(new Event('change')); $('sr-sous').value = p.sous_categorie || ''; $('sr-badge').value = p.badge;
       $('sr-publish').checked = !p.hidden;
       $('sr-discard').hidden = res.status === 'reviewed';
       $('sr-save').disabled = false; $('sr-save').textContent = 'Enregistrer';
@@ -817,7 +816,7 @@
     fd.append('action', 'save'); fd.append('ref', sheetRef);
     fd.append('name', $('sr-name').value); fd.append('price', $('sr-price').value);
     fd.append('weight_grams', $('sr-weight').value || '0'); fd.append('cat', $('sr-cat').value);
-    fd.append('description', $('sr-desc').value); fd.append('materials', $('sr-materials').value); fd.append('etat', $('sr-etat').value); fd.append('size_text', $('sr-size').value); fd.append('nature', $('sr-nature').value); fd.append('sous_categorie', $('sr-sous').value); fd.append('badge', $('sr-badge').value);
+    fd.append('description', $('sr-desc').value); fd.append('materials', $('sr-materials').value); fd.append('brand', $('sr-brand').value); fd.append('distributor', $('sr-distributor').value); fd.append('etat', $('sr-etat').value); fd.append('size_text', $('sr-size').value); fd.append('nature', $('sr-nature').value); fd.append('sous_categorie', $('sr-sous').value); fd.append('badge', $('sr-badge').value);
     if ($('sr-publish').checked) fd.append('publish', '1');
     api(fd).then(function (res) {
       btn.disabled = false; btn.textContent = 'Enregistrer';

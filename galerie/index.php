@@ -3,6 +3,7 @@
 // Sans identifiant : la liste des galeries publiées. Les données viennent de includes/galleries.php (catalogue regroupé, mis en cache).
 require_once __DIR__ . '/../includes/galleries.php';
 require_once __DIR__ . '/../includes/share.php';
+require_once __DIR__ . '/../includes/promo.php';
 
 function e($s): string
 {
@@ -343,6 +344,31 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
         <?php endif; ?>
       </div>
     </section>
+
+    <?php
+      // Promotions : les visuels promo (photo + encart CTA) des commerces membres ; chaque affichage et chaque clic est compté (monétisation de la mise en avant).
+      $promoItems = array_slice(array_values(array_filter($data['products'], static fn (array $p): bool => ($p['promo_visual'] ?? '') !== '')), 0, 6);
+      $promoTrack = $gallery['published'];   // l'aperçu d'une galerie non publiée n'est pas compté
+    ?>
+    <?php if ($promoItems): ?>
+    <section id="promos" class="promo-section" aria-labelledby="h-promos">
+      <h2 id="h-promos">Les promos du moment</h2>
+      <div class="promo-grid">
+        <?php foreach ($promoItems as $p):
+          $placement = 'galerie:' . $gallery['slug'];
+          $tok = promo_token((string) $p['shop'], (string) $p['ref'], $placement);
+          $href = $promoTrack ? '/galerie/clic.php?g=' . rawurlencode($gallery['slug']) . '&s=' . rawurlencode((string) $p['shop']) . '&r=' . rawurlencode((string) $p['ref']) . '&t=' . $tok : $p['url'];
+          $alt = $p['name'] . ' — ' . $p['promo_price'] . ' au lieu de ' . $p['price'] . ', chez ' . ($shops[$p['shop']]['name'] ?? '') . '. ' . ($p['promo_cta'] ?: 'Voir l\'offre');
+        ?>
+          <a class="promo-visual" href="<?= e($href) ?>"<?= $promoTrack ? ' data-promo-track data-promo-shop="' . e($p['shop']) . '" data-promo-ref="' . e($p['ref']) . '" data-promo-placement="' . e($placement) . '" data-promo-token="' . e($tok) . '"' : '' ?>>
+            <picture><?php if ($p['promo_visual_mobile'] !== ''): ?><source media="(max-width: 700px)" srcset="<?= e($p['promo_visual_mobile']) ?>"><?php endif; ?><img src="<?= e($p['promo_visual']) ?>" alt="<?= e($alt) ?>" loading="lazy"></picture>
+          </a>
+        <?php endforeach; ?>
+      </div>
+    </section>
+    <link rel="stylesheet" href="/assets/promo.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/promo.css') ?>">
+    <script src="/assets/promo-track.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/promo-track.js') ?>" defer></script>
+    <?php endif; ?>
 
     <section id="pieces" aria-labelledby="h-pieces">
       <h2 id="h-pieces"><?= e($st['pieces_title'] !== '' ? $st['pieces_title'] : 'Toutes les pièces') ?></h2>

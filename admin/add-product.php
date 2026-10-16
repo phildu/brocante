@@ -28,8 +28,8 @@ if (!$photoPath && !empty($_POST['use_cover']) && trim((string) ($_POST['cover_u
     $photoPath = product_photo_from_cover_url(trim((string) $_POST['cover_url']), 'product-' . $ref);
 }
 
-$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, badge, featured, sort_order)
-                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :badge, 0, :sort_order)');
+$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, brand, distributor, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, badge, featured, sort_order)
+                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :brand, :distributor, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :badge, 0, :sort_order)');
 $stmt->execute([
     'ref' => $ref,
     'name' => $name,
@@ -37,6 +37,8 @@ $stmt->execute([
     'photo' => $photoPath,
     'description' => trim((string) ($_POST['description'] ?? '')) ?: 'Description à compléter.',
     'materials' => trim((string) ($_POST['materials'] ?? '')),
+    'brand' => mb_substr(trim((string) ($_POST['brand'] ?? '')), 0, 80),
+    'distributor' => mb_substr(trim((string) ($_POST['distributor'] ?? '')), 0, 80),
     'etat' => product_condition_key($_POST['etat'] ?? '') ?: null,
     'nature' => $nature['nature'] ?: null,
     'size_text' => mb_substr(trim((string) ($_POST['size_text'] ?? '')), 0, 60),
@@ -44,7 +46,7 @@ $stmt->execute([
     'weight_grams' => $weightGrams,
     'sous_categorie' => $nature['sous_categorie'] ?: null,
     'barcode' => product_barcode_clean($_POST['barcode'] ?? '') ?: null,
-    'price' => trim((string) ($_POST['price'] ?? '')) ?: '0 €',
+    'price' => price_from_input($_POST['price'] ?? '', '0 €'),
     'badge' => trim((string) ($_POST['badge'] ?? '')) ?: 'Chiné',
     'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),
 ]);

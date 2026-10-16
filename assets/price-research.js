@@ -38,6 +38,8 @@
     var cat = res.catalogue || {};
     rows.push(['Votre catalogue' + (cat.n ? ' (' + cat.n + ' pièce' + (cat.n > 1 ? 's' : '') + ' similaire' + (cat.n > 1 ? 's' : '') + ')' : ''),
       cat.n ? range({ min: cat.min, max: cat.max }) : 'aucune pièce similaire', cat.n ? eur(cat.median) : '—']);
+    var em = res.emmaus;
+    if (em) rows.push(['Marketplace Emmaüs (' + em.n + ' annonce' + (em.n > 1 ? 's' : '') + ', « ' + em.query + ' »)', range({ min: em.min, max: em.max }), eur(em.median)]);
     if (res.web) {
       rows.push(['Neuf (web)', range(res.web['new']) || 'aucun prix trouvé', res.web['new'] ? eur(res.web['new'].median) : '—']);
       rows.push(['Occasion (web)', range(res.web.used) || 'aucun prix trouvé', res.web.used ? eur(res.web.used.median) : '—']);
@@ -60,6 +62,54 @@
       });
       panel.appendChild(adv); panel.appendChild(use);
     }
+    if (em && em.items && em.items.length) {
+      var edet = el('details', 'pr-sources'); edet.open = true;
+      edet.appendChild(el('summary', '', 'Annonces du marketplace d\'Emmaüs (prix demandés)'));
+      var eul = el('ul');
+      em.items.forEach(function (it) {
+        var li = el('li'), a = el('a', '', it.title); a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        li.appendChild(a); li.appendChild(document.createTextNode(' — ' + eur(it.price) + (it.seller ? ' · ' + it.seller : ''))); eul.appendChild(li);
+      });
+      edet.appendChild(eul);
+      var all = el('a', '', 'Voir toutes les annonces sur Label Emmaüs'); all.href = em.url; all.target = '_blank'; all.rel = 'noopener noreferrer';
+      var p = el('p', 'pr-q'); p.appendChild(all); edet.appendChild(p);
+      panel.appendChild(edet);
+    }
+    // Gestion du prix de vente (fiche du catalogue) : fourchette estimée et lien du prix du neuf, appliqués aux champs sur demande, jamais enregistrés d'office.
+    function apply(names, values, btn, done) {
+      names.forEach(function (n, i) { var f = field(root, n); if (f) { f.value = values[i]; f.dispatchEvent(new Event('input', { bubbles: true })); f.classList.remove('ai-filled'); void f.offsetWidth; f.classList.add('ai-filled'); } });
+      btn.textContent = done; btn.disabled = true;
+    }
+    var rng = res.web && res.web.used ? res.web.used : (res.emmaus ? { min: res.emmaus.min, max: res.emmaus.max } : null);
+    if (rng && field(root, 'est_min')) {
+      var rb = el('button', 'btn-small pr-use', 'Appliquer la fourchette estimée (' + (rng.min === rng.max ? eur(rng.min) : eur(rng.min) + ' à ' + eur(rng.max)) + ')'); rb.type = 'button';
+      rb.addEventListener('click', function () { apply(['est_min', 'est_max'], [rng.min, rng.max], rb, 'Fourchette appliquée : enregistrez la fiche'); });
+      panel.appendChild(rb);
+    }
+    if (field(root, 'new_url')) {
+      var box = el('div', 'pr-newlink'), search = el('button', 'btn-small', res.web && res.web['new'] ? 'Chercher le lien du prix du neuf (' + range(res.web['new']) + ')' : 'Chercher le lien du prix du neuf'); search.type = 'button';
+      box.appendChild(search);
+      search.addEventListener('click', function () {
+        search.disabled = true; search.textContent = 'Recherche du lien… (10 à 25 secondes)';
+        var fd = new FormData(); fd.append('mode', 'new_link');
+        ['name', 'brand', 'size_text', 'nature'].forEach(function (n) { var c = field(root, n); if (c && c.value) fd.append(n, c.value); });
+        var refInput = root.querySelector('[name="ref"]'); if (refInput && refInput.value) fd.append('ref', refInput.value);
+        if (res.web && res.web['new']) { fd.append('new_min', res.web['new'].min); fd.append('new_max', res.web['new'].max); }
+        fetch(URL_PR, { method: 'POST', body: fd, credentials: 'same-origin' }).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; }).then(function (r) {
+          box.textContent = '';
+          var nl = r && r.ok ? r.new_link : null;
+          if (!nl) { box.appendChild(el('p', 'pr-note', 'Aucune page marchande exploitable trouvée : saisissez le lien à la main si vous le connaissez.')); return; }
+          var p = el('p', 'pr-advice'); p.appendChild(el('strong', '', 'Prix du neuf' + (nl.price ? ' : ' + eur(nl.price) : '') + ' — '));
+          var a = el('a', '', nl.host + ' ↗'); a.href = nl.url; a.target = '_blank'; a.rel = 'noopener noreferrer nofollow'; p.appendChild(a);
+          p.appendChild(document.createTextNode(nl.verified ? ' (page ouverte : prix retrouvé ✓)' : ' (page ouverte, prix non retrouvé : à contrôler avant de l\'afficher)'));
+          box.appendChild(p);
+          var nb = el('button', 'btn-small pr-use', 'Utiliser ce lien du neuf'); nb.type = 'button';
+          nb.addEventListener('click', function () { apply(['new_url', 'new_price'], [nl.url, nl.price || ''], nb, 'Lien appliqué : cochez « Afficher » puis enregistrez'); });
+          box.appendChild(nb);
+        });
+      });
+      panel.appendChild(box);
+    }
     if (res.web) panel.appendChild(el('p', 'pr-reliab', 'Fiabilité de la recherche : ' + res.web.reliability + (res.web.reliability === 'faible' ? ' — peu de prix comparables trouvés, fiez-vous à votre propre jugement.' : '.')));
 
     if ((res.sources && res.sources.length) || (res.queries && res.queries.length)) {
@@ -72,7 +122,7 @@
       if (res.queries && res.queries.length) det.appendChild(el('p', 'pr-q', 'Recherches : ' + res.queries.join(' · ')));
       panel.appendChild(det);
     }
-    panel.appendChild(el('p', 'pr-note', "Estimation issue de recherches web faites par l'IA, à vérifier : l'état exact de votre pièce, sa rareté et son prix d'achat comptent plus que ces repères."));
+    panel.appendChild(el('p', 'pr-note', "Estimation issue de recherches web faites par l'IA et des annonces du marketplace d'Emmaüs (prix demandés, pas des ventes conclues), à vérifier : l'état exact de votre pièce, sa rareté et son prix d'achat comptent plus que ces repères."));
 
     // sous la ligne du champ Prix
     var anchor = field(root, 'price');
@@ -87,7 +137,7 @@
     var refInput = root.querySelector('[name="ref"]');
     var ref = (refInput && refInput.value) || root.dataset.aiRef || '';
     if (ref) fd.append('ref', ref);
-    ['name', 'description', 'cat', 'materials', 'etat', 'nature', 'sous_categorie', 'size_text'].forEach(function (n) {
+    ['name', 'description', 'cat', 'materials', 'brand', 'etat', 'nature', 'sous_categorie', 'size_text'].forEach(function (n) {
       var c = field(root, n); if (c && c.value) fd.append(n, c.value);
     });
     var file = root.querySelector('input[type="file"][name="photo"]');

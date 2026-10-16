@@ -6,9 +6,9 @@
 (function () {
   'use strict';
   var URL = (window.APP_BASE || '') + '/admin/product-ai.php';
-  var ALL = 'name,description,category,nature,materials,etat,size,weight,price';
-  var LABEL = { name: 'nom', description: 'description', category: 'catégorie', materials: 'matières', etat: 'état', nature: 'nature', sous_categorie: 'sous-catégorie', size: 'taille', size_text: 'taille', weight: 'poids', weight_grams: 'poids', weight_text: 'poids', price: 'prix' };
-  var INPUT = { name: 'name', description: 'description', category: 'cat', materials: 'materials', etat: 'etat', nature: 'nature', sous_categorie: 'sous_categorie', size_text: 'size_text', weight_grams: 'weight_grams', weight_text: 'weight_text', price: 'price' };
+  var ALL = 'name,description,category,nature,materials,brand,etat,size,weight,price';
+  var LABEL = { name: 'nom', description: 'description', category: 'catégorie', materials: 'matières', brand: 'marque', etat: 'état', nature: 'nature', sous_categorie: 'sous-catégorie', size: 'taille', size_text: 'taille', weight: 'poids', weight_grams: 'poids', weight_text: 'poids', price: 'prix' };
+  var INPUT = { name: 'name', description: 'description', category: 'cat', materials: 'materials', brand: 'brand', etat: 'etat', nature: 'nature', sous_categorie: 'sous_categorie', size_text: 'size_text', weight_grams: 'weight_grams', weight_text: 'weight_text', price: 'price' };
 
   // Photo choisie dans le formulaire d'ajout, réduite à 1280 px avant l'envoi (limite d'envoi de l'hébergement).
   function shrink(file) {
@@ -59,7 +59,7 @@
     var refInput = form.querySelector('[name="ref"]');
     var ref = (refInput && refInput.value) || form.dataset.aiRef || '';
     if (ref) fd.append('ref', ref);
-    ['name', 'description', 'cat', 'materials', 'etat', 'nature', 'sous_categorie', 'price', 'size_text', 'weight_text', 'weight_grams'].forEach(function (n) {
+    ['name', 'description', 'cat', 'materials', 'brand', 'distributor', 'etat', 'nature', 'sous_categorie', 'price', 'size_text', 'weight_text', 'weight_grams'].forEach(function (n) {
       var c = form.querySelector('[name="' + n + '"]') || form.querySelector('[data-ai-input="' + n + '"]');
       if (c && c.value) fd.append(n, c.value);
     });

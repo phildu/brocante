@@ -178,7 +178,7 @@ $flash = flash_get();
                 </td>
                 <td><input type="text" name="weight_min_kg" placeholder="0" required></td>
                 <td><input type="text" name="weight_max_kg" placeholder="1" required></td>
-                <td><input type="text" name="price" placeholder="ex : 23,40 €" required></td>
+                <td><input type="number" name="price" min="0.01" step="0.01" inputmode="decimal" placeholder="ex : 23,40" required aria-label="Prix en euros"></td>
                 <td><input type="text" name="delivery_delay" placeholder="ex : 13h le lendemain"></td>
                 <td><button type="submit" class="btn-small">Ajouter</button></td>
               </form>

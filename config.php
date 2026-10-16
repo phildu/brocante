@@ -99,6 +99,11 @@ function db(): PDO
         // Vidéos IA (Veo) en cours de génération.
         require_once __DIR__ . '/includes/veo.php';
         veo_ensure_schema($pdo);
+        // Visuels promo (photo + encart CTA) et compteurs de mises en avant.
+        require_once __DIR__ . '/includes/promo.php';
+        promo_visuals_ensure_schema($pdo);
+        require_once __DIR__ . '/includes/pricing-extras.php';
+        price_offers_ensure_schema($pdo);
         // Prompts (mots-clés / précisions) enregistrés pour la génération IA.
         require_once __DIR__ . '/includes/prompts.php';
         require_once __DIR__ . '/includes/ambiance-scenes.php';
@@ -113,6 +118,19 @@ function db(): PDO
         $productColumns = $pdo->query('PRAGMA table_info(products)')->fetchAll(PDO::FETCH_COLUMN, 1);
         if ($productColumns && !in_array('materials', $productColumns, true)) {
             $pdo->exec('ALTER TABLE products ADD COLUMN materials TEXT');
+        }
+        // Gestion du prix de vente : prix de vente minimum (interne), fourchette estimée, prix négociable, prix du neuf et son lien (includes/pricing-extras.php).
+        foreach (['price_floor' => 'TEXT', 'est_min' => 'REAL', 'est_max' => 'REAL', 'est_show' => 'INTEGER NOT NULL DEFAULT 0', 'negotiable' => 'INTEGER NOT NULL DEFAULT 0',
+                  'new_url' => 'TEXT', 'new_price' => 'TEXT', 'new_show' => 'INTEGER NOT NULL DEFAULT 0'] as $extraColumn => $extraType) {
+            if ($productColumns && !in_array($extraColumn, $productColumns, true)) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN ' . $extraColumn . ' ' . $extraType);
+            }
+        }
+        // Marque et distributeur de l'article (fiche, recherche, page publique).
+        foreach (['brand', 'distributor'] as $extraColumn) {
+            if ($productColumns && !in_array($extraColumn, $productColumns, true)) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN ' . $extraColumn . ' TEXT');
+            }
         }
         // Champ « État » (neuf, presque neuf, très bon état…) : voir product_condition_options().
         if ($productColumns && !in_array('etat', $productColumns, true)) {

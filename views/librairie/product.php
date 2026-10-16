@@ -9,6 +9,8 @@ $fc = get_content();
 $details = [];
 $details['Rayon'] = '<a href="/boutique.php?cat=' . urlencode($product['cat']) . '">' . h(category_label($product['cat'])) . '</a>';
 if ($nat) $details['Type'] = '<a href="/boutique.php?nature=' . urlencode($product['nature']) . '">' . h($nat[0]) . '</a>' . ($nat[1] ? ' › ' . h($nat[1]) : '');
+if (!empty($product['brand'])) $details['Marque'] = h($product['brand']);
+if (!empty($product['distributor'])) $details['Distributeur'] = h($product['distributor']);
 if ($etat) $details['État'] = h($etat[0]) . ' <span class="etat-hint">— ' . h($etat[1]) . '</span>';
 if (!empty($product['materials'])) $details['Matières'] = h($product['materials']);
 if (!empty($product['size_text'])) $details['Dimensions'] = h($product['size_text']);
@@ -68,6 +70,7 @@ $details['Référence'] = 'N°' . h($product['ref']);
 
       <aside class="lb-buybox" aria-label="Acheter">
         <p class="lb-buy-price"><?= $priceHtml ?></p>
+        <?= product_price_extras_html($product) ?>
         <p class="lb-stock <?= in_stock($product) ? 'is-in' : 'is-out' ?>"><?= in_stock($product) ? 'Disponible — pièce unique' : 'Vendue' ?></p>
         <div class="lb-buy-actions"><?= $buyHtml() ?></div>
         <div class="lb-share"><?= $shareBtn ?></div>

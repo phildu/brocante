@@ -66,6 +66,8 @@ $ticker = array_values(array_filter(array_map(static fn (int $i): string => trim
 </section>
 <?php endif; ?>
 
+<?= promo_section_html('Les promos du moment', 'md-promo-visuals') ?>
+
 <section class="md-story" id="histoire">
   <div class="md-story-grid">
     <?php $storyImg = !empty($content['story_photo']) ? (string) $content['story_photo'] : ($spot ? shop_cover($spot) : null); ?>

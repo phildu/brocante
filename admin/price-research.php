@@ -1,7 +1,7 @@
 <?php
 // Recherche du prix du marché d'une pièce (admin/catalog.php et relectures) : le même article, neuf et d'occasion, cherché
 // sur le web par l'IA, croisé avec les pièces similaires du catalogue. Réponse JSON :
-//   {ok, catalogue: {n, median, min, max, items}, web: {identification, new, used, reliability, advice_price, advice_text}|null,
+//   {ok, catalogue: {n, median, min, max, items}, emmaus: {query, n, median, min, max, items, url}|null, web: {identification, new, used, reliability, advice_price, advice_text}|null,
 //    sources: [{title, uri}], queries: [...], suggested: "35 €"|null}
 // POST ref (pièce existante) ou photo (formulaire d'ajout) ; name, description, materials, etat, nature, sous_categorie,
 // size_text, cat, notes : valeurs actuelles du formulaire.
@@ -20,6 +20,7 @@ function price_research_reply(array $data, int $status = 200): never
 
 if (!admin_access_ok()) price_research_reply(['ok' => false, 'error' => 'Session expirée : reconnectez-vous.'], 401);
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') price_research_reply(['ok' => false, 'error' => 'Méthode non autorisée.'], 405);
+if ($gate = ai_gate()) price_research_reply(['ok' => false, 'quota' => true, 'error' => $gate]);
 session_write_close();
 @set_time_limit(90);
 
@@ -35,6 +36,7 @@ $ctx = [
     'name' => $text('name', (string) ($product['name'] ?? '')),
     'description' => $text('description', (string) ($product['description'] ?? '')),
     'materials' => $text('materials', (string) ($product['materials'] ?? '')),
+    'brand' => $text('brand', (string) ($product['brand'] ?? '')),
     'size_text' => $text('size_text', (string) ($product['size_text'] ?? '')),
     'nature' => product_nature_text($pair['nature'], $pair['sous_categorie']),
     'etat' => $etat ? $etat[0] . ' (' . $etat[1] . ')' : '',
@@ -42,6 +44,14 @@ $ctx = [
 ];
 if ($ctx['name'] === '' && $ctx['description'] === '' && !$product && empty($_FILES['photo']['tmp_name'])) {
     price_research_reply(['ok' => false, 'error' => 'Saisissez au moins un nom, ou choisissez une photo.']);
+}
+
+// Lien vers le prix du neuf (bouton du panneau de résultat) : recherche à part, sans refaire toute l'étude.
+if (($_POST['mode'] ?? '') === 'new_link') {
+    $min = pricing_euros($_POST['new_min'] ?? '');
+    $max = pricing_euros($_POST['new_max'] ?? '');
+    $link = GEMINI_API_KEY ? price_research_new_link(['name' => $ctx['name'], 'brand' => $text('brand', (string) ($product['brand'] ?? '')), 'size_text' => $ctx['size_text']], $min !== null ? ['min' => $min, 'max' => $max ?? $min] : null) : null;
+    price_research_reply(['ok' => true, 'new_link' => $link]);
 }
 
 // 1) Le catalogue : pièces similaires déjà enregistrées.
@@ -63,23 +73,26 @@ if ($product) {
 $smalls = [];
 foreach ($images as $path) $smalls[] = downscale_for_ai($path, 900) ?? $path;
 
-$result = GEMINI_API_KEY ? price_research($ctx, $smalls, $comparables) : null;
+// 3) Le marketplace d'Emmaüs : annonces d'occasion réelles, aussi données à l'IA comme repères.
+$emmaus = $ctx['name'] !== '' ? price_research_emmaus($ctx['name'], $ctx['nature']) : null;
+$result = GEMINI_API_KEY ? price_research($ctx, $smalls, $comparables, $emmaus) : null;
 foreach ($smalls as $i => $small) if (($images[$i] ?? '') !== $small) @unlink($small);
 
-if (!$result && $catalogue['n'] === 0) {
+if (!$result && $catalogue['n'] === 0 && !$emmaus) {
     price_research_reply(['ok' => false, 'error' => GEMINI_API_KEY
         ? "La recherche n'a rien donné (service surchargé ?) : réessayez dans un instant."
         : 'Clé Gemini non configurée (Réglages du site) : la recherche web est indisponible.']);
 }
 
 $web = $result['web'] ?? null;
-$suggested = $web['advice_price'] ?? ($web['used']['median'] ?? null) ?? $catalogue['median'];
+$suggested = $web['advice_price'] ?? ($web['used']['median'] ?? null) ?? $catalogue['median'] ?? ($emmaus['median'] ?? null);
 price_research_reply([
     'ok' => true,
     'catalogue' => $catalogue,
+    'emmaus' => $emmaus,
     'web' => $web,
     'sources' => $result['sources'] ?? [],
     'queries' => $result['queries'] ?? [],
     'suggested' => $suggested ? price_research_format((float) $suggested) : null,
-    'suggested_from' => !$suggested ? null : ($web && isset($web['advice_price']) ? 'web' : (($web['used']['median'] ?? null) ? 'web' : 'catalogue')),
+    'suggested_from' => !$suggested ? null : ($web && isset($web['advice_price']) ? 'web' : (($web['used']['median'] ?? null) ? 'web' : ($catalogue['median'] ? 'catalogue' : 'emmaus'))),
 ]);

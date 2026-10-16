@@ -6,13 +6,7 @@ require_admin();
 $content = get_content();
 $aiReady = (bool) GEMINI_API_KEY;
 // Angles proposés : [clé, titre, conseil de prise de vue, obligatoire].
-$angles = [
-    ['face', 'Face', "L'objet entier, de face, sur un fond simple", true],
-    ['profil', 'Profil', 'De côté, pour montrer la forme et l’épaisseur', false],
-    ['dos', 'Dos', 'L’arrière de la pièce', false],
-    ['detail', 'Détail', 'Marque, signature, poinçon ou défaut', false],
-    ['dessous', 'Dessous', 'Le dessous ou l’intérieur', false],
-];
+$angles = studio_object_angles();
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -83,6 +77,7 @@ $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/admin/quick-a
 })();
 </script>
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>
+<script src="/assets/price-field.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/price-field.js') ?>"></script>
 <script src="/assets/product-ai.js"></script>
 <script src="/assets/nature-select.js"></script>
 <script src="/assets/price-research.js"></script>

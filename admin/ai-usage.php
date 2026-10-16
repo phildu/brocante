@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/saas.php';
 require_admin();
 
 $content = get_content();
@@ -83,6 +84,60 @@ $eur = static fn ($usd): string => ai_format_eur(ai_eur((float) $usd));
 
     <?php if ($flash): ?>
       <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin:16px 0;"><?= h($flash['message']) ?></p>
+    <?php endif; ?>
+
+    <?php
+      // IA incluse dans la formule et crédit racheté (includes/ai-plans.php) : seulement si la plateforme a affecté un quota à cette boutique.
+      $quota = ai_quota_state();
+      if ($quota):
+        $packs = saas_ai_packs();
+        $credits = saas_ai_credits(tenant_slug());
+        $usedPct = $quota['quota'] > 0 ? max(0, min(100, $quota['month_spent'] / $quota['quota'] * 100)) : 100;
+        $creditLeft = max(0.0, $quota['credit_left']);
+    ?>
+    <div class="admin-block au-quota" style="margin:18px 0;<?= $quota['blocked'] ? 'border-color:#b3261e;' : '' ?>">
+      <h2 style="font-size:1.1rem;">IA incluse dans votre formule</h2>
+      <?php if ($quota['blocked']): ?>
+        <p class="publish-status" data-kind="error" role="alert" style="margin:8px 0;"><strong>Les générations IA sont suspendues.</strong> Le quota gratuit de ce mois est épuisé et vous n'avez plus de crédit. Rachetez un pack ci-dessous pour reprendre tout de suite, ou attendez le 1er du mois prochain.</p>
+      <?php endif; ?>
+      <div class="au-bar" role="img" aria-label="<?= (int) $usedPct ?> % du quota gratuit du mois consommé"><span style="width:<?= (int) $usedPct ?>%;<?= $usedPct >= 100 ? 'background:#b3261e;' : '' ?>"></span></div>
+      <p class="au-note" style="margin:6px 0 0;">
+        <?php if ($quota['quota'] > 0): ?>
+          Ce mois-ci : <strong><?= h(ai_format_eur($quota['month_spent'])) ?></strong> consommés sur <strong><?= h(ai_format_eur($quota['quota'])) ?></strong> d'IA gratuite. Il vous reste <strong><?= h(ai_format_eur($quota['free_left'])) ?></strong>,
+          soit <?= h(saas_ai_estimate_text($quota['free_left'])) ?> <span class="muted">(au choix : un budget partagé entre textes, images et vidéos)</span>.
+        <?php else: ?>
+          Votre formule n'inclut pas d'IA : vous utilisez du crédit que vous rachetez ci-dessous.
+        <?php endif; ?>
+      </p>
+      <p class="au-note" style="margin:6px 0 0;">Crédit racheté restant : <strong><?= h(ai_format_eur($creditLeft)) ?></strong><?= $creditLeft > 0 ? ' (' . h(saas_ai_estimate_text($creditLeft)) . ')' : '' ?>.
+        Il ne s'utilise que lorsque le quota gratuit du mois est épuisé, et n'expire pas.</p>
+      <?php if ($packs): ?>
+        <h3 style="font-size:1rem;margin:14px 0 6px;">Racheter du crédit IA</h3>
+        <?php if (saas_stripe_configured()): ?>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;">
+            <?php foreach ($packs as $pk): ?>
+              <form method="post" action="/admin/ai-credit-action.php" style="border:1px solid var(--line);padding:10px 12px;min-width:200px;flex:1 1 200px;">
+                <input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="pack" value="<?= h($pk['key']) ?>">
+                <strong><?= h($pk['name']) ?></strong>
+                <p class="au-note" style="margin:4px 0 8px;"><?= h(ai_format_eur($pk['credit_eur'])) ?> de crédit<br><?= h(saas_ai_estimate_text((float) $pk['credit_eur'])) ?></p>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Acheter — <?= h(saas_money((int) $pk['price_cents'])) ?></button>
+              </form>
+            <?php endforeach; ?>
+          </div>
+          <p class="au-note" style="margin-top:8px;">Paiement unique et sécurisé par Stripe ; le crédit est ajouté dès la confirmation.</p>
+        <?php else: ?>
+          <p class="au-note">Le paiement en ligne n'est pas disponible sur ce serveur : contactez l'exploitant de la plateforme pour acheter du crédit IA.</p>
+        <?php endif; ?>
+      <?php endif; ?>
+      <?php if ($credits['purchases']): ?>
+        <details style="margin-top:10px;"><summary class="au-note" style="cursor:pointer;">Historique des crédits (<?= count($credits['purchases']) ?>)</summary>
+          <ul class="au-note" style="margin:6px 0 0;padding-left:18px;">
+            <?php foreach (array_reverse(array_slice($credits['purchases'], -8)) as $pu): ?>
+              <li><?= h(date('d/m/Y', (int) $pu['at'])) ?> — <?= h(ai_format_eur((float) $pu['credit_eur'])) ?><?= ($pu['source'] ?? '') === 'offert' ? ' offerts' : ' (' . h($pu['pack'] ?: 'pack') . ($pu['price_cents'] ? ', ' . h(saas_money((int) $pu['price_cents'])) : '') . ')' ?></li>
+            <?php endforeach; ?>
+          </ul></details>
+      <?php endif; ?>
+    </div>
     <?php endif; ?>
 
     <div class="au-cards">
