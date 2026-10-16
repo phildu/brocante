@@ -9,9 +9,19 @@ const RECTO_VERSO_MAX_ANGLES = 6;
 /** Détourages réellement envoyés à l'IA (la photo principale + 3 autres, comme les autres générations multi-photos). */
 const RECTO_VERSO_MAX_SENT = 4;
 
+/**
+ * Les gros plans (étiquette, texture, détail) restent de simples photos de la fiche : ce ne sont pas des angles de l'objet,
+ * ils ne sont ni détourés ni envoyés à l'IA pour fabriquer le recto et le verso (mais elle les lit pour rédiger la fiche).
+ */
+function recto_verso_is_closeup(array $photo): bool
+{
+    return (bool) preg_match('/^(étiquette|etiquette|texture|détail|detail)/iu', trim((string) $photo['label']));
+}
+
 function recto_verso_sources(string $ref): array
 {
-    return array_slice(product_source_photos($ref), 0, RECTO_VERSO_MAX_ANGLES);
+    $angles = array_values(array_filter(product_source_photos($ref), static fn (array $p): bool => !recto_verso_is_closeup($p)));
+    return array_slice($angles, 0, RECTO_VERSO_MAX_ANGLES);
 }
 
 /** Détourage déjà fait pour une photo de départ (le plus récent), ou null. */

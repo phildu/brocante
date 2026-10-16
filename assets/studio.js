@@ -11,6 +11,7 @@
 
   function $(id) { return document.getElementById(id); }
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function sizeText(n) { return n < 1048576 ? Math.max(1, Math.round(n / 1024)) + ' Ko' : (n / 1048576).toFixed(1).replace('.', ',') + ' Mo'; }
   function plural(n, one, many) { return n + ' ' + (n > 1 ? many : one); }
 
   // ── Appels serveur ────────────────────────────────────────────────────────
@@ -114,14 +115,35 @@
   var nextId = 1;
   var running = false;
 
+  // Type de pièce (objet, vêtement : recto et verso seulement, média : scan), code scanné et vidéo, portés par la pièce (tableau de photos).
+  // labels : les vues guidées, dans l'ordre ; au-delà (et à tout moment avec « Gros plan »), les photos sont des détails.
+  var KIND_SHOTS = { objet: { max: MAX_PER_PIECE }, vetement: { max: MAX_PER_PIECE, labels: ['Recto', 'Verso', 'Étiquette', 'Texture (gros plan)'] }, media: { max: MAX_PER_PIECE, labels: ['Couverture', 'Dos / tranche'] } };
+  /** Photos de la pièce qui sont des vues (pas des gros plans), et libellé de chaque photo envoyée au serveur. */
+  function viewCount(p) { return p.filter(function (x) { return !x.detail; }).length; }
+  function shotLabels(piece) {
+    var guided = KIND_SHOTS[meta(piece).kind].labels, v = 0, d = 0;
+    return piece.map(function (x) {
+      if (x.detail) return 'Détail ' + (++d);
+      v++;
+      return guided ? (guided[v - 1] || 'Vue ' + v) : (v === 1 ? 'Photo principale' : 'Vue ' + v);
+    });
+  }
+  function mainIndexOf(piece) { var i = piece.findIndex(function (x) { return !x.detail; }); return i < 0 ? 0 : i; }
+  function meta(p) { return p.meta || (p.meta = { kind: 'objet', scan: null, video: null, detail: false }); }
+  function pieceMax(p) { return KIND_SHOTS[meta(p).kind].max; }
+  /** Une pièce compte si elle a des photos, ou si c'est un média scanné avec sa pochette (sans photo). */
+  function pieceValid(p) { var m = meta(p); return p.length > 0 || (m.kind === 'media' && !!(m.scan && m.scan.cover)); }
   function total() { return pieces.reduce(function (n, p) { return n + p.length; }, 0); }
+  function validCount() { return pieces.filter(pieceValid).length; }
   function saveLayout() {
-    return idbDo('meta', 'readwrite', function (s) { return s.put(pieces.map(function (p) { return p.map(function (x) { return x.id; }); }), 'layout'); });
+    return idbDo('meta', 'readwrite', function (s) {
+      return s.put(pieces.map(function (p) { var m = meta(p); return { ids: p.map(function (x) { return x.id; }), details: p.filter(function (x) { return x.detail; }).map(function (x) { return x.id; }), kind: m.kind, scan: m.scan, video: m.video ? m.video.id : null }; }), 'layout');
+    });
   }
   function addShot(blob) {
     var piece = pieces[pieces.length - 1];
-    if (piece.length >= MAX_PER_PIECE) { toast('Déjà ' + MAX_PER_PIECE + ' photos : passez à la pièce suivante.'); return false; }
-    var shot = { id: nextId++, blob: blob, url: URL.createObjectURL(blob) };
+    if (piece.length >= pieceMax(piece)) { toast('Déjà ' + MAX_PER_PIECE + ' photos : passez à la pièce suivante.'); return false; }
+    var shot = { id: nextId++, blob: blob, url: URL.createObjectURL(blob), detail: !!meta(piece).detail };
     piece.push(shot);
     idbDo('blobs', 'readwrite', function (s) { return s.put(blob, shot.id); }).then(saveLayout);
     renderShoot();
@@ -131,19 +153,26 @@
     idbDo('blobs', 'readwrite', function (s) { return s.delete(shot.id); });
     URL.revokeObjectURL(shot.url);
   }
+  function dropVideo(p) {
+    var m = meta(p);
+    if (m.video) { idbDo('blobs', 'readwrite', function (s) { return s.delete(m.video.id); }); URL.revokeObjectURL(m.video.url); m.video = null; }
+  }
   function tidy() {
     // Plus de pièce vide, sauf la dernière (celle en cours de prise de vue).
-    pieces = pieces.filter(function (p, i) { return p.length || i === pieces.length - 1; });
+    pieces = pieces.filter(function (p, i) { return pieceValid(p) || i === pieces.length - 1; });
     if (!pieces.length) pieces = [[]];
   }
   function nextPiece() {
-    if (!pieces[pieces.length - 1].length) return;
-    pieces.push([]);
+    var last = pieces[pieces.length - 1];
+    if (!pieceValid(last)) return;
+    // La pièce suivante garde le type de la précédente (une série de vêtements, de disques…) ; le scan est à refaire.
+    var np = []; meta(np).kind = meta(last).kind;
+    pieces.push(np);
     saveLayout(); renderShoot();
     toast('Pièce ' + pieces.length + ' : prenez sa première photo.');
   }
   function clearDraft() {
-    pieces.forEach(function (p) { p.forEach(function (s) { URL.revokeObjectURL(s.url); }); });
+    pieces.forEach(function (p) { p.forEach(function (s) { URL.revokeObjectURL(s.url); }); if (meta(p).video) URL.revokeObjectURL(meta(p).video.url); });
     pieces = [[]];
     idbDo('blobs', 'readwrite', function (s) { return s.clear(); });
     idbDo('meta', 'readwrite', function (s) { return s.clear(); });
@@ -185,12 +214,36 @@
   }
 
   function renderShoot() {
-    var piece = pieces[pieces.length - 1];
+    var piece = pieces[pieces.length - 1], m = meta(piece), cfg = KIND_SHOTS[m.kind];
     $('sb-piece-label').textContent = 'Pièce ' + pieces.length;
     $('sb-total-label').textContent = plural(piece.length, 'photo', 'photos') + ' · ' + plural(total(), 'au total', 'au total');
-    $('sb-next').disabled = !piece.length;
-    $('sb-done').disabled = !total();
-    $('sb-done').textContent = total() ? 'Terminer (' + plural(pieces.filter(function (p) { return p.length; }).length, 'pièce', 'pièces') + ')' : 'Terminer le shooting';
+    $('sb-next').disabled = !pieceValid(piece);
+    $('sb-done').disabled = !validCount();
+    $('sb-done').textContent = validCount() ? 'Terminer (' + plural(validCount(), 'pièce', 'pièces') + ')' : 'Terminer le shooting';
+    document.querySelectorAll('#sb-kinds [data-kind]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.kind === m.kind)); });
+    // Consigne de la prochaine photo selon le type de pièce.
+    var guide = $('sb-guide'), views = viewCount(piece), guided = cfg.labels;
+    if (m.detail) guide.textContent = 'Gros plans : chaque photo est un détail (marque, défaut, couture, signature…). Touchez « Gros plan » pour revenir aux vues.';
+    else if (m.kind === 'objet') guide.textContent = 'Objet : plusieurs vues (face, profil, dos…) et autant de gros plans que nécessaire (bouton « Gros plan »). Un ensemble ? Isolez l\'objet à la relecture.';
+    else if (views < guided.length) guide.textContent = (m.kind === 'vetement' ? 'Vêtement : ' : 'Média : ') + 'prochaine photo — ' + guided[views] + (views ? '' : (m.kind === 'media' ? ' (après le scan du code)' : '')) + '.';
+    else guide.textContent = 'Vues prises : ajoutez autant de gros plans que vous voulez (bouton « Gros plan »), filmez la pièce, ou « Pièce suivante ».';
+    $('sb-detail').classList.toggle('is-on', !!m.detail);
+    $('sb-detail').setAttribute('aria-pressed', String(!!m.detail));
+    $('sb-next').classList.toggle('is-ready', m.kind !== 'objet' && views >= guided.length);
+    $('sb-scan').hidden = m.kind !== 'media';
+    var chip = $('sb-chips'); chip.textContent = '';
+    if (m.scan) {
+      var sc = el('span', 'sb-chip', '📚 ' + (m.scan.name || ('Code ' + m.scan.code)));
+      var x = el('button', 'sb-chip-x', '×'); x.type = 'button'; x.setAttribute('aria-label', 'Retirer le scan');
+      x.addEventListener('click', function () { m.scan = null; saveLayout(); renderShoot(); });
+      sc.appendChild(x); chip.appendChild(sc);
+    }
+    if (m.video) {
+      var vc = el('span', 'sb-chip', '🎬 Vidéo ' + (m.video.seconds ? m.video.seconds + ' s' : '') + ' (' + sizeText(m.video.blob.size) + ')');
+      var vx = el('button', 'sb-chip-x', '×'); vx.type = 'button'; vx.setAttribute('aria-label', 'Retirer la vidéo');
+      vx.addEventListener('click', function () { dropVideo(piece); saveLayout(); renderShoot(); });
+      vc.appendChild(vx); chip.appendChild(vc);
+    }
     var strip = $('sb-strip');
     strip.textContent = '';
     piece.forEach(function (shot, i) {
@@ -203,6 +256,90 @@
     });
     if (piece.length) strip.scrollLeft = strip.scrollWidth;
   }
+
+  // Type de la pièce en cours : le vêtement n'a que recto et verso ; le média se scanne.
+  document.querySelectorAll('#sb-kinds [data-kind]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var piece = pieces[pieces.length - 1], m = meta(piece), k = b.dataset.kind;
+      if (m.kind === k) return;
+      m.kind = k; if (k !== 'media') m.scan = null;
+      saveLayout(); renderShoot();
+    });
+  });
+
+  // « Gros plan » : les photos suivantes sont des détails (étiquette, défaut, signature, texture…), autant qu'on veut.
+  $('sb-detail').addEventListener('click', function () { var m = meta(pieces[pieces.length - 1]); m.detail = !m.detail; renderShoot(); });
+
+  // Scan d'un code-barres / QR (livre, CD, vinyle, DVD) : la fiche et la pochette sont cherchées au catalogue.
+  function applyScan(piece, code) {
+    toast('Recherche du média…');
+    var lookup = window.barcodeScanLookup ? window.barcodeScanLookup(code) : Promise.resolve({ ok: false, code: '' });
+    return lookup.then(function (res) {
+      var m = meta(piece);
+      m.scan = { code: res.code || '', name: res.ok ? res.name : '', cover: res.ok ? (res.cover || '') : '', label: res.ok ? res.label : '' };
+      if (!res.ok && !res.code) { m.scan = null; toast(res.error || 'Code non reconnu.'); return; }
+      toast(res.ok ? 'Trouvé : ' + res.name : 'Code gardé (' + res.code + ') : photographiez la couverture.');
+      saveLayout(); renderShoot();
+    }).catch(function () { toast('Recherche impossible : vérifiez la connexion.'); });
+  }
+  $('sb-scan').addEventListener('click', function () {
+    var piece = pieces[pieces.length - 1];
+    if (!window.barcodeScanCamera || !window.isSecureContext || !navigator.mediaDevices) {
+      var typed = prompt('Saisissez le code-barres, l\'ISBN ou l\'adresse du QR :');
+      if (typed) applyScan(piece, typed);
+      return;
+    }
+    stopCamera();   // le scanner ouvre sa propre caméra
+    window.barcodeScanCamera(function (code) { applyScan(piece, code); }, function () { toast('Caméra du scanner inaccessible : saisissez le code.'); var t = prompt('Saisissez le code-barres, l\'ISBN ou l\'adresse du QR :'); if (t) applyScan(piece, t); }, function () { resumeCameraIfShooting(); });
+  });
+
+  // Vidéo de la pièce : enregistrée par le viseur (MediaRecorder), sinon par l'appareil du téléphone.
+  var recorder = null, recChunks = [], recTimer = null, recStart = 0;
+  var REC_MAX = 20; // secondes
+  function recMime() {
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+    return ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0] || '';
+  }
+  function setPieceVideo(piece, blob, seconds) {
+    dropVideo(piece);
+    var m = meta(piece), id = nextId++;
+    m.video = { id: id, blob: blob, url: URL.createObjectURL(blob), seconds: seconds || 0 };
+    idbDo('blobs', 'readwrite', function (st) { return st.put(blob, id); }).then(saveLayout);
+    renderShoot();
+    toast('Vidéo enregistrée.');
+  }
+  function stopRecording() {
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  }
+  $('sb-rec').addEventListener('click', function () {
+    var piece = pieces[pieces.length - 1], btn = this;
+    if (recorder && recorder.state === 'recording') { stopRecording(); return; }
+    var mime = recMime();
+    if (!stream || !mime) { $('sb-video-file').click(); return; }
+    recChunks = [];
+    try { recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 }); } catch (e) { $('sb-video-file').click(); return; }
+    recorder.ondataavailable = function (e) { if (e.data && e.data.size) recChunks.push(e.data); };
+    recorder.onstop = function () {
+      clearInterval(recTimer); btn.classList.remove('is-rec'); btn.querySelector('span').textContent = 'Vidéo';
+      var secs = Math.round((Date.now() - recStart) / 1000);
+      var blob = new Blob(recChunks, { type: mime.split(';')[0] });
+      recorder = null;
+      if (blob.size && secs >= 1) setPieceVideo(piece, blob, secs);
+    };
+    recorder.start(1000); recStart = Date.now();
+    btn.classList.add('is-rec');
+    recTimer = setInterval(function () {
+      var secs = Math.round((Date.now() - recStart) / 1000);
+      btn.querySelector('span').textContent = '■ ' + secs + ' s';
+      if (secs >= REC_MAX) stopRecording();
+    }, 500);
+  });
+  $('sb-video-file').addEventListener('change', function () {
+    var f = this.files && this.files[0]; this.value = '';
+    if (!f) return;
+    if (f.size > 200 * 1048576) { toast('Vidéo trop lourde (200 Mo au plus) : filmez plus court.'); return; }
+    setPieceVideo(pieces[pieces.length - 1], f, 0);
+  });
 
   $('sb-start').addEventListener('click', function () {
     var btn = this; btn.disabled = true;
@@ -235,7 +372,7 @@
     if ($('sb-camera').hidden) showCameraUI(true);
     // Les photos sont ajoutées dans l'ordre ; le découpage en pièces se fait à la relecture.
     files.reduce(function (p, f) {
-      return p.then(function () { return shrink(f).then(function (blob) { if (pieces[pieces.length - 1].length >= MAX_PER_PIECE) pieces.push([]); addShot(blob); }); });
+      return p.then(function () { return shrink(f).then(function (blob) { var last = pieces[pieces.length - 1]; if (last.length >= pieceMax(last)) { var np = []; meta(np).kind = meta(last).kind === 'objet' ? 'objet' : meta(last).kind; pieces.push(np); } addShot(blob); }); });
     }, Promise.resolve());
   });
 
@@ -245,6 +382,7 @@
   // ── Lot : relecture avant envoi ───────────────────────────────────────────
   var SVG_STAR = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>';
   var SVG_SPLIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v18M5 8l-2 4 2 4M19 8l2 4-2 4"/></svg>';
+  var SVG_PICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="2.5"/></svg>';
   var SVG_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
   function iconBtn(svg, label, onClick, pressed) {
@@ -256,40 +394,51 @@
 
   function renderReview() {
     var list = $('sb-pieces'); list.textContent = '';
-    var count = pieces.filter(function (p) { return p.length; }).length;
+    var count = validCount();
     $('sb-summary').textContent = plural(count, 'pièce', 'pièces') + ' · ' + plural(total(), 'photo', 'photos') + '. La première photo de chaque pièce est la principale (détourée et mise en situation). Corrigez si besoin.';
     $('sb-generate').disabled = $('sb-send-only').disabled = !count;
     // Coût estimé de la génération complète du lot (détourage, 2 visuels, fiche par pièce), tarifs de la page Consommation IA.
     var perPiece = parseFloat($('sb-cost').dataset.pieceEur) || 0;
     $('sb-cost').textContent = count && perPiece ? 'Génération estimée à ' + (count * perPiece < 0.005 ? '< 0,01' : (count * perPiece).toFixed(2).replace('.', ',')) + ' € pour ' + plural(count, 'pièce', 'pièces') + ' (' + perPiece.toFixed(2).replace('.', ',') + ' € la pièce : détourage, deux visuels, fiche).' : '';
     pieces.forEach(function (piece, pi) {
-      if (!piece.length) return;
+      if (!pieceValid(piece)) return;
+      var pm = meta(piece);
       var card = el('section', 'sb-piece');
       var head = el('div', 'sb-piece-head');
-      head.appendChild(el('b', '', 'Pièce ' + (pi + 1) + ' · ' + plural(piece.length, 'photo', 'photos')));
+      head.appendChild(el('b', '', 'Pièce ' + (pi + 1) + ' · ' + { objet: 'objet', vetement: 'vêtement', media: 'média' }[pm.kind] + ' · ' + plural(piece.length, 'photo', 'photos') + (pm.video ? ' · 🎬 vidéo' : '')));
       var tools = el('span', 'sb-piece-tools');
       if (pi > 0 && pieces[pi - 1].length) {
         var merge = el('button', 'sb-link', 'Fusionner avec la précédente'); merge.type = 'button';
-        merge.addEventListener('click', function () { pieces[pi - 1] = pieces[pi - 1].concat(piece); pieces.splice(pi, 1); saveLayout(); renderReview(); });
+        merge.addEventListener('click', function () { var prev = pieces[pi - 1], merged = prev.concat(piece); merged.meta = meta(prev); pieces[pi - 1] = merged; if (!meta(prev).video) meta(prev).video = pm.video; else dropVideo(piece); pieces.splice(pi, 1); saveLayout(); renderReview(); });
         tools.appendChild(merge);
       }
       var del = el('button', 'sb-link sb-danger', 'Retirer la pièce'); del.type = 'button';
       del.addEventListener('click', function () {
         if (!confirm('Retirer cette pièce et ses ' + plural(piece.length, 'photo', 'photos') + ' ?')) return;
-        piece.forEach(dropShot); pieces.splice(pi, 1); tidy(); saveLayout(); renderReview();
+        piece.forEach(dropShot); dropVideo(piece); pieces.splice(pi, 1); tidy(); saveLayout(); renderReview();
       });
       tools.appendChild(del);
       head.appendChild(tools);
       card.appendChild(head);
 
+      if (pm.scan) card.appendChild(el('p', 'qa-note sb-scanline', '📚 ' + (pm.scan.name ? pm.scan.name + ' · ' : '') + 'code ' + pm.scan.code + (pm.scan.cover ? ' · la pochette servira de photo si besoin' : '')));
       var row = el('div', 'sb-photos');
       piece.forEach(function (shot, i) {
-        var cell = el('div', 'sb-photo' + (i === 0 ? ' is-main' : ''));
+        var cell = el('div', 'sb-photo' + (i === mainIndexOf(piece) ? ' is-main' : '') + (shot.detail ? ' is-detail' : ''));
         var img = el('img'); img.src = shot.url; img.alt = 'Pièce ' + (pi + 1) + ', photo ' + (i + 1);
         cell.appendChild(img);
         var bar = el('div', 'sb-photo-bar');
-        bar.appendChild(iconBtn(SVG_STAR, 'Photo principale', function () { piece.splice(i, 1); piece.unshift(shot); saveLayout(); renderReview(); }, i === 0));
-        if (i > 0) bar.appendChild(iconBtn(SVG_SPLIT, 'Nouvelle pièce à partir d\'ici', function () { var tail = piece.splice(i); pieces.splice(pi + 1, 0, tail); saveLayout(); renderReview(); }));
+        bar.appendChild(iconBtn(SVG_STAR, 'Photo principale', function () { piece.splice(i, 1); shot.detail = false; piece.unshift(shot); saveLayout(); renderReview(); }, i === mainIndexOf(piece)));
+        if (i > 0) bar.appendChild(iconBtn(SVG_SPLIT, 'Nouvelle pièce à partir d\'ici', function () { var tail = piece.splice(i); tail.meta = { kind: pm.kind === 'media' ? 'objet' : pm.kind, scan: null, video: null }; pieces.splice(pi + 1, 0, tail); saveLayout(); renderReview(); }));
+        // Un ensemble d'objets sur la photo : l'IA les repère, on touche celui à vendre.
+        bar.appendChild(iconBtn(SVG_PICK, 'Isoler un objet dans la photo', function () {
+          if (!window.studioPickObject) return;
+          window.studioPickObject(shot.blob).then(function (b) {
+            if (!b) return;
+            URL.revokeObjectURL(shot.url); shot.blob = b; shot.url = URL.createObjectURL(b);
+            idbDo('blobs', 'readwrite', function (st) { return st.put(b, shot.id); }); renderReview();
+          });
+        }));
         bar.appendChild(iconBtn(SVG_X, 'Retirer cette photo', function () { piece.splice(i, 1); dropShot(shot); tidy(); saveLayout(); renderReview(); }));
         cell.appendChild(bar);
         row.appendChild(cell);
@@ -356,14 +505,14 @@
 
   function startRun(doProcess) {
     tidy();
-    var todo = pieces.filter(function (p) { return p.length; });
+    var todo = pieces.filter(pieceValid);
     if (!todo.length) return;
     lotNotes = $('sb-notes').value.trim();
     jobs = [];
     var list = $('sb-runlist'); list.textContent = '';
     todo.forEach(function (piece, i) {
       var li = el('li'); li.innerHTML = '<span class="dot"></span><b></b><small>En attente</small>';
-      li.querySelector('b').textContent = 'Pièce ' + (i + 1) + ' · ' + plural(piece.length, 'photo', 'photos');
+      li.querySelector('b').textContent = 'Pièce ' + (i + 1) + ' · ' + plural(piece.length, 'photo', 'photos') + (meta(piece).video ? ' + vidéo' : '');
       list.appendChild(li);
       jobs.push({ piece: piece, row: li, ref: null, state: 'wait' });
     });
@@ -379,9 +528,26 @@
     var size = job.piece.reduce(function (n, s) { return n + s.blob.size; }, 0);
     if (size > MAX_REQUEST_BYTES) return Promise.resolve({ ok: false, error: 'Photos trop lourdes (' + (size / 1048576).toFixed(1).replace('.', ',') + ' Mo) : retirez-en une.' });
     var fd = new FormData();
-    fd.append('action', 'create'); fd.append('source', 'batch'); fd.append('notes', lotNotes); fd.append('main', '0');
-    job.piece.forEach(function (s, i) { fd.append('photos[]', s.blob, 'photo-' + i + '.jpg'); fd.append('labels[]', i === 0 ? 'Photo principale' : 'Vue ' + (i + 1)); });
+    var m = meta(job.piece), labels = shotLabels(job.piece);
+    fd.append('action', 'create'); fd.append('source', 'batch'); fd.append('notes', lotNotes); fd.append('main', String(mainIndexOf(job.piece))); fd.append('kind', m.kind);
+    if (m.scan && m.scan.code) fd.append('barcode', m.scan.code);
+    if (m.scan && m.scan.cover) fd.append('cover_url', m.scan.cover);
+    job.piece.forEach(function (s, i) { fd.append('photos[]', s.blob, 'photo-' + i + '.jpg'); fd.append('labels[]', labels[i]); });
     return api(fd);
+  }
+
+  /** Envoie la vidéo d'une pièce par morceaux (chunk octets) ; résout en {ok, error?}. */
+  function uploadVideo(ref, file, chunk) {
+    var id = Array.prototype.map.call(crypto.getRandomValues(new Uint8Array(8)), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    var total = Math.max(1, Math.ceil(file.size / chunk));
+    var name = file.name && /\.(mp4|mov|webm|m4v)$/i.test(file.name) ? file.name : (/webm/.test(file.type) ? 'video.webm' : (/quicktime/.test(file.type) ? 'video.mov' : 'video.mp4'));
+    function send(i, attempt) {
+      var fd = new FormData();
+      fd.append('action', 'video'); fd.append('ref', ref); fd.append('upload_id', id); fd.append('index', i); fd.append('total', total); fd.append('size', file.size); fd.append('name', name);
+      fd.append('file', file.slice(i * chunk, Math.min(file.size, (i + 1) * chunk)), 'part');
+      return api(fd).then(function (r) { return r.ok || attempt >= 1 || r.status === 401 || r.status === 415 ? r : send(i, attempt + 1); });
+    }
+    return (function loop(i) { return i >= total ? Promise.resolve({ ok: true }) : send(i, 0).then(function (r) { return r.ok ? loop(i + 1) : r; }); })(0);
   }
 
   function runJobs(doProcess) {
@@ -401,15 +567,21 @@
         return Promise.resolve(job.ref ? { ok: true, ref: job.ref } : uploadPiece(job)).then(function (res) {
           must(res);
           if (!res.ok) { setRow(job, 'err', res.error || 'Envoi impossible'); return; }
-          job.ref = res.ref;
-          // Les photos sont enregistrées sur le serveur : on les retire du brouillon du téléphone.
+          job.ref = res.ref; job.chunk = res.chunk || job.chunk;
+          // Les photos sont enregistrées sur le serveur : on les retire du brouillon du téléphone (la vidéo, après son envoi).
           job.piece.forEach(dropShot);
-          pieces = pieces.filter(function (p) { return p !== job.piece; });
-          if (!pieces.length) pieces = [[]];
-          saveLayout();
-          if (!doProcess) { setRow(job, 'later', 'Envoyée, à traiter depuis « Mes pièces » · Réf. N°' + job.ref); return; }
-          return processPiece(job.ref, function (t) { setRow(job, 'run', t); }).then(function (failed) {
-            setRow(job, 'ok', 'Fiche prête · Réf. N°' + job.ref + failedText(failed));
+          var pm = meta(job.piece), vid = pm.video;
+          var videoDone = vid ? (setRow(job, 'run', 'Envoi de la vidéo…'), uploadVideo(job.ref, vid.blob, job.chunk || 4 * 1048576)) : Promise.resolve({ ok: true });
+          return videoDone.then(function (v) {
+            var vnote = vid && !v.ok ? ' (vidéo non envoyée : ' + (v.error || 'réessayez') + ')' : '';
+            if (vid) dropVideo(job.piece);
+            pieces = pieces.filter(function (p) { return p !== job.piece; });
+            if (!pieces.length) pieces = [[]];
+            saveLayout();
+            if (!doProcess) { setRow(job, 'later', 'Envoyée, à traiter depuis « Mes pièces » · Réf. N°' + job.ref + vnote); return; }
+            return processPiece(job.ref, function (t) { setRow(job, 'run', t); }).then(function (failed) {
+            setRow(job, 'ok', 'Fiche prête · Réf. N°' + job.ref + failedText(failed) + vnote);
+            });
           });
         }).catch(function (err) {
           fatal = err.message === 'auth' ? 'auth' : 'network';
@@ -458,6 +630,7 @@
       jobList = res.jobs;
       var n = jobList.filter(function (j) { return j.status !== 'reviewed'; }).length;
       $('st-count').hidden = !n; $('st-count').textContent = n;
+      updateQueueBanner();
       return res;
     });
   }
@@ -542,22 +715,36 @@
       .then(function () { listBusy = false; keepAwake(false); loadList(); runVariants(); });
   }
 
-  $('sl-process-all').addEventListener('click', function () {
+  /** Traite les pièces en attente, une à une ; $btn : le bouton qui a lancé le traitement (progression affichée dessus). */
+  function processQueued($btn) {
     var queued = jobList.filter(function (j) { return j.status === 'queued'; });
     if (!queued.length || listBusy) return;
-    var btn = this; btn.disabled = true;
+    var label = $btn.textContent;
+    $btn.disabled = true;
     listBusy = true; keepAwake(true);
     var stop = false;
     queued.reduce(function (p, j, i) {
       return p.then(function () {
         if (stop) return;
-        btn.textContent = 'Traitement ' + (i + 1) + ' / ' + queued.length + '…';
-        return processPiece(j.ref, function (t) { cardStatus(j.ref, t, true); }).catch(function (err) {
+        $btn.textContent = 'Traitement ' + (i + 1) + ' / ' + queued.length + '…';
+        return processPiece(j.ref, function (t) { cardStatus(j.ref, t, true); $btn.textContent = 'Pièce ' + (i + 1) + ' / ' + queued.length + ' : ' + t; }).catch(function (err) {
           stop = true; toast(err.message === 'auth' ? 'Session expirée : rechargez la page.' : 'Connexion perdue : réessayez.');
         });
       });
-    }, Promise.resolve()).then(function () { listBusy = false; btn.disabled = false; keepAwake(false); loadList(); runVariants(); });
-  });
+    }, Promise.resolve()).then(function () { listBusy = false; $btn.disabled = false; $btn.textContent = label; keepAwake(false); loadList(); runVariants(); });
+  }
+  $('sl-process-all').addEventListener('click', function () { processQueued(this); });
+  // Mode « Shooting d'abord » : rappel, dans l'onglet « Une pièce », des pièces qui attendent leur traitement par lot.
+  function updateQueueBanner() {
+    var later = false;
+    try { later = localStorage.getItem('studio-mode') === 'later'; } catch (e) {}
+    var n = jobList.filter(function (j) { return j.status === 'queued'; }).length;
+    $('st-queue').hidden = !(later && n);
+    $('st-queue-text').textContent = plural(n, 'pièce attend', 'pièces attendent') + ' son traitement (détourage, mise en situation, recto / verso, fiche). Terminez le shooting, puis lancez-le d\'un coup.';
+    $('st-queue-run').textContent = 'Traiter les ' + n + ' pièce' + (n > 1 ? 's' : '') + ' maintenant';
+  }
+  $('st-queue-run').addEventListener('click', function () { processQueued(this); });
+  document.addEventListener('studio-mode', updateQueueBanner);
   $('sl-refresh').addEventListener('click', loadList);
 
   // ── Relecture d'une pièce ─────────────────────────────────────────────────
@@ -668,6 +855,7 @@
   if ('serviceWorker' in navigator && script.dataset.sw) navigator.serviceWorker.register(script.dataset.sw).catch(function () {});
 
   // ── Démarrage ─────────────────────────────────────────────────────────────
+  try { if (sessionStorage.getItem('studio-queued')) { sessionStorage.removeItem('studio-queued'); toast('Pièce enregistrée : à traiter plus tard. Photographiez la suivante.'); } } catch (e) {}
   go(location.hash.replace('#', '') || 'single');
   refreshCount();
   runVariants();
@@ -676,17 +864,26 @@
   // Lot interrompu (page fermée, téléphone rebooté) : on le retrouve.
   idbOpen().then(function (database) {
     idb = database;
-    return idbDo('meta', 'readonly', function (s) { return s.get('layout'); });
+    return idbDo('meta', 'readonly', function (st) { return st.get('layout'); });
   }).then(function (layout) {
     if (!layout || !layout.length) return;
-    var ids = [].concat.apply([], layout);
-    return Promise.all(ids.map(function (id) { return idbDo('blobs', 'readonly', function (s) { return s.get(id); }); })).then(function (blobs) {
+    // Ancien format : un tableau d'identifiants par pièce ; nouveau : {ids, kind, scan, video}.
+    layout = layout.map(function (p) { return Array.isArray(p) ? { ids: p, kind: 'objet', scan: null, video: null } : p; });
+    var ids = [].concat.apply([], layout.map(function (p) { return p.ids.concat(p.video ? [p.video] : []); }));
+    if (!ids.length) { layout = layout.filter(function (p) { return p.scan && p.scan.cover; }); if (!layout.length) return; }
+    return Promise.all(ids.map(function (id) { return idbDo('blobs', 'readonly', function (st) { return st.get(id); }); })).then(function (blobs) {
       var byId = {};
       ids.forEach(function (id, i) { if (blobs[i]) byId[id] = { id: id, blob: blobs[i], url: URL.createObjectURL(blobs[i]) }; });
-      var restored = layout.map(function (p) { return p.map(function (id) { return byId[id]; }).filter(Boolean); }).filter(function (p) { return p.length; });
+      var restored = layout.map(function (p) {
+        var arr = p.ids.map(function (id) { return byId[id]; }).filter(Boolean);
+        arr.forEach(function (x) { x.detail = (p.details || []).indexOf(x.id) >= 0; });
+        var v = p.video && byId[p.video] ? { id: p.video, blob: byId[p.video].blob, url: byId[p.video].url, seconds: 0 } : null;
+        arr.meta = { kind: KIND_SHOTS[p.kind] ? p.kind : 'objet', scan: p.scan || null, video: v };
+        return arr;
+      }).filter(pieceValid);
       if (!restored.length) return;
       pieces = restored.concat([[]]);
-      nextId = Math.max.apply(null, ids) + 1;
+      nextId = Math.max.apply(null, ids.concat([0])) + 1;
       var n = restored.reduce(function (c, p) { return c + p.length; }, 0);
       var note = $('sb-resume'); note.hidden = false;
       note.textContent = 'Shooting en cours retrouvé : ' + plural(restored.length, 'pièce', 'pièces') + ', ' + plural(n, 'photo', 'photos') + '. Ouvrez l\'appareil photo pour continuer, ou terminez-le.';

@@ -26,6 +26,7 @@ $angles = [
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="/assets/studio.css">
 <link rel="stylesheet" href="/assets/barcode-scan.css">
+<link rel="stylesheet" href="/assets/object-picker.css">
 <style>
   .qa-phone { border: 1px solid var(--line); background: var(--surface); padding: 14px; display: grid; grid-template-columns: 112px 1fr; gap: 14px; align-items: center; }
   .qa-phone .phone-qr { background: #fff; padding: 6px; line-height: 0; border: 1px solid var(--line); }
@@ -80,6 +81,7 @@ $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/admin/quick-a
 <script src="/assets/saved-prompts.js"></script>
 <script src="/assets/prompt-helper.js"></script>
 <script src="/assets/barcode-scan.js"></script>
+<script src="/assets/object-picker.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/object-picker.js') ?>"></script>
 <script src="/assets/quick-add.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/quick-add.js') ?>"></script>
 </body>
 </html>

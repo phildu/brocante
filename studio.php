@@ -59,7 +59,7 @@ $angles = [
     ['detail', 'Détail', 'Marque, signature, poinçon ou défaut', false],
     ['dessous', 'Dessous', 'Le dessous ou l’intérieur', false],
 ];
-$qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/studio.php', 'list' => '/studio.php#pieces', 'list_label' => 'Voir mes pièces', 'title' => false];
+$qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/studio.php', 'list' => '/studio.php#pieces', 'list_label' => 'Voir mes pièces', 'title' => false, 'later' => true];
 $ico = static fn (string $d): string => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
 $siteName = (string) $content['site_name'];
 ?><!DOCTYPE html>
@@ -80,6 +80,7 @@ $siteName = (string) $content['site_name'];
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="/assets/studio.css">
 <link rel="stylesheet" href="/assets/barcode-scan.css">
+<link rel="stylesheet" href="/assets/object-picker.css">
 </head>
 <body class="studio">
 <?php if (!$account): ?>
@@ -131,6 +132,7 @@ $siteName = (string) $content['site_name'];
   <main class="st-main">
     <!-- Une pièce -->
     <section class="st-tab" id="tab-single" data-tab="single">
+      <p class="st-queue" id="st-queue" role="status" hidden><span id="st-queue-text"></span><button type="button" class="btn btn-primary" id="st-queue-run">Traiter maintenant</button></p>
       <?php include __DIR__ . '/includes/quick-add-flow.php'; ?>
       <div class="qa-bar">
         <button type="button" class="btn btn-primary" id="main-btn" disabled>Prenez au moins la photo de face</button>
@@ -144,7 +146,7 @@ $siteName = (string) $content['site_name'];
         <div class="sb-screen" id="sb-shoot">
           <div class="sb-intro" id="sb-intro">
             <h1>Shooting en lot</h1>
-            <p class="qa-note">Photographiez vos pièces à la suite : plusieurs vues d'une même pièce, puis « Pièce suivante ». Vous lancez ensuite la génération de toutes les fiches d'un coup, ou plus tard.</p>
+            <p class="qa-note">Photographiez vos pièces à la suite, sans attendre l'IA : choisissez le type de chaque pièce (objet, vêtement en recto / verso seulement, média à scanner), ajoutez une vidéo si vous voulez, puis « Pièce suivante ». Le post-traitement (détourage, mise en situation, fiches) se lance ensuite d'un coup, ou plus tard.</p>
             <button type="button" class="btn btn-primary" id="sb-start">Ouvrir l'appareil photo</button>
             <label class="sb-file" for="sb-gallery">ou choisir des photos dans la galerie</label>
             <input type="file" id="sb-gallery" accept="image/*" multiple hidden>
@@ -152,11 +154,24 @@ $siteName = (string) $content['site_name'];
           </div>
           <div class="sb-camera" id="sb-camera" hidden>
             <div class="sb-head"><b id="sb-piece-label">Pièce 1</b><span id="sb-total-label">0 photo</span></div>
+            <div class="sb-kinds" id="sb-kinds" role="group" aria-label="Type de la pièce">
+              <button type="button" data-kind="objet" aria-pressed="true">📦 Objet</button>
+              <button type="button" data-kind="vetement" aria-pressed="false">👕 Vêtement</button>
+              <button type="button" data-kind="media" aria-pressed="false">📚 Média</button>
+            </div>
+            <p class="sb-guide" id="sb-guide"></p>
             <div class="sb-view">
               <video id="sb-video" playsinline muted autoplay></video>
               <div class="sb-flash" id="sb-flash"></div>
             </div>
+            <div class="sb-chips" id="sb-chips" aria-live="polite"></div>
             <div class="sb-strip" id="sb-strip" aria-label="Photos de la pièce en cours"></div>
+            <div class="sb-extras">
+              <button type="button" class="sb-extra" id="sb-scan" hidden><?= $ico('<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M11 9v6M15 9v6"/>') ?><span>Scanner le code</span></button>
+              <button type="button" class="sb-extra" id="sb-detail" aria-pressed="false"><?= $ico('<circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2M11 8.5v5M8.5 11h5"/>') ?><span>Gros plan</span></button>
+              <button type="button" class="sb-extra" id="sb-rec"><?= $ico('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>') ?><span>Vidéo</span></button>
+              <input type="file" id="sb-video-file" accept="video/*" capture="environment" hidden>
+            </div>
             <div class="sb-controls">
               <label class="sb-side" for="sb-gallery" aria-label="Ajouter depuis la galerie"><?= $ico('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>') ?><span>Galerie</span></label>
               <button type="button" class="sb-shutter" id="sb-shutter" aria-label="Prendre la photo"><span></span></button>
@@ -266,6 +281,7 @@ $siteName = (string) $content['site_name'];
   <script src="/assets/saved-prompts.js"></script>
   <script src="/assets/prompt-helper.js"></script>
   <script src="/assets/barcode-scan.js"></script>
+  <script src="/assets/object-picker.js?v=<?= (int) @filemtime(__DIR__ . '/assets/object-picker.js') ?>"></script>
   <script src="/assets/quick-add.js?v=<?= (int) @filemtime(__DIR__ . '/assets/quick-add.js') ?>"></script>
   <script src="/assets/studio.js?v=<?= (int) @filemtime(__DIR__ . '/assets/studio.js') ?>" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>

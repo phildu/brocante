@@ -265,6 +265,31 @@ Le champ **Matières** (colonne `materials`, ajoutée automatiquement aux bases 
 fiche produit, rempli par la génération de fiche (Studio, ajout rapide, import par lot) et modifiable à la
 relecture.
 
+## Studio : type de pièce, scan, vidéo, ensemble d'objets, shooting d'abord
+
+Application smartphone `studio.php` (parcours « Une pièce » : `quick-add.js` ; « En lot » : `studio.js`).
+
+- **Type de pièce** : Objet (5 angles, comme avant), **Vêtement** (**recto, verso, étiquette et texture en gros plan** : quatre emplacements, pas d'« autre angle » ; les gros plans ne sont ni détourés ni envoyés pour fabriquer le recto / verso, mais l'IA les lit pour la taille, la marque et la matière)
+  ou **Livre / CD / vinyle / DVD** (couverture et dos). Le type est enregistré (`studio_jobs.kind`) : le vêtement reçoit la nature
+  « Vêtements » d'office et une consigne à l'IA (nature, sous-catégorie, taille de l'étiquette) ; la nouvelle pièce d'un lot garde le type de la précédente.
+- **Plusieurs détails** : dans le parcours d'une pièce, « + Un détail de plus » ajoute autant d'emplacements « Détail 1, 2, 3… » que voulu (10 photos au plus
+  par pièce), pour tous les types ; dans le lot, le bouton **Gros plan** fait des photos suivantes des détails (numérotés « Détail n »). Les détails ne sont ni
+  détourés ni envoyés pour le recto / verso (`recto_verso_is_closeup()`) ; ils restent des photos de la fiche.
+- **Scan pour les médias** : en choisissant « Livre, CD, vinyle, DVD », barre de scan (code-barres, ISBN, QR : `barcode-scan.js`,
+  recherche `admin/barcode-lookup.php`) ; dans le lot, bouton « Scanner le code » devant le viseur. Le code est enregistré sur la pièce
+  (`products.barcode`), la **pochette trouvée tient lieu de photo** si le média n'est pas photographié, et à l'étape « fiche » les faits du catalogue
+  (titre, auteur, éditeur, pistes, nature, poids…) **priment** sur ce que l'IA devine.
+- **Vidéo** : « Filmer la pièce » (appareil du téléphone) dans le parcours d'une pièce ; dans le lot, bouton « Vidéo » qui enregistre depuis le viseur
+  (MediaRecorder, 20 s, ≈ 2,5 Mbit/s ; à défaut, l'appareil du téléphone). Envoyée **par morceaux** après les photos (`admin/quick-add-action.php`, action `video`,
+  assemblée dans `data/capture-tmp/`) puis ajoutée à la galerie de la pièce (« Vidéo de la pièce »).
+- **Ensemble d'objets** : sur une photo, bouton « ✂ Objet » (et, dans le lot, l'icône viseur de la relecture). L'IA repère les objets
+  (`studio_detect_objects()`, action `objects`) : on **touche l'objet à vendre** ou on **dessine un cadre**, et la photo est recadrée sur le téléphone
+  (`assets/object-picker.js`). Dans le parcours d'une pièce, un bandeau le propose tout seul quand la photo principale montre plusieurs objets.
+- **Shooting d'abord, post-traitement ensuite** : en tête de « Une pièce », choix **⚡ Traiter tout de suite** ou **📷 Shooting d'abord**
+  (mémorisé sur le téléphone). En mode « shooting d'abord », la pièce est seulement enregistrée (photos, vidéo, type, code) puis le formulaire repart à zéro
+  pour la suivante ; un bandeau rappelle les pièces en attente et **les traite d'un coup** (même file que « Mes pièces → Traiter les pièces en attente »).
+  L'onglet « En lot » fait la même chose pour une série de pièces.
+
 ## Recto / verso automatique (galerie d'une pièce)
 
 Bloc « ↔ Recto / verso automatique » de `admin/gallery.php` : un seul bouton enchaîne, étape par étape (une requête

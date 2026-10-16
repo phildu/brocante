@@ -2,7 +2,9 @@
 // Ajout rapide d'une pièce depuis un smartphone (admin/quick-add.php).
 // Chaque étape est un appel séparé, pour afficher la progression et rester
 // sous la limite de durée d'exécution des hébergements mutualisés :
-//   create   → photos enregistrées, fiche masquée créée
+//   create   → photos enregistrées, fiche masquée créée (+ type de pièce, code-barres et pochette d'un média)
+//   video    → vidéo de la pièce, envoyée par morceaux
+//   objects  → objets distincts d'une photo (ensemble), pour en isoler un
 //   detoure  → photo principale détourée (fal.ai, sinon Gemini)
 //   sheet    → nom, description, catégorie et prix suggérés d'après tous les angles (avant la mise en situation : la
 //              nature de la pièce décide du décor)
@@ -60,19 +62,25 @@ function quick_add_notes(string $ref): string
 switch ($action) {
     case 'create': {
         $files = $_FILES['photos'] ?? null;
-        if (!$files || !is_array($files['tmp_name']) || !array_filter($files['tmp_name'])) {
+        $hasFiles = $files && is_array($files['tmp_name']) && array_filter($files['tmp_name']);
+        // Type de pièce (objet, vêtement, média) et code lu par le scanner (livres, CD, vinyles, DVD) ; la pochette trouvée tient
+        // lieu de photo quand le média n'a pas été photographié.
+        $kind = studio_kind((string) ($_POST['kind'] ?? 'objet'));
+        $barcode = product_barcode_clean($_POST['barcode'] ?? '');
+        $coverUrl = trim((string) ($_POST['cover_url'] ?? ''));
+        if (!$hasFiles && !($kind === 'media' && $coverUrl !== '')) {
             quick_add_reply(['ok' => false, 'error' => 'Aucune photo reçue.'], 400);
         }
         if (!shop_can_add_items()) quick_add_reply(['ok' => false, 'error' => shop_limit_message()], 403);
         $labels = (array) ($_POST['labels'] ?? []);
         $main = (int) ($_POST['main'] ?? 0);
-        if (count(array_filter($files['tmp_name'])) > STUDIO_MAX_PHOTOS) {
+        if ($hasFiles && count(array_filter($files['tmp_name'])) > STUDIO_MAX_PHOTOS) {
             quick_add_reply(['ok' => false, 'error' => 'Trop de photos pour une pièce (' . STUDIO_MAX_PHOTOS . ' au plus).'], 400);
         }
 
         $ref = next_ref();
-        db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, price, badge, is_hidden, featured, sort_order)
-                       VALUES (:ref, :name, :cat, NULL, NULL, :description, :price, :badge, 1, 0, :sort_order)')
+        db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, price, badge, is_hidden, featured, sort_order, nature, barcode)
+                       VALUES (:ref, :name, :cat, NULL, NULL, :description, :price, :badge, 1, 0, :sort_order, :nature, :barcode)')
             ->execute([
                 'ref' => $ref,
                 'name' => 'Pièce à décrire',
@@ -81,33 +89,98 @@ switch ($action) {
                 'price' => '0 €',
                 'badge' => 'Chiné',
                 'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),
+                'nature' => ['vetement' => 'vetements', 'media' => 'livres_medias'][$kind] ?? null,
+                'barcode' => $barcode !== '' ? $barcode : null,
             ]);
 
         // Photo principale d'abord : elle sert de couverture et de source aux générations.
-        $order = array_keys(array_filter($files['tmp_name']));
-        usort($order, static fn ($a, $b) => ($b === $main) <=> ($a === $main));
         $saved = [];
-        foreach ($order as $i) {
-            if (($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !@getimagesize($files['tmp_name'][$i])) {
-                continue;
+        if ($hasFiles) {
+            $order = array_keys(array_filter($files['tmp_name']));
+            usort($order, static fn ($a, $b) => ($b === $main) <=> ($a === $main));
+            foreach ($order as $i) {
+                if (($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !@getimagesize($files['tmp_name'][$i])) {
+                    continue;
+                }
+                $path = copy_photo_into_uploads($files['tmp_name'][$i], 'product-' . $ref);
+                if (!$path) continue;
+                $label = trim((string) ($labels[$i] ?? '')) ?: 'Photo';
+                add_product_photo($ref, $path, $i === $main ? 'Photo principale' : mb_substr($label, 0, 40), false);
+                $saved[] = $path;
             }
-            $path = copy_photo_into_uploads($files['tmp_name'][$i], 'product-' . $ref);
-            if (!$path) continue;
-            $label = trim((string) ($labels[$i] ?? '')) ?: 'Photo';
-            add_product_photo($ref, $path, $i === $main ? 'Photo principale' : mb_substr($label, 0, 40), false);
+        }
+        if (!$saved && $kind === 'media' && $coverUrl !== '' && ($path = product_photo_from_cover_url($coverUrl, 'product-' . $ref))) {
+            add_product_photo($ref, $path, 'Photo principale', false);
             $saved[] = $path;
         }
         if (!$saved) {
             db()->prepare('DELETE FROM products WHERE ref = ?')->execute([$ref]);
             quick_add_reply(['ok' => false, 'error' => 'Les photos n\'ont pas pu être enregistrées (format non reconnu ?).'], 400);
         }
-        studio_job_create($ref, (string) ($_POST['source'] ?? 'single'), trim((string) ($_POST['notes'] ?? '')));
+        studio_job_create($ref, (string) ($_POST['source'] ?? 'single'), trim((string) ($_POST['notes'] ?? '')), $kind);
         quick_add_reply([
             'ok' => true,
             'ref' => $ref,
             'photos' => $saved,
+            'kind' => $kind,
+            'chunk' => min(4 * 1048576, capture_chunk_bytes()),
             'ai' => ['gemini' => (bool) GEMINI_API_KEY, 'fal' => (bool) FAL_API_KEY],
         ]);
+    }
+
+    // Vidéo de la pièce, envoyée par morceaux (une vidéo dépasse la limite d'une requête) puis recollée : upload_id, index, total, size, name + file.
+    case 'video': {
+        $product = quick_add_product();
+        $uploadId = (string) ($_POST['upload_id'] ?? '');
+        $index = (int) ($_POST['index'] ?? -1);
+        $total = (int) ($_POST['total'] ?? 0);
+        $size = (int) ($_POST['size'] ?? 0);
+        $chunkBytes = min(4 * 1048576, capture_chunk_bytes());
+        $chunk = $_FILES['file'] ?? null;
+        if (!preg_match('/^[a-f0-9]{16}$/', $uploadId) || $total < 1 || $index < 0 || $index >= $total || $size < 1 || $size > CAPTURE_VIDEO_MAX_BYTES
+            || $total !== (int) ceil($size / $chunkBytes)) {
+            quick_add_reply(['ok' => false, 'error' => "L'envoi de la vidéo a échoué, réessayez."], 400);
+        }
+        if (!$chunk || ($chunk['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || $chunk['size'] > $chunkBytes
+            || $chunk['size'] !== ($index === $total - 1 ? $size - $index * $chunkBytes : $chunkBytes)) {
+            quick_add_reply(['ok' => false, 'error' => "L'envoi de la vidéo a échoué, réessayez."], 400);
+        }
+        $dir = $root . '/data/capture-tmp';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $part = $dir . '/studio-' . substr(md5(tenant_slug() . '|' . $product['ref']), 0, 12) . '-' . $uploadId . '.part';
+        if ($index === 0) {
+            capture_part_cleanup();
+            if (!in_array(capture_sniff_mime($chunk['tmp_name']), CAPTURE_VIDEO_MIMES, true)) {
+                quick_add_reply(['ok' => false, 'error' => 'Format de vidéo non pris en charge (mp4, mov ou webm).'], 415);
+            }
+            file_put_contents($part, '');
+        }
+        if (!is_file($part) || filesize($part) < $index * $chunkBytes) {
+            quick_add_reply(['ok' => false, 'error' => "L'envoi a été interrompu : renvoyez la vidéo."], 409);
+        }
+        $fh = fopen($part, 'cb');
+        if (!$fh || !flock($fh, LOCK_EX)) quick_add_reply(['ok' => false, 'error' => "L'envoi de la vidéo a échoué, réessayez."], 500);
+        ftruncate($fh, $index * $chunkBytes);
+        fseek($fh, 0, SEEK_END);
+        $written = fwrite($fh, (string) file_get_contents($chunk['tmp_name']));
+        fflush($fh); flock($fh, LOCK_UN); fclose($fh);
+        if ($written !== (int) $chunk['size']) quick_add_reply(['ok' => false, 'error' => 'Disque plein ou écriture impossible, réessayez.'], 507);
+        if ($index < $total - 1) quick_add_reply(['ok' => true, 'done' => false]);
+        if (filesize($part) !== $size) { @unlink($part); quick_add_reply(['ok' => false, 'error' => 'Vidéo incomplète : renvoyez-la.'], 422); }
+        $path = capture_store_video($part, (string) ($_POST['name'] ?? 'video.mp4'));
+        if (!$path) { @unlink($part); quick_add_reply(['ok' => false, 'error' => 'Format de vidéo non pris en charge (mp4, mov ou webm).'], 415); }
+        add_product_photo($product['ref'], $path, 'Vidéo de la pièce', false, 'video');
+        quick_add_reply(['ok' => true, 'done' => true, 'path' => $path]);
+    }
+
+    // Objets distincts d'une photo (un ensemble) : l'IA les repère, le vendeur en choisit un (assets/object-picker.js).
+    case 'objects': {
+        $file = $_FILES['photo'] ?? null;
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !@getimagesize($file['tmp_name'])) {
+            quick_add_reply(['ok' => false, 'error' => 'Photo non reçue.'], 400);
+        }
+        if (!GEMINI_API_KEY) quick_add_reply(['ok' => true, 'objects' => [], 'ai' => false]);
+        quick_add_reply(['ok' => true, 'objects' => studio_detect_objects($file['tmp_name']), 'ai' => true]);
     }
 
     case 'detoure': {
@@ -176,12 +249,39 @@ switch ($action) {
             $smalls[] = downscale_for_ai($abs, 900) ?? $abs;
         }
         if (!$smalls) quick_add_reply(['ok' => false, 'error' => 'Aucune photo à analyser.']);
-        $text = gemini_describe_image($smalls[0], build_product_sheet_prompt(count($smalls), quick_add_notes($product['ref'])), 1, array_slice($smalls, 1));
+
+        // Type de pièce choisi au shooting et code lu par le scanner : indications supplémentaires pour l'IA.
+        $kind = studio_kind(studio_job_get($product['ref'])['kind'] ?? null);
+        $lookup = null;
+        if (!empty($product['barcode'])) {
+            require_once $root . '/includes/barcode.php';
+            $found = barcode_lookup((string) $product['barcode']);
+            if (!empty($found['ok'])) $lookup = $found;
+        }
+        $hint = '';
+        if ($kind === 'vetement') $hint .= ' Cette pièce est un vêtement (recto et verso photographiés) : indique sa nature et sa sous-catégorie de vêtement, et lis la taille sur l\'étiquette si elle est visible.';
+        if ($lookup) $hint .= ' Informations vérifiées d\'après le code-barres ' . $lookup['code'] . ' : ' . barcode_cut(trim(($lookup['label'] ?? '') . ' « ' . ($lookup['name'] ?? '') . ' ». ' . ($lookup['description'] ?? '')), 400);
+
+        $text = gemini_describe_image($smalls[0], build_product_sheet_prompt(count($smalls), trim(quick_add_notes($product['ref']) . $hint)), 1, array_slice($smalls, 1));
         foreach ($smalls as $i => $small) {
             if (str_starts_with($small, sys_get_temp_dir())) @unlink($small);
         }
         $sheet = $text ? parse_product_sheet_response($text) : null;
         if (!$sheet) quick_add_reply(['ok' => false, 'error' => 'La rédaction automatique a échoué : complétez la fiche à la main.']);
+        // Les faits du catalogue (titre, auteur, éditeur, pistes…) priment sur ce que l'IA devine d'après les photos.
+        if ($lookup) {
+            if (!empty($lookup['name'])) $sheet['name'] = mb_substr((string) $lookup['name'], 0, 120);
+            if (!empty($lookup['description'])) $sheet['description'] = (string) $lookup['description'];
+            if (!empty($lookup['materials'])) $sheet['materials'] = mb_substr((string) $lookup['materials'], 0, 200);
+            if (!empty($lookup['size_text'])) $sheet['size_text'] = mb_substr((string) $lookup['size_text'], 0, 60);
+            if (!empty($lookup['weight_grams'])) $sheet['weight_grams'] = (int) $lookup['weight_grams'];
+            if (!empty($lookup['nature'])) {
+                $pair = product_nature_resolve((string) $lookup['nature'], (string) ($lookup['sous_categorie'] ?? ''));
+                $sheet['nature'] = $pair['nature'];
+                $sheet['sous_categorie'] = $pair['sous_categorie'];
+                if ($cat = universe_key_for_nature($pair['nature'])) $sheet['category'] = $cat;
+            }
+        }
         db()->prepare('UPDATE products SET name = ?, description = ?, cat = ?, price = ?, materials = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, weight_text = ? WHERE ref = ?')
             ->execute([$sheet['name'], $sheet['description'] ?: 'Description à compléter.', $sheet['category'], $sheet['price_hint'] ?: '0 €', $sheet['materials'], $sheet['etat'] ?: null, $sheet['nature'] ?: null, $sheet['sous_categorie'] ?: null, $sheet['size_text'], $sheet['weight_grams'], product_weight_text($sheet['weight_grams']), $product['ref']]);
         // Le catalogue d'abord : assez de pièces comparables (même nature et sous-catégorie) imposent leur poids médian.
@@ -189,6 +289,7 @@ switch ($action) {
             $fresh = get_product($product['ref']);
             $sheet['weight_grams'] = (int) $fresh['weight_grams'];
         }
+        $sheet['barcode'] = (string) ($product['barcode'] ?? '');
         quick_add_reply(['ok' => true, 'sheet' => $sheet]);
     }
 

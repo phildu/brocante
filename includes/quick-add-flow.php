@@ -5,7 +5,7 @@
  * Attend $angles, $aiReady et $qaOpts (action, again, list, list_label, title).
  * Le script est assets/quick-add.js ; la barre d'action est ensuite placée par la page hôte.
  */
-?><div class="qa" data-action="<?= h($qaOpts['action']) ?>" data-again="<?= h($qaOpts['again']) ?>" data-list="<?= h($qaOpts['list']) ?>">
+?><div class="qa" data-action="<?= h($qaOpts['action']) ?>" data-again="<?= h($qaOpts['again']) ?>" data-list="<?= h($qaOpts['list']) ?>" data-ai="<?= $aiReady ? '1' : '0' ?>"<?= !empty($qaOpts['later']) ? ' data-later="1"' : '' ?>>
   <?php if (!empty($qaOpts['title'])): ?>
   <div>
     <p class="eyebrow" style="margin:0;">Catalogue</p>
@@ -20,8 +20,27 @@
 
   <!-- Étape 1 : photos -->
   <section class="qa-panel" id="panel-photos">
-    <p class="qa-note">Génération complète (détourage, mise en situation 3:2 et 9:16, fiche) : <?= h(ai_estimate_label(ai_estimate_piece_counts())) ?> par pièce.</p>
-    <p class="qa-note">Touchez un cadre pour ouvrir l'appareil photo. La photo de face est obligatoire ; les autres angles aident l'IA à décrire la pièce. « Principale » choisit la photo détourée et mise en situation.</p>
+    <?php if (!empty($qaOpts['later'])): ?>
+    <!-- Mode de travail : tout traiter tout de suite, ou photographier d'abord et traiter ensuite, par lot. -->
+    <div class="qa-mode" id="qa-mode" role="group" aria-label="Mode de travail">
+      <button type="button" data-mode="now" aria-pressed="true"><b>⚡ Traiter tout de suite</b><small>Fiche prête en 1 à 3 minutes</small></button>
+      <button type="button" data-mode="later" aria-pressed="false"><b>📷 Shooting d'abord</b><small>Je photographie, je traite ensuite par lot</small></button>
+    </div>
+    <?php endif; ?>
+    <div class="qa-kinds" id="qa-kinds" role="group" aria-label="Type de pièce">
+      <button type="button" data-kind="objet" aria-pressed="true"><span aria-hidden="true">📦</span> Objet</button>
+      <button type="button" data-kind="vetement" aria-pressed="false"><span aria-hidden="true">👕</span> Vêtement</button>
+      <button type="button" data-kind="media" aria-pressed="false"><span aria-hidden="true">📚</span> Livre, CD, vinyle, DVD</button>
+    </div>
+    <p class="qa-note" id="qa-kind-note"></p>
+    <div class="qa-scan" id="qa-scan" hidden></div>
+    <p class="qa-note" id="qa-cost-note">Génération complète (détourage, mise en situation 3:2 et 9:16, fiche) : <?= h(ai_estimate_label(ai_estimate_piece_counts())) ?> par pièce.</p>
+    <p class="qa-note" id="qa-shots-note">Touchez un cadre pour ouvrir l'appareil photo. La photo de face est obligatoire ; les autres angles aident l'IA à décrire la pièce. « Principale » choisit la photo détourée et mise en situation.</p>
+    <p class="qa-multi" id="qa-multi" role="status" hidden>
+      <span>Plusieurs objets sur cette photo : lequel vendez-vous ?</span>
+      <button type="button" class="btn btn-primary" id="qa-multi-pick">Choisir l'objet</button>
+      <button type="button" class="btn btn-ghost" id="qa-multi-no">Tout garder</button>
+    </p>
     <div class="qa-shots" id="shots">
       <?php foreach ($angles as $i => [$key, $title, $tip, $required]): ?>
         <div class="qa-shot<?= $i === 0 ? ' is-main' : '' ?>" data-index="<?= $i ?>" data-label="<?= h($title) ?>">
@@ -35,6 +54,7 @@
             <span><?= h($title) ?></span>
             <span class="qa-mini">
               <button type="button" data-act="main" aria-pressed="<?= $i === 0 ? 'true' : 'false' ?>" aria-label="Photo principale"><span aria-hidden="true">★</span><span class="txt"> Principale</span></button>
+              <button type="button" data-act="pick" aria-label="Isoler un objet dans la photo"><span aria-hidden="true">✂</span><span class="txt"> Objet</span></button>
               <button type="button" data-act="retake" aria-label="Reprendre la photo"><span aria-hidden="true">↺</span><span class="txt"> Reprendre</span></button>
               <button type="button" data-act="remove" aria-label="Retirer la photo">✕</button>
             </span>
@@ -42,11 +62,17 @@
         </div>
       <?php endforeach; ?>
     </div>
-    <button type="button" class="qa-add" id="add-shot">+ Autre angle</button>
+    <div class="qa-adds"><button type="button" class="qa-add" id="add-shot">+ Autre angle</button><button type="button" class="qa-add" id="add-detail">+ Un détail de plus</button></div>
     <div class="qa-gallery">
       Photos déjà prises ?
       <label for="gallery">Choisir dans la galerie</label>
       <input type="file" accept="image/*" multiple id="gallery" hidden>
+    </div>
+    <div class="qa-video" id="qa-video">
+      <label class="qa-video-take" for="qa-video-input"><span aria-hidden="true">🎬</span> Filmer la pièce <small>(facultatif — 10 à 20 secondes, en la faisant tourner)</small></label>
+      <input type="file" id="qa-video-input" accept="video/*" capture="environment" hidden>
+      <span class="qa-video-state" id="qa-video-state" role="status"></span>
+      <button type="button" class="btn-small" id="qa-video-remove" hidden>Retirer la vidéo</button>
     </div>
     <label class="qa-field">Indications pour l'IA (facultatif)
       <textarea id="notes" rows="2" maxlength="300" data-saved-prompts="notes" data-prompt-helper="notes" placeholder="Ex. : années 70, grès, petit éclat au pied, 32 cm de haut"></textarea>
@@ -60,6 +86,7 @@
   <section class="qa-panel" id="panel-progress" hidden>
     <ol class="qa-progress" id="progress">
       <li data-step="create"><span class="dot"></span><b>Envoi des photos</b><small>Enregistrement dans le catalogue</small></li>
+      <li data-step="video" hidden><span class="dot"></span><b>Vidéo</b><small>Envoi de la vidéo de la pièce</small></li>
       <li data-step="detoure"><span class="dot"></span><b>Détourage</b><small>Photo principale sur fond neutre</small></li>
       <li data-step="sheet"><span class="dot"></span><b>Rédaction de la fiche</b><small>Nom, description, catégorie, prix</small></li>
       <li data-step="ambiance"><span class="dot"></span><b>Mise en situation</b><small>La pièce dans un décor adapté</small></li>

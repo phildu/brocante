@@ -97,7 +97,7 @@
   }
 
   // ── Caméra ─────────────────────────────────────────────────────────────────
-  function openCamera(onCode, onError) {
+  function openCamera(onCode, onError, onClose) {
     var overlay = el('div', 'scan-overlay'); overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-label', 'Scanner un code');
     var panel = el('div', 'scan-panel');
     var stage = el('div', 'scan-stage'); var video = document.createElement('video'); video.setAttribute('playsinline', ''); video.muted = true; stage.appendChild(video);
@@ -112,6 +112,7 @@
       if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
       if (html5) { try { html5.stop().then(function () { html5.clear(); }).catch(function () {}); } catch (e) {} }
       overlay.remove();
+      if (onClose) onClose();
     }
     function found(code) { if (finished) return; if (navigator.vibrate) navigator.vibrate(60); stop(); onCode(code); }
     close.addEventListener('click', stop);
@@ -160,7 +161,8 @@
   }
 
   // ── Barre de scan ──────────────────────────────────────────────────────────
-  function buildBar(root) {
+  function buildBar(root, opts) {
+    opts = opts || {};
     var bar = el('div', 'scan-bar');
     var row = el('div', 'scan-row');
     var cam = el('button', 'btn-small scan-btn', '📷 Scanner un code-barres / QR'); cam.type = 'button';
@@ -168,14 +170,14 @@
     var code = document.createElement('input'); code.type = 'text'; code.className = 'scan-code'; code.placeholder = 'ou saisir un ISBN, un code-barres, une adresse…'; code.setAttribute('aria-label', 'Code-barres, ISBN ou adresse');
     var go = el('button', 'btn-small', 'Chercher'); go.type = 'button';
     row.appendChild(cam); row.appendChild(photoLab); row.appendChild(code); row.appendChild(go);
-    var hint = el('p', 'scan-hint', 'Livres (ISBN), CD, vinyles, DVD : titre, auteur ou artiste, éditeur, pistes et pochette sont récupérés. Un code QR peut être une page Discogs ou une fiche web.');
+    var hint = el('p', 'scan-hint', opts.hint || 'Livres (ISBN), CD, vinyles, DVD : titre, auteur ou artiste, éditeur, pistes et pochette sont récupérés. Un code QR peut être une page Discogs ou une fiche web.');
     var box = el('div', 'scan-result'); box.setAttribute('role', 'status');
     bar.appendChild(row); bar.appendChild(hint); bar.appendChild(box);
     var busy = false;
     function run(text) {
       text = (text || '').trim(); if (!text || busy) return; busy = true; code.value = text;
       box.innerHTML = ''; box.appendChild(el('p', 'scan-msg', 'Recherche en cours…'));
-      lookup(text).then(function (res) { showResult(root, box, res); }).catch(function () { box.innerHTML = ''; box.appendChild(el('p', 'scan-msg is-warn', 'La recherche a échoué : vérifiez la connexion et réessayez.')); }).then(function () { busy = false; });
+      lookup(text).then(function (res) { if (opts.onResult) { box.innerHTML = ''; opts.onResult(res, box); } else showResult(root, box, res); }).catch(function () { box.innerHTML = ''; box.appendChild(el('p', 'scan-msg is-warn', 'La recherche a échoué : vérifiez la connexion et réessayez.')); }).then(function () { busy = false; });
     }
     cam.addEventListener('click', function () {
       if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -219,4 +221,9 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
   window.barcodeScanInit = start;
+  // Pour le Studio (shooting) : une barre de scan autonome qui rend le résultat à la page au lieu de remplir un formulaire,
+  // et les briques utiles à son viseur (lecture par la caméra, recherche).
+  window.barcodeScanWidget = function (container, onResult, hint) { var bar = buildBar(container, { onResult: onResult, hint: hint }); container.appendChild(bar); return bar; };
+  window.barcodeScanCamera = openCamera;
+  window.barcodeScanLookup = lookup;
 })();
