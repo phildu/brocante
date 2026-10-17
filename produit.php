@@ -41,7 +41,7 @@ $buyHtml = static function () use ($product): string {
         return '<a class="btn btn-primary" href="/index.php#contact">Nous contacter</a>';
     }
     // « Ajouter au panier » reste sur la fiche ; « Commander » ajoute puis ouvre le panier (le dernier `redirect` envoyé l'emporte).
-    return '<form method="post" action="/cart-add.php" class="buy-form">'
+    return '<form method="post" action="/cart-add.php" class="buy-form">' . cart_csrf_field()
         . '<input type="hidden" name="ref" value="' . h($product['ref']) . '">'
         . '<input type="hidden" name="redirect" value="/produit.php?ref=' . h($product['ref']) . '">'
         . '<button class="btn btn-primary" type="submit">Ajouter au panier</button>'

@@ -138,7 +138,7 @@ function shop_add_form(array $p, string $label = 'Ajouter au panier', string $cl
 {
     if (!in_stock($p)) return '<span class="badge sold">Vendue</span>';
     if (!is_fixed_price(effective_price($p))) return '<a class="' . h($class) . '" href="/index.php#contact">Nous contacter</a>';
-    return '<form method="post" action="/cart-add.php" class="shop-add">'
+    return '<form method="post" action="/cart-add.php" class="shop-add">' . cart_csrf_field()
         . '<input type="hidden" name="ref" value="' . h($p['ref']) . '">'
         . '<input type="hidden" name="redirect" value="' . h($_SERVER['REQUEST_URI'] ?? '/boutique.php') . '">'
         . '<button class="' . h($class) . '" type="submit">' . h($label) . '</button></form>';

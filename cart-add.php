@@ -15,6 +15,13 @@ if (!str_starts_with($redirect, '/') || str_starts_with($redirect, '//')) $redir
 // « Commander » : le bouton envoie redirect = la page du panier, on y va directement ; sinon un bouton « Commander » accompagne la confirmation.
 $toCart = app_unprefix(strtok($redirect, '?#')) === '/cart.php';
 
+// Formulaire sans le jeton de la session (autre site, page restée ouverte trop longtemps) : rien n'est ajouté.
+if (!cart_csrf_valid()) {
+    flash_set("La page avait expiré : rien n'a été ajouté au panier. Recommencez, s'il vous plaît.", 'error');
+    header('Location: ' . $redirect);
+    exit;
+}
+
 if ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
     cart_add($ref, 1);
     flash_set('« ' . $product['name'] . ' » ajouté au panier.', 'ok', $toCart ? null : ['label' => 'Commander', 'url' => '/cart.php']);

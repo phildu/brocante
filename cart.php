@@ -3,6 +3,12 @@ require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    // Formulaire sans le jeton de la session (autre site, page restée ouverte trop longtemps) : panier inchangé.
+    if (!cart_csrf_valid()) {
+        flash_set("La page avait expiré : le panier n'a pas été modifié. Recommencez, s'il vous plaît.", 'error');
+        header('Location: /cart.php');
+        exit;
+    }
     $ref = (string) ($_POST['ref'] ?? '');
     if ($_POST['action'] === 'remove') {
         cart_remove($ref);
@@ -59,6 +65,7 @@ include __DIR__ . '/includes/header.php';
                 <h3 style="font-size:1.05rem;"><?= h($p['name']) ?></h3>
                 <p class="desc" style="color:var(--ink-soft);font-size:0.88rem;"><?= format_cents($line['unit_cents']) ?> pièce</p>
                 <form method="post" style="display:flex;align-items:center;gap:10px;">
+                  <?= cart_csrf_field() ?>
                   <input type="hidden" name="ref" value="<?= h($p['ref']) ?>">
                   <input type="hidden" name="action" value="qty">
                   <label style="font-family:var(--font-mono);font-size:0.7rem;color:var(--ink-soft);">Quantité
@@ -70,6 +77,7 @@ include __DIR__ . '/includes/header.php';
               <div style="text-align:right;">
                 <p class="price" style="margin-bottom:10px;"><?= format_cents($line['total_cents']) ?></p>
                 <form method="post">
+                  <?= cart_csrf_field() ?>
                   <input type="hidden" name="ref" value="<?= h($p['ref']) ?>">
                   <input type="hidden" name="action" value="remove">
                   <button type="submit" class="admin-delete">Retirer</button>
@@ -86,6 +94,7 @@ include __DIR__ . '/includes/header.php';
         <div class="shipping-destination" style="margin-top:20px;padding-top:20px;border-top:1px solid var(--line);">
           <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Destination</span>
           <form method="post" id="destination-form" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+            <?= cart_csrf_field() ?>
             <input type="hidden" name="action" value="set_destination">
             <label style="font-family:var(--font-mono);font-size:0.7rem;color:var(--ink-soft);">Pays
               <select name="country" id="destination-country" style="display:block;margin-top:6px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px;min-width:220px;">
@@ -126,6 +135,7 @@ include __DIR__ . '/includes/header.php';
         </div>
 
         <form method="post" action="/checkout.php" id="checkout-form" style="margin-top:24px;">
+          <?= cart_csrf_field() ?>
           <div class="shipping-choice" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
             <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Livraison</span>
 

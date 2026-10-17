@@ -7,6 +7,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+// Formulaire sans le jeton de la session (autre site, page restée ouverte trop longtemps) : pas de passage à la caisse.
+if (!cart_csrf_valid()) {
+    flash_set("La page avait expiré : recommencez le passage à la caisse, s'il vous plaît.", 'error');
+    header('Location: /cart.php');
+    exit;
+}
+
 $lines = cart_lines();
 if (!$lines) {
     header('Location: /cart.php');

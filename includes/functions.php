@@ -472,6 +472,7 @@ function product_card_html(array $p, int $i = 0): string
     if (is_fixed_price(effective_price($p))) {
         $action = '
           <form method="post" action="/cart-add.php" style="display:contents;">
+            ' . cart_csrf_field() . '
             <input type="hidden" name="ref" value="' . h($p['ref']) . '">
             <input type="hidden" name="redirect" value="' . h($_SERVER['REQUEST_URI'] ?? '/boutique.php') . '">
             <button class="card-cta" type="submit">Ajouter</button>
@@ -3030,6 +3031,8 @@ function is_fixed_price(?string $price): bool
 function price_to_cents(?string $price): ?int
 {
     if (!$price) return null;
+    // Espaces insécables (prix copié-collé : « 1 250 € ») lues comme des espaces, sinon le montant s'arrêterait à « 1 ».
+    $price = str_replace(["\xc2\xa0", "\xe2\x80\xaf"], ' ', $price);
     if (!preg_match('/(\d[\d\s]*)(?:[,.](\d{1,2}))?/', $price, $m)) return null;
     $euros = (int) str_replace(' ', '', $m[1]);
     $cents = isset($m[2]) ? (int) str_pad($m[2], 2, '0') : 0;
@@ -3106,6 +3109,33 @@ function cart_remove(string $ref): void
 function cart_clear(): void
 {
     $_SESSION['cart'] = [];
+}
+
+/**
+ * Jeton anti-CSRF des formulaires du panier (ajout, quantités, destination,
+ * passage à la caisse) : un autre site ne peut pas remplir le panier d'un
+ * visiteur ni l'envoyer à la caisse à son insu. Même principe que
+ * admin_csrf_token(), dans la session du commerce ; champ « csrf ».
+ */
+function cart_csrf_token(): string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) return '';
+    if (empty($_SESSION['cart_csrf'])) {
+        $_SESSION['cart_csrf'] = bin2hex(random_bytes(16));
+    }
+    return $_SESSION['cart_csrf'];
+}
+
+function cart_csrf_field(): string
+{
+    return '<input type="hidden" name="csrf" value="' . h(cart_csrf_token()) . '">';
+}
+
+/** Vrai si le formulaire envoyé porte le jeton de la session (faux : formulaire d'un autre site, ou page restée ouverte au-delà de la session). */
+function cart_csrf_valid(): bool
+{
+    $token = cart_csrf_token();
+    return $token !== '' && hash_equals($token, (string) ($_POST['csrf'] ?? ''));
 }
 
 function cart_count(): int
