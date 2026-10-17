@@ -25,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 $lines = cart_lines();
 $total = cart_total_cents();
+$held = $lines ? cart_held_by_others() : [];
 $content = get_content();
 
 $destCountry = (string) ($_SESSION['shipping_country'] ?? 'FR');
@@ -64,6 +65,9 @@ include __DIR__ . '/includes/header.php';
               <div class="product-admin-fields">
                 <h3 style="font-size:1.05rem;"><?= h($p['name']) ?></h3>
                 <p class="desc" style="color:var(--ink-soft);font-size:0.88rem;"><?= format_cents($line['unit_cents']) ?> pièce</p>
+                <?php if ($line['qty'] > product_free_qty($p, $held)): ?>
+                  <p class="desc" style="color:var(--accent);font-size:0.88rem;">En cours de paiement par un autre client : de nouveau disponible d'ici une demi-heure si ce paiement n'aboutit pas.</p>
+                <?php endif; ?>
                 <form method="post" style="display:flex;align-items:center;gap:10px;">
                   <?= cart_csrf_field() ?>
                   <input type="hidden" name="ref" value="<?= h($p['ref']) ?>">

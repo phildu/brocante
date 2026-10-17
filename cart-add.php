@@ -22,7 +22,9 @@ if (!cart_csrf_valid()) {
     exit;
 }
 
-if ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
+if ($product && is_fixed_price(effective_price($product)) && in_stock($product) && product_free_qty($product) < 1) {
+    flash_set(product_held_message($product['name']), 'error');
+} elseif ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
     cart_add($ref, 1);
     flash_set('« ' . $product['name'] . ' » ajouté au panier.', 'ok', $toCart ? null : ['label' => 'Commander', 'url' => '/cart.php']);
 }

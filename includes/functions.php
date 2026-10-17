@@ -143,6 +143,71 @@ function order_mark_paid(array $order, array $session): bool
 }
 
 /**
+ * Durée de vie d'une page de paiement Stripe (minimum accepté par Stripe : 30 min) : tant qu'elle est ouverte, les pièces de
+ * la commande sont réservées à ce visiteur. Passé ce délai, Stripe la ferme et la pièce redevient disponible.
+ */
+const CHECKOUT_HOLD_MINUTES = 31;
+
+/** Commandes en attente de ce visiteur (ses propres passages à la caisse ne le bloquent jamais). */
+function checkout_own_orders(): array
+{
+    return array_map('intval', (array) ($_SESSION['checkout_orders'] ?? []));
+}
+
+function checkout_remember_order(int $id): void
+{
+    $_SESSION['checkout_orders'] = array_slice(array_merge(checkout_own_orders(), [$id]), -5);
+}
+
+/** Quantités réservées par les paiements en cours des AUTRES visiteurs : [ref => quantité]. */
+function cart_held_by_others(): array
+{
+    $own = checkout_own_orders();
+    $held = [];
+    $rows = db()->query("SELECT id, items FROM orders WHERE status = 'pending' AND created_at >= datetime('now', '-" . CHECKOUT_HOLD_MINUTES . " minutes')")->fetchAll();
+    foreach ($rows as $row) {
+        if (in_array((int) $row['id'], $own, true)) continue;
+        foreach (json_decode((string) $row['items'], true) ?: [] as $item) {
+            $ref = (string) ($item['ref'] ?? '');
+            $held[$ref] = ($held[$ref] ?? 0) + (int) ($item['qty'] ?? 0);
+        }
+    }
+    return $held;
+}
+
+/** Quantité d'une pièce encore libre une fois retirées les réservations des autres visiteurs. */
+function product_free_qty(array $p, ?array $held = null): int
+{
+    $held ??= cart_held_by_others();
+    return max(0, (int) $p['stock'] - ($held[(string) $p['ref']] ?? 0));
+}
+
+/** Message affiché quand une pièce est en cours de paiement par un autre client. */
+function product_held_message(string $name): string
+{
+    return '« ' . $name . " » est en cours de paiement par un autre client. Si ce paiement n'aboutit pas, la pièce sera de nouveau disponible d'ici une demi-heure.";
+}
+
+/**
+ * Nouveau passage à la caisse de ce visiteur : ses pages de paiement précédentes encore ouvertes sont fermées chez Stripe,
+ * pour qu'il ne puisse pas payer deux fois. Une page déjà payée ne peut pas être fermée : orders_settle_pending_for() la rattrape.
+ */
+function checkout_expire_own_sessions(): void
+{
+    $own = checkout_own_orders();
+    if (!$own) return;
+    $stmt = db()->prepare("SELECT stripe_session_id FROM orders WHERE id IN (" . implode(',', array_fill(0, count($own), '?')) . ") AND status = 'pending'");
+    $stmt->execute($own);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $sessionId) {
+        try {
+            stripe_request('POST', '/checkout/sessions/' . urlencode($sessionId) . '/expire');
+        } catch (Throwable $e) {
+            // Déjà payée ou déjà expirée : rien à faire.
+        }
+    }
+}
+
+/**
  * Avant un passage à la caisse : une commande en attente de moins de 24 h (durée
  * de vie d'une session Stripe) qui contient une pièce du panier a peut-être été
  * payée par un client qui a fermé l'onglet avant de revenir sur le site. On le

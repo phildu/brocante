@@ -29,6 +29,17 @@ if (!stripe_configured()) {
     exit;
 }
 
+// Pièce en cours de paiement par un autre client (sa page Stripe est encore ouverte) : pas de deuxième paiement en parallèle.
+$held = cart_held_by_others();
+foreach ($lines as $line) {
+    if ($line['qty'] > product_free_qty($line['product'], $held)) {
+        flash_set(product_held_message($line['product']['name']), 'error');
+        header('Location: /cart.php');
+        exit;
+    }
+}
+checkout_expire_own_sessions();
+
 $content = get_content();
 
 // Chaque option porte une clé ('pickup', 'rate-<id>', 'flat') qui correspond
@@ -93,6 +104,8 @@ $params = [
     'cancel_url' => SITE_URL . '/cart.php',
     'shipping_address_collection' => ['allowed_countries' => array_keys(shipping_allowed_countries())],
     'shipping_options' => $shippingOptions,
+    // Page de paiement fermée après CHECKOUT_HOLD_MINUTES : la réservation des pièces ne dure pas plus longtemps.
+    'expires_at' => time() + CHECKOUT_HOLD_MINUTES * 60,
 ];
 
 // Client connecté par un réseau social : son adresse e-mail est préremplie sur la page de paiement.
@@ -138,6 +151,7 @@ $stmt->execute([
     'pending',
     json_encode($itemsSnapshot, JSON_UNESCAPED_UNICODE),
 ]);
+checkout_remember_order((int) db()->lastInsertId());
 
 header('Location: ' . $session['url'], true, 303);
 exit;
