@@ -1,0 +1,56 @@
+/* Pack Communication : page « Médiathèque ». */
+.com-media { display: grid; gap: 14px; margin-top: 18px; }
+.com-small { font-size: 0.78rem; color: var(--ink-soft); margin: 4px 0 0; }
+.com-drop { border: 2px dashed var(--line); background: var(--surface); padding: 18px; text-align: center; }
+.com-drop p { margin: 0; }
+.com-drop.is-over { border-color: var(--accent); background: var(--surface-2); }
+.com-uploads { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 0.82rem; }
+.com-uploads:empty { display: none; }
+.com-uploads li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; overflow-wrap: anywhere; }
+.com-uploads progress { width: 120px; }
+.com-error { color: var(--danger, #b3261e); }
+.com-adds { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.com-inline { display: flex; gap: 8px; }
+.com-inline input, .com-toolbar input, .com-toolbar select { flex: 1 1 160px; min-width: 0; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 7px 9px; font-family: var(--font-body); font-size: 0.85rem; }
+.com-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.com-toolbar input[type="search"] { flex-basis: 240px; }
+.com-stats, .com-web { margin: 0; font-size: 0.84rem; color: var(--ink-soft); }
+.com-group { border-top: 1px solid var(--line); padding: 8px 0; }
+.com-group > summary { cursor: pointer; font-size: 0.95rem; padding: 4px 0; }
+.com-group > summary span { color: var(--ink-soft); font-weight: 400; }
+.com-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 10px; }
+.com-card { display: flex; flex-direction: column; gap: 4px; text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px; cursor: pointer; font: inherit; min-width: 0; }
+.com-card:hover, .com-card:focus-visible { outline: 2px solid var(--accent); }
+.com-card-media { position: relative; display: block; aspect-ratio: 4/3; background: var(--surface-2); overflow: hidden; }
+.com-card-media img, .com-card-media video { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+.com-card-ph { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 2rem; color: var(--ink-soft); }
+.com-badges { position: absolute; left: 4px; bottom: 4px; right: 4px; font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; background: rgba(0, 0, 0, 0.6); color: #fff; padding: 2px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.com-card-title { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.com-card-meta { font-family: var(--font-mono); font-size: 0.66rem; color: var(--ink-soft); }
+.com-edit { border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 0; width: min(980px, calc(100vw - 24px)); max-height: calc(100vh - 24px); }
+.com-edit::backdrop { background: rgba(0, 0, 0, 0.55); }
+.com-edit-form { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px; padding: 18px; }
+.com-edit-preview { background: var(--surface-2); display: flex; align-items: center; justify-content: center; min-height: 240px; }
+.com-edit-preview img, .com-edit-preview video { max-width: 100%; max-height: 70vh; display: block; }
+.com-edit-preview iframe { width: 100%; aspect-ratio: 16/9; border: 0; }
+.com-edit-fields { display: grid; gap: 10px; align-content: start; }
+.com-edit-fields .eyebrow { margin: 0; }
+.com-edit-fields label { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; }
+.com-edit-fields label small { font-weight: 400; color: var(--ink-soft); }
+.com-edit-fields input[type="text"], .com-edit-fields textarea { background: var(--surface); border: 1px solid var(--line); color: var(--ink); padding: 7px 9px; font-family: var(--font-body); font-size: 0.88rem; }
+.com-edit-fields .com-check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+.com-info { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 0.78rem; }
+.com-info dt { color: var(--ink-soft); }
+.com-info dd { margin: 0; overflow-wrap: anywhere; }
+.com-edit-status { margin: 0; font-size: 0.82rem; color: var(--ink-soft); }
+.com-edit-status:empty { display: none; }
+.com-edit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.com-danger { color: var(--danger, #b3261e); }
+@media (max-width: 720px) {
+  .com-edit-form { grid-template-columns: 1fr; padding: 12px; }
+  .com-edit-preview { min-height: 160px; }
+  .com-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .com-inline { flex-wrap: wrap; }
+}
+/* Les styles de boutons et de champs ne doivent pas faire réapparaître un élément masqué. */
+.com-media [hidden], .com-edit [hidden] { display: none !important; }

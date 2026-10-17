@@ -1,0 +1,27 @@
+{
+  "id": "communication",
+  "name": "Communication",
+  "version": "0.1.0",
+  "description": "Pack Communication / Promotion. Pour l'instant : la médiathèque enrichie (titres, textes alternatifs, crédits, mots-clés, dossiers, envois groupés et par morceaux, import par adresse, vidéos YouTube et Vimeo, versions web, suggestions de l'IA) et un sélecteur commun pour la fiche, le diaporama, les bandeaux et le hero.",
+  "table_prefix": "com_",
+  "pages": [
+    { "id": "mediatheque", "label": "Médiathèque", "icon": "folder", "file": "pages/mediatheque.php", "roles": ["admin", "community_manager"], "replaces": "media" }
+  ],
+  "api": [
+    { "id": "media-list", "file": "api/media-list.php", "methods": ["GET"], "roles": ["admin", "community_manager"] },
+    { "id": "media-update", "file": "api/media-update.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "media-upload", "file": "api/media-upload.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "media-import-url", "file": "api/media-import-url.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "media-delete", "file": "api/media-delete.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "media-web", "file": "api/media-web.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "media-adopt", "file": "api/media-adopt.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "media-describe", "file": "api/media-describe.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "product-photo-add", "file": "api/product-photo-add.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "links", "file": "api/links.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
+    { "id": "link-delete", "file": "api/link-delete.php", "methods": ["POST"], "roles": ["admin", "community_manager"] }
+  ],
+  "admin_assets": [
+    { "file": "picker.css", "roles": ["admin", "community_manager"] },
+    { "file": "picker.js", "roles": ["admin", "community_manager"] }
+  ]
+}

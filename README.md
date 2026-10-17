@@ -827,8 +827,11 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   et les tables du plugin, toutes préfixées comme le déclare son manifeste (`hello_…`). Une boutique sans plugin n'a ni table
   `plugins`, ni menu, ni route : rien ne change pour elle. **Désactiver** retire le menu et les pages, sans rien effacer.
 - **Manifeste** `packs/<id>/plugin.json` : `id` (= nom du dossier), `name`, `version` (x.y.z), `description`, `table_prefix`,
-  `pages` (`id`, `label`, `icon`, `file`, `roles`) et `api` (`id`, `file`, `methods` GET/POST, `roles`). Rôles : `admin` (toujours
-  autorisé) et `community_manager`. Un manifeste invalide est ignoré (journal d'erreurs PHP).
+  `pages` (`id`, `label`, `icon`, `file`, `roles`, et `replaces` : l'entrée du menu de la plateforme dont la page prend la place,
+  par exemple `media`), `api` (`id`, `file`, `methods` GET/POST, `roles`) et `admin_assets` (`file`, `roles` : scripts et styles de
+  `assets/` chargés sur toutes les pages de l'administration, pour enrichir les pages de la plateforme sans les modifier ; un script
+  y reçoit `data-api`, `data-csrf` et `data-role`). Rôles : `admin` (toujours autorisé) et `community_manager`. Un manifeste
+  invalide est ignoré (journal d'erreurs PHP).
 - **Migrations** : `packs/<id>/migrations/NNN-nom.sql`, appliquées une seule fois chacune, dans l'ordre, dans une transaction.
   Une migration qui nomme une table sans le préfixe du plugin est refusée (le plugin ne peut pas toucher aux tables de la boutique).
 - **Adresses** : pages `/admin/plugin.php?p=<id>&v=<page>`, API JSON `/admin/plugin-api.php?p=<id>&r=<route>`. Elles passent par la
@@ -843,6 +846,40 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
 - **Retour arrière** : redéployer l'ancien code met le plugin en pause (« base plus récente que le code ») ; pour revenir vraiment à
   l'ancienne version, remplacer la base de la boutique par la sauvegarde d'avant la mise à jour (site au repos ; les écritures faites
   depuis sont perdues).
+
+## Pack Communication : la médiathèque enrichie (plugin `communication`)
+
+Premier module du pack Communication / Promotion (repris d'electroboy80, voir `packs/communication/`). Activé pour une boutique
+(portail → Plugins), il remplace l'entrée « Médiathèque » du menu (la page classique `admin/media.php` reste accessible par le lien
+« Vue classique ») ; administrateurs et community managers y ont accès.
+
+- **Une seule médiathèque** : les mêmes éléments que la page classique (ressources de `media_library` et photos des fiches, lues en
+  place), avec en plus titre, texte alternatif, crédit, mots-clés, dossier, « montrer dans la galerie publique », dimensions et poids
+  (table `com_media_meta`, par chemin de fichier). Le titre et les mots-clés d'une ressource sont recopiés dans `media_library`.
+  Recherche, filtre par type, classement par dossier, produit, source ou mois, tri par date, nom, poids ou format.
+- **Envois** : glisser-déposer ou choix de plusieurs fichiers, envoyés par morceaux de 1,5 Mo (sous la limite PHP la plus basse) ;
+  JPEG, PNG, WebP, GIF jusqu'à 25 Mo (40 mégapixels), MP4, MOV, WebM jusqu'à 500 Mo. Le type est vérifié sur le contenu (un
+  faux JPEG ou un script renommé est refusé). Les fichiers vont dans `uploads/<boutique>/` et sont inscrits dans `media_library` :
+  tous les sélecteurs de la plateforme les voient. Morceaux en cours dans `data/com-tmp/` (nettoyés après un jour).
+- **Import par adresse** (image ou vidéo) : http(s) seulement, ports 80 et 443, adresses internes refusées, adresse du serveur
+  résolue une fois et imposée au téléchargement, redirections revérifiées, taille plafonnée.
+- **Vidéos en ligne** YouTube et Vimeo : gardées sous forme de lien (table `com_media_links`), rien n'est téléchargé.
+- **Versions web** : une copie de 1 200 px au plus (JPEG, ou WebP quand l'image peut être transparente, orientation des photos de
+  téléphone appliquée) dans `uploads/<boutique>/web/`, créée à l'envoi ; « Créer les versions web manquantes » traite les anciennes
+  8 par 8. Une image déjà petite et légère sert elle-même de version web.
+- **IA** : « Proposer avec l'IA » suggère titre, texte alternatif et mots-clés par Gemini (même consigne que la médiathèque
+  classique), comptés dans la consommation d'IA de la boutique et refusés si son quota est épuisé. Rien n'est enregistré sans
+  validation.
+- **Retirer** une ressource : la photo d'une fiche se retire depuis la galerie du produit. Un fichier n'est effacé du disque que s'il
+  vient des envois du pack (`uploads/<boutique>/`) et n'est utilisé nulle part ailleurs dans la boutique (recherche de son nom dans
+  toutes les tables) ; sinon seule la ligne de la médiathèque disparaît.
+- **Sélecteur commun** (`assets/picker.js`, chargé sur toutes les pages de l'administration) : les fenêtres « Choisir dans la
+  médiathèque » du hero, du diaporama, des bandeaux et des réglages gagnent « Toute la médiathèque… » (photos des fiches comprises,
+  recherche, dossiers, envoi depuis la fenêtre) ; la galerie d'une fiche gagne « Ajouter depuis la médiathèque… » (sans copier le
+  fichier). Le choix passe par l'élément déjà présent dans la fenêtre de la page, après inscription du fichier dans `media_library`
+  (seule source acceptée par les actions de la plateforme) : ces pages ne sont pas modifiées.
+- **Isolation** : toute route n'accepte qu'un chemin présent dans la médiathèque de la boutique courante (jamais un chemin libre),
+  la session et le jeton CSRF sont ceux de la boutique.
 
 ## Vidéos de la galerie d'une pièce
 

@@ -39,11 +39,13 @@ try {
 // Chaque rôle ne voit que les pages qu'il peut ouvrir (voir admin_role_can_access()).
 $adminNavItems = array_filter($adminNavItems, static fn (array $item): bool => admin_role_can_access(admin_role(), $item[0]));
 // Pages des plugins activés pour cette boutique (includes/plugins.php), selon les rôles de leur manifeste, après la médiathèque.
+// Une page de plugin peut remplacer une entrée de la plateforme (« replaces ») : elle prend alors sa place dans le menu.
 require_once __DIR__ . '/plugins.php';
 if ($pluginNavItems = plugin_nav_items(admin_role())) {
     $navAt = array_search('media', array_keys($adminNavItems), true);
     $navAt = $navAt === false ? count($adminNavItems) : $navAt + 1;
     $adminNavItems = array_slice($adminNavItems, 0, $navAt, true) + $pluginNavItems + array_slice($adminNavItems, $navAt, null, true);
+    $adminNavItems = array_diff_key($adminNavItems, array_flip(plugin_nav_replaced(admin_role())));
 }
 $adminNav = $adminNav ?? '';
 
@@ -79,6 +81,7 @@ $adminIcon = static fn (string $name): string =>
   document.documentElement.classList.add('has-admin-sidebar');
   try { if (localStorage.getItem('adminSidebar') === 'collapsed') document.documentElement.classList.add('admin-sidebar-collapsed'); } catch (e) {}
 </script>
+<?= plugin_admin_assets_html(admin_role()) ?>
 <header class="admin-topbar">
   <button type="button" class="admin-topbar-btn" id="admin-sidebar-open" aria-controls="admin-sidebar" aria-expanded="false" aria-label="Ouvrir le menu d'administration"><?= $adminIcon('menu') ?></button>
   <a class="wordmark" href="/admin/catalog.php"><img src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo"></a>

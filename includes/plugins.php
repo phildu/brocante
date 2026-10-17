@@ -7,8 +7,10 @@
 //
 // Manifeste packs/<id>/plugin.json (exemple complet : packs/hello/plugin.json, mode d'emploi dans le README, « Plugins ») :
 //   id, name, version (x.y.z), description, table_prefix (« hello_ »),
-//   pages : [{ id, label, icon, file, roles }]          → /admin/plugin.php?p=<id>&v=<page>
+//   pages : [{ id, label, icon, file, roles, replaces }] → /admin/plugin.php?p=<id>&v=<page> ; « replaces » : entrée du menu
+//           de la plateforme dont la page prend la place (ex. « media »)
 //   api   : [{ id, file, methods, roles }]              → /admin/plugin-api.php?p=<id>&r=<route> (JSON)
+//   admin_assets : [{ file, roles }]                    → scripts et styles de assets/ chargés sur toutes les pages de l'administration
 //   migrations : fichiers packs/<id>/migrations/NNN-quelque-chose.sql, appliqués dans l'ordre, une seule fois chacun.
 // Rôles : « admin » (toujours autorisé) et « community_manager ». Les pages et l'API passent par la session de
 // l'administration de la boutique ; l'API exige le jeton CSRF (en-tête X-CSRF-Token) pour tout ce qui n'est pas GET.
@@ -72,8 +74,23 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
             $errors[] = "page « $pid » invalide (identifiant ou fichier)";
             continue;
         }
+        $replaces = (string) ($p['replaces'] ?? '');
+        if ($replaces !== '' && !preg_match('/^[a-z0-9-]{1,32}$/', $replaces)) {
+            $errors[] = "page « $pid » : entrée de menu remplacée « $replaces » invalide";
+            continue;
+        }
         $pages[$pid] = ['id' => $pid, 'label' => trim((string) ($p['label'] ?? '')) ?: $name, 'icon' => (string) ($p['icon'] ?? 'puzzle'),
-            'file' => $pfile, 'roles' => plugin_roles($p['roles'] ?? []), 'menu' => ($p['menu'] ?? true) !== false];
+            'file' => $pfile, 'roles' => plugin_roles($p['roles'] ?? []), 'menu' => ($p['menu'] ?? true) !== false, 'replaces' => $replaces];
+    }
+    // Ressources chargées sur toutes les pages de l'administration (pour enrichir les pages de la plateforme) : [{ file, roles }].
+    $assets = [];
+    foreach ((array) ($raw['admin_assets'] ?? []) as $a) {
+        $afile = (string) ($a['file'] ?? '');
+        if (!preg_match('#^[a-z0-9_-]+(?:/[a-z0-9_-]+)*\.(?:js|css)$#', $afile) || !is_file($dir . '/assets/' . $afile)) {
+            $errors[] = "ressource d'administration « $afile » invalide (fichier .js ou .css de assets/)";
+            continue;
+        }
+        $assets[] = ['file' => $afile, 'roles' => plugin_roles($a['roles'] ?? [])];
     }
     $api = [];
     foreach ((array) ($raw['api'] ?? []) as $r) {
@@ -98,7 +115,7 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
     if ($errors) return null;
     return [
         'id' => $id, 'name' => $name, 'version' => $version, 'description' => trim((string) ($raw['description'] ?? '')),
-        'table_prefix' => $prefix, 'pages' => $pages, 'api' => $api, 'migrations' => $migrations, 'dir' => $dir,
+        'table_prefix' => $prefix, 'pages' => $pages, 'api' => $api, 'admin_assets' => $assets, 'migrations' => $migrations, 'dir' => $dir,
     ];
 }
 
@@ -219,6 +236,41 @@ function plugin_nav_items(string $role): array
         }
     }
     return $items;
+}
+
+/** Entrées du menu de la plateforme remplacées par une page de plugin active, ouverte à ce rôle (ex. « media »). */
+function plugin_nav_replaced(string $role): array
+{
+    $keys = [];
+    foreach (plugins_shop_states() as $id => $row) {
+        $m = plugin_manifest($id);
+        if (!$m || plugin_status($row, $m) !== 'ready') continue;
+        foreach ($m['pages'] as $page) {
+            if ($page['replaces'] !== '' && plugin_role_allowed($page['roles'], $role)) $keys[] = $page['replaces'];
+        }
+    }
+    return $keys;
+}
+
+/**
+ * Balises des ressources que les plugins actifs chargent sur toutes les pages de l'administration. Chaque script reçoit
+ * l'adresse de base de l'API de son plugin (data-api, à compléter par le nom de la route), le jeton CSRF (data-csrf) et le rôle.
+ */
+function plugin_admin_assets_html(string $role): string
+{
+    $html = '';
+    foreach (plugins_shop_states() as $id => $row) {
+        $m = plugin_manifest($id);
+        if (!$m || plugin_status($row, $m) !== 'ready') continue;
+        foreach ($m['admin_assets'] as $a) {
+            if (!plugin_role_allowed($a['roles'], $role) || ($url = plugin_asset_url($m, $a['file'])) === '') continue;
+            $html .= str_ends_with($a['file'], '.css')
+                ? '<link rel="stylesheet" href="' . h($url) . '">' . "\n"
+                : '<script src="' . h($url) . '" data-plugin="' . h($id) . '" data-api="' . h(plugin_api_url($id, '')) . '" data-csrf="'
+                    . h(admin_csrf_token()) . '" data-role="' . h($role) . '" defer></script>' . "\n";
+        }
+    }
+    return $html;
 }
 
 function plugin_page_url(string $id, string $page): string
