@@ -72,6 +72,7 @@ const ACCOUNT_COMMUNITY_MANAGER_PAGES = [
     'profile.php', 'profile-action.php', // son propre profil
     'capture-session.php', // code QR pour envoyer des photos/vidéos depuis un téléphone
     'prompts-action.php', // prompts enregistrés de la génération IA (galerie)
+    'plugin.php', 'plugin-api.php', // plugins : chaque page et route vérifie ensuite les rôles de son manifeste (includes/plugins.php)
 ];
 
 function admin_role_can_access(string $role, string $script): bool

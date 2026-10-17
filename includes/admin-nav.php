@@ -38,6 +38,13 @@ try {
 }
 // Chaque rôle ne voit que les pages qu'il peut ouvrir (voir admin_role_can_access()).
 $adminNavItems = array_filter($adminNavItems, static fn (array $item): bool => admin_role_can_access(admin_role(), $item[0]));
+// Pages des plugins activés pour cette boutique (includes/plugins.php), selon les rôles de leur manifeste, après la médiathèque.
+require_once __DIR__ . '/plugins.php';
+if ($pluginNavItems = plugin_nav_items(admin_role())) {
+    $navAt = array_search('media', array_keys($adminNavItems), true);
+    $navAt = $navAt === false ? count($adminNavItems) : $navAt + 1;
+    $adminNavItems = array_slice($adminNavItems, 0, $navAt, true) + $pluginNavItems + array_slice($adminNavItems, $navAt, null, true);
+}
 $adminNav = $adminNav ?? '';
 
 // Pictogrammes (traits 24×24, couleur du texte).
@@ -60,10 +67,12 @@ $adminIcons = [
     'cloud' => '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1-.5 9.5z"/><path d="M12 16v-5M9.5 13.5 12 11l2.5 2.5"/>',
     'collapse' => '<path d="m15 18-6-6 6-6"/>',
     'menu' => '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    'puzzle' => '<path d="M10 3h4v2.5a1.5 1.5 0 0 0 3 0V3h4v7h-2.5a1.5 1.5 0 0 0 0 3H21v8h-7v-2.5a1.5 1.5 0 0 0-3 0V21H3v-8h2.5a1.5 1.5 0 0 0 0-3H3V3z"/>',
 ];
+// Une icône inconnue (déclarée par un plugin) prend la pièce de puzzle.
 $adminIcon = static fn (string $name): string =>
     '<svg class="admin-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-    . $adminIcons[$name] . '</svg>';
+    . ($adminIcons[$name] ?? $adminIcons['puzzle']) . '</svg>';
 ?>
 <script>
   // Appliqué avant l'affichage du reste de la page, pour éviter un saut de mise en page.

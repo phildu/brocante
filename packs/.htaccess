@@ -1,0 +1,7 @@
+# Plugins (voir includes/plugins.php) : rien n'est servi directement depuis packs/ (manifestes, migrations, pages et API PHP
+# passent par admin/plugin.php et admin/plugin-api.php), sauf les ressources statiques de packs/<id>/assets/.
+# Le test porte sur le fichier demandé, donc aussi sur les adresses préfixées par un commerce (/<commerce>/packs/…).
+<If "%{REQUEST_FILENAME} !~ m#/packs/[a-z0-9][a-z0-9-]*/assets/(?:[a-z0-9_-]+/)*[a-z0-9_.-]+\.(?:js|css|svg|png|jpe?g|webp|gif|woff2?)$#">
+    Require all denied
+</If>
+Options -Indexes

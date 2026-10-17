@@ -28,10 +28,14 @@ class LocalValetDriver extends BasicValetDriver
     private function isSensitive(string $uri): bool
     {
         $uri = rawurldecode($uri);
+        // Plugins : rien de packs/ n'est servi directement, sauf packs/<id>/assets/ (comme packs/.htaccess), y compris sous /<commerce>/.
+        $packs = preg_replace('#^/[a-z0-9][a-z0-9_-]*(?=/packs(?:/|$))#', '', $uri);
         return (bool) (
             preg_match('#^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$)#', $uri)
             || preg_match('#(?:^|/)\.(?!well-known)#', $uri)
             || preg_match('#\.(?:db|sqlite|sqlite3|sql|log|bak)(?:$|[./-])#i', $uri)
+            || (preg_match('#^/packs(?:/|$)#', $packs)
+                && !preg_match('#^/packs/[a-z0-9][a-z0-9-]*/assets/(?:[a-z0-9_-]+/)*[a-z0-9_.-]+\.(?:js|css|svg|png|jpe?g|webp|gif|woff2?)$#', $packs))
         );
     }
 

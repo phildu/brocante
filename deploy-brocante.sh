@@ -153,6 +153,10 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .env* \
   --exclude-glob config.local.php \
   --exclude-glob deploy-brocante.sh \
+  --exclude-glob plugin/ \
+  --exclude-glob plugin-mediatheque.php \
+  --exclude-glob .plugin_enabled \
+  --exclude-glob '_*.md' \
   --exclude-glob '*.sql' \
   --exclude-glob '*.bak' \
   --exclude-glob '*.db' \
@@ -239,6 +243,10 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .env* \
   --exclude-glob config.local.php \
   --exclude-glob deploy-brocante.sh \
+  --exclude-glob plugin/ \
+  --exclude-glob plugin-mediatheque.php \
+  --exclude-glob .plugin_enabled \
+  --exclude-glob '_*.md' \
   --exclude-glob '*.bak' \
   --exclude-glob '*.db.bak-*' \
   --exclude-glob .DS_Store \
@@ -291,20 +299,21 @@ quit
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SNAPSHOT GIT — point de restauration avant chaque déploiement (no-op si pas de repo)
+# ÉTAT GIT — simple avertissement. Le script ne commite et ne pousse plus rien :
+# le dossier de travail contient aussi des essais locaux (uploads/, commerce
+# kllklmk, prototype plugin/ et fichiers _*.md, exclus ci-dessus de l'envoi)
+# qui ne doivent jamais partir dans un commit. Le commit du seul code se fait
+# à la main ; il indique ce qui est en ligne.
 # ─────────────────────────────────────────────────────────────────────────────
-git_snapshot() {
+git_status_warning() {
     if ! git rev-parse --git-dir > /dev/null 2>&1; then return; fi
-    local changes
-    changes=$(git status --porcelain 2>/dev/null)
-    if [ -z "$changes" ]; then
-        log "Git : rien de nouveau à commiter"
-        return
+    local count
+    count=$(git status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$count" = "0" ]; then
+        log "Git : code envoyé = commit $(git rev-parse --short HEAD) ($(git rev-parse --abbrev-ref HEAD))"
+    else
+        warn "Git : $count fichier(s) suivi(s) modifié(s) et non commité(s) partent aussi en ligne — pensez au commit du code"
     fi
-    local label="deploy-preprod $(date '+%Y-%m-%d %H:%M')"
-    git add -A
-    git commit -m "$label" --quiet && ok "Git snapshot : \"$label\"" || warn "Git commit échoué (non bloquant)"
-    git push origin main --quiet 2>/dev/null && ok "Git push → GitHub" || warn "Git push échoué (non bloquant, pas de remote configuré)"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -312,7 +321,7 @@ git_snapshot() {
 # ─────────────────────────────────────────────────────────────────────────────
 START=$(date +%s)
 
-git_snapshot
+git_status_warning
 if [ "$PORTAIL" = "1" ]; then
     deploy_portail
 else

@@ -35,6 +35,12 @@ RedirectMatch 404 "(?:^|/)\.(?!well-known)"
 # Dossiers internes : configuration des commerces, bases, scripts, journaux.
 RedirectMatch 404 "^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$)"
 
+# Plugins : seules les ressources de packs/<id>/assets/ sont servies (le reste est aussi refusé par packs/.htaccess).
+RedirectMatch 404 "^/packs(?:/|$)(?![a-z0-9][a-z0-9-]*/assets/)"
+
+# Fichiers de travail Markdown à la racine (consignes, audits : _NOM.md) : jamais servis.
+RedirectMatch 404 "^/_[^/]*\.md$"
+
 # Scripts et styles : toujours revalidés (ETag / Last-Modified), pour que chaque déploiement soit pris en compte tout de suite
 # au lieu d'attendre l'expiration du cache du navigateur (15 minutes par défaut) avec une ancienne version des scripts.
 <IfModule mod_headers.c>

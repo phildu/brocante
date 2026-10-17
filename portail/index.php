@@ -48,6 +48,7 @@ $shopLabel = static fn (string $slug): string => portail_shop_label($slug, $shop
       <a class="btn" href="/portail/galeries.php">Galeries commerciales</a>
       <a class="btn" href="/portail/social.php">Connexion sociale</a>
       <a class="btn" href="/portail/cles.php">Clés API partagées</a>
+      <a class="btn" href="/portail/plugins.php">Plugins</a>
       <?php if (!empty($_SESSION['portail_user'])): ?><a class="btn" href="/portail/logout.php">Se déconnecter</a><?php endif; ?>
     </span>
   </header>

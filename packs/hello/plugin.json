@@ -1,0 +1,14 @@
+{
+  "id": "hello",
+  "name": "Bonjour (démonstration)",
+  "version": "1.0.0",
+  "description": "Plugin de démonstration du socle : une page d'administration, une petite API et une table de notes propre à chaque boutique.",
+  "table_prefix": "hello_",
+  "pages": [
+    { "id": "index", "label": "Bonjour (démo)", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "notes", "file": "api/notes.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
+    { "id": "notes-delete", "file": "api/notes-delete.php", "methods": ["POST"], "roles": ["admin"] }
+  ]
+}

@@ -16,6 +16,14 @@ if (preg_match('#^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$)#
     echo 'Accès interdit.';
     return true;
 }
+// Plugins : rien de packs/ n'est servi directement, sauf packs/<id>/assets/ (comme packs/.htaccess), y compris sous /<commerce>/.
+$packsPath = preg_replace('#^/[a-z0-9][a-z0-9_-]*(?=/packs(?:/|$))#', '', $decoded);
+if (preg_match('#^/packs(?:/|$)#', $packsPath)
+    && !preg_match('#^/packs/[a-z0-9][a-z0-9-]*/assets/(?:[a-z0-9_-]+/)*[a-z0-9_.-]+\.(?:js|css|svg|png|jpe?g|webp|gif|woff2?)$#', $packsPath)) {
+    http_response_code(403);
+    echo 'Accès interdit.';
+    return true;
+}
 
 // Racine du domaine : la page d'accueil de la plateforme, quand le portail est présent (déploiement portail).
 if ($path === '/' && !getenv('TENANT') && is_file(__DIR__ . '/portail/index.php')) {

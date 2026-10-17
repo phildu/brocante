@@ -817,6 +817,33 @@ dans un autre dossier (`/www/brocante/`), ne voit pas le dossier du portail (`/w
 **Mise en production** : le bouton « Supprimer toutes les clés partagées » (confirmation en tapant `PRODUCTION`) les efface d'un coup ;
 chaque commerce n'utilise plus que ses propres clés (et perd les fonctions d'IA correspondantes s'il n'en a pas).
 
+## Plugins : un seul code, activé boutique par boutique
+
+Un plugin (ou « pack ») ajoute un module aux boutiques sans copier son code chez chacune : il vit dans `packs/<id>/`, part avec
+le déploiement (les deux modes), et s'active **boutique par boutique** dans le portail → **Plugins** (`portail/plugins.php`).
+Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démonstration (une page, une petite API, une table de notes).
+
+- **Données isolées** : chaque boutique garde dans sa propre base la table `plugins` (activé, version installée, dernière migration)
+  et les tables du plugin, toutes préfixées comme le déclare son manifeste (`hello_…`). Une boutique sans plugin n'a ni table
+  `plugins`, ni menu, ni route : rien ne change pour elle. **Désactiver** retire le menu et les pages, sans rien effacer.
+- **Manifeste** `packs/<id>/plugin.json` : `id` (= nom du dossier), `name`, `version` (x.y.z), `description`, `table_prefix`,
+  `pages` (`id`, `label`, `icon`, `file`, `roles`) et `api` (`id`, `file`, `methods` GET/POST, `roles`). Rôles : `admin` (toujours
+  autorisé) et `community_manager`. Un manifeste invalide est ignoré (journal d'erreurs PHP).
+- **Migrations** : `packs/<id>/migrations/NNN-nom.sql`, appliquées une seule fois chacune, dans l'ordre, dans une transaction.
+  Une migration qui nomme une table sans le préfixe du plugin est refusée (le plugin ne peut pas toucher aux tables de la boutique).
+- **Adresses** : pages `/admin/plugin.php?p=<id>&v=<page>`, API JSON `/admin/plugin-api.php?p=<id>&r=<route>`. Elles passent par la
+  session de l'administration de la boutique (une connexion ne vaut que pour sa boutique), vérifient le rôle déclaré, et l'API exige le
+  jeton CSRF (en-tête `X-CSRF-Token`) pour tout ce qui n'est pas GET. Les entrées de menu apparaissent après « Médiathèque »,
+  selon le rôle. Rien de `packs/` n'est servi directement, sauf `packs/<id>/assets/` (scripts, styles, images) : voir `packs/.htaccess`,
+  `.htaccess`, `router.php` et `LocalValetDriver.php` ; chaque fichier PHP d'un plugin commence par `defined('PLUGIN_RUNTIME') || exit;`.
+- **Mises à jour** : on déploie le code, puis dans le portail **« Mettre à jour les N boutiques en retard »** (ou boutique par boutique).
+  Entre les deux, le plugin reste **en pause** dans ces boutiques (page « module en cours de mise à jour », API en 503) pour ne jamais
+  tourner sur une base pas encore migrée. Avant chaque migration, la base est copiée dans
+  `data/backups/<base>-plugin-<id>-<de>-<vers>-<date>.db`. Chaque action est journalisée (portail → Activité).
+- **Retour arrière** : redéployer l'ancien code met le plugin en pause (« base plus récente que le code ») ; pour revenir vraiment à
+  l'ancienne version, remplacer la base de la boutique par la sauvegarde d'avant la mise à jour (site au repos ; les écritures faites
+  depuis sont perdues).
+
 ## Vidéos de la galerie d'une pièce
 
 Galerie d'une pièce → « Générer une nouvelle vue » → deux types de vidéo, sans ffmpeg obligatoire :
@@ -999,6 +1026,12 @@ Chaque commerce a son propre fichier d'identifiants FTP `.env.deploy.<slug>`
 envoyée sur son serveur, avec un fichier `.tenant` qui le désigne. Le dossier
 `uploads/` n'est envoyé que si `deploy_uploads` vaut `true` dans son `tenant.php`
 (c'est le cas du Petit Chalet), pour ne pas copier ses photos chez les autres.
+
+Le script **ne commite et ne pousse plus rien** : le dossier de travail contient aussi des essais locaux (`uploads/`, commerce
+`kllklmk`, chantiers en cours) qui ne doivent jamais partir dans un commit. Il signale seulement les fichiers suivis modifiés
+et non commités qui partent en ligne ; le commit du seul code se fait à la main. Il n'envoie jamais `plugin/` (ancien
+prototype), `admin/plugin-mediatheque.php`, `.plugin_enabled` ni les fichiers de travail `_*.md` (que le `.htaccess` refuse
+aussi de servir).
 
 ## Envoyer des pièces du Mac vers la préprod
 
