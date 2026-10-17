@@ -234,6 +234,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob uploads/batch-import/ \
   --exclude-glob node_modules/ \
   --exclude-glob db-backup/ \
+  --exclude-glob data/backups/ \
   --exclude-glob '*.log' \
   --exclude-glob .env* \
   --exclude-glob config.local.php \

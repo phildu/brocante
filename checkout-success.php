@@ -18,39 +18,9 @@ if ($sessionId === '') {
         $order = $stmt->fetch();
 
         if ($paid && $order && $order['status'] !== 'paid') {
-            $shippingCents = (int) ($session['shipping_cost']['amount_total'] ?? 0);
-            $shippingAddr = $session['shipping_details']['address'] ?? $session['customer_details']['address'] ?? null;
-            $addressText = $shippingAddr ? implode(', ', array_filter([
-                $session['shipping_details']['name'] ?? null,
-                $shippingAddr['line1'] ?? null,
-                $shippingAddr['line2'] ?? null,
-                trim(($shippingAddr['postal_code'] ?? '') . ' ' . ($shippingAddr['city'] ?? '')),
-                $shippingAddr['country'] ?? null,
-            ])) : null;
-
-            $upd = db()->prepare('UPDATE orders SET status = ?, email = ?, amount_total = ?, shipping_cents = ?, shipping_address = ? WHERE stripe_session_id = ?');
-            $upd->execute([
-                'paid',
-                $session['customer_details']['email'] ?? null,
-                (int) ($session['amount_total'] ?? $order['amount_total']),
-                $shippingCents,
-                $addressText,
-                $sessionId,
-            ]);
-            // Le client rejoint la liste des comptes (Administration → Comptes) ; un prospect inscrit à la newsletter passe en client.
-            account_upsert_contact(
-                (string) ($session['customer_details']['email'] ?? ''),
-                (string) ($session['customer_details']['name'] ?? $session['shipping_details']['name'] ?? ''),
-                'client',
-                'commande'
-            );
-            $order['status'] = 'paid';
-            $order['email'] = $session['customer_details']['email'] ?? null;
-            $order['amount_total'] = (int) ($session['amount_total'] ?? $order['amount_total']);
-            $order['shipping_cents'] = $shippingCents;
-            $order['shipping_address'] = $addressText;
-            decrement_stock_for_order(json_decode($order['items'], true) ?: []);
-            cart_clear();
+            if (order_mark_paid($order, $session)) cart_clear();
+            $stmt->execute([$sessionId]);
+            $order = $stmt->fetch();
         } elseif (!$paid) {
             $error = "Le paiement n'a pas été confirmé pour cette commande.";
         }

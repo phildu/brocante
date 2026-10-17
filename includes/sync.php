@@ -107,7 +107,6 @@ function sync_remote_call(array $target, array $fields, ?string $fileAbs = null)
     $body = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
-    curl_close($ch);
 
     if ($body === false) return ['ok' => false, 'error' => 'Site distant injoignable : ' . $error];
     $data = json_decode((string) $body, true);

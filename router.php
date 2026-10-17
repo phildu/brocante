@@ -6,6 +6,17 @@
 
 $path = (string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
+// Chemins qui ne doivent jamais sortir, comme dans le .htaccess et LocalValetDriver.php : bases et leurs sauvegardes,
+// configuration des commerces, clés, journaux.
+$decoded = rawurldecode($path);
+if (preg_match('#^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$)#', $decoded)
+    || preg_match('#(?:^|/)\.(?!well-known)#', $decoded)
+    || preg_match('#\.(?:db|sqlite|sqlite3|sql|log|bak)(?:$|[./-])#i', $decoded)) {
+    http_response_code(403);
+    echo 'Accès interdit.';
+    return true;
+}
+
 // Racine du domaine : la page d'accueil de la plateforme, quand le portail est présent (déploiement portail).
 if ($path === '/' && !getenv('TENANT') && is_file(__DIR__ . '/portail/index.php')) {
     $_SERVER['SCRIPT_NAME'] = '/accueil/index.php';

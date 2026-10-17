@@ -4,7 +4,7 @@
 // d'adresse (brocs.arrimage.com/<slug>/) partage son domaine avec les autres :
 // son cookie de session a donc un nom et un chemin propres, sinon le panier
 // et la connexion admin d'un commerce se retrouveraient dans les autres.
-// Sans préfixe (sous-domaine, .tenant), la session reste celle de toujours.
+// Sans préfixe (sous-domaine, .tenant), le cookie garde son nom et son chemin habituels.
 require_once __DIR__ . '/tenant.php';
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -21,16 +21,20 @@ if (session_status() === PHP_SESSION_NONE) {
         ini_set('session.gc_probability', '1');
         ini_set('session.gc_divisor', '100');
     }
+    // Cookie en SameSite=Lax pour tous les commerces : un formulaire envoyé depuis un autre site arrive sans session (ni panier,
+    // ni connexion admin), ce qui protège aussi les actions de l'administration qui n'ont pas de jeton propre. Un lien suivi
+    // depuis un autre site (retour de Stripe, connexion sociale) garde la session.
+    $cookie = [
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+    ];
     $base = tenant_base_path();
     if ($base !== '') {
         session_name('sess_' . tenant_slug());
-        session_set_cookie_params([
-            'path' => $base . '/',
-            'httponly' => true,
-            'samesite' => 'Lax',
-            'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-        ]);
+        $cookie['path'] = $base . '/';
     }
+    session_set_cookie_params($cookie);
     session_start();
 }
 

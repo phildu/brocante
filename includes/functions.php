@@ -94,15 +94,75 @@ function in_stock(array $p): bool
 
 /**
  * Décrémente le stock des pièces d'une commande une fois le paiement
- * confirmé — appelé une seule fois par commande (checkout-success.php et
- * la vérification manuelle admin ne l'exécutent que lors du passage
- * pending → paid, jamais si la commande est déjà payée).
+ * confirmé — appelé une seule fois par commande, par order_mark_paid() lors
+ * du passage pending → paid, jamais si la commande est déjà payée.
  */
 function decrement_stock_for_order(array $items): void
 {
     $stmt = db()->prepare('UPDATE products SET stock = MAX(stock - ?, 0) WHERE ref = ?');
     foreach ($items as $item) {
         $stmt->execute([(int) $item['qty'], $item['ref']]);
+    }
+}
+
+/**
+ * Passe une commande en « payée » d'après sa session Stripe (e-mail, montant,
+ * livraison, adresse), décrémente le stock et ajoute le client aux comptes.
+ * Le passage se fait en une seule requête (… AND status <> 'paid') : si la page
+ * de confirmation et une vérification arrivent en même temps, une seule des deux
+ * décrémente le stock. Retourne vrai si c'est cet appel qui a fait le passage.
+ */
+function order_mark_paid(array $order, array $session): bool
+{
+    $shippingAddr = $session['shipping_details']['address'] ?? $session['customer_details']['address'] ?? null;
+    $addressText = $shippingAddr ? implode(', ', array_filter([
+        $session['shipping_details']['name'] ?? null,
+        $shippingAddr['line1'] ?? null,
+        $shippingAddr['line2'] ?? null,
+        trim(($shippingAddr['postal_code'] ?? '') . ' ' . ($shippingAddr['city'] ?? '')),
+        $shippingAddr['country'] ?? null,
+    ])) : null;
+    $upd = db()->prepare("UPDATE orders SET status = 'paid', email = ?, amount_total = ?, shipping_cents = ?, shipping_address = ? WHERE id = ? AND status <> 'paid'");
+    $upd->execute([
+        $session['customer_details']['email'] ?? null,
+        (int) ($session['amount_total'] ?? $order['amount_total']),
+        (int) ($session['shipping_cost']['amount_total'] ?? 0),
+        $addressText,
+        (int) $order['id'],
+    ]);
+    if ($upd->rowCount() === 0) return false;
+    decrement_stock_for_order(json_decode((string) $order['items'], true) ?: []);
+    // Le client rejoint la liste des comptes (Administration → Comptes) ; un prospect inscrit à la newsletter passe en client.
+    account_upsert_contact(
+        (string) ($session['customer_details']['email'] ?? ''),
+        (string) ($session['customer_details']['name'] ?? $session['shipping_details']['name'] ?? ''),
+        'client',
+        'commande'
+    );
+    return true;
+}
+
+/**
+ * Avant un passage à la caisse : une commande en attente de moins de 24 h (durée
+ * de vie d'une session Stripe) qui contient une pièce du panier a peut-être été
+ * payée par un client qui a fermé l'onglet avant de revenir sur le site. On le
+ * vérifie auprès de Stripe : la pièce vendue sort alors du stock au lieu d'être
+ * vendue une deuxième fois. Une erreur Stripe n'empêche pas la commande en cours.
+ */
+function orders_settle_pending_for(array $refs): void
+{
+    $refs = array_map('strval', $refs);
+    if (!$refs) return;
+    $pending = db()->query("SELECT * FROM orders WHERE status = 'pending' AND created_at >= datetime('now', '-1 day') ORDER BY id DESC LIMIT 20")->fetchAll();
+    foreach ($pending as $order) {
+        $items = json_decode((string) $order['items'], true) ?: [];
+        if (!array_intersect($refs, array_map('strval', array_column($items, 'ref')))) continue;
+        try {
+            $session = stripe_request('GET', '/checkout/sessions/' . urlencode($order['stripe_session_id']));
+            if (($session['payment_status'] ?? '') === 'paid') order_mark_paid($order, $session);
+        } catch (Throwable $e) {
+            error_log('Vérification Stripe de la commande ' . $order['id'] . ' impossible : ' . $e->getMessage());
+        }
     }
 }
 
@@ -3351,11 +3411,9 @@ function stripe_request(string $method, string $path, array $params = []): array
     $body = curl_exec($ch);
     if ($body === false) {
         $err = curl_error($ch);
-        curl_close($ch);
         throw new RuntimeException('Erreur réseau Stripe : ' . $err);
     }
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     $data = json_decode($body, true) ?? [];
     if ($status >= 400) {

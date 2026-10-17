@@ -38,26 +38,7 @@ if ($action === 'fulfillment') {
     try {
         $session = stripe_request('GET', '/checkout/sessions/' . urlencode($order['stripe_session_id']));
         $paid = ($session['payment_status'] ?? '') === 'paid';
-        if ($paid && $order['status'] !== 'paid') {
-            $shippingCents = (int) ($session['shipping_cost']['amount_total'] ?? 0);
-            $shippingAddr = $session['shipping_details']['address'] ?? $session['customer_details']['address'] ?? null;
-            $addressText = $shippingAddr ? implode(', ', array_filter([
-                $session['shipping_details']['name'] ?? null,
-                $shippingAddr['line1'] ?? null,
-                $shippingAddr['line2'] ?? null,
-                trim(($shippingAddr['postal_code'] ?? '') . ' ' . ($shippingAddr['city'] ?? '')),
-                $shippingAddr['country'] ?? null,
-            ])) : null;
-            $upd = db()->prepare('UPDATE orders SET status = ?, email = ?, amount_total = ?, shipping_cents = ?, shipping_address = ? WHERE id = ?');
-            $upd->execute([
-                'paid',
-                $session['customer_details']['email'] ?? null,
-                (int) ($session['amount_total'] ?? $order['amount_total']),
-                $shippingCents,
-                $addressText,
-                $id,
-            ]);
-            decrement_stock_for_order(json_decode($order['items'], true) ?: []);
+        if ($paid && $order['status'] !== 'paid' && order_mark_paid($order, $session)) {
             flash_set('Paiement confirmé auprès de Stripe — commande mise à jour.');
         } elseif ($paid) {
             flash_set('Cette commande est déjà à jour (payée).');

@@ -159,6 +159,9 @@ function db(): PDO
             $pdo->exec('ALTER TABLE product_photos ADD COLUMN cutout_of INTEGER');
         }
         require_once __DIR__ . '/includes/recto-verso.php';
+        // Sauvegarde du jour de la base, à la première ouverture (voir includes/backup.php).
+        require_once __DIR__ . '/includes/backup.php';
+        db_backup_daily($pdo);
     }
     return $pdo;
 }

@@ -14,6 +14,9 @@ if (!cart_csrf_valid()) {
     exit;
 }
 
+// Pièce du panier payée ailleurs sans retour sur le site : sortie du stock avant de recalculer le panier.
+if (stripe_configured()) orders_settle_pending_for(array_keys(cart_get()));
+
 $lines = cart_lines();
 if (!$lines) {
     header('Location: /cart.php');
