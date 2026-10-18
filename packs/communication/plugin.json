@@ -8,7 +8,7 @@
     {"id": "mediatheque", "label": "Médiathèque", "icon": "folder", "file": "pages/mediatheque.php", "roles": ["admin", "community_manager"], "replaces": "media"},
     {"id": "editeur", "label": "Éditeur visuel", "icon": "palette", "file": "pages/editeur.php", "roles": ["admin", "community_manager"]},
     {"id": "publication", "label": "Publication", "icon": "cloud", "file": "pages/publication.php", "roles": ["admin", "community_manager"]},
-    {"id": "reseaux", "label": "Réseaux sociaux", "icon": "gear", "file": "pages/reseaux.php", "roles": ["admin"]}
+    {"id": "reseaux", "label": "API & Réseaux", "icon": "gear", "file": "pages/reseaux.php", "roles": ["admin"]}
   ],
   "api": [
     {"id": "eb80", "file": "api/eb80.php", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"], "roles": ["admin", "community_manager"]},
@@ -21,5 +21,9 @@
   ],
   "cron": [
     {"file": "cron/rs-schedule.php"}
-  ]
+  ],
+  "agent_api": [
+    {"prefix": "/video-jobs", "file": "api/agent.php"}
+  ],
+  "sync": {"tool": "tools/extract-eb80.php", "source": "electroboy80", "record": "eb80/SOURCE.txt"}
 }

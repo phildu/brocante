@@ -45,6 +45,15 @@ if (preg_match('#^/galerie(?:/([a-z0-9][a-z0-9-]*))?/?$#', $path, $m)) {
     return true;
 }
 
+// Agents externes des plugins : /api/… et /<commerce>/api/… → plugin-agent.php (comme le .htaccess).
+if (preg_match('#^(?:/([a-z0-9][a-z0-9_-]*))?/api/([a-z0-9/-]+)$#', $path, $m)
+    && ($m[1] === '' || (is_file(__DIR__ . '/tenants/' . $m[1] . '/tenant.php') && !file_exists(__DIR__ . '/' . $m[1])))) {
+    $_GET['agent_path'] = $m[2];
+    $_SERVER['SCRIPT_NAME'] = '/plugin-agent.php';
+    require __DIR__ . '/plugin-agent.php';
+    return true;
+}
+
 if (preg_match('#^/([a-z0-9][a-z0-9_-]*)(/.*)?$#', $path, $m)
     && is_file(__DIR__ . '/tenants/' . $m[1] . '/tenant.php')
     && !file_exists(__DIR__ . '/' . $m[1])) {

@@ -11,6 +11,10 @@ RewriteRule ^$ accueil/index.php [L]
 RewriteRule ^galerie/?$ galerie/index.php [L]
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/?$ galerie/index.php?g=$1 [L,QSA]
 
+# Agents externes des plugins (ex. agent de rendu vidéo) : /api/… → plugin-agent.php, aussi sous /<commerce>/api/… (après la
+# réécriture du commerce ci-dessous, la règle s'applique au second passage). La route du plugin authentifie l'agent (jeton).
+RewriteRule ^api/([a-z0-9/-]+)$ plugin-agent.php?agent_path=$1 [L,QSA]
+
 # Un commerce servi sous le domaine du portail : /<identifiant>/… affiche la
 # boutique de tenants/<identifiant>/ (le PHP reconnaît le commerce à l'adresse
 # demandée, voir tenant_from_path() dans includes/tenant.php). Un dossier réel

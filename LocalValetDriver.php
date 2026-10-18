@@ -13,6 +13,7 @@ use Valet\Drivers\BasicValetDriver;
  *                                /annuaire/, /inscription/ et /portail/ sont des dossiers servis tels quels
  *   /galerie/, /galerie/<id>/  → galerie/index.php (galeries commerciales)
  *   /<commerce>/…              → la boutique tenants/<commerce>/ servie sous le domaine du portail
+ *   /api/…, /<commerce>/api/…  → plugin-agent.php (agents externes des plugins, authentifiés par le plugin)
  *   data/, tenants/, includes/, views/, var/, scripts/, db-backup/, fichiers cachés, *.db, *.sql, *.log, *.bak → 403
  *
  * Même logique que router.php (serveur intégré : php -S localhost:8000 router.php).
@@ -90,6 +91,13 @@ class LocalValetDriver extends BasicValetDriver
         if (preg_match('#^/galerie(?:/([A-Za-z0-9][A-Za-z0-9-]*))?/?$#', $uri, $m)) {
             $_GET['g'] = strtolower($m[1] ?? '');
             return $this->run($sitePath, '/galerie/index.php', $_GET['g'] !== '' ? 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : '') : $query);
+        }
+
+        // Agents externes des plugins : /api/… et /<commerce>/api/… → plugin-agent.php (même règle que le .htaccess et router.php).
+        if (preg_match('#^(?:/([a-z0-9][a-z0-9_-]*))?/api/([a-z0-9/-]+)$#', $uri, $m)
+            && ($m[1] === '' || $this->tenantInPath($sitePath, '/' . $m[1] . '/') !== '')) {
+            $_GET['agent_path'] = $m[2];
+            return $this->run($sitePath, '/plugin-agent.php', 'agent_path=' . $m[2] . ($query !== '' ? '&' . $query : ''), $uri);
         }
 
         // Commerce sous le domaine du portail : /<commerce>/… (même règle que le .htaccess et router.php).

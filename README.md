@@ -829,7 +829,8 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
 - **Manifeste** `packs/<id>/plugin.json` : `id` (= nom du dossier), `name`, `version` (x.y.z), `description`, `table_prefix`,
   `pages` (`id`, `label`, `icon`, `file`, `roles`, et `replaces` : l'entrée du menu de la plateforme dont la page prend la place,
   par exemple `media`), `api` (`id`, `file`, `methods` GET/POST/PUT/PATCH/DELETE, `roles`), `cron` (`file` : tâches planifiées,
-  voir plus bas) et `admin_assets` (`file`, `roles` : scripts et styles de
+  voir plus bas), `agent_api` (`prefix`, `file` : appels d'un agent externe, voir plus bas), `sync` (plugin recopié d'un autre
+  projet, voir plus bas) et `admin_assets` (`file`, `roles` : scripts et styles de
   `assets/` chargés sur toutes les pages de l'administration, pour enrichir les pages de la plateforme sans les modifier ; un script
   y reçoit `data-api`, `data-csrf` et `data-role`). Rôles : `admin` (toujours autorisé) et `community_manager`. Un manifeste
   invalide est ignoré (journal d'erreurs PHP).
@@ -849,6 +850,16 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   plugin activé et à jour, exécute ses tâches (`cron` du manifeste) dans un processus séparé, avec `TENANT=<boutique>` : une tâche ne
   voit que sa boutique. Journal : `var/log/plugins-cron.log`. Options : `--plugin=<id>`, `--tenant=<boutique>`. En ligne de commande
   seulement (rien n'est servi par le web).
+- **Agents externes** (`agent_api`) : un programme qui n'a pas de session (ex. l'agent de rendu de la Vidéo IA) appelle
+  `/api/<préfixe>/…` d'une boutique (aussi sous `/<boutique>/api/…`) ; `.htaccess`, `router.php` et `LocalValetDriver.php` mènent
+  à `plugin-agent.php`, qui choisit le plugin ayant déclaré ce préfixe, s'il est activé et à jour dans cette boutique. Pas de
+  session ni de CSRF : **la route du plugin authentifie l'agent elle-même** (jeton) et n'ouvre que ses propres chemins.
+- **Plugin recopié d'un autre projet** (`sync` : `tool`, le script d'extraction ; `source`, le nom du projet ; `record`, le fichier
+  qui dit d'où vient la copie) : dans le **portail local** (Herd), la fiche du plugin montre si la copie est à jour (commit copié,
+  commit actuel du projet, modifications pas encore commitées) et propose **« Recopier depuis … »**. Le bouton lance le script
+  d'extraction (PHP en ligne de commande), puis affiche son rapport et les fichiers du plugin qui diffèrent du dernier commit.
+  Rien ne part chez les boutiques avant le commit et le déploiement. En ligne, la fiche indique seulement de quel commit vient la
+  copie : la recopie y est refusée.
 - **Retour arrière** : redéployer l'ancien code met le plugin en pause (« base plus récente que le code ») ; pour revenir vraiment à
   l'ancienne version, remplacer la base de la boutique par la sauvegarde d'avant la mise à jour (site au repos ; les écritures faites
   depuis sont perdues).
@@ -865,7 +876,31 @@ doublons, dérivés, recadrages orphelins, variantes, préfixes, import par adre
   `assets/eb80/admin.html`), ses scripts annexes (`assets/eb80/js/`) et les fichiers serveur de la médiathèque (`eb80/api/` :
   `config.php`, `media.php`, `media-links.php`, `generate-web-images.php`, `settings.php`, et `eb80/reglages-publics.php`), avec
   quelques retouches listées dans le script : il s'arrête si l'une ne trouve plus son motif. `eb80/SOURCE.txt` dit d'où vient la
-  copie. **Quand electroboy80 évolue, on relance le script** : `php packs/communication/tools/extract-eb80.php --source=…/electroboy80`.
+  copie. **Quand electroboy80 évolue (un bug corrigé, par exemple), on recopie** : portail local → Plugins → Communication →
+  « Recopier depuis electroboy80 », ou `php packs/communication/tools/extract-eb80.php [--source=…/electroboy80]`. `--status`
+  refait la copie en mémoire sans rien écrire : la copie est « à jour » quand l'empreinte des fichiers lus d'electroboy80 et des
+  retouches est celle notée dans `SOURCE.txt` (modifications pas encore commitées dans electroboy80 comprises) ; une retouche
+  cassée y est signalée d'avance (« À revoir » dans le portail). Si `node` est installé, la syntaxe des scripts retouchés est
+  vérifiée avant toute écriture : une retouche qui casserait le JavaScript de la page arrête la recopie. Si une retouche ne trouve plus son motif, le script s'arrête **avant d'écrire quoi que ce soit** :
+  la copie reste entière. Ensuite : relire `git diff packs/communication`, tester sur une boutique locale, commiter, déployer.
+  Les scripts et styles que la page charge (`<script src="/js/…">`, `/plugin/…`) suivent d'eux-mêmes, même nouveaux : ils sont
+  recopiés au même chemin sous `assets/eb80/`, avec une empreinte de leur contenu dans l'adresse (jamais d'ancienne copie en cache),
+  et les modules d'interface de `plugin/` prennent les couleurs de la boutique ; un fichier chargé mais absent arrête tout. Ne
+  suivent pas d'eux-mêmes : un nouveau contrôleur `api/` (à ajouter à la liste du script) et un correctif dans une fonction
+  remplacée par `eb80/compat.php` (à reporter à la main).
+- **Sources de l'éditeur** (`plugin/sources.js` d'electroboy80, panneau « Source des données ») : la boutique déclare ses propres
+  sources intégrées, **« Pièce du catalogue »** (pièces en vente : nom, prix, catégorie, description, photos, lien de la fiche) et
+  **« Promo en cours »** (pièces en promo, prix barré, visuel promo à jour en premier), à la place des événements, articles merch et
+  partenaires d'electroboy80 (option `integrees` de sources.js, posée par `eb80-shim.js` dans `window.EB80SourceConfig`). Données :
+  route `eb80` GET `/shop/pieces` et `/shop/promos` (`lib/sources.php`), lecture seule, boutique courante, informations publiques
+  seulement. « Alimenter l'affiche » remplit titre, prix, catégorie, « Au lieu de … » et photo de fond. La configuration (clé
+  `editor_sources_private`, onglet Sources éditeur) est lisible par l'équipe, community manager compris, et modifiable par
+  l'administrateur ; on peut y ajouter des sources personnalisées. Dans les **OPTIONS** d'une source de la boutique, « Champs
+  utilisés » choisit ce que reprend chaque emplacement : catégorie, description, prix, **détail court** (le petit texte de
+  l'affiche) et étiquettes — plusieurs champs possibles pour ces deux derniers — parmi nom, référence, catégorie, nature,
+  description, prix, prix barré, prix du neuf, prix à débattre, badge, état, marque, matières, couleurs, dimensions, **poids**
+  (et, pour les promos, accroche et appel à l'action du visuel). Par défaut, le détail court reprend « Au lieu de … », l'état et
+  les dimensions. Liste des champs : `champsDisponibles` dans `eb80-shim.js`, valeurs dans `lib/sources.php` (mêmes clés).
 - **Navigateur** : la page Médiathèque affiche `admin.html` dans un cadre. `assets/eb80/eb80-shim.js` (chargé avant le code
   d'electroboy80) redirige chaque `fetch('/api/…')` vers la route `eb80` du plugin, avec la session de la boutique et le jeton CSRF
   (plus de jeton electroboy80), et lui donne les couleurs et polices de l'administration de la boutique (variables CSS, couleurs
@@ -884,9 +919,27 @@ doublons, dérivés, recadrages orphelins, variantes, préfixes, import par adre
   vidéo et reel, formats et zones de sécurité, styles rapides, couches libres, timeline, effets (`eb80-effects.js`), projets
   enregistrés (« Mes projets »), export vers la médiathèque, PNG, PDF. L'affiche part des textes de la boutique (son nom, l'adresse
   de son site, « Nouveautés en boutique »…) au lieu de ceux d'Electroboy 80 ; les blocs gardent leurs libellés génériques. Le script
-  vidéo par l'IA (`ai-generate.php`) passe par Gemini et le quota de la boutique. Pas disponibles : la Vidéo IA (son agent de
-  rendu Remotion n'existe pas pour les boutiques, bouton masqué) et la conversion de l'export vidéo en MP4, qu'electroboy80
+  vidéo par l'IA (`ai-generate.php`) passe par Gemini et le quota de la boutique. La **Vidéo IA** (voir plus bas) s'ouvre aux couleurs et avec les textes de la boutique. Pas disponible : la conversion de l'export vidéo en MP4, qu'electroboy80
   fait avec ffmpeg sur le serveur (l'export reste en WebM).
+- **Vidéo IA** (éditeur, mode Vidéo → « ✨ Vidéo IA ») : la fenêtre d'electroboy80, avec son aperçu dans le navigateur, aux
+  couleurs de la boutique et avec ses textes (scènes titre, photos, mots-chocs, carte infos, fin, exemples : `EB80_VIA_TEXTES` dans
+  `eb80-shim.js`, retouches de `video-ia.js`). Choisir une pièce ou une promo refait les scènes avec ses photos, son nom et son prix.
+  - **Scénario par l'IA** (« Proposer une vidéo », « 3 variantes », « Accorder la carte au visuel ») : `video-jobs-ai.php` recopié ;
+    le prompt présente la boutique (nom, `ai.shop`) au lieu d'Electroboy 80 ; sans pièce choisie, le sujet est la boutique. L'IA
+    se choisit dans **API & Réseaux → IA** (« IA du scénario de la Vidéo IA ») : **Gemini** (par défaut, clé de la boutique ou
+    partagée) ou **Claude** (clé Claude de la boutique, réglage ★ rangé dans `.secrets/<boutique>/claude.key`, sinon clé partagée
+    du portail → Clés API). Le coût entre dans le quota d'IA de la boutique ; Claude a ses tarifs au barème (portail → IA,
+    « Claude, entrée / sortie », à vérifier chez Anthropic). Remplacement de l'appel : `viaClaude()` dans `eb80/compat.php`.
+  - **Rendu MP4** (« Générer le MP4 ») : `video-jobs.php` recopié ; les demandes sont dans `data/com/<boutique>.db`. L'**agent de
+    rendu** (script Node/Remotion sur une machine de l'équipe, dépôt `remotion-videos`) vient les chercher avec le jeton de la
+    boutique (« Générer un jeton d'agent », administrateur seulement, affiché une fois, rangé haché) : `GET /api/video-jobs/next`,
+    puis `POST /api/video-jobs/{id}/result` (le MP4 par morceaux), par `plugin-agent.php` et `api/agent.php`. Les morceaux attendent
+    hors de `uploads/` (`data/com/tmp/<boutique>/`) ; le fichier assemblé doit être un MP4 (ou MOV) de 500 Mo au plus, sinon il est
+    refusé ; il arrive dans `uploads/<boutique>/` (nom suffixé du numéro de la demande, jamais d'écrasement), donc dans la médiathèque.
+    **À faire côté agent** : lui déclarer chaque boutique (adresse + jeton) ; ses compositions gardent leurs noms
+    (`electroboy80-promo-concert…`).
+  - **Simulateur** : `define('EB80_IA_SIMULATEUR', true);` dans `config.local.php` renvoie un scénario factice, sans appel à une IA
+    (tests locaux, jamais en ligne).
 - **Pages de la plateforme** : les fenêtres « Choisir dans la médiathèque » du hero, du diaporama, des bandeaux et des réglages
   gagnent « Toute la médiathèque… », et la galerie d'une fiche « Ajouter depuis la médiathèque… » (`assets/picker.js`). Le bouton
   ouvre **le sélecteur d'electroboy80** (mode « sélecteur » de l'admin portée, en surimpression). Le fichier choisi est inscrit dans
@@ -896,8 +949,16 @@ doublons, dérivés, recadrages orphelins, variantes, préfixes, import par adre
   (affiche de l'éditeur, médiathèque, carrousel, envoi), publier tout de suite ou programmer (une fois, ou à répéter) sur Facebook,
   Instagram, Threads et TikTok, avec l'historique des publications programmées. Contrôleurs recopiés : `rs-v2.php`,
   `rs-schedule.php`, `rs-tiktok-callback.php`, `social-feed.php`.
-- **Réseaux sociaux** (menu « Réseaux sociaux », administrateurs seulement) : l'onglet « Réseaux sociaux » de la page « API &
-  Réseaux » d'electroboy80, avec ses guides pas à pas. Comme dans electroboy80, **chaque boutique colle ses propres jetons** (page
+- **API & Réseaux** (menu « API & Réseaux », administrateurs seulement) : la page de réglages d'electroboy80 complète — IA,
+  Réseaux sociaux (avec ses guides pas à pas), Connexion & envois, Recherche & billetterie, Sources éditeur, SEO. Sans doublon
+  avec la plateforme (`lib/reglages.php`) : la **clé Gemini** est celle de la boutique (la même que dans le tableau de bord,
+  `.secrets/<boutique>/gemini.key`) et les **clés Google / Facebook** de la connexion sociale sont celles de « Connexion sociale »
+  (`.secrets/<boutique>/oauth.json`) ; le serveur les lit et les écrit chez la plateforme, ne renvoie jamais un secret (« •••••• »
+  s'il existe ; le laisser tel quel le garde) et ne les range jamais dans la base d'electroboy80. Ces champs sont marqués ★ avec un
+  lien vers leur page. Les réglages qu'aucune fonction de la boutique n'utilise (clé Claude, SMTP et e-mail de test, WhatsApp, SMS,
+  billetterie, recherche) sont grisés « Non utilisé par la boutique » et ignorés à l'enregistrement. Le bouton ✨ IA du SEO passe
+  par Gemini et le quota de la boutique (le champ « clé Claude » qu'il réclame reçoit une valeur neutre, jamais enregistrée).
+  Comme dans electroboy80, **chaque boutique colle ses propres jetons** (page
   Facebook, compte Instagram professionnel, Threads, TikTok) ; ils restent dans `data/com/<boutique>.db`. Un community manager publie
   avec ces jetons sans jamais les lire (l'API lui renvoie `••••••`) ; renouveler un jeton, le diagnostic, les tests et les réglages
   sont réservés à l'administrateur. L'adresse de retour TikTok à déclarer est affichée sur la page (celle de la boutique).

@@ -18,6 +18,37 @@
   // Retour OAuth de TikTok : la route eb80 du plugin (même adresse que celle calculée par rs-tiktok-callback.php).
   window.EB80_TIKTOK_CALLBACK = P.api + '&path=' + encodeURIComponent('/rs/tiktok-callback');
   try { localStorage.setItem('eb80_token', 'session-boutique'); } catch (e) { /* stockage indisponible */ }
+  // Vidéo IA (js/video-promo/video-ia.js, lu à son chargement) : textes de la boutique au lieu de ceux d'electroboy80 (concert,
+  // new wave, son nom, son site). Scènes et exemples restent modifiables dans la fenêtre.
+  var shop = String(P.shop || 'Ma boutique').toUpperCase();
+  window.EB80_VIA_TEXTES = {
+    sousTitre: 'promo boutique', sujet: 'Le sujet', iaNom: 'L\'IA',
+    consigneEx: 'Ex. ton chaleureux, mettre en avant les pièces en céramique, ouvert dimanche…',
+    dateEx: 'CE WEEK-END', mentionsEx: 'VINTAGE, PIÈCE UNIQUE', texteInfos: 'À découvrir en boutique', lien: P.site || '',
+    titre: shop, titre2: 'EN BOUTIQUE', mots: ['CHINÉ.', 'UNIQUE.', 'À SAISIR.'], photo: 'PIÈCE UNIQUE', photo2: 'EN BOUTIQUE',
+    carteNom: 'Carte infos', carteEtiquette: 'À DÉCOUVRIR', fin: shop,
+    charte: 'Habiller la carte infos aux couleurs de la boutique',
+    charteAide: 'La charte habille la carte infos et ajoute le logo de la boutique à l\'écran de fin.',
+  };
+  // Sources intégrées de l'éditeur (plugin/sources.js, lu à son chargement) : celles de la boutique au lieu des événements, articles
+  // merch et partenaires d'electroboy80. Données servies par la route eb80 (/shop/pieces, /shop/promos : lib/sources.php).
+  // Champs d'une pièce proposés dans les options de la source (lib/sources.php, mêmes clés), et correspondance par défaut.
+  var champsDisponibles = [
+    ['name', 'Nom'], ['ref', 'Référence'], ['category', 'Catégorie'], ['nature', 'Nature (type d\'objet)'], ['description', 'Description'],
+    ['price', 'Prix'], ['old_price_text', 'Prix barré (« Au lieu de … »)'], ['new_price_text', 'Prix du neuf'], ['negotiable', 'Prix à débattre'],
+    ['badge', 'Badge (Promo, Chiné…)'], ['etat', 'État'], ['brand', 'Marque'], ['materials', 'Matières'], ['colors', 'Couleurs'],
+    ['size', 'Dimensions / taille'], ['weight', 'Poids'],
+  ];
+  var champsPiece = { id: 'id', nom: 'name', sousTitre: 'category', description: 'description', prix: 'price', photos: 'photos',
+    lien: 'url', info: ['old_price_text', 'etat', 'size'], mentions: ['category', 'badge'], groupe: 'category' };
+  window.EB80SourceConfig = { integrees: [
+    { id: 'piece', label: 'Pièce du catalogue', icone: '🏷', profil: 'produit', actif: true, endpoint: '/api/shop/pieces', cleListe: 'items',
+      champs: champsPiece, champsDisponibles: champsDisponibles, etiquette: 'EN BOUTIQUE', texteInfos: 'À découvrir en boutique' },
+    { id: 'promo', label: 'Promo en cours', icone: '🏷', profil: 'produit', actif: true, endpoint: '/api/shop/promos', cleListe: 'items',
+      champs: Object.assign({}, champsPiece, { sousTitre: 'headline', info: ['old_price_text'], groupe: 'category' }),
+      champsDisponibles: champsDisponibles.concat([['headline', 'Accroche du visuel promo'], ['cta', 'Appel à l\'action du visuel promo']]),
+      etiquette: 'PROMO', texteInfos: 'Prix réduit en boutique' },
+  ] };
 
   var origFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {

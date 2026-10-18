@@ -37,24 +37,103 @@
       window.openMediaPicker(function (url) { if (P.onPick) P.onPick(url); }, { type: P.pickType === 'video' || P.pickType === 'image' ? P.pickType : null });
     });
   }
-  // Réglages des réseaux : seul l'onglet « Réseaux sociaux » de la page « API & Réseaux » concerne la boutique (les clés d'IA,
-  // l'e-mail, la recherche et le SEO relèvent de la plateforme) ; l'adresse de retour TikTok affichée est celle de la boutique.
+  // « API & Réseaux » : la page complète d'electroboy80. Les réglages en double avec la plateforme y sont les mêmes que dans
+  // l'administration (le serveur les lit et les écrit chez elle, lib/reglages.php) : chacun est marqué et renvoie à sa page. Ceux
+  // qu'aucune fonction de la boutique n'utilise sont grisés (et ignorés à l'enregistrement). L'adresse de retour TikTok est celle
+  // de la boutique.
   if (start === 'rs-settings') {
-    document.documentElement.classList.add('eb80-rs-only');
+    document.documentElement.classList.add('eb80-api-page');
+    var base = '';
+    try { base = String(window.parent.APP_BASE || ''); } catch (e) { base = ''; }
+    var link = function (path, text) { return '<a target="_top" href="' + base + path + '">' + text + '</a>'; };
+    var BRANCHES = {
+      gemini_api_key: 'Clé Gemini de la boutique : la même que dans le ' + link('/admin/index.php#gemini-settings', 'tableau de bord') +
+        ' (sans clé, la clé partagée de la plateforme sert) · ' + link('/admin/ai-usage.php', 'consommation et quota'),
+      oauth_google_client_id: 'Clés de la boutique : les mêmes que dans ' + link('/admin/social.php', 'Connexion sociale'),
+    };
+    BRANCHES.claude_api_key = 'Clé Claude de la boutique, pour le scénario de la Vidéo IA si « Claude » est choisi ci-dessous ' +
+      '(sans clé, la clé partagée de la plateforme sert s\'il y en a une) · coût compté dans le ' + link('/admin/ai-usage.php', 'quota d\'IA');
+    ['oauth_google_client_secret', 'oauth_facebook_client_id', 'oauth_facebook_client_secret'].forEach(function (k) { BRANCHES[k] = BRANCHES.oauth_google_client_id; });
+    var INUTILISE = /^(smtp_.*|meta_wa_.*|twilio_.*|billetweb_api_.*|brave_search_key|google_cse_.*|google_places_key|serper_api_key)$/;
+    // Choix de l'IA qui écrit le scénario de la Vidéo IA (réglage video_ai_provider, enregistré avec les clés).
+    var addProvider = function () {
+      var gemini = document.querySelector('#apitab-ia [data-key="gemini_api_key"]');
+      var grid = gemini && gemini.closest('.form-grid');
+      if (!grid || document.querySelector('[data-key="video_ai_provider"]')) return;
+      var box = document.createElement('div');
+      box.className = 'form-grid';
+      box.innerHTML = '<div class="form-group" style="grid-column:1/-1"><label class="form-label">IA du scénario de la Vidéo IA</label>' +
+        '<select class="form-input auth-set" data-key="video_ai_provider"><option value="gemini">Gemini (clé de la boutique ou partagée)</option>' +
+        '<option value="claude">Claude (clé Claude ci-dessus)</option></select>' +
+        '<div class="eb80-field-note eb80-field-shop">★ Les autres fonctions d\'IA du pack utilisent Gemini. Coût compté dans le quota d\'IA de la boutique.</div></div>';
+      grid.parentNode.insertBefore(box, grid.nextSibling);
+      fetch('/api/settings').then(function (r) { return r.json(); }).then(function (d) {
+        var v = d && d.settings && d.settings.video_ai_provider;
+        if (v === 'claude' || v === 'gemini') box.querySelector('select').value = v;
+      }).catch(function () { /* valeur par défaut : Gemini */ });
+    };
+    var annotate = function () {
+      addProvider();
+      ['ia', 'conn', 'search'].forEach(function (tab) {
+        var pane = document.getElementById('apitab-' + tab);
+        if (!pane) return;
+        pane.querySelectorAll('[data-key]').forEach(function (input) {
+          if (input.dataset.eb80Note) return;
+          var key = input.dataset.key;
+          var group = input.closest('.form-group') || input.parentNode;
+          var note = document.createElement('div');
+          if (BRANCHES[key]) {
+            note.className = 'eb80-field-note eb80-field-shop';
+            note.innerHTML = '★ ' + BRANCHES[key];
+          } else if (INUTILISE.test(key)) {
+            input.disabled = true;
+            input.classList.remove('auth-set');
+            group.classList.add('eb80-field-off');
+            note.className = 'eb80-field-note';
+            note.textContent = 'Non utilisé par la boutique';
+          } else {
+            return;
+          }
+          input.dataset.eb80Note = '1';
+          group.appendChild(note);
+        });
+      });
+      // Envoi d'un e-mail de test (SMTP d'electroboy80) : la boutique envoie ses e-mails sans ce réglage.
+      var smtpResult = document.getElementById('smtp-test-result');
+      var smtpBar = smtpResult && smtpResult.parentNode;
+      if (smtpBar && !smtpBar.dataset.eb80Note) {
+        smtpBar.dataset.eb80Note = '1';
+        smtpBar.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      }
+    };
+    var addNote = function () {
+      var firstTab = document.querySelector('[data-apitab]');
+      var bar = firstTab && firstTab.parentNode;
+      if (!bar || document.querySelector('.eb80-platform-note')) return;
+      var note = document.createElement('p');
+      note.className = 'eb80-platform-note';
+      note.innerHTML = '★ Réglage de la boutique, le même que dans son administration (un seul endroit où il est rangé). ' +
+        'Les champs grisés servent à electroboy80 mais pas à la boutique.';
+      bar.parentNode.insertBefore(note, bar);
+    };
     // Le panneau des réseaux est construit après le chargement : l'adresse de retour TikTok est posée dès qu'il apparaît.
     var callback = location.origin + (window.EB80_TIKTOK_CALLBACK || '');
     var fillHint = function () {
       var hint = document.getElementById('tiktok-redirect-hint');
       if (hint && window.EB80_TIKTOK_CALLBACK && hint.textContent !== callback) hint.textContent = callback;
     };
-    new MutationObserver(fillHint).observe(document.documentElement, { childList: true, subtree: true });
+    new MutationObserver(function () { fillHint(); if (document.getElementById('apitab-ia')) { addNote(); annotate(); } }).observe(document.documentElement, { childList: true, subtree: true });
     var rsOnly = function () {
       fillHint();
-      try { if (typeof window.apiSettingsTab === 'function') window.apiSettingsTab('rs'); } catch (e) { console.warn('Réseaux sociaux :', e); }
+      addNote();
+      annotate();
     };
     // Les scripts du cadre sont injectés tardivement : la page peut être déjà chargée.
     if (document.readyState === 'complete') rsOnly(); else window.addEventListener('load', rsOnly);
   }
+  // Clé Claude : jamais gardée dans le navigateur (electroboy80 la recopiait dans localStorage) ; elle se range côté serveur.
+  window.saveSeoApiKey = function () {};
+  try { localStorage.removeItem('eb80_anthropic_key'); } catch (e) { /* stockage indisponible */ }
   ['loadDashboardFromAPI', 'refreshPendingBadge'].forEach(function (fn) {
     if (typeof window[fn] === 'function') window[fn] = function () {};
   });

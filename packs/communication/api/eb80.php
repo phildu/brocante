@@ -22,6 +22,11 @@ if ($path === '/auth/me') {
     plugin_json(['id' => (int) ($session['id'] ?? 0), 'role' => $role === 'admin' ? 'admin' : 'collaborator', 'name' => $session['name'] !== '' ? $session['name'] : 'Compte principal',
         'email' => '', 'permissions' => $role === 'admin' ? [] : ['editor', 'community'], 'uploads' => '/uploads/' . tenant_slug() . '/']);
 }
+// Sources de l'éditeur propres à la boutique (sources intégrées déclarées dans eb80-shim.js) : pièces en vente et promos.
+if ($method === 'GET' && ($path === '/shop/pieces' || $path === '/shop/promos')) {
+    require_once __DIR__ . '/../lib/sources.php';
+    plugin_json(['items' => $path === '/shop/pieces' ? com_source_pieces() : com_source_promos()]);
+}
 // Réglages d'electroboy80 (sa table settings, propre à la boutique) : lecture pour tous, écriture réservée aux administrateurs.
 if ($controller === 'settings' && $method !== 'GET' && $role !== 'admin') plugin_json(['error' => 'Réservé aux administrateurs.'], 403);
 
@@ -30,21 +35,50 @@ if ($controller === 'settings' && $method !== 'GET' && $role !== 'admin') plugin
 if ($controller === 'settings' && $method === 'GET' && $role !== 'admin') {
     require_once __DIR__ . '/../eb80/compat.php';
     [$data, $status] = eb80_capture(static function (): void { require __DIR__ . '/../eb80/api/settings.php'; });
-    $masque = static fn(string $key, $value) => (!eb80_reglage_est_public($key) && (string) $value !== '') ? '••••••' : $value;
+    // Réglages « private » pour les visiteurs mais sans secret, nécessaires à l'équipe : la configuration des sources de l'éditeur.
+    $equipe = ['editor_sources_private'];
+    $masque = static fn(string $key, $value) => (!in_array($key, $equipe, true) && !eb80_reglage_est_public($key) && (string) $value !== '') ? '••••••' : $value;
     foreach ((array) ($data['settings'] ?? []) as $key => $value) $data['settings'][$key] = $masque((string) $key, $value);
     foreach ((array) ($data['settingsList'] ?? []) as $i => $row) {
         if (is_array($row) && isset($row['key'])) $data['settingsList'][$i]['value'] = $masque((string) $row['key'], $row['value'] ?? '');
     }
     plugin_json($data, $status);
 }
+// Réglages de l'administrateur : ceux en double avec la plateforme (clé Gemini, connexion sociale) sont lus et écrits chez elle,
+// ceux qu'aucune fonction de la boutique n'utilise sont ignorés (lib/reglages.php) ; le reste va dans la base d'electroboy80.
+if ($path === '/settings' && $role === 'admin' && in_array($method, ['GET', 'PATCH'], true)) {
+    require_once __DIR__ . '/../eb80/compat.php';
+    require_once __DIR__ . '/../lib/reglages.php';
+    if ($method === 'GET') {
+        [$data, $status] = eb80_capture(static function (): void { require __DIR__ . '/../eb80/api/settings.php'; });
+        plugin_json(is_array($data) && $status === 200 ? com_reglages_superposer($data) : $data, $status);
+    }
+    $body = json_decode((string) file_get_contents('php://input'), true);
+    if (!is_array($body)) plugin_json(['error' => 'Requête invalide.'], 400);
+    try {
+        [$rest, $saved] = com_reglages_enregistrer($body);
+    } catch (RuntimeException $e) {
+        plugin_json(['error' => $e->getMessage()], 500);
+    }
+    if (!$rest) plugin_json(['message' => 'Paramètres mis à jour', 'updated' => $saved]);
+    $GLOBALS['eb80_json_input'] = $rest;
+    [$data, $status] = eb80_capture(static function (): void { require __DIR__ . '/../eb80/api/settings.php'; });
+    if (is_array($data) && isset($data['updated']) && is_array($data['updated'])) $data['updated'] = array_merge($saved, $data['updated']);
+    plugin_json($data, $status);
+}
 // Réseaux sociaux. Les publications programmées ne partent que par la tâche planifiée (scripts/plugins-cron.php), jamais par le web.
 if ($path === '/rs/schedule/run') plugin_json(['error' => 'Réservé à la tâche planifiée.'], 403);
 // Jetons et diagnostic : réservés aux administrateurs (le community manager publie et programme).
 if (preg_match('#^/rs/(?:[a-z]+-refresh-token|test/|diagnose|tiktok-callback)#', $path) && $role !== 'admin') plugin_json(['error' => 'Réservé aux administrateurs.'], 403);
+// Vidéo IA : le jeton de l'agent de rendu ne se crée que par l'administrateur ; l'agent lui-même passe par /api/video-jobs/…
+// (plugin-agent.php, api/agent.php), jamais par cette route de l'administration.
+if ($path === '/video-jobs/worker-token' && $role !== 'admin') plugin_json(['error' => 'Réservé aux administrateurs.'], 403);
+if ($path === '/video-jobs/next' || preg_match('#^/video-jobs/\d+/result$#', $path)) plugin_json(['error' => 'Réservé à l\'agent de rendu.'], 403);
 
 $dir = __DIR__ . '/../eb80/api/';
 $ported = ['media' => 'media.php', 'settings' => 'settings.php', 'generate-web-images' => 'generate-web-images.php', 'ai-generate' => 'ai-generate.php'];
 $ported['social-feed'] = 'social-feed.php';
+$ported['video-jobs'] = 'video-jobs.php'; // file de rendu de la Vidéo IA ; /video-jobs/ai → video-jobs-ai.php (relais du fichier)
 // Même aiguillage qu'electroboy80 (api/entry.php) pour /rs/… : retour TikTok, programmation, le reste dans rs-v2.php.
 if ($controller === 'rs') {
     if ($path === '/rs/tiktok-callback') {

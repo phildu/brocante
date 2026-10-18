@@ -181,6 +181,7 @@ $labels = ['pricing' => 'Barème', 'calc' => 'Calculateur', 'packs' => 'Packs', 
             'search' => ['Recherche web ($)', 'par recherche de prix (en plus du texte)'], 'cutout' => ['Détourage ($)', 'fal.ai, Modal'],
             'veo_lite' => ['Vidéo Veo Lite ($ / s)', ''], 'veo_fast' => ['Vidéo Veo Fast ($ / s)', 'sert aux estimations de vidéo'], 'veo_std' => ['Vidéo Veo Standard ($ / s)', ''],
             'wan22' => ['Vidéo Wan 2.2 ($)', 'par vidéo (SiliconFlow)'], 'modal_video' => ['Vidéo Modal ($)', 'par vidéo estimée'],
+            'claude_in' => ['Claude, entrée ($ / M tokens)', 'scénario de la Vidéo IA (pack Communication)'], 'claude_out' => ['Claude, sortie ($ / M tokens)', 'à vérifier sur le site d\'Anthropic'],
           ] as $k => [$label, $help]): ?>
             <label class="f"><?= e($label) ?><input type="text" inputmode="decimal" name="p[<?= e($k) ?>]" value="<?= e(rtrim(rtrim(number_format($p[$k], 4, ',', ''), '0'), ',')) ?>"><?php if ($help): ?><small><?= e($help) ?></small><?php endif; ?></label>
           <?php endforeach; ?>

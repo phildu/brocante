@@ -12,10 +12,13 @@
 .eb80-boutique input, .eb80-boutique select, .eb80-boutique textarea, .eb80-boutique button { font-family: var(--shop-body); }
 /* Boutons pleins : texte clair sur la couleur d'accent de la boutique. */
 .eb80-boutique .btn-primary, .eb80-boutique .btn-yellow { background: var(--shop-accent) !important; border-color: var(--shop-accent) !important; color: var(--shop-bg) !important; }
-/* Vidéo IA d'electroboy80 : son agent de rendu (Remotion, sur une machine de l'équipe) n'existe pas pour les boutiques. */
-.eb80-boutique div:has(> button[onclick*="EB80VideoIA"]), .eb80-boutique button[onclick*="EB80VideoIA"] { display: none !important; }
 /* Mode « sélecteur » (picker.js) : la page d'electroboy80 disparaît derrière son sélecteur de médias, en plein cadre. */
 .eb80-picker-mode .main { visibility: hidden; }
 .eb80-picker-mode #poster-media-picker { visibility: visible; inset: 0 !important; }
 /* Réglages des réseaux : seul l'onglet « Réseaux sociaux » (les autres onglets d'electroboy80 relèvent de la plateforme). */
-.eb80-rs-only [data-apitab]:not([data-apitab="rs"]) { display: none !important; }
+/* « API & Réseaux » de la boutique : réglages partagés avec l'administration (★) et réglages sans usage (grisés), eb80-after.js. */
+.eb80-field-note { margin-top: 4px; font-size: 10px; letter-spacing: .5px; color: var(--muted); }
+.eb80-field-shop { color: var(--cyan); } .eb80-field-shop a { color: var(--yellow); }
+.eb80-field-off { opacity: .55; } .eb80-field-off input { cursor: not-allowed; }
+.eb80-platform-note { margin: 0 0 14px; padding: 10px 12px; border: 1px dashed var(--border); font-size: 12px; line-height: 1.6; color: var(--muted); }
+.eb80-platform-note a { color: var(--yellow); }

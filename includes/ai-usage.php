@@ -7,7 +7,7 @@
 // est une estimation, pas une facture.
 
 /** Tarifs par défaut : image = $ par image générée ; text_in / text_out = $ par million de tokens ; search = $ par requête avec recherche web ; cutout = $ par détourage fal.ai ; veo_* = $ par seconde de vidéo Veo 3.1 (Lite, Fast, Standard ; 720p) ; wan22 = $ par vidéo Wan 2.2 (SiliconFlow, durée fixée par le service) ; modal_video = $ estimé par vidéo Wan 2.2 5B sur Modal (≈ 22 s de GPU + chargement du modèle, prélevé sur le crédit Modal). */
-const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001, 'veo_lite' => 0.05, 'veo_fast' => 0.10, 'veo_std' => 0.40, 'wan22' => 0.29, 'modal_video' => 0.07];
+const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001, 'veo_lite' => 0.05, 'veo_fast' => 0.10, 'veo_std' => 0.40, 'wan22' => 0.29, 'modal_video' => 0.07, 'claude_in' => 5.00, 'claude_out' => 25.00];
 const AI_KINDS = ['image' => 'Images générées', 'text' => 'Texte et vision', 'search' => 'Recherches web', 'cutout' => 'Détourages (fal.ai, Modal)', 'video' => 'Vidéos IA (Veo, Wan)'];
 
 function ai_usage_ensure_schema(PDO $pdo): void
@@ -90,6 +90,15 @@ function ai_usage_log_text(array $usage, string $model = 'gemini-2.5-flash'): vo
 {
     [$cost, $in, $out] = ai_usage_text_cost($usage);
     ai_usage_record('text', $cost, $model, $in, $out);
+}
+
+/** Appel de Claude (scénario de la Vidéo IA du pack Communication) : tokens d'entrée et de sortie au barème claude_in / claude_out. */
+function ai_usage_log_claude(array $usage, string $model = 'claude'): void
+{
+    $p = ai_pricing();
+    $in = (int) ($usage['input_tokens'] ?? 0) + (int) ($usage['cache_creation_input_tokens'] ?? 0) + (int) ($usage['cache_read_input_tokens'] ?? 0);
+    $out = (int) ($usage['output_tokens'] ?? 0);
+    ai_usage_record('text', $in * $p['claude_in'] / 1e6 + $out * $p['claude_out'] / 1e6, $model, $in, $out);
 }
 
 function ai_usage_log_image(array $usage = []): void

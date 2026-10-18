@@ -3374,6 +3374,7 @@ body.nav-collapsed .main{margin-left:0;}
         <button class="media-filter-btn"    data-apitab="rs"  onclick="apiSettingsTab('rs')">📡 Réseaux sociaux</button>
         <button class="media-filter-btn"    data-apitab="conn" onclick="apiSettingsTab('conn')">✉ Connexion &amp; envois</button>
         <button class="media-filter-btn"    data-apitab="search" onclick="apiSettingsTab('search')">🔍 Recherche &amp; billetterie</button>
+        <button class="media-filter-btn"    data-apitab="sources" onclick="apiSettingsTab('sources')">🔗 Sources éditeur</button>
         <button class="media-filter-btn"    data-apitab="seo" onclick="apiSettingsTab('seo')">🔎 SEO</button>
       </div>
       <div class="api-tab" id="apitab-ia">
@@ -3551,6 +3552,12 @@ body.nav-collapsed .main{margin-left:0;}
           </div>
         </div>
       </div>
+      <div class="api-tab" id="apitab-sources" style="display:none">
+        <div class="card">
+          <div class="card-header"><div class="section-title">Sources de l'éditeur visuel</div></div>
+          <div class="card-body"><div id="src-config-mount"></div></div>
+        </div>
+      </div>
       <div class="api-tab" id="apitab-seo" style="display:none">
       <!-- ── Métadonnées SEO images ─────────────────────────── -->
       <div class="card">
@@ -3563,7 +3570,7 @@ body.nav-collapsed .main{margin-left:0;}
         <div class="card-body">
           <p style="font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6">
             Renseigne un <code style="color:var(--cyan)">alt</code> (texte alternatif pour Google Images), un <code style="color:var(--cyan)">title</code> (info-bulle) et un <code style="color:var(--cyan)">slug</code> SEO pour chaque image.<br>
-            Le bouton <strong style="color:var(--yellow)">✨ IA</strong> utilise Claude Vision pour générer des suggestions automatiques — clé API à renseigner dans l'onglet <strong style="color:var(--yellow)">Clés IA</strong>.
+            Le bouton <strong style="color:var(--yellow)">✨ IA</strong> propose le texte, la légende et le nom de fichier avec l'IA de la boutique (Gemini, dans son quota d'IA).
           </p>
           <div id="seo-images-list" style="display:flex;flex-direction:column;gap:12px">
             <div style="color:var(--muted);font-size:12px;font-style:italic">Clique sur "Charger les images" pour commencer.</div>
@@ -3710,7 +3717,7 @@ body.nav-collapsed .main{margin-left:0;}
       <div class="card" style="margin-top:16px">
         <div class="card-header"><div class="section-title">Résultat</div></div>
         <div class="card-body">
-          <pre id="maintenance-output" style="background:#0a0a14;border:1px solid var(--border);border-radius:4px;padding:14px;font-size:11px;line-height:1.7;min-height:80px;max-height:420px;overflow-y:auto;white-space:pre-wrap;color:var(--muted)">En attente d'une action…</pre>
+          <pre id="maintenance-output" style="background:var(--mid);border:1px solid var(--border);border-radius:4px;padding:14px;font-size:11px;line-height:1.7;min-height:80px;max-height:420px;overflow-y:auto;white-space:pre-wrap;color:var(--muted)">En attente d'une action…</pre>
         </div>
       </div>
     </div>
@@ -4070,6 +4077,9 @@ body.nav-collapsed .main{margin-left:0;}
             <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:0 8px" onclick="_cancelProjectName()">✕</button>
           </div>
 
+
+          <!-- Source des données (plugin/sources.js) : alimente l'affiche, le Prompt créatif et la Vidéo IA -->
+          <div id="src-mount"></div>
 
           <!-- Tableau de référence des formats — commun à tous les onglets -->
           <div style="border-bottom:2px solid var(--border);flex-shrink:0">
@@ -8916,6 +8926,7 @@ function renderPartners() {
         </div>
         ${p.website ? `<a href="${p.website.startsWith('http')?p.website:'https://'+p.website}" target="_blank" style="font-size:11px;color:var(--muted);text-decoration:none">🔗</a>` : ''}
         <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" title="Ouvrir l'éditeur visuel alimenté par ce partenaire" onclick="EB80Source.ouvrirDansEditeur('partner',${p.id})">🎨 Affiche</button>
           <button class="btn btn-ghost btn-sm" onclick="openEditPartner(${p.id})">Éditer</button>
           <button class="btn btn-sm" style="border-color:var(--pink);color:var(--pink);background:transparent" onclick="deletePartner(${p.id})">✕</button>
         </div>
@@ -17483,7 +17494,7 @@ async function generateRsMessage(targetNet) {
 
   const apiKey = document.getElementById('seo-api-key')?.value.trim()
               || localStorage.getItem('eb80_anthropic_key') || '';
-  if (!apiKey) {
+  if (false /* boutique : clé côté serveur */ && !apiKey) {
     showToast('Clé API manquante — configure-la dans Paramètres → Intelligence artificielle', 'error');
     return;
   }
@@ -17615,7 +17626,7 @@ async function loadSeoImages() {
     const row = document.createElement('div');
     row.id    = 'seo-row-' + CSS.escape(f.filename);
     row.dataset.filename = f.filename;
-    row.style.cssText = 'display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:start;padding:12px;background:#0a0a14;border:1px solid var(--border);border-radius:4px';
+    row.style.cssText = 'display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:start;padding:12px;background:var(--mid);border:1px solid var(--border);border-radius:4px';
     row.innerHTML = `
       <img src="${src}" alt="${f.filename}" style="width:72px;height:72px;object-fit:cover;border-radius:3px;border:1px solid var(--border)">
       <div>
@@ -17694,7 +17705,7 @@ async function seoSuggest(filename, btn) {
   const row    = document.getElementById('seo-row-' + CSS.escape(filename));
   const status = row.querySelector('.seo-status');
 
-  if (!apiKey) { showToast('Entre ta clé API Anthropic dans le champ en haut', 'error'); return; }
+  if (false /* boutique : clé côté serveur */ && !apiKey) { showToast('Entre ta clé API Anthropic dans le champ en haut', 'error'); return; }
   saveSeoApiKey(apiKey);
 
   btn.disabled = true; btn.textContent = '⏳';
@@ -17732,7 +17743,7 @@ async function _mcemGenerateSeo() {
   const apiKey = (document.getElementById('seo-api-key')?.value.trim()) || localStorage.getItem('eb80_anthropic_key') || '';
   const btn    = document.getElementById('mcem-ai-btn');
   const status = document.getElementById('mcem-ai-status');
-  if (!apiKey) { showToast('Entre ta clé API Anthropic dans les réglages SEO', 'error'); return; }
+  if (false /* boutique : clé côté serveur */ && !apiKey) { showToast('Entre ta clé API Anthropic dans les réglages SEO', 'error'); return; }
   saveSeoApiKey(apiKey);
   btn.disabled = true; btn.textContent = '⏳ Analyse…';
   status.style.color = 'var(--muted)'; status.textContent = 'Analyse en cours…';
@@ -25511,7 +25522,7 @@ async function _generateScriptFromPoster(fromModal) {
 
   const token    = localStorage.getItem('eb80_token') || '';
   const duration = (typeof VIDEO !== 'undefined' ? VIDEO.duration : null) || 15;
-  const body     = JSON.stringify({ provider, poster: POSTER, context: userCtx, duration });
+  const body     = JSON.stringify({ provider, poster: POSTER, context: userCtx, duration, source: window.EB80Source ? EB80Source.pourIA() : null });
 
   try {
     const res = await fetch('/api/ai-generate', {
@@ -29941,6 +29952,7 @@ async function loadMerchProducts() {
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${p.active ? 'rgba(0,255,100,0.12)' : 'rgba(255,255,255,0.06)'};color:${p.active ? '#0f0' : 'var(--muted)'}">${p.active ? 'Actif' : 'Inactif'}</span>
+          <button class="btn btn-ghost btn-sm" title="Ouvrir l'éditeur visuel alimenté par cet article" onclick="EB80Source.ouvrirDansEditeur('merch',${p.id})">🎨</button>
           <button class="btn btn-ghost btn-sm" onclick='openMerchForm(${JSON.stringify(p)})'>✎</button>
           <button class="btn btn-ghost btn-sm" style="color:var(--pink)" onclick="deleteMerchProduct(${p.id},'${p.name.replace(/'/g,"\\'")}')">✕</button>
         </div>
@@ -30770,7 +30782,7 @@ async function saveSocialFeedConfig() {
     </div>
   </div>
 </div>
-<script src="js/eb80-effects.js"></script>
+<script src="js/eb80-effects.js?h=e656325355"></script>
 <script>
 // ── EFFETS OVERLAY — gestion catalog ─────────────────────────────────────────
 
@@ -32224,9 +32236,10 @@ async function deleteAllOrphanCrops() {
 }
 </script>
 
-<script src="js/video-promo/video-ia.js?v=20261015c" defer></script>
-<script src="js/media-validation.js?v=20261012p" defer></script>
-<script src="js/media-picker-outils.js?v=20261012p" defer></script>
+<script src="plugin/sources.js?v=1.2.0&h=5b44533250" defer></script>
+<script src="js/video-promo/video-ia.js?v=20261018b&h=22c1c3b760" defer></script>
+<script src="js/media-validation.js?v=20261012p&h=3c32d48268" defer></script>
+<script src="js/media-picker-outils.js?v=20261012p&h=12f2584569" defer></script>
 <script>document.write("<script src=\"eb80-after.js?v={v}\"><\/script>".replace('{v}', encodeURIComponent(new URLSearchParams(location.search).get('v') || '')))</script>
 </body>
 </html>

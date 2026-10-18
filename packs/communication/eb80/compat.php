@@ -28,6 +28,9 @@ define('DB_DRIVER', 'sqlite');
 const EB80_AUDIO_TYPES = ['audio/mpeg' => 'mp3', 'audio/mp4' => 'm4a', 'audio/x-m4a' => 'm4a', 'audio/aac' => 'aac', 'audio/wav' => 'wav',
     'audio/x-wav' => 'wav', 'audio/ogg' => 'ogg', 'audio/webm' => 'weba', 'audio/flac' => 'flac', 'audio/x-flac' => 'flac'];
 const EB80_AUDIO_MAX_BYTES = 50 * 1024 * 1024;
+// Vidéo IA : fichier MP4 renvoyé par l'agent de rendu (500 Mo au plus) ; ses morceaux attendent hors de uploads/ (jamais servis).
+const EB80_VIDEO_MAX_OCTETS = 500 * 1024 * 1024;
+define('EB80_TMP_DIR', com_root() . '/data/com/tmp/' . tenant_slug() . '/');
 if (!is_dir(dirname(EB80_DB_PATH))) @mkdir(dirname(EB80_DB_PATH), 0700, true);
 if (!is_dir(UPLOAD_DIR)) @mkdir(UPLOAD_DIR, 0755, true);
 
@@ -79,6 +82,12 @@ function requirePerm(string $perm)
 {
     return requireAuth();
 }
+/** Corps JSON de l'appel ; la route peut le remplacer (réglages filtrés, voir api/eb80.php) par $GLOBALS['eb80_json_input']. */
+function getJsonInput()
+{
+    return isset($GLOBALS['eb80_json_input']) && is_array($GLOBALS['eb80_json_input']) ? $GLOBALS['eb80_json_input'] : _eb80_orig_getJsonInput();
+}
+
 function getCurrentUser()
 {
     return empty($GLOBALS['eb80_session']) ? null : eb80_user();
@@ -311,3 +320,127 @@ function handleGetMedia()
     usort($files, static fn ($a, $b) => strcmp((string) $b['date'], (string) $a['date']));
     jsonResponse($files);
 }
+
+// ── Vidéo IA : scénario écrit par l'IA (eb80/api/video-jobs-ai.php) ──────────────────────────────────────────────────────────────
+// IA choisie dans API & Réseaux → IA (réglage video_ai_provider de la base d'electroboy80) : Gemini par défaut (clé de la boutique ou
+// partagée, quota de la boutique), Claude si une clé Claude existe (celle de la boutique, .secrets/<boutique>/claude.key, ou la clé
+// partagée du portail). Le coût est compté dans le quota de la boutique dans les deux cas (barème du portail → IA).
+
+function eb80_via_fournisseur(): string
+{
+    return getSetting('video_ai_provider') === 'claude' ? 'claude' : 'gemini';
+}
+
+/** Clé Claude de la boutique, sinon clé partagée de la plateforme, sinon chaîne vide. */
+function eb80_claude_key(): string
+{
+    $file = secret_path('claude.key');
+    return is_file($file) ? trim((string) file_get_contents($file)) : '';
+}
+
+/** Clé de l'appel (« gemini » ou la clé Claude), après le contrôle du quota d'IA ; arrête l'appel avec un message clair sinon. */
+function eb80_via_cle(): string
+{
+    if (($gate = ai_gate()) !== null) errorResponse($gate, 402);
+    if (defined('EB80_IA_SIMULATEUR') && EB80_IA_SIMULATEUR) return 'simulateur';
+    if (eb80_via_fournisseur() === 'claude') {
+        $key = eb80_claude_key();
+        if ($key === '') errorResponse('Clé Claude absente : API & Réseaux → IA (ou choisir Gemini pour le scénario vidéo).', 400);
+        return $key;
+    }
+    if (!com_ai_ready()) errorResponse('Clé Gemini absente : scénario par l\'IA indisponible.', 400);
+    return 'gemini';
+}
+
+/** « La Brocante du Petit Chalet, brocante et dépôt-vente de… » (nom et description de la boutique). */
+function eb80_via_identite_courte(): string
+{
+    return '« ' . get_content()['site_name'] . ' », ' . tenant('ai.shop');
+}
+
+/** Présentation de la boutique en tête du prompt du scénario (à la place de celle d'Electroboy 80). */
+function eb80_via_identite(): string
+{
+    return 'Tu es réalisateur de clips promo pour ' . eb80_via_identite_courte() . ". Ton ton est chaleureux et vivant ;\n"
+        . "tu mets en valeur des pièces réelles de la boutique, sans rien inventer (ni prix, ni date, ni caractéristique).";
+}
+
+/** Sujet par défaut (aucune pièce choisie) : la boutique elle-même, et non un concert. */
+function eb80_via_sujet_boutique(): array
+{
+    return ['profil' => 'generique', 'photos' => [],
+        'contexte' => 'La boutique « ' . get_content()['site_name'] . ' » (' . tenant('ai.shop') . ') : vidéo de promotion de la boutique et de ses nouveautés.'];
+}
+
+/** Schéma JSON → schéma de réponse de Gemini (types en capitales, sans additionalProperties ni valeur vide dans les listes). */
+function eb80_gemini_schema(array $schema): array
+{
+    $out = [];
+    foreach ($schema as $k => $v) {
+        if ($k === 'additionalProperties') continue;
+        if ($k === 'type' && is_string($v)) { $out[$k] = strtoupper($v); continue; }
+        if ($k === 'enum' && is_array($v)) { if (in_array('', $v, true)) continue; $out[$k] = array_values($v); continue; }
+        if ($k === 'properties' && is_array($v)) { $out[$k] = array_map('eb80_gemini_schema', $v); continue; }
+        $out[$k] = is_array($v) && $k === 'items' ? eb80_gemini_schema($v) : $v;
+    }
+    return $out;
+}
+
+/** Réponse factice (EB80_IA_SIMULATEUR, tests locaux) : aucun appel à une IA. */
+function eb80_via_simulation(array $schema): array
+{
+    $required = (array) ($schema['required'] ?? []);
+    if (in_array('accent', $required, true)) {
+        return [['accent' => '#B5502E', 'label' => 'À DÉCOUVRIR', 'palette' => 'chaud', 'explication' => 'Charte simulée (aucun appel à l\'IA).'], ['model' => 'simulateur']];
+    }
+    $scene = static fn (string $type, float $duree, string $texte = '', string $texte2 = '', string $photo = '', array $mots = []) => [
+        'type' => $type, 'duree' => $duree, 'texte' => $texte, 'texte2' => $texte2, 'photo' => $photo, 'mots' => $mots, 'bandeau' => '',
+        'anim' => '', 'transition' => 'coupe', 'cadrage' => ['x' => 50, 'y' => 50, 'zoom' => 1]];
+    $variante = ['nom' => 'Simulée', 'scenes' => [
+        $scene('titre', 2.12, mb_strtoupper((string) get_content()['site_name']), 'EN BOUTIQUE'),
+        $scene('photo', 2.12, 'PIÈCE UNIQUE', 'À SAISIR', 'IMG-0'), $scene('photo', 2.12, 'CHINÉ', 'POUR VOUS', 'IMG-1'),
+        $scene('mots', 2.82, '', '', '', ['CHINÉ.', 'UNIQUE.']), $scene('concert', 3.53, '', 'À DÉCOUVRIR'), $scene('fin', 2.29, 'À BIENTÔT')],
+        'mentions' => ['VINTAGE', 'PIÈCE UNIQUE'], 'texteInfos' => 'À découvrir', 'palette' => 'chaud', 'badge' => '', 'musique' => '',
+        'legende' => 'Vidéo simulée.', 'hashtags' => ['brocante', 'vintage'], 'explication' => 'Variante simulée (aucun appel à l\'IA).', 'accentLieu' => ''];
+    return [['variantes' => [$variante]], ['model' => 'simulateur']];
+}
+
+/**
+ * Remplace viaClaude() d'electroboy80 : même contrat (système, contenu en blocs texte / image, schéma JSON) et même retour
+ * [réponse JSON, réponse brute], avec Gemini ou Claude selon la clé reçue (eb80_via_cle()) ; consommation comptée.
+ */
+function viaClaude(string $cle, string $systeme, array $contenu, array $schema, int $maxTokens, int $delai): array
+{
+    if ($cle === 'simulateur') return eb80_via_simulation($schema);
+    if ($cle !== 'gemini') {
+        [$json, $rep] = _eb80_orig_viaClaude($cle, $systeme, $contenu, $schema, $maxTokens, $delai);
+        ai_usage_log_claude((array) ($rep['usage'] ?? []), (string) ($rep['model'] ?? VIA_MODELE));
+        return [$json, $rep];
+    }
+    $parts = [];
+    foreach ($contenu as $bloc) {
+        if (($bloc['type'] ?? '') === 'text') $parts[] = ['text' => (string) $bloc['text']];
+        elseif (($bloc['type'] ?? '') === 'image') $parts[] = ['inlineData' => ['mimeType' => (string) ($bloc['source']['media_type'] ?? 'image/jpeg'), 'data' => (string) ($bloc['source']['data'] ?? '')]];
+    }
+    $payload = [
+        'systemInstruction' => ['parts' => [['text' => $systeme]]],
+        'contents' => [['role' => 'user', 'parts' => $parts]],
+        'generationConfig' => ['responseMimeType' => 'application/json', 'responseSchema' => eb80_gemini_schema($schema), 'maxOutputTokens' => max(8192, $maxTokens * 2)],
+    ];
+    $ch = curl_init('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . GEMINI_API_KEY);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT => $delai]);
+    $body = curl_exec($ch);
+    $err = curl_error($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    if ($err) errorResponse('Erreur réseau Gemini : ' . $err, 502);
+    $rep = json_decode((string) $body, true) ?: [];
+    if ($code >= 400 || isset($rep['error'])) errorResponse('Gemini : ' . ($rep['error']['message'] ?? "HTTP $code"), 502);
+    ai_usage_log_text((array) ($rep['usageMetadata'] ?? []));
+    $text = '';
+    foreach ((array) ($rep['candidates'][0]['content']['parts'] ?? []) as $part) $text .= (string) ($part['text'] ?? '');
+    $json = json_decode($text, true);
+    if (!is_array($json)) errorResponse(($rep['candidates'][0]['finishReason'] ?? '') === 'MAX_TOKENS' ? 'Réponse de Gemini tronquée, réessayez.' : 'Réponse de Gemini illisible.', 502);
+    return [$json, ['model' => 'gemini-2.5-flash', 'usage' => $rep['usageMetadata'] ?? []]];
+}
+

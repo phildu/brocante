@@ -12,6 +12,7 @@ const SHARED_SECRET_FILES = [
     'fal.key' => 'fal.ai (détourage)',
     'siliconflow.key' => 'SiliconFlow (vidéo IA Wan 2.2)',
     'modal-video.json' => 'Modal (vidéo IA et détourage haute précision)',
+    'claude.key' => 'Claude (scénario de la Vidéo IA, pack Communication)',
 ];
 
 function shared_secrets_dir(): string

@@ -1,15 +1,18 @@
-Copie d'electroboy80 faite le 2026-10-18 06:59
+Copie d'electroboy80 faite le 2026-10-18 12:04
 Dossier : /Users/admin/Documents/projet/web local/electroboy80
-Commit : 2a8092f 2026-10-15 12:33:33 +0200 RS : ajouter Threads (composeur, publication, programmation)
+Commit : e7ef5ae 2026-10-18 12:04:33 +0200 Sources éditeur 1.2.0 : sources intégrées déclarées par le site hôte, choix des champs ; Vidéo IA : liste des scènes rafraîchie
+Empreinte : cb36c452fe9fb1b16b3646a76e683658
 
 Retouches :
 admin.html : adaptation au début : 1
 admin.html : couleurs de la boutique : 1
 admin.html : adaptation à la fin : 1
-admin.html : scripts annexes en chemin relatif : 3
+admin.html : scripts et styles en chemin relatif : 5
 admin.html : /uploads/ + nom : 6
 admin.html : `/uploads/${…}` : 1
-admin.html : fonds sombres : 214
+admin.html : clé IA non exigée dans le navigateur : 3
+admin.html : texte du bouton IA du SEO : 1
+admin.html : fonds sombres : 216
 admin.html : fonds noirs translucides : 76
 admin.html : bordures sombres : 63
 admin.html : textes clairs : 54
@@ -17,14 +20,54 @@ admin.html : textes atténués : 128
 admin.html : retour TikTok : 1
 js/eb80-effects.js : /uploads/ + nom : 0
 js/eb80-effects.js : `/uploads/${…}` : 0
-js/media-picker-outils.js : /uploads/ + nom : 0
-js/media-picker-outils.js : `/uploads/${…}` : 0
-js/media-validation.js : /uploads/ + nom : 3
-js/media-validation.js : `/uploads/${…}` : 0
+plugin/sources.js : /uploads/ + nom : 0
+plugin/sources.js : `/uploads/${…}` : 0
+plugin/sources.js : fonds sombres : 6
+plugin/sources.js : fonds noirs translucides : 0
+plugin/sources.js : bordures sombres : 4
+plugin/sources.js : textes clairs : 0
+plugin/sources.js : textes atténués : 6
 js/video-promo/video-ia.js : /uploads/ + nom : 1
 js/video-promo/video-ia.js : `/uploads/${…}` : 0
+js/video-promo/video-ia.js : lecteur en chemin relatif : 1
+js/video-promo/video-ia.js : textes de la boutique : 1
+js/video-promo/video-ia.js : titre de la fenêtre : 1
+js/video-promo/video-ia.js : exemple de consigne : 1
+js/video-promo/video-ia.js : nom de l'IA : 1
+js/video-promo/video-ia.js : exemple de date : 1
+js/video-promo/video-ia.js : exemple d'étiquettes : 1
+js/video-promo/video-ia.js : appel final : 1
+js/video-promo/video-ia.js : lien affiché : 1
+js/video-promo/video-ia.js : nom de la carte finale (liste) : 1
+js/video-promo/video-ia.js : charte (case) : 1
+js/video-promo/video-ia.js : charte (aide) : 1
+js/video-promo/video-ia.js : charte sans logo : 1
+js/video-promo/video-ia.js : nom de la carte finale : 1
+js/video-promo/video-ia.js : scène titre : 1
+js/video-promo/video-ia.js : scène mots-chocs : 1
+js/video-promo/video-ia.js : scènes photo : 1
+js/video-promo/video-ia.js : carte finale (exemple) : 1
+js/video-promo/video-ia.js : carte finale (renvoi) : 1
+js/video-promo/video-ia.js : fin (exemple) : 1
+js/video-promo/video-ia.js : fin (renvoi) : 1
+js/video-promo/video-ia.js : nom de l'IA (visuel) : 1
+js/video-promo/video-ia.js : nom de l'IA (sujet) : 1
+js/video-promo/video-ia.js : nom de l'IA (charte) : 1
+js/video-promo/video-ia.js : nom de l'IA (variantes) : 1
+js/video-promo/video-ia.js : nom de l'IA (scénario) : 1
+video-ia.js (fenêtre) : fonds sombres : 15
+video-ia.js (fenêtre) : fonds noirs translucides : 1
+video-ia.js (fenêtre) : bordures sombres : 13
+video-ia.js (fenêtre) : textes clairs : 7
+video-ia.js (fenêtre) : textes atténués : 5
+js/video-promo/video-ia.js : couleurs de la fenêtre : 1
+js/media-validation.js : /uploads/ + nom : 3
+js/media-validation.js : `/uploads/${…}` : 0
+js/media-picker-outils.js : /uploads/ + nom : 0
+js/media-picker-outils.js : `/uploads/${…}` : 0
 js/video-promo/eb80-video-player.js : /uploads/ + nom : 0
 js/video-promo/eb80-video-player.js : `/uploads/${…}` : 0
+scripts et styles recopiés : js/eb80-effects.js, plugin/sources.js, js/video-promo/video-ia.js, js/media-validation.js, js/media-picker-outils.js, js/video-promo/eb80-video-player.js, js/video-promo/eb80-video-player.css
 config.php : en-tête PHP : 1
 config.php : curl_close retiré : 0
 config.php : imagedestroy retiré : 3
@@ -38,6 +81,7 @@ config.php : requirePerm remplacée : 1
 config.php : getCurrentUser remplacée : 1
 config.php : uploadFile remplacée : 1
 config.php : jsonResponse remplacée : 1
+config.php : getJsonInput remplacée : 1
 media.php : en-tête PHP : 1
 media.php : curl_close retiré : 3
 media.php : imagedestroy retiré : 4
@@ -108,4 +152,28 @@ social-feed.php : imagedestroy retiré : 0
 social-feed.php : config : 1
 social-feed.php : adresses des fichiers : 0
 social-feed.php : constantes : 0
+video-jobs.php : en-tête PHP : 1
+video-jobs.php : curl_close retiré : 0
+video-jobs.php : imagedestroy retiré : 0
+video-jobs.php : config : 1
+video-jobs.php : adresses des fichiers : 1
+video-jobs.php : constantes : 0
+video-jobs.php : dossier temporaire hors de uploads/ : 1
+video-jobs.php : nom de fichier sans écrasement : 1
+video-jobs.php : contrôle du fichier rendu : 1
+video-jobs-ai.php : en-tête PHP : 1
+video-jobs-ai.php : curl_close retiré : 1
+video-jobs-ai.php : imagedestroy retiré : 2
+video-jobs-ai.php : config : 1
+video-jobs-ai.php : adresses des fichiers : 2
+video-jobs-ai.php : constantes : 0
+video-jobs-ai.php : sujet par défaut : la boutique : 1
+video-jobs-ai.php : clé de l'IA : 1
+video-jobs-ai.php : charte : la boutique : 1
+video-jobs-ai.php : identité de la boutique : 1
+video-jobs-ai.php : photos du sujet : 1
+video-jobs-ai.php : palette sans charte Electroboy : 1
+video-jobs-ai.php : musique sans Electroboy : 1
+video-jobs-ai.php : message sans photo : 1
+video-jobs-ai.php : appel de l'IA remplacé : 1
 reglages-publics.php : en-tête PHP : 1

@@ -25,6 +25,11 @@ $duration        = max(6, min(300, (int)($input['duration'] ?? 15)));
 $shorten         = !empty($input['shorten']);
 $existingScript  = $input['existing_script'] ?? null;
 
+// Sujet alimenté depuis l'admin (plugin sources) : profil evenement (défaut), produit, organisation ou generique.
+$source     = is_array($input['source'] ?? null) ? $input['source'] : null;
+$sourceType = in_array($source['profil'] ?? '', ['produit', 'organisation', 'generique'], true) ? $source['profil'] : 'event';
+$sourceCtx  = $source ? mb_substr(trim((string)($source['contexte'] ?? '')), 0, 1200) : '';
+
 // Construire le contexte affiche
 $artist = $poster['logo']['text']   ?? 'Artiste';
 $title  = $poster['title']['text']  ?? '';
@@ -35,7 +40,7 @@ $footer = $poster['footer']['text'] ?? '';
 
 // Calculer l'urgence selon le délai avant l'événement
 $urgencyCtx = '';
-if ($date) {
+if ($date && $sourceType === 'event') {
     // Tenter de parser la date (formats courants : "Vendredi 12 septembre 2025", "12/09/2025", ISO...)
     $parsedDate = date_create($date) ?: null;
     // Essai avec strtotime pour formats français partiels
@@ -66,7 +71,28 @@ if ($venue)       $posterDesc .= "\nLieu : $venue";
 if ($info)        $posterDesc .= "\nInformation : $info";
 if ($footer)      $posterDesc .= "\nSite/contact : $footer";
 if ($urgencyCtx)  $posterDesc .= "\n\nContexte temporel : $urgencyCtx";
+if ($sourceCtx)   $posterDesc .= "\n\nSujet fourni (informations à respecter, sans rien inventer) :\n$sourceCtx";
 if ($context)     $posterDesc .= "\nStyle souhaité par l'artiste : $context";
+
+// Consignes selon le sujet
+if ($sourceType === 'produit') {
+    $mustMention = "Le script DOIT nommer l'article, donner son prix et donner envie de l'acheter (boutique, lien en bio). N'invente ni promotion ni stock. ";
+    $corpsRule   = "narration qui présente l'ARTICLE et son PRIX";
+    $captionRule = "légende Instagram complète avec nom de l'article, prix, lien boutique en bio";
+} elseif ($sourceType === 'organisation') {
+
+    $mustMention = "Le script DOIT mettre en valeur le partenaire (nom, ville) avec un ton chaleureux de remerciement ou de recommandation. N'invente aucun fait sur lui. ";
+    $corpsRule   = "narration qui met en valeur le PARTENAIRE (nom, ville)";
+    $captionRule = "légende Instagram complète qui cite le partenaire et sa ville, avec un appel à le soutenir";
+} elseif ($sourceType === 'generique') {
+    $mustMention = "Le script DOIT présenter clairement le sujet fourni (nom, ce qui le caractérise) et donner envie d'en savoir plus. N'invente aucun fait. ";
+    $corpsRule   = "narration qui présente le SUJET (nom et points forts fournis)";
+    $captionRule = "légende Instagram complète qui présente le sujet et renvoie vers le lien fourni";
+} else {
+    $mustMention = "Le script DOIT mentionner la date et le lieu de l'événement. Adapte le ton à l'urgence fournie. ";
+    $corpsRule   = "narration avec DATE et LIEU";
+    $captionRule = "légende Instagram complète avec date, lieu, lien bio";
+}
 
 // Calcul du découpage temporel selon la durée réelle
 $hookEnd  = min(3, (int)round($duration * 0.15));
@@ -77,8 +103,7 @@ $systemPrompt = "Tu es un expert en communication pour artistes de musique élec
     . "Tu crées des scripts de Reels vidéo (format 9:16, durée EXACTE : {$duration} secondes). "
     . "Découpage imposé : $timingEx. "
     . "Hook = 2-4 mots percutants lus en {$hookEnd}s. Corps = 2-3 phrases max adaptées au temps disponible. CTA = phrase courte + emoji. "
-    . "Le script DOIT mentionner la date et le lieu de l'événement. "
-    . "Adapte le ton à l'urgence fournie. "
+    . $mustMention
     . "Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou après. "
     . "Format : {\"hook\":\"...\",\"corps\":\"...\",\"cta\":\"...\",\"timing\":\"$timingEx\",\"hashtags\":[\"...\"],\"caption\":\"...\"}";
 
@@ -90,18 +115,18 @@ if ($shorten && $existingScript) {
         . "Script actuel :\n"
         . "HOOK: $prevHook\nCORPS: $prevCorps\nCTA: $prevCta\n\n"
         . "Raccourcis-le STRICTEMENT pour tenir en {$duration}s selon le découpage : $timingEx.\n"
-        . "Garde les infos essentielles : artiste, date, lieu. Coupe tout ce qui est superflu.\n"
+        . "Garde les infos essentielles : artiste, sujet, et selon le cas date, lieu ou prix. Coupe tout ce qui est superflu.\n"
         . "Même format JSON : hook, corps, cta, timing (\"$timingEx\"), hashtags, caption.";
 } else {
     $userPrompt = "À partir de l'affiche ci-dessous, génère un script de Reel vidéo de {$duration} secondes :\n\n"
         . $posterDesc . "\n\n"
         . "JSON attendu :\n"
         . "- hook : accroche MAJUSCULES (2-4 mots, lu en {$hookEnd}s)\n"
-        . "- corps : narration avec DATE et LIEU (durée " . ($ctaStart - $hookEnd) . "s max)\n"
+        . "- corps : $corpsRule (durée " . ($ctaStart - $hookEnd) . "s max)\n"
         . "- cta : appel à l'action + emoji (durée " . ($duration - $ctaStart) . "s)\n"
         . "- timing : \"$timingEx\"\n"
         . "- hashtags : 6-8 hashtags pertinents\n"
-        . "- caption : légende Instagram complète avec date, lieu, lien bio";
+        . "- caption : $captionRule";
 }
 
 // --- Lecture clé API depuis settings DB ---

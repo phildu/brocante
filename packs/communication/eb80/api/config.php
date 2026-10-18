@@ -575,7 +575,7 @@ function getPath() {
 }
 
 // Get JSON body input (also handles form data)
-function getJsonInput() {
+function _eb80_orig_getJsonInput() {
     $data = [];
     
     // Try JSON body first

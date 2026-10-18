@@ -13,6 +13,11 @@
 //   admin_assets : [{ file, roles }]                    → scripts et styles de assets/ chargés sur toutes les pages de l'administration
 //   cron  : [{ file }]                                  → tâches lancées par scripts/plugins-cron.php pour chaque boutique où le
 //           plugin est actif (ligne de commande, variable TENANT)
+//   agent_api : [{ prefix, file }]                      → /api/<prefix>/… (plugin-agent.php) : appels d'un agent externe (ex. agent de
+//           rendu vidéo), sans session ni CSRF ; la route authentifie elle-même l'agent (jeton) ; boutique d'après l'adresse
+//   sync  : { tool, source, record }                    → plugin recopié d'un autre projet (ex. electroboy80) : « tool » est le
+//           script d'extraction (ligne de commande, option --status en JSON), « source » le nom du projet, « record » le fichier
+//           qui dit d'où vient la copie ; le portail local propose « Recopier » (portail → Plugins)
 //   migrations : fichiers packs/<id>/migrations/NNN-quelque-chose.sql, appliqués dans l'ordre, une seule fois chacun.
 // Rôles : « admin » (toujours autorisé) et « community_manager ». Les pages et l'API passent par la session de
 // l'administration de la boutique ; l'API exige le jeton CSRF (en-tête X-CSRF-Token) pour tout ce qui n'est pas GET.
@@ -115,6 +120,27 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
         }
         $cron[] = ['file' => $cfile];
     }
+    // Agents externes (plugin-agent.php) : [{ prefix, file }], préfixe d'adresse sous /api/ et fichier de route du plugin.
+    $agentApi = [];
+    foreach ((array) ($raw['agent_api'] ?? []) as $a) {
+        $prefix = (string) ($a['prefix'] ?? '');
+        $afile = plugin_safe_file($dir, (string) ($a['file'] ?? ''), 'php');
+        if (!preg_match('#^/[a-z0-9-]+(?:/[a-z0-9-]+)*$#', $prefix) || $afile === null) {
+            $errors[] = "route d'agent « $prefix » invalide (préfixe /x/y ou fichier)";
+            continue;
+        }
+        $agentApi[] = ['prefix' => $prefix, 'file' => $afile];
+    }
+    // Copie d'un autre projet (portail local → Plugins → « Recopier ») : { tool, source, record }.
+    $sync = null;
+    if (isset($raw['sync'])) {
+        $tool = plugin_safe_file($dir, (string) ($raw['sync']['tool'] ?? ''), 'php');
+        $record = (string) ($raw['sync']['record'] ?? '');
+        $record = preg_match('#^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.txt$#', $record) && is_file($dir . '/' . $record) ? $record : null;
+        $source = trim((string) ($raw['sync']['source'] ?? ''));
+        if ($tool === null || $source === '') $errors[] = 'copie « sync » invalide (script ou nom de la source)';
+        else $sync = ['tool' => $tool, 'source' => $source, 'record' => $record];
+    }
     $migrations = [];
     foreach (glob($dir . '/migrations/*.sql') ?: [] as $sql) {
         if (!preg_match('/^(\d{3})-[a-z0-9-]+\.sql$/', basename($sql), $mm) || isset($migrations[(int) $mm[1]])) {
@@ -127,7 +153,7 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
     if ($errors) return null;
     return [
         'id' => $id, 'name' => $name, 'version' => $version, 'description' => trim((string) ($raw['description'] ?? '')),
-        'table_prefix' => $prefix, 'pages' => $pages, 'api' => $api, 'admin_assets' => $assets, 'cron' => $cron, 'migrations' => $migrations, 'dir' => $dir,
+        'table_prefix' => $prefix, 'pages' => $pages, 'api' => $api, 'admin_assets' => $assets, 'cron' => $cron, 'agent_api' => $agentApi, 'sync' => $sync, 'migrations' => $migrations, 'dir' => $dir,
     ];
 }
 

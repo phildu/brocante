@@ -9,35 +9,36 @@
  * API : api/video-jobs.php, api/video-jobs-ai.php.
  */
 (() => {
-  const BASE = '/js/video-promo/';
+  const T = window.EB80_VIA_TEXTES || {}; // textes de la boutique (eb80-shim.js), sinon ceux d'electroboy80
+  const BASE = 'js/video-promo/';
   // À changer à chaque mise à jour du lecteur (et du ?v= de ce script dans admin.html),
   // sinon le navigateur garde l'ancienne version en cache.
-  const VERSION = '20261015c';
+  const VERSION = '20261018b';
   // Version de rendu attendue de l'agent (VERSION_RENDU de scripts/rendu-worker.mjs) :
   // un agent plus ancien ignore les réglages récents (animations, palette, recadrage).
   const VERSION_AGENT = 9;
   const CLE_BROUILLON = 'eb80_video_ia_brouillon';
 
   const CSS = `
-.via{border:2px solid var(--yellow,#ff0);background:#0a0a0a;color:#f0f0f0;padding:0;width:min(1280px,96vw);max-height:94vh;font-family:'IBM Plex Mono',monospace;font-size:12px;}
-.via::backdrop{background:rgba(0,0,0,.8);}
+.via{border:2px solid var(--yellow,#ff0);background:var(--mid);color:var(--white);padding:0;width:min(1280px,96vw);max-height:94vh;font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.via::backdrop{background:color-mix(in srgb, var(--black) 96%, transparent);}
 .via [hidden]{display:none!important;}
 .via *{box-sizing:border-box;}
-.via-top{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:2px solid #222;background:#000;position:sticky;top:0;z-index:2;}
+.via-top{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:2px solid var(--border);background:var(--mid);position:sticky;top:0;z-index:2;}
 .via-top h2{font-family:'Anton',sans-serif;font-weight:400;font-size:20px;letter-spacing:-.5px;margin:0;}
 .via-top h2 span{color:#FF006E;}
 .via-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:18px;padding:18px;overflow:auto;max-height:calc(94vh - 56px);}
 @media (max-width:900px){.via-body{grid-template-columns:1fr;}}
-.via-sec{background:#161616;border:1px solid #222;padding:14px;margin-bottom:14px;}
+.via-sec{background:var(--mid);border:1px solid var(--border);padding:14px;margin-bottom:14px;}
 .via-sec h3{font-family:'VT323',monospace;font-size:18px;letter-spacing:3px;color:#ff0;font-weight:400;margin:0 0 8px;text-transform:uppercase;}
-.via label{display:block;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin:8px 0 3px;}
-.via input[type=text],.via select,.via textarea{width:100%;background:#111;border:1px solid #2a2a2a;color:#f0f0f0;font-family:inherit;font-size:12px;padding:7px 9px;}
+.via label{display:block;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:8px 0 3px;}
+.via input[type=text],.via select,.via textarea{width:100%;background:var(--mid);border:1px solid var(--border);color:var(--white);font-family:inherit;font-size:12px;padding:7px 9px;}
 .via textarea{resize:vertical;min-height:54px;}
 .via input:focus,.via select:focus,.via textarea:focus{outline:none;border-color:#ff0;}
 .via-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .via-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
-.via-hint{font-size:10px;color:#aaa;margin-top:5px;line-height:1.5;}
-.via-btn{background:transparent;border:2px solid #333;color:#f0f0f0;font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;padding:5px 12px;cursor:pointer;text-transform:uppercase;}
+.via-hint{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.5;}
+.via-btn{background:transparent;border:2px solid var(--border);color:var(--white);font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;padding:5px 12px;cursor:pointer;text-transform:uppercase;}
 .via-btn:hover{border-color:#ff0;color:#ff0;}
 .via-btn.ia{background:#00FFDD;border-color:#00FFDD;color:#000;}
 .via-btn.go{background:#FF006E;border-color:#FF006E;color:#000;width:100%;}
@@ -45,51 +46,51 @@
 .via-btn:disabled{opacity:.4;cursor:not-allowed;}
 .via-btn.sm{font-size:13px;padding:2px 7px;}
 .via-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;max-height:300px;overflow:auto;padding:2px;}
-.via-tile{position:relative;aspect-ratio:1;background:#000 center/cover no-repeat;border:2px solid transparent;cursor:pointer;}
+.via-tile{position:relative;aspect-ratio:1;background:var(--mid) center/cover no-repeat;border:2px solid transparent;cursor:pointer;}
 .via-tile:hover{border-color:#777;}
 .via-tile.on{border-color:#FF006E;}
 .via-tile .n{position:absolute;top:3px;left:3px;background:#FF006E;color:#000;font-family:'VT323',monospace;font-size:16px;line-height:1;padding:1px 5px;}
 .via-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
-.via-chip{display:flex;align-items:center;gap:4px;background:#111;border:1px solid #2a2a2a;padding:3px;}
+.via-chip{display:flex;align-items:center;gap:4px;background:var(--mid);border:1px solid var(--border);padding:3px;}
 .via-chip img{width:40px;height:40px;object-fit:cover;display:block;}
 .via-slot{display:flex;align-items:center;gap:8px;margin-top:6px;}
-.via-slot .t{width:58px;height:36px;background:#555 center/contain no-repeat;border:1px solid #2a2a2a;flex-shrink:0;}
+.via-slot .t{width:58px;height:36px;background:#555 center/contain no-repeat;border:1px solid var(--border);flex-shrink:0;}
 .via-ia-msg{margin-top:8px;font-size:11px;line-height:1.5;color:#00FFDD;}
 .via-ia-msg.err{color:#FF006E;}
 .via-variantes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px;}
-.via-variante{background:#111;border:1px solid #2a2a2a;color:#f0f0f0;font-family:inherit;font-size:11px;text-align:left;padding:8px 10px;cursor:pointer;line-height:1.45;}
+.via-variante{background:var(--mid);border:1px solid var(--border);color:var(--white);font-family:inherit;font-size:11px;text-align:left;padding:8px 10px;cursor:pointer;line-height:1.45;}
 .via-variante b{display:block;font-family:'VT323',monospace;font-size:18px;font-weight:400;letter-spacing:2px;color:#ff0;text-transform:uppercase;}
 .via-variante:hover{border-color:#ff0;}
 .via-variante.on{border-color:#00FFDD;box-shadow:inset 0 0 0 1px #00FFDD;}
-.via-apercu{background:#000;border:1px solid #222;margin:10px auto;position:relative;}
+.via-apercu{background:var(--mid);border:1px solid var(--border);margin:10px auto;position:relative;}
 .via-safe-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;}
 .via-zone-btn.on{border-color:#ff0;color:#ff0;}
 .via-formats{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;}
-.via-formats label{display:inline-flex;gap:5px;align-items:center;color:#f0f0f0;margin:0;font-size:11px;letter-spacing:1px;text-transform:none;}
-.via-formats .x{background:transparent;border:none;color:#666;cursor:pointer;font-size:11px;padding:0 2px;}
+.via-formats label{display:inline-flex;gap:5px;align-items:center;color:var(--white);margin:0;font-size:11px;letter-spacing:1px;text-transform:none;}
+.via-formats .x{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px;}
 .via-formats .x:hover{color:#FF006E;}
-.via-lot{margin-top:8px;padding:8px 10px;background:#0a0a0a;border:1px solid #252525;}
-.via-lot-titre{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#555;margin-bottom:6px;}
+.via-lot{margin-top:8px;padding:8px 10px;background:var(--mid);border:1px solid #252525;}
+.via-lot-titre{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
 .via-lot-formats{display:flex;flex-wrap:wrap;gap:4px 12px;}
 .via-lot-formats label{display:inline-flex;gap:5px;align-items:center;color:#bbb;margin:0;font-size:11px;cursor:pointer;}
-.via-lot-formats label:hover{color:#f0f0f0;}
+.via-lot-formats label:hover{color:var(--white);}
 .via-lot-formats input[type=checkbox]{accent-color:#FF006E;width:12px;height:12px;cursor:pointer;}
 .via-jobs{list-style:none;margin:0;padding:0;}
-.via-jobs li{border-top:1px solid #222;padding:8px 0;display:flex;justify-content:space-between;gap:8px;align-items:center;}
+.via-jobs li{border-top:1px solid var(--border);padding:8px 0;display:flex;justify-content:space-between;gap:8px;align-items:center;}
 .via-st{font-family:'VT323',monospace;font-size:14px;letter-spacing:2px;padding:0 6px;border:1px solid currentColor;white-space:nowrap;}
-.via-st.pending{color:#aaa}.via-st.rendering{color:#00FFFF}.via-st.done{color:#3f6}.via-st.error{color:#FF006E}
-.via pre{background:#000;border:1px solid #222;padding:8px;font-size:10px;white-space:pre-wrap;word-break:break-all;color:#ff0;margin:6px 0 0;}
-.via-sub{background:#111;border:2px solid #ff0;padding:12px;}
+.via-st.pending{color:var(--muted)}.via-st.rendering{color:#00FFFF}.via-st.done{color:#3f6}.via-st.error{color:#FF006E}
+.via pre{background:var(--mid);border:1px solid var(--border);padding:8px;font-size:10px;white-space:pre-wrap;word-break:break-all;color:#ff0;margin:6px 0 0;}
+.via-sub{background:var(--mid);border:2px solid #ff0;padding:12px;}
 .via-durees{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .via-durees .via-btn.on{border-color:#ff0;color:#ff0;}
-.via-scene{border:1px solid #2a2a2a;background:#111;padding:8px;margin-top:8px;}
+.via-scene{border:1px solid var(--border);background:var(--mid);padding:8px;margin-top:8px;}
 .via-scene-top{display:flex;gap:6px;align-items:center;}
 .via-scene-top b{font-family:'VT323',monospace;font-size:18px;color:#FF006E;min-width:22px;}
 .via-scene-top select{width:auto;flex:1;}
-.via-scene-top input[type=number]{width:64px;background:#111;border:1px solid #2a2a2a;color:#f0f0f0;font-family:inherit;padding:6px;}
+.via-scene-top input[type=number]{width:64px;background:var(--mid);border:1px solid var(--border);color:var(--white);font-family:inherit;padding:6px;}
 .via-scene .via-photo{display:flex;gap:8px;align-items:center;margin-top:6px;}
-.via-scene .via-photo .t{width:44px;height:60px;background:#333 center/cover no-repeat;border:1px solid #2a2a2a;}
-.via-crop-cadre{position:relative;overflow:hidden;background:#000;margin:0 auto;cursor:grab;touch-action:none;border:2px solid #ff0;user-select:none;}
+.via-scene .via-photo .t{width:44px;height:60px;background:var(--mid) center/cover no-repeat;border:1px solid var(--border);}
+.via-crop-cadre{position:relative;overflow:hidden;background:var(--mid);margin:0 auto;cursor:grab;touch-action:none;border:2px solid #ff0;user-select:none;}
 .via-crop-cadre:active{cursor:grabbing;}
 .via-crop-cadre div{position:absolute;inset:0;}
 .via-crop-cadre img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;}
@@ -104,7 +105,7 @@
 
   const HTML = `
 <div class="via-top">
-  <h2>VIDÉO <span>IA</span> · promo concert</h2>
+  <h2>VIDÉO <span>IA</span> · ${T.sousTitre || 'promo concert'}</h2>
   <button class="via-btn sm" data-via="fermer">Fermer ✕</button>
 </div>
 <div class="via-body">
@@ -112,22 +113,26 @@
     <div class="via-sec">
       <h3>✨ Assistant IA</h3>
       <label for="via-consigne">Consigne (facultatif)</label>
-      <textarea id="via-consigne" placeholder="Ex. ton festif, mettre en avant les lunettes fluo, entrée gratuite…"></textarea>
+      <textarea id="via-consigne" placeholder="${T.consigneEx || 'Ex. ton festif, mettre en avant les lunettes fluo, entrée gratuite…'}"></textarea>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
         <button class="via-btn ia" data-via="ia">✨ Proposer une vidéo</button>
         <button class="via-btn ia" data-via="ia3" title="Trois versions différentes à comparer dans l'aperçu">✨ 3 variantes</button>
-        <span class="via-hint" style="margin:0">Claude regarde les photos de la médiathèque, rédige les textes, choisit les animations et règle le style. Tout reste modifiable.</span>
+        <span class="via-hint" style="margin:0">${T.iaNom || 'Claude'} regarde les photos de la médiathèque, rédige les textes, choisit les animations et règle le style. Tout reste modifiable.</span>
       </div>
       <div class="via-ia-msg" id="via-ia-msg"></div>
       <div class="via-variantes" id="via-variantes" hidden></div>
     </div>
 
     <div class="via-sec">
-      <h3>Le concert</h3>
-      <label for="via-evenement">Partir d'un événement de l'agenda</label>
-      <select id="via-evenement"><option value="">— Infos reprises de l'affiche ouverte —</option></select>
+      <h3>Le sujet</h3>
+      <label for="via-source-type">Partir d'un élément de l'admin</label>
       <div class="via-row">
-        <div><label for="via-date">Date affichée</label><input type="text" id="via-date" placeholder="VENDREDI 16 OCTOBRE"></div>
+        <select id="via-source-type"><option value="">📄 Affiche ouverte</option></select>
+        <select id="via-evenement"><option value="">— Infos reprises de l'affiche ouverte —</option></select>
+      </div>
+      <div class="via-hint" id="via-sujet-note" hidden></div>
+      <div class="via-row">
+        <div><label for="via-date">Date affichée</label><input type="text" id="via-date" placeholder="${T.dateEx || 'VENDREDI 16 OCTOBRE'}"></div>
         <div><label for="via-heure">Heure</label><input type="text" id="via-heure" placeholder="20H30"></div>
       </div>
       <div class="via-row">
@@ -135,10 +140,10 @@
         <div><label for="via-ville">Ville</label><input type="text" id="via-ville"></div>
       </div>
       <label for="via-mentions">Étiquettes (séparées par des virgules)</label>
-      <input type="text" id="via-mentions" placeholder="ROCK'N'ROLL, NEW WAVE">
+      <input type="text" id="via-mentions" placeholder="${T.mentionsEx || "ROCK'N'ROLL, NEW WAVE"}">
       <div class="via-row">
-        <div><label for="via-texte-infos">Appel final</label><input type="text" id="via-texte-infos" value="Plus d'infos ici"></div>
-        <div><label for="via-lien-infos">Lien affiché</label><input type="text" id="via-lien-infos" value="electroboy80.com"></div>
+        <div><label for="via-texte-infos">Appel final</label><input type="text" id="via-texte-infos" value="${T.texteInfos || "Plus d'infos ici"}"></div>
+        <div><label for="via-lien-infos">Lien affiché</label><input type="text" id="via-lien-infos" value="${T.lien || 'electroboy80.com'}"></div>
       </div>
     </div>
 
@@ -155,7 +160,7 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center">
         <select id="via-ajout" style="width:auto">
           <option value="photo">Photo</option><option value="titre">Titre</option><option value="mots">Mots-chocs</option>
-          <option value="compte">Compte à rebours</option><option value="concert">Carte concert</option><option value="fin">Fin</option>
+          <option value="compte">Compte à rebours</option><option value="concert">${T.carteNom || 'Carte concert'}</option><option value="fin">Fin</option>
         </select>
         <button class="via-btn sm" data-via="ajouter">+ Ajouter la scène</button>
         <button class="via-btn sm" data-via="photos-multi">+ Plusieurs photos</button>
@@ -195,7 +200,7 @@
     <div class="via-sec">
       <h3>Charte du lieu</h3>
       <label style="display:flex;gap:8px;align-items:center;color:#f0f0f0;letter-spacing:1px;margin:0">
-        <input type="checkbox" id="via-charte-on"> Habiller la carte du concert aux couleurs du lieu
+        <input type="checkbox" id="via-charte-on"> ${T.charte || 'Habiller la carte du concert aux couleurs du lieu'}
       </label>
       <div class="via-visuel">
         <label>Visuel du lieu (inspire l'IA)</label>
@@ -205,13 +210,13 @@
           <button class="via-btn sm" data-visuel="aucun" title="Retirer le visuel">✕</button>
         </div>
         <button class="via-btn sm ia" data-via="accorder" style="margin-top:6px">✨ Accorder la carte au visuel</button>
-        <p class="via-hint">Une photo ou une vidéo du lieu (façade, salle, affiche…). Claude s'en inspire pour la couleur
+        <p class="via-hint">Une photo ou une vidéo du lieu (façade, salle, affiche…). ${T.iaNom || 'Claude'} s'en inspire pour la couleur
           d'accent, l'étiquette de la carte et la palette — ici et dans « Proposer une vidéo ». Elle n'apparaît pas dans la vidéo.</p>
         <div class="via-ia-msg" id="via-visuel-msg"></div>
       </div>
       <div id="via-charte">
         <p class="via-hint">Seul le logo est indispensable ; texture (sinon fond papier uni) et bandeau du bas sont facultatifs.
-          PNG transparents de préférence. La charte habille la carte du concert et ajoute le logo du lieu à l'écran de fin.</p>
+          PNG transparents de préférence. ${T.charteAide || 'La charte habille la carte du concert et ajoute le logo du lieu à l\'écran de fin.'}</p>
         <div class="via-slot"><div class="t" id="via-t-logo"></div><button class="via-btn sm" data-slot="logo">Logo du lieu</button><button class="via-btn sm" data-retirer="logo" title="Retirer">✕</button></div>
         <div class="via-slot"><div class="t" id="via-t-texture"></div><button class="via-btn sm" data-slot="texture">Texture de fond</button><button class="via-btn sm" data-retirer="texture" title="Retirer">✕</button></div>
         <div class="via-slot"><div class="t" id="via-t-sol"></div><button class="via-btn sm" data-slot="sol">Bandeau du bas</button><button class="via-btn sm" data-retirer="sol" title="Retirer">✕</button></div>
@@ -345,18 +350,20 @@
     spirale: 'Spirale',
     pixel: 'Pixelisation',
   };
-  const LIB_TYPES = { titre: 'Titre', photo: 'Photo', mots: 'Mots-chocs', compte: 'Compte à rebours', concert: 'Carte concert', fin: 'Fin' };
+  const LIB_TYPES = { titre: 'Titre', photo: 'Photo', mots: 'Mots-chocs', compte: 'Compte à rebours', concert: T.carteNom || 'Carte concert', fin: 'Fin' };
   const DUREES_TYPE = { titre: 8, photo: 4, mots: 8, compte: 4, concert: 16, fin: 8 }; // en temps
   const nouvelleScene = (type) => {
     const sc = { type, duree: Math.round(DUREES_TYPE[type] * TEMPS * 100) / 100 };
-    if (type === 'titre') { sc.texte = 'ELECTRO\nBOY 80'; sc.texte2 = 'EN CONCERT'; }
-    if (type === 'mots') sc.mots = ['CHEAP.', 'PRIMITIF.', 'SAUVAGE.'];
+    if (type === 'titre') { sc.texte = T.titre || 'ELECTRO\nBOY 80'; sc.texte2 = T.titre2 || 'EN CONCERT'; }
+    if (type === 'mots') sc.mots = T.mots ? T.mots.slice() : ['CHEAP.', 'PRIMITIF.', 'SAUVAGE.'];
+    if (type === 'concert' && T.carteEtiquette) sc.texte2 = T.carteEtiquette;
+    if (type === 'fin' && T.fin) sc.texte = T.fin;
     if (type === 'compte') sc.texte = $('via-badge').value.trim() || 'J-5';
     return sc;
   };
   const classique = (photos) => [
     nouvelleScene('titre'),
-    ...(photos.length ? photos : ['']).map((photo) => ({ ...nouvelleScene('photo'), photo, texte: "LA NEW WAVE DES 80'S", texte2: 'À 170 BPM' })),
+    ...(photos.length ? photos : ['']).map((photo) => ({ ...nouvelleScene('photo'), photo, texte: T.photo || "LA NEW WAVE DES 80'S", texte2: T.photo2 || 'À 170 BPM' })),
     nouvelleScene('mots'),
     nouvelleScene('concert'),
     nouvelleScene('fin'),
@@ -459,7 +466,7 @@
   // État complet de l'éditeur : brouillon local, et copie jointe à chaque demande de rendu
   // pour pouvoir reprendre la vidéo plus tard depuis la médiathèque.
   const brouillon = () => {
-    const b = { musique: etat.musique, scenes: etat.scenes, duree: etat.duree, charte: etat.charte, charteOn: $('via-charte-on').checked, format: format(), legende: $('via-legende').value };
+    const b = { musique: etat.musique, scenes: etat.scenes, duree: etat.duree, charte: etat.charte, charteOn: $('via-charte-on').checked, format: format(), legende: $('via-legende').value, sujet: etat.sujet || null };
     CHAMPS.forEach((id) => { b[id] = $(id).value; });
     return b;
   };
@@ -511,6 +518,8 @@
       dessinerLot();
       $('via-legende').value = b.legende || '';
       $('via-publication').hidden = !b.legende;
+      etat.sujet = b.sujet || null;
+      noteSujet();
       return true;
     } catch (e) { return false; }
   };
@@ -616,7 +625,7 @@
       const finCourte = etat.scenes.some((sc) => sc.type === 'fin' && Number(sc.duree) < 2.5);
       $('via-generer-info').textContent = !p.scenes.length ? 'Ajoutez des scènes, ou demandez une proposition à l\'IA.'
         : sansPhoto ? 'Une scène photo n\'a pas encore d\'image : elle est ignorée.'
-        : incomplete ? 'Charte du lieu sans logo : choisissez le logo du lieu, sinon la carte Electroboy est utilisée.'
+        : incomplete ? 'Charte du lieu sans logo : choisissez le logo du lieu, sinon la carte par défaut est utilisée.'
         : finCourte ? 'Écran de fin très court : donnez-lui 3 s au moins pour qu\'on ait le temps de lire le lien.' : '';
       dlg.querySelector('[data-via=generer]').disabled = !p.scenes.length;
       if (!p.scenes.length) return;
@@ -691,8 +700,8 @@
         <div class="via-row">${champ(i, 'texte', 'Accroche, ligne 1', sc.texte || '')}${champ(i, 'texte2', 'Accroche, ligne 2', sc.texte2 || '')}</div>`;
       if (sc.type === 'mots') corps = `<div class="via-row">${champ(i, 'mots', 'Mots (séparés par des virgules)', (sc.mots || []).join(', '))}${champ(i, 'bandeau', 'Bandeau défilant (vide = influences)', sc.bandeau || '')}</div>`;
       if (sc.type === 'compte') corps = `<div class="via-row">${champ(i, 'texte', 'Chiffre (J-5, CE SOIR…)', sc.texte || '')}${champ(i, 'texte2', 'Sous-texte', sc.texte2 || '')}</div>`;
-      if (sc.type === 'concert') corps = `<div class="via-row">${champ(i, 'texte2', 'Étiquette au-dessus de la date', sc.texte2 || '', 'placeholder="PROCHAIN CONCERT"')}<div><label>&nbsp;</label><span class="via-hint">Date, lieu, étiquettes : section « Le concert ».</span></div></div><div class="via-photo"><div class="t" style="background-image:url('${esc(sc.photo || '')}');background-position:${sc.cadrage ? `${sc.cadrage.x}% ${sc.cadrage.y}%` : 'center'}"></div><button class="via-btn sm" data-photo="${i}">${sc.photo ? 'Changer la photo de fond' : 'Ajouter une photo de fond'}</button>${sc.photo ? ` <button class="via-btn sm" data-recadrer="${i}">✂ Recadrer${sc.cadrage ? ' ✓' : ''}</button> <button class="via-btn sm" data-via="effacer-photo-scene" data-i="${i}" title="Retirer la photo">✕</button>` : ''}</div>`;
-      if (sc.type === 'fin') corps = `<div class="via-row">${champ(i, 'texte', 'Titre de fin', sc.texte || '', 'placeholder="ELECTROBOY 80"')}<div><label>&nbsp;</label><span class="via-hint">Appel final et lien : section « Le concert ».</span></div></div>`;
+      if (sc.type === 'concert') corps = `<div class="via-row">${champ(i, 'texte2', 'Étiquette au-dessus de la date', sc.texte2 || '', 'placeholder="' + (T.carteEtiquette || 'PROCHAIN CONCERT') + '"')}<div><label>&nbsp;</label><span class="via-hint">Date, lieu, étiquettes : section « ${T.sujet || 'Le concert'} ».</span></div></div><div class="via-photo"><div class="t" style="background-image:url('${esc(sc.photo || '')}');background-position:${sc.cadrage ? `${sc.cadrage.x}% ${sc.cadrage.y}%` : 'center'}"></div><button class="via-btn sm" data-photo="${i}">${sc.photo ? 'Changer la photo de fond' : 'Ajouter une photo de fond'}</button>${sc.photo ? ` <button class="via-btn sm" data-recadrer="${i}">✂ Recadrer${sc.cadrage ? ' ✓' : ''}</button> <button class="via-btn sm" data-via="effacer-photo-scene" data-i="${i}" title="Retirer la photo">✕</button>` : ''}</div>`;
+      if (sc.type === 'fin') corps = `<div class="via-row">${champ(i, 'texte', 'Titre de fin', sc.texte || '', 'placeholder="' + (T.fin || 'ELECTROBOY 80') + '"')}<div><label>&nbsp;</label><span class="via-hint">Appel final et lien : section « ${T.sujet || 'Le concert'} ».</span></div></div>`;
       return `<div class="via-scene">
         <div class="via-scene-top"><b>${i + 1}</b>
           <select data-i="${i}" data-champ="type">${Object.entries(LIB_TYPES).map(([k, l]) => `<option value="${k}" ${k === sc.type ? 'selected' : ''}>${l}</option>`).join('')}</select>
@@ -759,6 +768,68 @@
     $('via-evenement').innerHTML = '<option value="">— Infos reprises de l\'affiche ouverte —</option>'
       + (avenir.length ? `<optgroup label="À venir">${avenir.map(opt).join('')}</optgroup>` : '')
       + (passes.length ? `<optgroup label="Passés">${passes.map(opt).join('')}</optgroup>` : '');
+  };
+
+  // ── Autres sources (article merch, partenaire) ───────────────────────────────
+  const maj = (v) => String(v || '').toUpperCase();
+  const noteSujet = () => {
+    const n = $('via-sujet-note');
+    if (!n) return;
+    n.hidden = !etat.sujet;
+    if (etat.sujet) {
+      const carte = etat.sujet.profil === 'produit' ? 'le prix (« Date »)' : 'la catégorie (« Date »)';
+      n.textContent = `Sujet : ${etat.sujet.nom}. La carte d'infos reprend ${carte} et le nom (« Lieu ») ; ${T.iaNom || 'Claude'} écrit les textes à partir de ces infos.`;
+    }
+  };
+  // Types proposés = sources activées dans « API & Réseaux → Sources éditeur » (plugin/sources.js).
+  const remplirTypes = async () => {
+    const sel = $('via-source-type');
+    const courant = sel.value;
+    let actives = [];
+    try { await window.EB80Source.init(); actives = window.EB80Source.sourcesActives(); } catch (e) { actives = []; }
+    sel.innerHTML = '<option value="">📄 Affiche ouverte</option>'
+      + actives.map((a) => `<option value="${esc(a.id)}">${esc(a.icone)} ${esc(a.label)}</option>`).join('');
+    sel.value = actives.some((a) => a.id === courant) ? courant : (actives.some((a) => a.id === 'event') ? 'event' : '');
+  };
+  const chargerSources = async () => {
+    const type = $('via-source-type').value;
+    etat.sujet = null;
+    noteSujet();
+    const sel = $('via-evenement');
+    if (type === 'event') { await chargerEvenements(); return; }
+    if (!type) { sel.innerHTML = '<option value="">— Infos reprises de l\'affiche ouverte —</option>'; return; }
+    sel.innerHTML = '<option value="">— Chargement… —</option>';
+    try {
+      const l = await window.EB80Source.liste(type);
+      const groupes = {};
+      l.forEach((e) => { (groupes[e.groupe] = groupes[e.groupe] || []).push(e); });
+      sel.innerHTML = '<option value="">— Choisir —</option>'
+        + Object.entries(groupes).map(([g, es]) => `<optgroup label="${esc(g)}">${es.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('')}</optgroup>`).join('');
+    } catch (e) { sel.innerHTML = `<option value="">— Indisponible : ${esc(e.message)} —</option>`; }
+  };
+  const depuisSource = async (type, id) => {
+    const s = await window.EB80Source.charger(type, id);
+    const k = s.carte;
+    etat.sujet = window.EB80Source.pourIA();
+    $('via-date').value = k.date;
+    $('via-heure').value = k.heure || '';
+    $('via-lieu').value = k.lieu;
+    $('via-ville').value = k.ville || '';
+    $('via-mentions').value = (k.mentions || []).join(', ');
+    if (k.texteInfos) $('via-texte-infos').value = k.texteInfos;
+    $('via-lien-infos').value = s.lien || '';
+    if (s.photos.length) {
+      etat.scenes = classique(s.photos);
+      etat.scenes.filter((sc) => sc.type === 'photo').forEach((sc) => {
+        sc.texte = maj(s.nom).slice(0, 22);
+        sc.texte2 = maj(s.profil === 'produit' ? s.prix : (s.profil === 'evenement' ? s.ville : s.ville || s.sousTitre)).slice(0, 14);
+      });
+      ajuster(etat.duree);
+    }
+    const carte = etat.scenes.find((sc) => sc.type === 'concert');
+    if (carte && !carte.texte2 && k.etiquette) carte.texte2 = k.etiquette;
+    dessinerScenes(); // le scénario a été refait d'après la source : la liste des scènes doit le montrer
+    noteSujet();
   };
 
   // ── Demandes et agent ────────────────────────────────────────────────────────
@@ -883,7 +954,7 @@
     const msg = $('via-visuel-msg');
     bouton.disabled = true;
     msg.className = 'via-ia-msg';
-    msg.textContent = '⏳ Claude regarde le visuel du lieu…';
+    msg.textContent = '⏳ ' + (T.iaNom || 'Claude') + ' regarde le visuel du lieu…';
     try {
       const visuelLieu = await imageDuVisuel(etat.charte.visuel);
       const p = props();
@@ -933,8 +1004,8 @@
     dlg.querySelectorAll('[data-via^=ia]').forEach((b) => { b.disabled = true; });
     msg.className = 'via-ia-msg';
     msg.textContent = nombre > 1
-      ? `⏳ Claude regarde les photos et écrit ${nombre} variantes de ${etat.duree} s… (une à deux minutes)`
-      : `⏳ Claude regarde les photos et écrit un scénario de ${etat.duree} s… (jusqu'à une minute)`;
+      ? `⏳ ${T.iaNom || 'Claude'} regarde les photos et écrit ${nombre} variantes de ${etat.duree} s… (une à deux minutes)`
+      : `⏳ ${T.iaNom || 'Claude'} regarde les photos et écrit un scénario de ${etat.duree} s… (jusqu'à une minute)`;
     try {
       const p = props();
       const r = await api('/video-jobs/ai', {
@@ -946,6 +1017,7 @@
           duree: etat.duree,
           scenarioActuel: etat.scenes.map((sc) => sc.type),
           variantes: nombre,
+          sujet: etat.sujet || null,
         }),
       });
       etat.duree = r.duree || etat.duree;
@@ -1170,7 +1242,18 @@
     $('via-lot-formats').addEventListener('change', () => {
       etat.formatsLot = [...dlg.querySelectorAll('#via-lot-formats input[type=checkbox]:checked')].map((x) => x.value);
     });
-    $('via-evenement').addEventListener('change', () => {
+    $('via-source-type').addEventListener('change', chargerSources);
+    $('via-evenement').addEventListener('change', async () => {
+      const type = $('via-source-type').value;
+      if (type !== 'event') {
+        const id = $('via-evenement').value;
+        if (!type) { etat.sujet = null; noteSujet(); depuisAffiche(); majApercu(); return; }
+        if (!id) { etat.sujet = null; noteSujet(); depuisAffiche(); majApercu(); return; }
+        try { await depuisSource(type, id); majApercu(); sauver(); }
+        catch (err) { const m = $('via-ia-msg'); m.className = 'via-ia-msg err'; m.textContent = 'Source indisponible : ' + err.message; }
+        return;
+      }
+      etat.sujet = null; noteSujet();
       const e = etat.evenements.find((x) => String(x.id) === $('via-evenement').value);
       if (!e) { depuisAffiche(); majApercu(); return; }
       const d = new Date(e.date + 'T12:00:00');
@@ -1209,6 +1292,20 @@
       $('via-ia-msg').className = 'via-ia-msg err';
       $('via-ia-msg').textContent = 'Chargement impossible : ' + e.message;
     }
+    // Affiche alimentée par une source (hors événement) : la vidéo reprend le même sujet.
+    try {
+      await remplirTypes();
+      if (!$('via-source-type').value) await chargerSources();
+      const ps = typeof POSTER !== 'undefined' && POSTER._source;
+      const src = window.EB80Source && window.EB80Source.courante.src;
+      if (!options.brouillon && ps && ps.source !== 'event' && src && src.source === ps.source && String(src.id) === String(ps.id)
+          && !(etat.sujet && etat.sujet.nom === src.nom) && [...$('via-source-type').options].some((o) => o.value === ps.source)) {
+        $('via-source-type').value = ps.source;
+        await chargerSources();
+        $('via-evenement').value = String(ps.id);
+        await depuisSource(ps.source, ps.id);
+      }
+    } catch (e) { /* la source reste choisissable à la main */ }
     dessinerScenes();
     dessinerCharte();
     dessinerMusique();
