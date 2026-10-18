@@ -123,13 +123,13 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
     // Agents externes (plugin-agent.php) : [{ prefix, file }], préfixe d'adresse sous /api/ et fichier de route du plugin.
     $agentApi = [];
     foreach ((array) ($raw['agent_api'] ?? []) as $a) {
-        $prefix = (string) ($a['prefix'] ?? '');
+        $agentPrefix = (string) ($a['prefix'] ?? ''); // pas $prefix : c'est le préfixe des tables, renvoyé plus bas
         $afile = plugin_safe_file($dir, (string) ($a['file'] ?? ''), 'php');
-        if (!preg_match('#^/[a-z0-9-]+(?:/[a-z0-9-]+)*$#', $prefix) || $afile === null) {
-            $errors[] = "route d'agent « $prefix » invalide (préfixe /x/y ou fichier)";
+        if (!preg_match('#^/[a-z0-9-]+(?:/[a-z0-9-]+)*$#', $agentPrefix) || $afile === null) {
+            $errors[] = "route d'agent « $agentPrefix » invalide (préfixe /x/y ou fichier)";
             continue;
         }
-        $agentApi[] = ['prefix' => $prefix, 'file' => $afile];
+        $agentApi[] = ['prefix' => $agentPrefix, 'file' => $afile];
     }
     // Copie d'un autre projet (portail local → Plugins → « Recopier ») : { tool, source, record }.
     $sync = null;
