@@ -62,7 +62,7 @@ foreach ($images as $src) {
     $white = imagecolorallocate($dst, 255, 255, 255);
     imagefill($dst, 0, 0, $white);
     imagecopyresampled($dst, $im, 0, 0, 0, 0, $dstW, $dstH, $srcW, $srcH);
-    imagedestroy($im);
+
 
     if (imagejpeg($dst, $webPath, $QUALITY)) {
         $origKo = (int)(filesize($src) / 1024);
@@ -73,7 +73,7 @@ foreach ($images as $src) {
         echo "ERREUR  $fn (écriture JPEG impossible)\n";
         $errors++;
     }
-    imagedestroy($dst);
+
 }
 
 echo "\n--- Terminé : $done générés, $skipped ignorés, $errors erreurs ---\n";

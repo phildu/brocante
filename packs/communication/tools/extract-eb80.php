@@ -8,7 +8,8 @@
 //   packs/communication/assets/eb80/admin.html  l'admin d'electroboy80, servie dans le cadre de la page Médiathèque ;
 //                                               eb80-shim.js (au début) et eb80-after.js (à la fin) l'adaptent à la boutique
 //   packs/communication/assets/eb80/js/…        ses scripts annexes (effets, outils du sélecteur, validation, vidéo IA)
-//   packs/communication/eb80/api/*.php          config.php, media.php, media-links.php, generate-web-images.php, settings.php
+//   packs/communication/eb80/api/*.php          config.php, media.php, media-links.php, generate-web-images.php, settings.php,
+//                                               ai-generate.php (script vidéo par l'IA)
 //                                               (et eb80/reglages-publics.php, le filtre des réglages publics) ;
 //                                               packs/communication/eb80/compat.php remplace les fonctions renommées ici
 //   packs/communication/eb80/SOURCE.txt         d'où vient la copie (dossier, commit, date)
@@ -56,6 +57,12 @@ function patch_re(string $what, string $text, string $pattern, string|callable $
     $log[] = "$what : $n";
     return $out;
 }
+/** Appels sans effet depuis PHP 8 et obsolètes en PHP 8.5 (avertissements qui casseraient les réponses JSON) : retirés. */
+function php85(string $php, string $what): string
+{
+    $php = patch_re("$what : curl_close retiré", $php, '/[ \t]*curl_close\(\$\w+\);[ \t]*\n?/', '', 0);
+    return patch_re("$what : imagedestroy retiré", $php, '/[ \t]*imagedestroy\([^;]*\);[ \t]*/', '', 0);
+}
 function write_file(string $path, string $content): void
 {
     if (!is_dir(dirname($path))) mkdir(dirname($path), 0755, true);
@@ -81,12 +88,15 @@ function patch_colors(string $what, string $s): string
 }
 
 $html = (string) file_get_contents($source . '/admin.html');
-$html = patch_re('admin.html : adaptation au début', $html, '/<head(?=[\s>])[^>]*>/i', static fn ($m) => $m[0] . "\n<script src=\"eb80-shim.js\"></script>", 1);
+// Fichiers d'adaptation chargés avec la version de la page (?v= de l'adresse du cadre, posée par lib/eb80-frame.php) : une
+// mise à jour est prise en compte aussitôt, sans ancienne copie en cache. document.write garde le chargement synchrone.
+$eb80Tag = static fn (string $tag): string => "<script>document.write(" . json_encode($tag) . ".replace('{v}', encodeURIComponent(new URLSearchParams(location.search).get('v') || '')))</script>";
+$html = patch_re('admin.html : adaptation au début', $html, '/<head(?=[\s>])[^>]*>/i', static fn ($m) => $m[0] . "\n" . $eb80Tag('<script src="eb80-shim.js?v={v}"></scr' . 'ipt>'), 1);
 if (substr_count($html, 'eb80-shim.js') !== 1) { fwrite(STDERR, "admin.html : plusieurs balises <head>\n"); exit(1); }
-$html = patch('admin.html : couleurs de la boutique', $html, '</head>', "<link rel=\"stylesheet\" href=\"eb80-theme.css\">\n</head>");
+$html = patch('admin.html : couleurs de la boutique', $html, '</head>', $eb80Tag('<link rel="stylesheet" href="eb80-theme.css?v={v}">') . "\n</head>");
 $pos = strripos($html, '</body>');
 if ($pos === false) { fwrite(STDERR, "admin.html : </body> introuvable\n"); exit(1); }
-$html = substr($html, 0, $pos) . "<script src=\"eb80-after.js\"></script>\n" . substr($html, $pos);
+$html = substr($html, 0, $pos) . $eb80Tag('<script src="eb80-after.js?v={v}"></scr' . 'ipt>') . "\n" . substr($html, $pos);
 $log[] = 'admin.html : adaptation à la fin : 1';
 $html = patch('admin.html : scripts annexes en chemin relatif', $html, 'src="/js/', 'src="js/', 1);
 $html = patch_uploads('admin.html', $html, 1);
@@ -104,6 +114,7 @@ foreach ($jsFiles as $f) {
 $guard = "<?php\n// Copie d'electroboy80 (voir packs/communication/tools/extract-eb80.php) : ne pas modifier ici, relancer l'extraction.\ndefined('PLUGIN_RUNTIME') || exit;\n";
 $cfg = (string) file_get_contents($source . '/api/config.php');
 $cfg = patch_re('config.php : en-tête PHP', $cfg, '/^<\?php\s*/', $guard, 1);
+$cfg = php85($cfg, 'config.php');
 // En-têtes CORS ouverts, réponse aux pré-requêtes, type de contenu : l'API du plugin s'en charge (même origine, pas de CORS).
 $cfg = patch_re('config.php : en-têtes CORS', $cfg, '/^header\(\'Access-Control-[^\n]*\n/m', '', 4);
 $cfg = patch_re('config.php : pré-requêtes OPTIONS', $cfg, '/^if \(\$_SERVER\[\'REQUEST_METHOD\'\] === \'OPTIONS\'\) \{.*?^\}\n/ms', '', 1);
@@ -118,10 +129,11 @@ foreach (['requireAuth', 'requirePerm', 'getCurrentUser', 'uploadFile', 'jsonRes
 }
 write_file($pack . '/eb80/api/config.php', $cfg);
 
-$controllers = ['media.php', 'media-links.php', 'generate-web-images.php', 'settings.php'];
+$controllers = ['media.php', 'media-links.php', 'generate-web-images.php', 'settings.php', 'ai-generate.php'];
 foreach ($controllers as $f) {
     $php = (string) file_get_contents($source . '/api/' . $f);
     $php = patch_re("$f : en-tête PHP", $php, '/^<\?php\s*/', $guard, 1);
+    $php = php85($php, $f);
     $php = patch_re("$f : config", $php, '/require_once\s+(?:__DIR__\s*\.\s*)?[\'"]\/?config\.php[\'"];/', "require_once __DIR__ . '/../compat.php';", 1);
     $php = patch("$f : adresses des fichiers", $php, "'/uploads/' . ", 'UPLOAD_URL . ', 0);
     if (preg_match('/\bDB_PATH\b/', $php)) { fwrite(STDERR, "$f utilise DB_PATH : à adapter (base de la boutique).\n"); exit(1); }
@@ -131,6 +143,16 @@ foreach ($controllers as $f) {
         foreach (['handleGetMedia', 'handleUploadChunk', 'handleImportUrl', 'handleSeoSuggest', 'handleDownloadVideo', 'handleMergeAV', 'handleExtractAudio'] as $fn) {
             $php = patch_re("media.php : $fn remplacée", $php, '/^function ' . $fn . '\(/m', 'function _eb80_orig_' . $fn . '(', 1);
         }
+    }
+    if ($f === 'ai-generate.php') {
+        // Connexion de la boutique au lieu du jeton electroboy80, puis quota d'IA de la boutique.
+        $php = patch_re('ai-generate.php : connexion', $php, '/\/\/ Auth\s*\n\$headers = getallheaders\(\);.*?if \(!\$payload\) \{[^\n]*\}\n/s',
+            "requireAuth(['admin']);\nif ((\$eb80Gate = ai_gate()) !== null) errorResponse(\$eb80Gate, 402);\n", 1);
+        // La boutique n'a que Gemini : clé de la boutique (compat.php) et consommation comptée.
+        $php = patch_re('ai-generate.php : fournisseur', $php, '/^\$provider\s*=.*$/m', "\$provider        = 'gemini'; // la boutique n'utilise que Gemini", 1);
+        $php = patch_re('ai-generate.php : clé', $php, '/^function getAiKey\(/m', 'function _eb80_orig_getAiKey(', 1);
+        $php = patch('ai-generate.php : consommation comptée', $php, "    \$text = \$resp['candidates'][0]['content']['parts'][0]['text'] ?? '';",
+            "    \$text = \$resp['candidates'][0]['content']['parts'][0]['text'] ?? '';\n    if (\$text) ai_usage_log_text(\$resp['usageMetadata'] ?? []);", 1);
     }
     write_file($pack . '/eb80/api/' . $f, $php);
 }

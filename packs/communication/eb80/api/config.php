@@ -964,7 +964,7 @@ function generateWebImage($srcPath, $basename, $maxPx = 1200, $quality = 82) {
 
     if ($srcW <= $maxPx && $srcH <= $maxPx && $ext === 'jpg') {
         // Already small enough and right format — skip generating duplicate
-        imagedestroy($im);
+
         return null;
     }
 
@@ -974,11 +974,11 @@ function generateWebImage($srcPath, $basename, $maxPx = 1200, $quality = 82) {
 
     $dst = imagecreatetruecolor($dstW, $dstH);
     imagecopyresampled($dst, $im, 0, 0, 0, 0, $dstW, $dstH, $srcW, $srcH);
-    imagedestroy($im);
+
 
     $webPath = UPLOAD_DIR . $basename . '_web.jpg';
     $ok = imagejpeg($dst, $webPath, $quality);
-    imagedestroy($dst);
+
 
     return $ok ? $webPath : null;
 }

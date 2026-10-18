@@ -1,16 +1,15 @@
 {
   "id": "communication",
   "name": "Communication",
-  "version": "0.3.0",
-  "description": "Pack Communication / Promotion : la médiathèque d'electroboy80, portée telle quelle (interface d'origine dans un cadre, API adaptée à la boutique, dossier uploads/<boutique>/), et un sélecteur commun pour la fiche, le diaporama, les bandeaux et le hero.",
+  "version": "0.4.0",
+  "description": "Pack Communication / Promotion : la médiathèque et l'éditeur visuel d'electroboy80 (affiche, carrousel, vidéo et reel, couches libres, effets), portés tels quels (interface d'origine dans un cadre, API adaptée à la boutique, dossier uploads/<boutique>/), et un sélecteur commun pour la fiche, le diaporama, les bandeaux et le hero.",
   "table_prefix": "com_",
   "pages": [
-    {"id": "mediatheque", "label": "Médiathèque", "icon": "folder", "file": "pages/mediatheque.php", "roles": ["admin", "community_manager"], "replaces": "media"}
+    {"id": "mediatheque", "label": "Médiathèque", "icon": "folder", "file": "pages/mediatheque.php", "roles": ["admin", "community_manager"], "replaces": "media"},
+    {"id": "editeur", "label": "Éditeur visuel", "icon": "palette", "file": "pages/editeur.php", "roles": ["admin", "community_manager"]}
   ],
   "api": [
     {"id": "eb80", "file": "api/eb80.php", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"], "roles": ["admin", "community_manager"]},
-    {"id": "media-list", "file": "api/media-list.php", "methods": ["GET"], "roles": ["admin", "community_manager"]},
-    {"id": "media-upload", "file": "api/media-upload.php", "methods": ["POST"], "roles": ["admin", "community_manager"]},
     {"id": "media-adopt", "file": "api/media-adopt.php", "methods": ["POST"], "roles": ["admin", "community_manager"]},
     {"id": "product-photo-add", "file": "api/product-photo-add.php", "methods": ["POST"], "roles": ["admin", "community_manager"]}
   ],

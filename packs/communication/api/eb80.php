@@ -6,7 +6,9 @@
 defined('PLUGIN_RUNTIME') || exit;
 
 $path = '/' . trim((string) ($_GET['path'] ?? ''), '/');
-if (!preg_match('#^/[a-z0-9/_.-]*$#i', $path) || str_contains($path, '..')) plugin_json(['error' => 'Chemin invalide.'], 400);
+// Les noms (projets, états, fichiers) peuvent contenir espaces et accents : seuls « .. » et les caractères de contrôle sont refusés,
+// les contrôleurs d'electroboy80 traitent ensuite les noms eux-mêmes (requêtes préparées, basename()).
+if (!preg_match('#^/[^\x00-\x1f\x7f]*$#u', $path) || preg_match('#(?:^|/)\.\.(?:/|$)#', $path)) plugin_json(['error' => 'Chemin invalide.'], 400);
 // Les contrôleurs d'electroboy80 lisent leurs propres paramètres : on leur rend ceux de l'appel d'origine.
 parse_str((string) ($_GET['eb80q'] ?? ''), $query);
 $_GET = $query;
@@ -18,13 +20,13 @@ $controller = $parts[0] ?? '';
 
 if ($path === '/auth/me') {
     plugin_json(['id' => (int) ($session['id'] ?? 0), 'role' => 'admin', 'name' => $session['name'] !== '' ? $session['name'] : 'Compte principal',
-        'email' => '', 'permissions' => []]);
+        'email' => '', 'permissions' => [], 'uploads' => '/uploads/' . tenant_slug() . '/']);
 }
 // Réglages d'electroboy80 (sa table settings, propre à la boutique) : lecture pour tous, écriture réservée aux administrateurs.
 if ($controller === 'settings' && $method !== 'GET' && $role !== 'admin') plugin_json(['error' => 'Réservé aux administrateurs.'], 403);
 
 $dir = __DIR__ . '/../eb80/api/';
-$ported = ['media' => 'media.php', 'settings' => 'settings.php', 'generate-web-images' => 'generate-web-images.php'];
+$ported = ['media' => 'media.php', 'settings' => 'settings.php', 'generate-web-images' => 'generate-web-images.php', 'ai-generate' => 'ai-generate.php'];
 // Sous-chemin combiné, comme dans electroboy80 (/media/links → media-links.php), parmi les contrôleurs portés seulement.
 if (count($parts) > 1 && $controller === 'media' && implode('-', $parts) === 'media-links' && is_file($dir . 'media-links.php')) {
     require $dir . 'media-links.php';

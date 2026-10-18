@@ -3,13 +3,17 @@
 .eb80-boutique .sidebar, .eb80-boutique #sidebar-toggle { display: none !important; }
 .eb80-boutique .main { margin-left: 0 !important; }
 .eb80-boutique .topbar { display: none !important; }
-.eb80-boutique .content { padding: 18px 16px 40px; }
+/* La marge de 30 px du contenu est gardée : l'éditeur la compense par margin:-30px. Sans la barre du haut (56 px), l'éditeur
+   prend toute la hauteur du cadre. */
+.eb80-boutique #page-editor > div:first-child { height: 100vh !important; }
 .eb80-boutique body { background: var(--dark); color: var(--white); font-family: var(--shop-body); }
 .eb80-boutique .section-title, .eb80-boutique .card-title, .eb80-boutique [style*="VT323"] { font-family: var(--shop-display) !important; letter-spacing: 0.02em !important; }
 .eb80-boutique [style*="IBM Plex Mono"], .eb80-boutique code, .eb80-boutique .media-card .mc-name { font-family: var(--shop-mono) !important; }
 .eb80-boutique input, .eb80-boutique select, .eb80-boutique textarea, .eb80-boutique button { font-family: var(--shop-body); }
 /* Boutons pleins : texte clair sur la couleur d'accent de la boutique. */
 .eb80-boutique .btn-primary, .eb80-boutique .btn-yellow { background: var(--shop-accent) !important; border-color: var(--shop-accent) !important; color: var(--shop-bg) !important; }
-@media (max-width: 720px) {
-  .eb80-boutique .content { padding: 12px 10px 32px; }
-}
+/* Vidéo IA d'electroboy80 : son agent de rendu (Remotion, sur une machine de l'équipe) n'existe pas pour les boutiques. */
+.eb80-boutique div:has(> button[onclick*="EB80VideoIA"]), .eb80-boutique button[onclick*="EB80VideoIA"] { display: none !important; }
+/* Mode « sélecteur » (picker.js) : la page d'electroboy80 disparaît derrière son sélecteur de médias, en plein cadre. */
+.eb80-picker-mode .main { visibility: hidden; }
+.eb80-picker-mode #poster-media-picker { visibility: visible; inset: 0 !important; }

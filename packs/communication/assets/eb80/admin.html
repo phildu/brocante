@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<script src="eb80-shim.js"></script>
+<script>document.write("<script src=\"eb80-shim.js?v={v}\"><\/script>".replace('{v}', encodeURIComponent(new URLSearchParams(location.search).get('v') || '')))</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EB80 — Admin</title>
@@ -584,7 +584,7 @@ body.nav-collapsed .main{margin-left:0;}
   };
 })();
 </script>
-<link rel="stylesheet" href="eb80-theme.css">
+<script>document.write("<link rel=\"stylesheet\" href=\"eb80-theme.css?v={v}\">".replace('{v}', encodeURIComponent(new URLSearchParams(location.search).get('v') || '')))</script>
 </head>
 <body>
 
@@ -32227,6 +32227,6 @@ async function deleteAllOrphanCrops() {
 <script src="js/video-promo/video-ia.js?v=20261015c" defer></script>
 <script src="js/media-validation.js?v=20261012p" defer></script>
 <script src="js/media-picker-outils.js?v=20261012p" defer></script>
-<script src="eb80-after.js"></script>
+<script>document.write("<script src=\"eb80-after.js?v={v}\"><\/script>".replace('{v}', encodeURIComponent(new URLSearchParams(location.search).get('v') || '')))</script>
 </body>
 </html>

@@ -480,7 +480,6 @@ function _eb80_orig_handleImportUrl($input) {
     $httpCode    = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
     $errno       = curl_errno($ch);
-    curl_close($ch);
 
     if ($errno || $content === false || $content === '') {
         errorResponse('Impossible de télécharger le fichier (curl errno ' . $errno . ')', 400);
@@ -996,7 +995,6 @@ function callClaude(string $apiKey, string $b64, string $mime, string $prompt): 
     ]);
     $resp   = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($status !== 200) {
         $err = json_decode($resp, true);
@@ -1033,7 +1031,6 @@ function callGemini(string $apiKey, string $b64, string $mime, string $prompt): 
     ]);
     $resp   = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($status !== 200) {
         $err = json_decode($resp, true);
@@ -1289,7 +1286,7 @@ function handleOptimizeAll() {
         $out = imagescale($srcImg, $w, $h, IMG_BICUBIC);
         if (!$out) return false;
         $ok  = imagewebp($out, $destPath, $quality);
-        imagedestroy($out);
+
         return $ok;
     };
 
@@ -1323,7 +1320,7 @@ function handleOptimizeAll() {
             $srcW = imagesx($src); $srcH = imagesy($src);
             if (!file_exists($mobilePath))  $genWebp($src, $srcW, $srcH, 768,  80, $mobilePath);
             if (!file_exists($desktopPath)) $genWebp($src, $srcW, $srcH, 1920, 85, $desktopPath);
-            imagedestroy($src);
+
         }
 
         // Mettre à jour la clé _webp dans les settings si elle n'existe pas encore
@@ -1398,14 +1395,14 @@ function handleOptimizeImage(array $input) {
         $out = imagescale($srcImg, $w, $h, IMG_BICUBIC);
         if (!$out) return false;
         $ok = imagewebp($out, $destPath, $quality);
-        imagedestroy($out);
+
         return $ok;
     };
 
     if (!file_exists($mobilePath))  $genWebp($src, $srcW, $srcH, 768,  80, $mobilePath);
     if (!file_exists($desktopPath)) $genWebp($src, $srcW, $srcH, 1920, 85, $desktopPath);
 
-    imagedestroy($src);
+
 
     echo json_encode(['mobile' => $pub . $mobileFile, 'desktop' => $pub . $desktopFile]);
     exit;

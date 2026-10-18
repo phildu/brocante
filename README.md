@@ -847,7 +847,7 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   l'ancienne version, remplacer la base de la boutique par la sauvegarde d'avant la mise à jour (site au repos ; les écritures faites
   depuis sont perdues).
 
-## Pack Communication : la médiathèque d'electroboy80, portée telle quelle (plugin `communication`)
+## Pack Communication : la médiathèque et l'éditeur d'electroboy80, portés tels quels (plugin `communication`)
 
 Activé pour une boutique (portail → Plugins), le plugin remplace l'entrée « Médiathèque » du menu par **la médiathèque
 d'electroboy80**, avec sa vraie interface (dossiers, recherche, filtres, tris, vues grille et liste, kit, sélection multiple,
@@ -874,9 +874,17 @@ doublons, dérivés, recadrages orphelins, variantes, préfixes, import par adre
 - **Isolation** : chaque boutique a son dossier `uploads/<boutique>/` et sa propre base d'electroboy80, `data/com/<boutique>.db`
   (jamais servie ni déployée, séparée de la base de la boutique). Les photos des fiches produit apparaissent en plus, en lecture
   seule : les retirer depuis la médiathèque ne touche pas leur fichier (elles se gèrent dans la galerie de chaque pièce).
+- **Éditeur visuel** (menu « Éditeur visuel », même cadre ouvert sur la page « editor » d'electroboy80) : affiche, carrousel,
+  vidéo et reel, formats et zones de sécurité, styles rapides, couches libres, timeline, effets (`eb80-effects.js`), projets
+  enregistrés (« Mes projets »), export vers la médiathèque, PNG, PDF. L'affiche part des textes de la boutique (son nom, l'adresse
+  de son site, « Nouveautés en boutique »…) au lieu de ceux d'Electroboy 80 ; les blocs gardent leurs libellés génériques. Le script
+  vidéo par l'IA (`ai-generate.php`) passe par Gemini et le quota de la boutique. Pas disponibles : la Vidéo IA (son agent de
+  rendu Remotion n'existe pas pour les boutiques, bouton masqué) et la conversion de l'export vidéo en MP4, qu'electroboy80
+  fait avec ffmpeg sur le serveur (l'export reste en WebM).
 - **Pages de la plateforme** : les fenêtres « Choisir dans la médiathèque » du hero, du diaporama, des bandeaux et des réglages
-  gardent leur bouton « Toute la médiathèque… », et la galerie d'une fiche « Ajouter depuis la médiathèque… » (`assets/picker.js`).
-  Ils voient aussi les fichiers envoyés par la médiathèque portée, inscrits dans `media_library` au moment du choix.
+  gagnent « Toute la médiathèque… », et la galerie d'une fiche « Ajouter depuis la médiathèque… » (`assets/picker.js`). Le bouton
+  ouvre **le sélecteur d'electroboy80** (mode « sélecteur » de l'admin portée, en surimpression). Le fichier choisi est inscrit dans
+  `media_library` (route `media-adopt`), puis appliqué à la page.
 - Aucun fichier de `uploads/` n'est jamais exécuté comme script (`.htaccess`, `router.php`, `LocalValetDriver.php`).
 
 ## Vidéos de la galerie d'une pièce

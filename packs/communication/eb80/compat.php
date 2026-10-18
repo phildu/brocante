@@ -5,7 +5,7 @@
 //  - connexion : celle de l'administration de la boutique (aucun jeton electroboy80), vérifiée par admin/plugin-api.php ;
 //  - envoi de fichiers (direct, par morceaux, import par adresse) : type réel contrôlé (images, vidéos, sons), extension tirée
 //    du type, adresses internes refusées pour l'import ;
-//  - suggestion SEO : Gemini de la boutique, dans son quota d'IA ;
+//  - suggestion SEO et script vidéo par l'IA : Gemini de la boutique, dans son quota d'IA ;
 //  - outils vidéo qui exigent yt-dlp ou ffmpeg sur le serveur : indisponibles (comme electroboy80 sans ces outils) ;
 //  - liste des médias : celle d'electroboy80 (dossier uploads/<boutique>/) plus les photos des fiches, en lecture seule.
 // Isolation : chaque boutique a son dossier d'envoi (uploads/<boutique>/) et sa base d'electroboy80 (EB80_DB_PATH :
@@ -198,6 +198,12 @@ function handleSeoSuggest($input)
     $data = $text ? json_decode((string) preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)), true) : null;
     if (!is_array($data) || empty($data['alt'])) errorResponse('Réponse non reconnue, réessayez.', 502);
     jsonResponse(['alt' => trim((string) $data['alt']), 'title' => trim((string) ($data['title'] ?? '')), 'slug' => trim((string) ($data['slug'] ?? ''))]);
+}
+
+/** Clés d'IA lues par ai-generate.php : la clé Gemini de la boutique ; aucune autre (la boutique n'utilise pas Claude). */
+function getAiKey(string $keyName): string
+{
+    return $keyName === 'gemini_api_key' && com_ai_ready() ? GEMINI_API_KEY : '';
 }
 
 /** Outils vidéo d'electroboy80 qui exigent yt-dlp ou ffmpeg sur le serveur : indisponibles sur l'hébergement de la plateforme. */

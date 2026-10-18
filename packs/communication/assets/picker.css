@@ -1,22 +1,7 @@
-/* Pack Communication : sélecteur commun de la médiathèque (toutes les pages de l'administration). */
-.com-pick-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
-.com-pick-box { background: var(--bg); color: var(--ink); border: 1px solid var(--line); width: min(980px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 10px; padding: 16px; box-sizing: border-box; }
-.com-pick-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.com-pick-head .eyebrow { margin: 0; }
-.com-pick-close { background: none; border: 1px solid var(--line); color: var(--ink); font-size: 1.3rem; line-height: 1; width: 34px; height: 34px; cursor: pointer; }
-.com-pick-tools { display: flex; flex-wrap: wrap; gap: 8px; }
-.com-pick-tools input[type="search"], .com-pick-tools select { flex: 1 1 180px; min-width: 0; background: var(--surface); border: 1px solid var(--line); color: var(--ink); padding: 7px 9px; font-family: var(--font-body); font-size: 0.85rem; }
-.com-pick-status { margin: 0; font-size: 0.82rem; color: var(--ink-soft); }
-.com-pick-status:empty { display: none; }
-.com-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; overflow-y: auto; min-height: 120px; }
-.com-pick-item { border: 1px solid var(--line); background: var(--surface); cursor: pointer; padding: 0; text-align: left; color: var(--ink); }
-.com-pick-item img, .com-pick-item video { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--surface-2); display: block; pointer-events: none; }
-.com-pick-item span { display: block; font-size: 0.68rem; padding: 4px 6px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.com-pick-item:hover, .com-pick-item:focus-visible { outline: 2px solid var(--accent); }
+/* Pack Communication : sélecteur de médias d'electroboy80 ouvert depuis les pages de la plateforme (picker.js). */
+.com-eb80-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(0, 0, 0, 0.45); }
+.com-eb80-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+.com-eb80-status { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); margin: 0; padding: 6px 12px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); font-size: 0.85rem; }
+.com-eb80-status:empty { display: none; }
 .com-pick-open { margin: 8px 0; }
 .com-classic-note { margin: 0 0 14px; font-size: 0.88rem; color: var(--ink-soft); }
-@media (max-width: 560px) {
-  .com-pick-backdrop { padding: 0; }
-  .com-pick-box { max-height: 100vh; height: 100vh; border: 0; }
-  .com-pick-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
-}

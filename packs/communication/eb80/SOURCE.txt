@@ -1,4 +1,4 @@
-Copie d'electroboy80 faite le 2026-10-18 05:56
+Copie d'electroboy80 faite le 2026-10-18 06:25
 Dossier : /Users/admin/Documents/projet/web local/electroboy80
 Commit : 2a8092f 2026-10-15 12:33:33 +0200 RS : ajouter Threads (composeur, publication, programmation)
 
@@ -25,6 +25,8 @@ js/video-promo/video-ia.js : `/uploads/${…}` : 0
 js/video-promo/eb80-video-player.js : /uploads/ + nom : 0
 js/video-promo/eb80-video-player.js : `/uploads/${…}` : 0
 config.php : en-tête PHP : 1
+config.php : curl_close retiré : 0
+config.php : imagedestroy retiré : 3
 config.php : en-têtes CORS : 4
 config.php : pré-requêtes OPTIONS : 1
 config.php : type de contenu : 1
@@ -36,6 +38,8 @@ config.php : getCurrentUser remplacée : 1
 config.php : uploadFile remplacée : 1
 config.php : jsonResponse remplacée : 1
 media.php : en-tête PHP : 1
+media.php : curl_close retiré : 3
+media.php : imagedestroy retiré : 4
 media.php : config : 1
 media.php : adresses des fichiers : 18
 media.php : constantes : 0
@@ -47,15 +51,31 @@ media.php : handleDownloadVideo remplacée : 1
 media.php : handleMergeAV remplacée : 1
 media.php : handleExtractAudio remplacée : 1
 media-links.php : en-tête PHP : 1
+media-links.php : curl_close retiré : 0
+media-links.php : imagedestroy retiré : 0
 media-links.php : config : 1
 media-links.php : adresses des fichiers : 0
 media-links.php : constantes : 0
 generate-web-images.php : en-tête PHP : 1
+generate-web-images.php : curl_close retiré : 0
+generate-web-images.php : imagedestroy retiré : 2
 generate-web-images.php : config : 1
 generate-web-images.php : adresses des fichiers : 0
 generate-web-images.php : constantes : 1
 settings.php : en-tête PHP : 1
+settings.php : curl_close retiré : 0
+settings.php : imagedestroy retiré : 0
 settings.php : config : 1
 settings.php : adresses des fichiers : 0
 settings.php : constantes : 0
+ai-generate.php : en-tête PHP : 1
+ai-generate.php : curl_close retiré : 2
+ai-generate.php : imagedestroy retiré : 0
+ai-generate.php : config : 1
+ai-generate.php : adresses des fichiers : 0
+ai-generate.php : constantes : 0
+ai-generate.php : connexion : 1
+ai-generate.php : fournisseur : 1
+ai-generate.php : clé : 1
+ai-generate.php : consommation comptée : 1
 reglages-publics.php : en-tête PHP : 1
