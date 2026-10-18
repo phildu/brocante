@@ -1,7 +1,7 @@
-Copie d'electroboy80 faite le 2026-10-18 12:04
+Copie d'electroboy80 faite le 2026-10-18 15:51
 Dossier : /Users/admin/Documents/projet/web local/electroboy80
 Commit : e7ef5ae 2026-10-18 12:04:33 +0200 Sources éditeur 1.2.0 : sources intégrées déclarées par le site hôte, choix des champs ; Vidéo IA : liste des scènes rafraîchie
-Empreinte : cb36c452fe9fb1b16b3646a76e683658
+Empreinte : a5ee9d65de97d064229de279f6302e32
 
 Retouches :
 admin.html : adaptation au début : 1
@@ -55,6 +55,8 @@ js/video-promo/video-ia.js : nom de l'IA (sujet) : 1
 js/video-promo/video-ia.js : nom de l'IA (charte) : 1
 js/video-promo/video-ia.js : nom de l'IA (variantes) : 1
 js/video-promo/video-ia.js : nom de l'IA (scénario) : 1
+js/video-promo/video-ia.js : bandeau défilant : libellé : 1
+js/video-promo/video-ia.js : bandeau défilant : vide = aucun : 1
 video-ia.js (fenêtre) : fonds sombres : 15
 video-ia.js (fenêtre) : fonds noirs translucides : 1
 video-ia.js (fenêtre) : bordures sombres : 13

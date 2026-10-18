@@ -27,6 +27,8 @@
     dateEx: 'CE WEEK-END', mentionsEx: 'VINTAGE, PIÈCE UNIQUE', texteInfos: 'À découvrir en boutique', lien: P.site || '',
     titre: shop, titre2: 'EN BOUTIQUE', mots: ['CHINÉ.', 'UNIQUE.', 'À SAISIR.'], photo: 'PIÈCE UNIQUE', photo2: 'EN BOUTIQUE',
     carteNom: 'Carte infos', carteEtiquette: 'À DÉCOUVRIR', fin: shop,
+    // Bandeaux défilants (haut et bas) de la scène Mots-chocs : aucun par défaut ; un texte saisi dans la scène les fait apparaître.
+    bandeau: '', bandeauLib: 'Bandeau défilant en haut et en bas (vide = aucun)',
     charte: 'Habiller la carte infos aux couleurs de la boutique',
     charteAide: 'La charte habille la carte infos et ajoute le logo de la boutique à l\'écran de fin.',
   };

@@ -924,6 +924,8 @@ doublons, dérivés, recadrages orphelins, variantes, préfixes, import par adre
 - **Vidéo IA** (éditeur, mode Vidéo → « ✨ Vidéo IA ») : la fenêtre d'electroboy80, avec son aperçu dans le navigateur, aux
   couleurs de la boutique et avec ses textes (scènes titre, photos, mots-chocs, carte infos, fin, exemples : `EB80_VIA_TEXTES` dans
   `eb80-shim.js`, retouches de `video-ia.js`). Choisir une pièce ou une promo refait les scènes avec ses photos, son nom et son prix.
+  Les deux **bandeaux défilants** (haut et bas) appartiennent à la scène Mots-chocs : champ « Bandeau défilant » de sa carte,
+  vide = aucun bandeau (par défaut ; la composition d'origine affichait sinon les influences d'Electroboy 80).
   - **Scénario par l'IA** (« Proposer une vidéo », « 3 variantes », « Accorder la carte au visuel ») : `video-jobs-ai.php` recopié ;
     le prompt présente la boutique (nom, `ai.shop`) au lieu d'Electroboy 80 ; sans pièce choisie, le sujet est la boutique. L'IA
     se choisit dans **API & Réseaux → IA** (« IA du scénario de la Vidéo IA ») : **Gemini** (par défaut, clé de la boutique ou

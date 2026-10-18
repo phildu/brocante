@@ -447,7 +447,9 @@
       ratio: infoFormat().lecteur === 'libre' ? { largeur: infoFormat().l, hauteur: infoFormat().h } : null,
       flash: $('via-flash').value,
       // Scènes photo sans image écartées ; durées en secondes.
-      scenes: etat.scenes.filter((sc) => sc.type !== 'photo' || sc.photo).map((sc) => ({ ...sc, duree: Number(sc.duree) || 1 })),
+      scenes: etat.scenes.filter((sc) => sc.type !== 'photo' || sc.photo).map((sc) => ({ ...sc, duree: Number(sc.duree) || 1,
+        // Mots-chocs sans bandeau saisi : texte de la boutique (vide = aucun bandeau), jamais celui de la composition d'origine.
+        ...(sc.type === 'mots' && sc.bandeau == null && T.bandeau != null ? { bandeau: T.bandeau } : {}) })),
     };
     p.photos = p.scenes.filter((sc) => sc.type === 'photo').map((sc) => sc.photo);
     // Toujours explicite, comme la charte : null = sans musique.
@@ -698,7 +700,7 @@
       if (sc.type === 'titre') corps = `<div class="via-row"><div><label>Titre (\\n = à la ligne)</label><input type="text" data-i="${i}" data-champ="texte" value="${esc((sc.texte || '').replace(/\n/g, '\\n'))}"></div>${champ(i, 'texte2', 'Surtitre', sc.texte2 || '')}</div>`;
       if (sc.type === 'photo') corps = `<div class="via-photo"><div class="t" style="background-image:url('${esc(sc.photo || '')}');background-position:${sc.cadrage ? `${sc.cadrage.x}% ${sc.cadrage.y}%` : 'center'}"></div><button class="via-btn sm" data-photo="${i}">${sc.photo ? 'Changer la photo' : 'Choisir la photo'}</button>${sc.photo ? `<button class="via-btn sm" data-recadrer="${i}">✂ Recadrer${sc.cadrage ? ' ✓' : ''}</button>` : ''}</div>
         <div class="via-row">${champ(i, 'texte', 'Accroche, ligne 1', sc.texte || '')}${champ(i, 'texte2', 'Accroche, ligne 2', sc.texte2 || '')}</div>`;
-      if (sc.type === 'mots') corps = `<div class="via-row">${champ(i, 'mots', 'Mots (séparés par des virgules)', (sc.mots || []).join(', '))}${champ(i, 'bandeau', 'Bandeau défilant (vide = influences)', sc.bandeau || '')}</div>`;
+      if (sc.type === 'mots') corps = `<div class="via-row">${champ(i, 'mots', 'Mots (séparés par des virgules)', (sc.mots || []).join(', '))}${champ(i, 'bandeau', T.bandeauLib || 'Bandeau défilant (vide = influences)', sc.bandeau || '')}</div>`;
       if (sc.type === 'compte') corps = `<div class="via-row">${champ(i, 'texte', 'Chiffre (J-5, CE SOIR…)', sc.texte || '')}${champ(i, 'texte2', 'Sous-texte', sc.texte2 || '')}</div>`;
       if (sc.type === 'concert') corps = `<div class="via-row">${champ(i, 'texte2', 'Étiquette au-dessus de la date', sc.texte2 || '', 'placeholder="' + (T.carteEtiquette || 'PROCHAIN CONCERT') + '"')}<div><label>&nbsp;</label><span class="via-hint">Date, lieu, étiquettes : section « ${T.sujet || 'Le concert'} ».</span></div></div><div class="via-photo"><div class="t" style="background-image:url('${esc(sc.photo || '')}');background-position:${sc.cadrage ? `${sc.cadrage.x}% ${sc.cadrage.y}%` : 'center'}"></div><button class="via-btn sm" data-photo="${i}">${sc.photo ? 'Changer la photo de fond' : 'Ajouter une photo de fond'}</button>${sc.photo ? ` <button class="via-btn sm" data-recadrer="${i}">✂ Recadrer${sc.cadrage ? ' ✓' : ''}</button> <button class="via-btn sm" data-via="effacer-photo-scene" data-i="${i}" title="Retirer la photo">✕</button>` : ''}</div>`;
       if (sc.type === 'fin') corps = `<div class="via-row">${champ(i, 'texte', 'Titre de fin', sc.texte || '', 'placeholder="' + (T.fin || 'ELECTROBOY 80') + '"')}<div><label>&nbsp;</label><span class="via-hint">Appel final et lien : section « ${T.sujet || 'Le concert'} ».</span></div></div>`;

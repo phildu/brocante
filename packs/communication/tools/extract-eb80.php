@@ -299,6 +299,18 @@ EOT],
 EOT, <<<'EOT'
 `⏳ ${T.iaNom || 'Claude'} regarde les photos et écrit un scénario
 EOT],
+            ["bandeau défilant : libellé", <<<'EOT'
+'Bandeau défilant (vide = influences)'
+EOT, <<<'EOT'
+T.bandeauLib || 'Bandeau défilant (vide = influences)'
+EOT],
+            ["bandeau défilant : vide = aucun", <<<'EOT'
+scenes: etat.scenes.filter((sc) => sc.type !== 'photo' || sc.photo).map((sc) => ({ ...sc, duree: Number(sc.duree) || 1 })),
+EOT, <<<'EOT'
+scenes: etat.scenes.filter((sc) => sc.type !== 'photo' || sc.photo).map((sc) => ({ ...sc, duree: Number(sc.duree) || 1,
+        // Mots-chocs sans bandeau saisi : texte de la boutique (vide = aucun bandeau), jamais celui de la composition d'origine.
+        ...(sc.type === 'mots' && sc.bandeau == null && T.bandeau != null ? { bandeau: T.bandeau } : {}) })),
+EOT],
         ] as [$what, $from, $to]) $js = patch($f . ' : ' . $what, $js, $from, $to, 1);
         // Couleurs de la boutique pour la fenêtre (bloc CSS de l'interface seulement ; les palettes de la vidéo ne changent pas).
         $js = patch_re($f . ' : couleurs de la fenêtre', $js, '/(const CSS = `)(.*?)(`;)/s', static fn ($m) => $m[1] . patch_colors('video-ia.js (fenêtre)', $m[2]) . $m[3], 1);
