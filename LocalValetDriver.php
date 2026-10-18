@@ -34,8 +34,9 @@ class LocalValetDriver extends BasicValetDriver
             preg_match('#^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$)#', $uri)
             || preg_match('#(?:^|/)\.(?!well-known)#', $uri)
             || preg_match('#\.(?:db|sqlite|sqlite3|sql|log|bak)(?:$|[./-])#i', $uri)
+            || preg_match('#(?:^|/)uploads/.*\.(?:php\d?|phtml|phar|pl|py|cgi|sh)$#i', $uri) // fichiers envoyés : jamais exécutés
             || (preg_match('#^/packs(?:/|$)#', $packs)
-                && !preg_match('#^/packs/[a-z0-9][a-z0-9-]*/assets/(?:[a-z0-9_-]+/)*[a-z0-9_.-]+\.(?:js|css|svg|png|jpe?g|webp|gif|woff2?)$#', $packs))
+                && !preg_match('#^/packs/[a-z0-9][a-z0-9-]*/assets/(?:[a-z0-9_-]+/)*[a-z0-9_.-]+\.(?:js|css|html|svg|png|jpe?g|webp|gif|woff2?)$#', $packs))
         );
     }
 

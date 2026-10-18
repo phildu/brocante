@@ -14,5 +14,5 @@ plugin_json([
     'folders' => $folders,
     'stats' => ['count' => count($items) + count($links), 'own_bytes' => $ownBytes, 'missing_web' => count(array_filter($items, static fn ($i) => $i['type'] === 'photo' && !$i['web_url'] && !$i['missing']))],
     'limits' => ['chunk' => COM_CHUNK_BYTES, 'image' => COM_IMAGE_MAX_BYTES, 'video' => COM_VIDEO_MAX_BYTES],
-    'ai' => GEMINI_API_KEY !== '',
+    'ai' => com_ai_ready(),
 ]);

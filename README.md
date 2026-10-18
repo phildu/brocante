@@ -847,39 +847,37 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   l'ancienne version, remplacer la base de la boutique par la sauvegarde d'avant la mise à jour (site au repos ; les écritures faites
   depuis sont perdues).
 
-## Pack Communication : la médiathèque enrichie (plugin `communication`)
+## Pack Communication : la médiathèque d'electroboy80, portée telle quelle (plugin `communication`)
 
-Premier module du pack Communication / Promotion (repris d'electroboy80, voir `packs/communication/`). Activé pour une boutique
-(portail → Plugins), il remplace l'entrée « Médiathèque » du menu (la page classique `admin/media.php` reste accessible par le lien
-« Vue classique ») ; administrateurs et community managers y ont accès.
+Activé pour une boutique (portail → Plugins), le plugin remplace l'entrée « Médiathèque » du menu par **la médiathèque
+d'electroboy80**, avec sa vraie interface (dossiers, recherche, filtres, tris, vues grille et liste, kit, sélection multiple,
+doublons, dérivés, recadrages orphelins, variantes, préfixes, import par adresse, liens vidéo, webcam, envoi par morceaux, menu
+« Actions » de chaque fichier…). La page classique `admin/media.php` reste accessible. Administrateurs et community managers y ont accès.
 
-- **Une seule médiathèque** : les mêmes éléments que la page classique (ressources de `media_library` et photos des fiches, lues en
-  place), avec en plus titre, texte alternatif, crédit, mots-clés, dossier, « montrer dans la galerie publique », dimensions et poids
-  (table `com_media_meta`, par chemin de fichier). Le titre et les mots-clés d'une ressource sont recopiés dans `media_library`.
-  Recherche, filtre par type, classement par dossier, produit, source ou mois, tri par date, nom, poids ou format.
-- **Envois** : glisser-déposer ou choix de plusieurs fichiers, envoyés par morceaux de 1,5 Mo (sous la limite PHP la plus basse) ;
-  JPEG, PNG, WebP, GIF jusqu'à 25 Mo (40 mégapixels), MP4, MOV, WebM jusqu'à 500 Mo. Le type est vérifié sur le contenu (un
-  faux JPEG ou un script renommé est refusé). Les fichiers vont dans `uploads/<boutique>/` et sont inscrits dans `media_library` :
-  tous les sélecteurs de la plateforme les voient. Morceaux en cours dans `data/com-tmp/` (nettoyés après un jour).
-- **Import par adresse** (image ou vidéo) : http(s) seulement, ports 80 et 443, adresses internes refusées, adresse du serveur
-  résolue une fois et imposée au téléchargement, redirections revérifiées, taille plafonnée.
-- **Vidéos en ligne** YouTube et Vimeo : gardées sous forme de lien (table `com_media_links`), rien n'est téléchargé.
-- **Versions web** : une copie de 1 200 px au plus (JPEG, ou WebP quand l'image peut être transparente, orientation des photos de
-  téléphone appliquée) dans `uploads/<boutique>/web/`, créée à l'envoi ; « Créer les versions web manquantes » traite les anciennes
-  8 par 8. Une image déjà petite et légère sert elle-même de version web.
-- **IA** : « Proposer avec l'IA » suggère titre, texte alternatif et mots-clés par Gemini (même consigne que la médiathèque
-  classique), comptés dans la consommation d'IA de la boutique et refusés si son quota est épuisé. Rien n'est enregistré sans
-  validation.
-- **Retirer** une ressource : la photo d'une fiche se retire depuis la galerie du produit. Un fichier n'est effacé du disque que s'il
-  vient des envois du pack (`uploads/<boutique>/`) et n'est utilisé nulle part ailleurs dans la boutique (recherche de son nom dans
-  toutes les tables) ; sinon seule la ligne de la médiathèque disparaît.
-- **Sélecteur commun** (`assets/picker.js`, chargé sur toutes les pages de l'administration) : les fenêtres « Choisir dans la
-  médiathèque » du hero, du diaporama, des bandeaux et des réglages gagnent « Toute la médiathèque… » (photos des fiches comprises,
-  recherche, dossiers, envoi depuis la fenêtre) ; la galerie d'une fiche gagne « Ajouter depuis la médiathèque… » (sans copier le
-  fichier). Le choix passe par l'élément déjà présent dans la fenêtre de la page, après inscription du fichier dans `media_library`
-  (seule source acceptée par les actions de la plateforme) : ces pages ne sont pas modifiées.
-- **Isolation** : toute route n'accepte qu'un chemin présent dans la médiathèque de la boutique courante (jamais un chemin libre),
-  la session et le jeton CSRF sont ceux de la boutique.
+**Comment c'est fait (portage fidèle, sans réécriture).**
+- `packs/communication/tools/extract-eb80.php` recopie depuis le dossier d'electroboy80 son `admin.html` (dans
+  `assets/eb80/admin.html`), ses scripts annexes (`assets/eb80/js/`) et les fichiers serveur de la médiathèque (`eb80/api/` :
+  `config.php`, `media.php`, `media-links.php`, `generate-web-images.php`, `settings.php`, et `eb80/reglages-publics.php`), avec
+  quelques retouches listées dans le script : il s'arrête si l'une ne trouve plus son motif. `eb80/SOURCE.txt` dit d'où vient la
+  copie. **Quand electroboy80 évolue, on relance le script** : `php packs/communication/tools/extract-eb80.php --source=…/electroboy80`.
+- **Navigateur** : la page Médiathèque affiche `admin.html` dans un cadre. `assets/eb80/eb80-shim.js` (chargé avant le code
+  d'electroboy80) redirige chaque `fetch('/api/…')` vers la route `eb80` du plugin, avec la session de la boutique et le jeton CSRF
+  (plus de jeton electroboy80), et lui donne les couleurs et polices de l'administration de la boutique (variables CSS, couleurs
+  écrites en dur ramenées aux variables par l'extraction). `eb80-after.js` n'ouvre que les pages portées et masque le menu
+  d'electroboy80 ; `eb80-theme.css` règle l'apparence.
+- **Serveur** : la route `api/eb80.php` appelle les contrôleurs d'electroboy80 recopiés ; `eb80/compat.php` fixe leurs constantes
+  pour la boutique et remplace les fonctions sensibles. La connexion est celle de l'administration de la boutique. L'envoi (direct,
+  par morceaux, import par adresse) n'accepte que des images, vidéos (MP4, MOV, WebM) et sons (MP3, M4A, WAV, OGG), d'après leur
+  contenu, avec l'extension de leur vrai type. L'import refuse les adresses internes. La suggestion SEO passe par Gemini, dans le
+  quota d'IA de la boutique. Le téléchargement YouTube, la fusion et l'extraction audio (yt-dlp, ffmpeg) sont indisponibles. Un
+  chemin non encore porté répond vide (lecture) ou « pas encore disponible ».
+- **Isolation** : chaque boutique a son dossier `uploads/<boutique>/` et sa propre base d'electroboy80, `data/com/<boutique>.db`
+  (jamais servie ni déployée, séparée de la base de la boutique). Les photos des fiches produit apparaissent en plus, en lecture
+  seule : les retirer depuis la médiathèque ne touche pas leur fichier (elles se gèrent dans la galerie de chaque pièce).
+- **Pages de la plateforme** : les fenêtres « Choisir dans la médiathèque » du hero, du diaporama, des bandeaux et des réglages
+  gardent leur bouton « Toute la médiathèque… », et la galerie d'une fiche « Ajouter depuis la médiathèque… » (`assets/picker.js`).
+  Ils voient aussi les fichiers envoyés par la médiathèque portée, inscrits dans `media_library` au moment du choix.
+- Aucun fichier de `uploads/` n'est jamais exécuté comme script (`.htaccess`, `router.php`, `LocalValetDriver.php`).
 
 ## Vidéos de la galerie d'une pièce
 

@@ -1,0 +1,61 @@
+Copie d'electroboy80 faite le 2026-10-18 05:56
+Dossier : /Users/admin/Documents/projet/web local/electroboy80
+Commit : 2a8092f 2026-10-15 12:33:33 +0200 RS : ajouter Threads (composeur, publication, programmation)
+
+Retouches :
+admin.html : adaptation au début : 1
+admin.html : couleurs de la boutique : 1
+admin.html : adaptation à la fin : 1
+admin.html : scripts annexes en chemin relatif : 3
+admin.html : /uploads/ + nom : 6
+admin.html : `/uploads/${…}` : 1
+admin.html : fonds sombres : 214
+admin.html : fonds noirs translucides : 76
+admin.html : bordures sombres : 63
+admin.html : textes clairs : 54
+admin.html : textes atténués : 128
+js/eb80-effects.js : /uploads/ + nom : 0
+js/eb80-effects.js : `/uploads/${…}` : 0
+js/media-picker-outils.js : /uploads/ + nom : 0
+js/media-picker-outils.js : `/uploads/${…}` : 0
+js/media-validation.js : /uploads/ + nom : 3
+js/media-validation.js : `/uploads/${…}` : 0
+js/video-promo/video-ia.js : /uploads/ + nom : 1
+js/video-promo/video-ia.js : `/uploads/${…}` : 0
+js/video-promo/eb80-video-player.js : /uploads/ + nom : 0
+js/video-promo/eb80-video-player.js : `/uploads/${…}` : 0
+config.php : en-tête PHP : 1
+config.php : en-têtes CORS : 4
+config.php : pré-requêtes OPTIONS : 1
+config.php : type de contenu : 1
+config.php : base propre au portage : 2
+config.php : constantes : 6
+config.php : requireAuth remplacée : 1
+config.php : requirePerm remplacée : 1
+config.php : getCurrentUser remplacée : 1
+config.php : uploadFile remplacée : 1
+config.php : jsonResponse remplacée : 1
+media.php : en-tête PHP : 1
+media.php : config : 1
+media.php : adresses des fichiers : 18
+media.php : constantes : 0
+media.php : handleGetMedia remplacée : 1
+media.php : handleUploadChunk remplacée : 1
+media.php : handleImportUrl remplacée : 1
+media.php : handleSeoSuggest remplacée : 1
+media.php : handleDownloadVideo remplacée : 1
+media.php : handleMergeAV remplacée : 1
+media.php : handleExtractAudio remplacée : 1
+media-links.php : en-tête PHP : 1
+media-links.php : config : 1
+media-links.php : adresses des fichiers : 0
+media-links.php : constantes : 0
+generate-web-images.php : en-tête PHP : 1
+generate-web-images.php : config : 1
+generate-web-images.php : adresses des fichiers : 0
+generate-web-images.php : constantes : 1
+settings.php : en-tête PHP : 1
+settings.php : config : 1
+settings.php : adresses des fichiers : 0
+settings.php : constantes : 0
+reglages-publics.php : en-tête PHP : 1

@@ -1,0 +1,15 @@
+/* Portage d'electroboy80 dans la boutique : la page d'electroboy80 sans son menu ni sa barre (la boutique a les siens), aux
+   couleurs et polices de l'administration de la boutique (variables posées par eb80-shim.js). */
+.eb80-boutique .sidebar, .eb80-boutique #sidebar-toggle { display: none !important; }
+.eb80-boutique .main { margin-left: 0 !important; }
+.eb80-boutique .topbar { display: none !important; }
+.eb80-boutique .content { padding: 18px 16px 40px; }
+.eb80-boutique body { background: var(--dark); color: var(--white); font-family: var(--shop-body); }
+.eb80-boutique .section-title, .eb80-boutique .card-title, .eb80-boutique [style*="VT323"] { font-family: var(--shop-display) !important; letter-spacing: 0.02em !important; }
+.eb80-boutique [style*="IBM Plex Mono"], .eb80-boutique code, .eb80-boutique .media-card .mc-name { font-family: var(--shop-mono) !important; }
+.eb80-boutique input, .eb80-boutique select, .eb80-boutique textarea, .eb80-boutique button { font-family: var(--shop-body); }
+/* Boutons pleins : texte clair sur la couleur d'accent de la boutique. */
+.eb80-boutique .btn-primary, .eb80-boutique .btn-yellow { background: var(--shop-accent) !important; border-color: var(--shop-accent) !important; color: var(--shop-bg) !important; }
+@media (max-width: 720px) {
+  .eb80-boutique .content { padding: 12px 10px 32px; }
+}

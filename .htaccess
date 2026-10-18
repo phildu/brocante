@@ -38,6 +38,9 @@ RedirectMatch 404 "^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$
 # Plugins : seules les ressources de packs/<id>/assets/ sont servies (le reste est aussi refusé par packs/.htaccess).
 RedirectMatch 404 "^/packs(?:/|$)(?![a-z0-9][a-z0-9-]*/assets/)"
 
+# Fichiers envoyés (uploads/, y compris sous /<commerce>/) : jamais exécutés comme scripts, quelle que soit leur extension.
+RedirectMatch 404 "(?:^|/)uploads/.*\.(?:php\d?|phtml|phar|pl|py|cgi|sh)$"
+
 # Fichiers de travail Markdown à la racine (consignes, audits : _NOM.md) : jamais servis.
 RedirectMatch 404 "^/_[^/]*\.md$"
 

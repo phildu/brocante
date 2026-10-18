@@ -9,7 +9,7 @@
 //   id, name, version (x.y.z), description, table_prefix (« hello_ »),
 //   pages : [{ id, label, icon, file, roles, replaces }] → /admin/plugin.php?p=<id>&v=<page> ; « replaces » : entrée du menu
 //           de la plateforme dont la page prend la place (ex. « media »)
-//   api   : [{ id, file, methods, roles }]              → /admin/plugin-api.php?p=<id>&r=<route> (JSON)
+//   api   : [{ id, file, methods, roles }]              → /admin/plugin-api.php?p=<id>&r=<route> (JSON ; GET, POST, PUT, PATCH, DELETE)
 //   admin_assets : [{ file, roles }]                    → scripts et styles de assets/ chargés sur toutes les pages de l'administration
 //   migrations : fichiers packs/<id>/migrations/NNN-quelque-chose.sql, appliqués dans l'ordre, une seule fois chacun.
 // Rôles : « admin » (toujours autorisé) et « community_manager ». Les pages et l'API passent par la session de
@@ -22,7 +22,7 @@
 // « Mettre à jour » dans le portail, qui sauvegarde la base (data/backups/) avant d'appliquer les migrations.
 
 const PLUGIN_ROLES = ['admin', 'community_manager'];
-const PLUGIN_METHODS = ['GET', 'POST'];
+const PLUGIN_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
 /** Dossier des plugins. */
 function plugins_dir(): string

@@ -16,6 +16,12 @@ const COM_IMAGE_MAX_PIXELS = 40_000_000; // au-delà, GD dépasserait la mémoir
 const COM_CHUNK_BYTES = 1_572_864;       // 1,5 Mo : sous la limite d'envoi PHP la plus basse (2 Mo)
 const COM_WEB_MAX_PX = 1200;
 
+/** Une clé Gemini est-elle configurée ? (Tolère un site où la constante n'existe pas.) */
+function com_ai_ready(): bool
+{
+    return defined('GEMINI_API_KEY') && GEMINI_API_KEY !== '';
+}
+
 function com_root(): string
 {
     return dirname(__DIR__, 3);
@@ -119,6 +125,27 @@ function com_items(int $measure = 150): array
             'badges' => $m['badges'],
             'own' => com_is_own($path),
             'missing' => !is_file($abs),
+        ];
+    }
+    // Fichiers envoyés par la médiathèque portée d'electroboy80 (uploads/<boutique>/, hors versions web et dérivés) : pas encore
+    // inscrits dans media_library ; media-adopt les y inscrit quand on les choisit dans une page de la plateforme.
+    foreach (glob(com_root() . '/' . com_upload_rel() . '/*') ?: [] as $abs) {
+        $name = basename($abs);
+        $path = com_upload_rel() . '/' . $name;
+        if (isset($items[$path]) || !is_file($abs) || preg_match('/(?:_web\.jpg|-\d+w\.webp)$/i', $name)) continue;
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        $type = isset(array_flip(COM_IMAGE_TYPES)[$ext]) || $ext === 'jpeg' ? 'photo' : (isset(array_flip(COM_VIDEO_TYPES)[$ext]) ? 'video' : null);
+        if ($type === null) continue;
+        $x = $meta[$path] ?? [];
+        $web = com_root() . '/' . com_upload_rel() . '/' . pathinfo($name, PATHINFO_FILENAME) . '_web.jpg';
+        $items[$path] = [
+            'path' => $path, 'url' => '/' . $path, 'type' => $type, 'kind' => 'eb80', 'media_id' => null,
+            'title' => ($x['title'] ?? '') !== '' ? $x['title'] : com_pretty_name($name), 'alt' => (string) ($x['alt'] ?? ''),
+            'credit' => (string) ($x['credit'] ?? ''), 'tags' => (string) ($x['tags'] ?? ''), 'folder' => (string) ($x['folder'] ?? ''),
+            'in_gallery' => false, 'web_url' => is_file($web) ? '/' . com_upload_rel() . '/' . basename($web) : null,
+            'width' => isset($x['width']) ? (int) $x['width'] : null, 'height' => isset($x['height']) ? (int) $x['height'] : null,
+            'bytes' => (int) filesize($abs), 'source' => 'Médiathèque', 'created_at' => date('Y-m-d H:i:s', filemtime($abs)),
+            'fiche' => null, 'origin_name' => '', 'badges' => [], 'own' => true, 'missing' => false,
         ];
     }
     return $items;
