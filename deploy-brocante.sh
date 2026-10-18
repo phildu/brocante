@@ -46,6 +46,9 @@ ok()   { echo -e "${GREEN}✅${NC} $1"; }
 warn() { echo -e "${YELLOW}⚠️ ${NC} $1"; }
 err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 
+# Commerces d'essai purement locaux : jamais envoyés, quel que soit le mode (dossiers tenants/<slug>/ et assets/tenants/<slug>/).
+LOCAL_ONLY_TENANTS="kllklmk"
+
 WITH_DB=0
 PORTAIL=0
 TENANT="${TENANT:-petit-chalet}"
@@ -210,6 +213,10 @@ deploy_portail() {
     log "Déploiement du portail et de tous les commerces vers ${FTP_PATH_FRONT}..."
 
     local db_exclude="--exclude-glob data/ --exclude-glob *.db"
+    # Fichiers envoyés (uploads/) : jamais en mode portail (chaque serveur garde les siens ; les essais locaux ne partent pas).
+    # Commerces d'essai locaux (LOCAL_ONLY_TENANTS) : ni leur configuration, ni leurs ressources.
+    local local_tenants_exclude=""
+    for t in $LOCAL_ONLY_TENANTS; do local_tenants_exclude="$local_tenants_exclude --exclude-glob tenants/$t/ --exclude-glob assets/tenants/$t/"; done
     [ "$WITH_DB" = "1" ] && db_exclude=""
     local account_file
     account_file="$(mktemp)"
@@ -251,6 +258,8 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob '*.db.bak-*' \
   --exclude-glob .DS_Store \
   --exclude-glob .tenant \
+  --exclude-glob uploads/ \
+  $local_tenants_exclude \
   $db_exclude \
   --verbose \
   . ${FTP_PATH_FRONT}
