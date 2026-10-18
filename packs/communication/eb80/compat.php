@@ -5,13 +5,18 @@
 //  - connexion : celle de l'administration de la boutique (aucun jeton electroboy80), vérifiée par admin/plugin-api.php ;
 //  - envoi de fichiers (direct, par morceaux, import par adresse) : type réel contrôlé (images, vidéos, sons), extension tirée
 //    du type, adresses internes refusées pour l'import ;
-//  - suggestion SEO et script vidéo par l'IA : Gemini de la boutique, dans son quota d'IA ;
+//  - suggestion SEO, script vidéo et message de publication par l'IA : Gemini de la boutique, dans son quota d'IA ;
+//  - réseaux sociaux : simulateur local possible (EB80_RS_SIMULATEUR), rôle « collaborateur » pour le community manager ;
 //  - outils vidéo qui exigent yt-dlp ou ffmpeg sur le serveur : indisponibles (comme electroboy80 sans ces outils) ;
 //  - liste des médias : celle d'electroboy80 (dossier uploads/<boutique>/) plus les photos des fiches, en lecture seule.
 // Isolation : chaque boutique a son dossier d'envoi (uploads/<boutique>/) et sa base d'electroboy80 (EB80_DB_PATH :
 // data/com/<boutique>.db, jamais servie ni déployée), séparée de la base de la boutique : rien n'est partagé ni mélangé.
 defined('PLUGIN_RUNTIME') || exit;
 require_once __DIR__ . '/../lib/media.php';
+
+// Heures d'electroboy80 (publications programmées, dates des projets) : heure locale de la boutique, comme son interface les saisit
+// (fuseau « timezone » du tenant.php, Paris par défaut ; PHP en ligne de commande compterait sinon en temps universel).
+date_default_timezone_set((string) (tenant('timezone') ?: 'Europe/Paris'));
 
 define('UPLOAD_DIR', com_root() . '/uploads/' . tenant_slug() . '/');
 define('UPLOAD_URL', '/uploads/' . tenant_slug() . '/');
@@ -59,7 +64,11 @@ function eb80_capture(callable $fn): array
 function eb80_user(): array
 {
     $s = $GLOBALS['eb80_session'] ?? null;
-    return ['id' => (int) ($s['id'] ?? 0), 'role' => 'admin', 'name' => ($s['name'] ?? '') !== '' ? $s['name'] : 'Compte principal', 'email' => '', 'permissions' => []];
+    // Administrateur de la boutique → « admin » d'electroboy80 ; community manager → « collaborateur » (droits editor et community :
+    // il publie et programme, mais les réglages d'electroboy80 ne lui renvoient pas les jetons ni les clés).
+    $admin = ($s['role'] ?? '') === 'admin';
+    return ['id' => (int) ($s['id'] ?? 0), 'role' => $admin ? 'admin' : 'collaborator', 'name' => ($s['name'] ?? '') !== '' ? $s['name'] : 'Compte principal',
+        'email' => '', 'permissions' => $admin ? [] : ['editor', 'community']];
 }
 function requireAuth($roles = [])
 {
@@ -204,6 +213,74 @@ function handleSeoSuggest($input)
 function getAiKey(string $keyName): string
 {
     return $keyName === 'gemini_api_key' && com_ai_ready() ? GEMINI_API_KEY : '';
+}
+
+// ── Réseaux sociaux ─────────────────────────────────────────────────────────
+/**
+ * Simulateur local des réseaux (constante EB80_RS_SIMULATEUR, à mettre dans config.local.php d'un poste de test, jamais en ligne) :
+ * aucun appel ne part, chaque appel est noté dans data/com/<boutique>-simulateur.log et reçoit une réponse plausible (identifiant,
+ * page, compte Instagram, statut « FINISHED »…). Sans la constante, les vrais appels d'electroboy80.
+ */
+function eb80_rs_simulated(): bool
+{
+    return defined('EB80_RS_SIMULATEUR') && EB80_RS_SIMULATEUR;
+}
+function apiCurl(string $url, array $opts = []): array
+{
+    if (!eb80_rs_simulated()) return _eb80_orig_apiCurl($url, $opts);
+    $post = $opts[CURLOPT_POSTFIELDS] ?? null;
+    $line = ['at' => date('c'), 'method' => !empty($opts[CURLOPT_POST]) || $post !== null ? 'POST' : 'GET',
+        'url' => preg_replace('/(access_token|client_secret|fb_exchange_token)=[^&]+/', '$1=***', $url),
+        'body' => is_string($post) ? mb_substr($post, 0, 500) : (is_array($post) ? array_keys($post) : null)];
+    @file_put_contents(dirname(EB80_DB_PATH) . '/' . tenant_slug() . '-simulateur.log', json_encode($line, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND | LOCK_EX);
+    $id = 'sim_' . bin2hex(random_bytes(4));
+    $reply = [
+        'id' => $id, 'post_id' => $id, 'success' => true, 'status_code' => 'FINISHED', 'status' => 'FINISHED', 'simulateur' => true,
+        'name' => 'Page simulée', 'username' => 'boutique_simulee', 'access_token' => 'sim_token', 'expires_in' => 5184000,
+        'instagram_business_account' => ['id' => 'sim_ig'], 'permalink_url' => 'https://example.test/' . $id,
+    ];
+    // TikTok répond { data: { publish_id } } ; Meta, pour les listes (pages…), { data: [ … ] }.
+    $reply['data'] = str_contains($url, 'tiktok')
+        ? ['publish_id' => $id, 'status' => 'PUBLISH_COMPLETE']
+        : [['id' => 'sim_page', 'name' => 'Page simulée', 'access_token' => 'sim_token', 'instagram_business_account' => ['id' => 'sim_ig']]];
+    return $reply;
+}
+/** Table des publications programmées : config.php d'electroboy80 la crée avec un ancien schéma (sans next_run) que rs-schedule.php
+ *  ne corrige pas ; vide, on la retire pour qu'il crée la bonne. Appelée avant toute route /rs/schedule et par la tâche planifiée. */
+function eb80_fix_schedule_table(): void
+{
+    $db = getDb();
+    $cols = array_column($db->query('PRAGMA table_info(scheduled_posts)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+    if ($cols && !in_array('next_run', $cols, true) && (int) $db->query('SELECT COUNT(*) FROM scheduled_posts')->fetchColumn() === 0) {
+        $db->exec('DROP TABLE scheduled_posts');
+    }
+}
+function refreshTikTokToken(): bool
+{
+    return eb80_rs_simulated() ? true : _eb80_orig_refreshTikTokToken();
+}
+/** POST /rs/generate-message : texte de publication rédigé par Gemini (clé et quota de la boutique), même réponse qu'electroboy80. */
+function handleGenerateMessage(array $input): void
+{
+    requireAuth(['admin']);
+    if (!com_ai_ready()) errorResponse('Clé Gemini absente : rédaction par l\'IA indisponible.', 400);
+    if (($gate = ai_gate()) !== null) errorResponse($gate, 402);
+    $networks = array_map('strval', (array) ($input['networks'] ?? []));
+    $type = match (trim((string) ($input['content_type'] ?? 'post'))) { 'story' => 'Story', 'reel' => 'Reel / vidéo courte', default => 'Post' };
+    $ctx = [];
+    foreach (['event_name' => 'Sujet', 'event_date' => 'Date', 'event_venue' => 'Lieu', 'hint' => 'Indications'] as $k => $label) {
+        $v = trim((string) ($input[$k] ?? ''));
+        if ($v !== '') $ctx[] = "$label : " . mb_substr($v, 0, 300);
+    }
+    $prompt = 'Tu es le community manager de « ' . get_content()['site_name'] . ' », ' . tenant('ai.shop') . '. Rédige un ' . $type . ' pour '
+        . ($networks ? implode(', ', array_map('ucfirst', $networks)) : 'les réseaux sociaux') . ' en français.'
+        . ($ctx ? "\nContexte :\n" . implode("\n", $ctx) : '')
+        . "\n\nTon chaleureux et concret, sans formules banales. Pour Instagram et TikTok : 150 caractères au plus et 3 à 5 mots-dièse."
+        . ' Pour Facebook : 280 caractères au plus, sans mots-dièse. Pour Threads : 200 caractères au plus. Si plusieurs réseaux, adapte'
+        . " pour le premier. N'invente ni prix, ni date, ni caractéristique. Réponds uniquement avec le texte, sans guillemets.";
+    $text = gemini_describe_image('', $prompt);
+    if (!$text) errorResponse('Rédaction par l\'IA indisponible pour le moment, réessayez.', 502);
+    jsonResponse(['ok' => true, 'message' => trim($text)]);
 }
 
 /** Outils vidéo d'electroboy80 qui exigent yt-dlp ou ffmpeg sur le serveur : indisponibles sur l'hébergement de la plateforme. */

@@ -15,6 +15,8 @@
   }
   window.COM_EB80 = P;
   window.EB80_UPLOADS = P.uploads;
+  // Retour OAuth de TikTok : la route eb80 du plugin (même adresse que celle calculée par rs-tiktok-callback.php).
+  window.EB80_TIKTOK_CALLBACK = P.api + '&path=' + encodeURIComponent('/rs/tiktok-callback');
   try { localStorage.setItem('eb80_token', 'session-boutique'); } catch (e) { /* stockage indisponible */ }
 
   var origFetch = window.fetch.bind(window);

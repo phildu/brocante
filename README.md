@@ -828,7 +828,8 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   `plugins`, ni menu, ni route : rien ne change pour elle. **Désactiver** retire le menu et les pages, sans rien effacer.
 - **Manifeste** `packs/<id>/plugin.json` : `id` (= nom du dossier), `name`, `version` (x.y.z), `description`, `table_prefix`,
   `pages` (`id`, `label`, `icon`, `file`, `roles`, et `replaces` : l'entrée du menu de la plateforme dont la page prend la place,
-  par exemple `media`), `api` (`id`, `file`, `methods` GET/POST, `roles`) et `admin_assets` (`file`, `roles` : scripts et styles de
+  par exemple `media`), `api` (`id`, `file`, `methods` GET/POST/PUT/PATCH/DELETE, `roles`), `cron` (`file` : tâches planifiées,
+  voir plus bas) et `admin_assets` (`file`, `roles` : scripts et styles de
   `assets/` chargés sur toutes les pages de l'administration, pour enrichir les pages de la plateforme sans les modifier ; un script
   y reçoit `data-api`, `data-csrf` et `data-role`). Rôles : `admin` (toujours autorisé) et `community_manager`. Un manifeste
   invalide est ignoré (journal d'erreurs PHP).
@@ -843,11 +844,16 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   Entre les deux, le plugin reste **en pause** dans ces boutiques (page « module en cours de mise à jour », API en 503) pour ne jamais
   tourner sur une base pas encore migrée. Avant chaque migration, la base est copiée dans
   `data/backups/<base>-plugin-<id>-<de>-<vers>-<date>.db`. Chaque action est journalisée (portail → Activité).
+- **Tâches planifiées** : une seule entrée dans la tâche planifiée de l'hébergeur (OVH : Hébergement → Tâches planifiées - Cron,
+  langage PHP 8, toutes les 5 ou 15 minutes) lance `scripts/plugins-cron.php`. Le script fait le tour des boutiques et, pour chaque
+  plugin activé et à jour, exécute ses tâches (`cron` du manifeste) dans un processus séparé, avec `TENANT=<boutique>` : une tâche ne
+  voit que sa boutique. Journal : `var/log/plugins-cron.log`. Options : `--plugin=<id>`, `--tenant=<boutique>`. En ligne de commande
+  seulement (rien n'est servi par le web).
 - **Retour arrière** : redéployer l'ancien code met le plugin en pause (« base plus récente que le code ») ; pour revenir vraiment à
   l'ancienne version, remplacer la base de la boutique par la sauvegarde d'avant la mise à jour (site au repos ; les écritures faites
   depuis sont perdues).
 
-## Pack Communication : la médiathèque et l'éditeur d'electroboy80, portés tels quels (plugin `communication`)
+## Pack Communication : la médiathèque, l'éditeur et la publication d'electroboy80, portés tels quels (plugin `communication`)
 
 Activé pour une boutique (portail → Plugins), le plugin remplace l'entrée « Médiathèque » du menu par **la médiathèque
 d'electroboy80**, avec sa vraie interface (dossiers, recherche, filtres, tris, vues grille et liste, kit, sélection multiple,
@@ -885,6 +891,27 @@ doublons, dérivés, recadrages orphelins, variantes, préfixes, import par adre
   gagnent « Toute la médiathèque… », et la galerie d'une fiche « Ajouter depuis la médiathèque… » (`assets/picker.js`). Le bouton
   ouvre **le sélecteur d'electroboy80** (mode « sélecteur » de l'admin portée, en surimpression). Le fichier choisi est inscrit dans
   `media_library` (route `media-adopt`), puis appliqué à la page.
+- **Publication sur les réseaux** (menu « Publication », page « publish » d'electroboy80 ; administrateurs et community managers) :
+  composer un post (texte, légende par réseau, texte proposé par l'IA via Gemini et le quota de la boutique), choisir un visuel
+  (affiche de l'éditeur, médiathèque, carrousel, envoi), publier tout de suite ou programmer (une fois, ou à répéter) sur Facebook,
+  Instagram, Threads et TikTok, avec l'historique des publications programmées. Contrôleurs recopiés : `rs-v2.php`,
+  `rs-schedule.php`, `rs-tiktok-callback.php`, `social-feed.php`.
+- **Réseaux sociaux** (menu « Réseaux sociaux », administrateurs seulement) : l'onglet « Réseaux sociaux » de la page « API &
+  Réseaux » d'electroboy80, avec ses guides pas à pas. Comme dans electroboy80, **chaque boutique colle ses propres jetons** (page
+  Facebook, compte Instagram professionnel, Threads, TikTok) ; ils restent dans `data/com/<boutique>.db`. Un community manager publie
+  avec ces jetons sans jamais les lire (l'API lui renvoie `••••••`) ; renouveler un jeton, le diagnostic, les tests et les réglages
+  sont réservés à l'administrateur. L'adresse de retour TikTok à déclarer est affichée sur la page (celle de la boutique).
+- **Programmations** : elles ne partent que par la tâche planifiée (`cron/rs-schedule.php`, lancé par `scripts/plugins-cron.php`) ;
+  l'adresse web d'electroboy80 qui les déclenchait répond 403. Un verrou par boutique (`data/com/<boutique>.cron.lock`) empêche deux
+  passages simultanés de publier deux fois. Les heures sont celles du fuseau de la boutique (`timezone`, sinon Europe/Paris).
+  **À mettre en place sur OVH** au premier déploiement : une tâche planifiée qui lance
+  `php <dossier du site>/scripts/plugins-cron.php` toutes les 5 minutes (ou 15, selon l'offre).
+- **Simulateur** : avec `define('EB80_RS_SIMULATEUR', true);` dans `config.local.php`, aucun appel ne part vers Meta ou TikTok ; les
+  appels sont écrits dans `data/com/<boutique>-simulateur.log` et reçoivent une réponse factice (« Page simulée », `sim_…`). C'est le
+  réglage des tests locaux ; jamais en ligne.
+- **Limites** : Meta n'accepte que des médias à une adresse publique (pas depuis un poste local) ; publier pour d'autres comptes
+  que les siens demande la validation de l'application par Meta (App Review) — d'ici là, chaque boutique crée sa propre application
+  ou l'on teste avec des comptes de test. La vidéo exportée par l'éditeur reste en WebM (Instagram et TikTok demandent du MP4).
 - Aucun fichier de `uploads/` n'est jamais exécuté comme script (`.htaccess`, `router.php`, `LocalValetDriver.php`).
 
 ## Vidéos de la galerie d'une pièce

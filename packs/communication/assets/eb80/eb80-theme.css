@@ -17,3 +17,5 @@
 /* Mode « sélecteur » (picker.js) : la page d'electroboy80 disparaît derrière son sélecteur de médias, en plein cadre. */
 .eb80-picker-mode .main { visibility: hidden; }
 .eb80-picker-mode #poster-media-picker { visibility: visible; inset: 0 !important; }
+/* Réglages des réseaux : seul l'onglet « Réseaux sociaux » (les autres onglets d'electroboy80 relèvent de la plateforme). */
+.eb80-rs-only [data-apitab]:not([data-apitab="rs"]) { display: none !important; }

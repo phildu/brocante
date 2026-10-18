@@ -1,12 +1,14 @@
 {
   "id": "communication",
   "name": "Communication",
-  "version": "0.4.0",
-  "description": "Pack Communication / Promotion : la médiathèque et l'éditeur visuel d'electroboy80 (affiche, carrousel, vidéo et reel, couches libres, effets), portés tels quels (interface d'origine dans un cadre, API adaptée à la boutique, dossier uploads/<boutique>/), et un sélecteur commun pour la fiche, le diaporama, les bandeaux et le hero.",
+  "version": "0.5.0",
+  "description": "Pack Communication / Promotion : la médiathèque, l'éditeur visuel (affiche, carrousel, vidéo et reel, couches libres, effets) et la publication sur les réseaux sociaux (Facebook, Instagram, Threads, TikTok, programmation) d'electroboy80, portés tels quels (interface d'origine dans un cadre, API adaptée à la boutique, dossier uploads/<boutique>/), et un sélecteur commun pour la fiche, le diaporama, les bandeaux et le hero.",
   "table_prefix": "com_",
   "pages": [
     {"id": "mediatheque", "label": "Médiathèque", "icon": "folder", "file": "pages/mediatheque.php", "roles": ["admin", "community_manager"], "replaces": "media"},
-    {"id": "editeur", "label": "Éditeur visuel", "icon": "palette", "file": "pages/editeur.php", "roles": ["admin", "community_manager"]}
+    {"id": "editeur", "label": "Éditeur visuel", "icon": "palette", "file": "pages/editeur.php", "roles": ["admin", "community_manager"]},
+    {"id": "publication", "label": "Publication", "icon": "cloud", "file": "pages/publication.php", "roles": ["admin", "community_manager"]},
+    {"id": "reseaux", "label": "Réseaux sociaux", "icon": "gear", "file": "pages/reseaux.php", "roles": ["admin"]}
   ],
   "api": [
     {"id": "eb80", "file": "api/eb80.php", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"], "roles": ["admin", "community_manager"]},
@@ -16,5 +18,8 @@
   "admin_assets": [
     {"file": "picker.css", "roles": ["admin", "community_manager"]},
     {"file": "picker.js", "roles": ["admin", "community_manager"]}
+  ],
+  "cron": [
+    {"file": "cron/rs-schedule.php"}
   ]
 }

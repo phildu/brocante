@@ -37,6 +37,24 @@
       window.openMediaPicker(function (url) { if (P.onPick) P.onPick(url); }, { type: P.pickType === 'video' || P.pickType === 'image' ? P.pickType : null });
     });
   }
+  // Réglages des réseaux : seul l'onglet « Réseaux sociaux » de la page « API & Réseaux » concerne la boutique (les clés d'IA,
+  // l'e-mail, la recherche et le SEO relèvent de la plateforme) ; l'adresse de retour TikTok affichée est celle de la boutique.
+  if (start === 'rs-settings') {
+    document.documentElement.classList.add('eb80-rs-only');
+    // Le panneau des réseaux est construit après le chargement : l'adresse de retour TikTok est posée dès qu'il apparaît.
+    var callback = location.origin + (window.EB80_TIKTOK_CALLBACK || '');
+    var fillHint = function () {
+      var hint = document.getElementById('tiktok-redirect-hint');
+      if (hint && window.EB80_TIKTOK_CALLBACK && hint.textContent !== callback) hint.textContent = callback;
+    };
+    new MutationObserver(fillHint).observe(document.documentElement, { childList: true, subtree: true });
+    var rsOnly = function () {
+      fillHint();
+      try { if (typeof window.apiSettingsTab === 'function') window.apiSettingsTab('rs'); } catch (e) { console.warn('Réseaux sociaux :', e); }
+    };
+    // Les scripts du cadre sont injectés tardivement : la page peut être déjà chargée.
+    if (document.readyState === 'complete') rsOnly(); else window.addEventListener('load', rsOnly);
+  }
   ['loadDashboardFromAPI', 'refreshPendingBadge'].forEach(function (fn) {
     if (typeof window[fn] === 'function') window[fn] = function () {};
   });

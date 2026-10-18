@@ -17299,7 +17299,7 @@ function connectTikTok() {
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
     body: JSON.stringify(data),
   }).then(() => {
-    const redirectUri = encodeURIComponent(window.location.origin + '/api/rs/tiktok-callback');
+    const redirectUri = encodeURIComponent(window.location.origin + (window.EB80_TIKTOK_CALLBACK || '/api/rs/tiktok-callback'));
     const scope = encodeURIComponent('user.info.basic,video.publish,video.upload');
     const state = btoa(Date.now() + ':' + Math.random());
     localStorage.setItem('tiktok_oauth_state', state);

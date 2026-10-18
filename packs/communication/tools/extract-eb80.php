@@ -9,7 +9,8 @@
 //                                               eb80-shim.js (au début) et eb80-after.js (à la fin) l'adaptent à la boutique
 //   packs/communication/assets/eb80/js/…        ses scripts annexes (effets, outils du sélecteur, validation, vidéo IA)
 //   packs/communication/eb80/api/*.php          config.php, media.php, media-links.php, generate-web-images.php, settings.php,
-//                                               ai-generate.php (script vidéo par l'IA)
+//                                               ai-generate.php (script vidéo par l'IA), rs-v2.php, rs-schedule.php,
+//                                               rs-tiktok-callback.php, social-feed.php (publication sur les réseaux)
 //                                               (et eb80/reglages-publics.php, le filtre des réglages publics) ;
 //                                               packs/communication/eb80/compat.php remplace les fonctions renommées ici
 //   packs/communication/eb80/SOURCE.txt         d'où vient la copie (dossier, commit, date)
@@ -101,6 +102,8 @@ $log[] = 'admin.html : adaptation à la fin : 1';
 $html = patch('admin.html : scripts annexes en chemin relatif', $html, 'src="/js/', 'src="js/', 1);
 $html = patch_uploads('admin.html', $html, 1);
 $html = patch_colors('admin.html', $html);
+// Retour OAuth TikTok : la route eb80 du plugin (window.EB80_TIKTOK_CALLBACK, posée par eb80-shim.js) au lieu de /api/….
+$html = patch('admin.html : retour TikTok', $html, "window.location.origin + '/api/rs/tiktok-callback'", "window.location.origin + (window.EB80_TIKTOK_CALLBACK || '/api/rs/tiktok-callback')", 1);
 write_file($pack . '/assets/eb80/admin.html', $html);
 
 $jsFiles = ['eb80-effects.js', 'media-picker-outils.js', 'media-validation.js', 'video-promo/video-ia.js', 'video-promo/eb80-video-player.js', 'video-promo/eb80-video-player.css'];
@@ -129,7 +132,7 @@ foreach (['requireAuth', 'requirePerm', 'getCurrentUser', 'uploadFile', 'jsonRes
 }
 write_file($pack . '/eb80/api/config.php', $cfg);
 
-$controllers = ['media.php', 'media-links.php', 'generate-web-images.php', 'settings.php', 'ai-generate.php'];
+$controllers = ['media.php', 'media-links.php', 'generate-web-images.php', 'settings.php', 'ai-generate.php', 'rs-v2.php', 'rs-schedule.php', 'rs-tiktok-callback.php', 'social-feed.php'];
 foreach ($controllers as $f) {
     $php = (string) file_get_contents($source . '/api/' . $f);
     $php = patch_re("$f : en-tête PHP", $php, '/^<\?php\s*/', $guard, 1);
@@ -153,6 +156,20 @@ foreach ($controllers as $f) {
         $php = patch_re('ai-generate.php : clé', $php, '/^function getAiKey\(/m', 'function _eb80_orig_getAiKey(', 1);
         $php = patch('ai-generate.php : consommation comptée', $php, "    \$text = \$resp['candidates'][0]['content']['parts'][0]['text'] ?? '';",
             "    \$text = \$resp['candidates'][0]['content']['parts'][0]['text'] ?? '';\n    if (\$text) ai_usage_log_text(\$resp['usageMetadata'] ?? []);", 1);
+    }
+    if ($f === 'rs-v2.php') {
+        // Appels aux réseaux (simulateur local possible), renouvellement TikTok, message rédigé par l'IA : remplacés dans compat.php.
+        foreach (['apiCurl', 'refreshTikTokToken', 'handleGenerateMessage'] as $fn) {
+            $php = patch_re("rs-v2.php : $fn remplacée", $php, '/^function ' . $fn . '\(/m', 'function _eb80_orig_' . $fn . '(', 1);
+        }
+    }
+    if ($f === 'rs-schedule.php') {
+        $php = patch('rs-schedule.php : bibliothèque RS', $php, "require_once 'rs-v2.php';", "require_once __DIR__ . '/rs-v2.php';", 1);
+    }
+    if ($f === 'rs-tiktok-callback.php') {
+        // Adresse de retour : la route eb80 du plugin, sous le préfixe de la boutique (identique à celle envoyée par le navigateur).
+        $php = patch_re('rs-tiktok-callback.php : adresse de retour', $php, '/^\$redirectUri\s*=.*$/m',
+            "\$redirectUri = appBaseUrl() . app_prefix(plugin_api_url('communication', 'eb80') . '&path=' . rawurlencode('/rs/tiktok-callback'));", 1);
     }
     write_file($pack . '/eb80/api/' . $f, $php);
 }

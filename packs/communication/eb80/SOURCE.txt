@@ -1,4 +1,4 @@
-Copie d'electroboy80 faite le 2026-10-18 06:25
+Copie d'electroboy80 faite le 2026-10-18 06:59
 Dossier : /Users/admin/Documents/projet/web local/electroboy80
 Commit : 2a8092f 2026-10-15 12:33:33 +0200 RS : ajouter Threads (composeur, publication, programmation)
 
@@ -14,6 +14,7 @@ admin.html : fonds noirs translucides : 76
 admin.html : bordures sombres : 63
 admin.html : textes clairs : 54
 admin.html : textes atténués : 128
+admin.html : retour TikTok : 1
 js/eb80-effects.js : /uploads/ + nom : 0
 js/eb80-effects.js : `/uploads/${…}` : 0
 js/media-picker-outils.js : /uploads/ + nom : 0
@@ -78,4 +79,33 @@ ai-generate.php : connexion : 1
 ai-generate.php : fournisseur : 1
 ai-generate.php : clé : 1
 ai-generate.php : consommation comptée : 1
+rs-v2.php : en-tête PHP : 1
+rs-v2.php : curl_close retiré : 4
+rs-v2.php : imagedestroy retiré : 0
+rs-v2.php : config : 1
+rs-v2.php : adresses des fichiers : 0
+rs-v2.php : constantes : 0
+rs-v2.php : apiCurl remplacée : 1
+rs-v2.php : refreshTikTokToken remplacée : 1
+rs-v2.php : handleGenerateMessage remplacée : 1
+rs-schedule.php : en-tête PHP : 1
+rs-schedule.php : curl_close retiré : 0
+rs-schedule.php : imagedestroy retiré : 0
+rs-schedule.php : config : 1
+rs-schedule.php : adresses des fichiers : 0
+rs-schedule.php : constantes : 1
+rs-schedule.php : bibliothèque RS : 1
+rs-tiktok-callback.php : en-tête PHP : 1
+rs-tiktok-callback.php : curl_close retiré : 1
+rs-tiktok-callback.php : imagedestroy retiré : 0
+rs-tiktok-callback.php : config : 1
+rs-tiktok-callback.php : adresses des fichiers : 0
+rs-tiktok-callback.php : constantes : 0
+rs-tiktok-callback.php : adresse de retour : 1
+social-feed.php : en-tête PHP : 1
+social-feed.php : curl_close retiré : 1
+social-feed.php : imagedestroy retiré : 0
+social-feed.php : config : 1
+social-feed.php : adresses des fichiers : 0
+social-feed.php : constantes : 0
 reglages-publics.php : en-tête PHP : 1

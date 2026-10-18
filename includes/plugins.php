@@ -11,6 +11,8 @@
 //           de la plateforme dont la page prend la place (ex. « media »)
 //   api   : [{ id, file, methods, roles }]              → /admin/plugin-api.php?p=<id>&r=<route> (JSON ; GET, POST, PUT, PATCH, DELETE)
 //   admin_assets : [{ file, roles }]                    → scripts et styles de assets/ chargés sur toutes les pages de l'administration
+//   cron  : [{ file }]                                  → tâches lancées par scripts/plugins-cron.php pour chaque boutique où le
+//           plugin est actif (ligne de commande, variable TENANT)
 //   migrations : fichiers packs/<id>/migrations/NNN-quelque-chose.sql, appliqués dans l'ordre, une seule fois chacun.
 // Rôles : « admin » (toujours autorisé) et « community_manager ». Les pages et l'API passent par la session de
 // l'administration de la boutique ; l'API exige le jeton CSRF (en-tête X-CSRF-Token) pour tout ce qui n'est pas GET.
@@ -103,6 +105,16 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
         }
         $api[$rid] = ['id' => $rid, 'file' => $rfile, 'methods' => $methods, 'roles' => plugin_roles($r['roles'] ?? [])];
     }
+    // Tâches planifiées (scripts/plugins-cron.php) : [{ file }], scripts PHP du plugin lancés en ligne de commande, boutique par boutique.
+    $cron = [];
+    foreach ((array) ($raw['cron'] ?? []) as $c) {
+        $cfile = plugin_safe_file($dir, (string) ($c['file'] ?? ''), 'php');
+        if ($cfile === null) {
+            $errors[] = 'tâche planifiée « ' . ($c['file'] ?? '') . ' » invalide';
+            continue;
+        }
+        $cron[] = ['file' => $cfile];
+    }
     $migrations = [];
     foreach (glob($dir . '/migrations/*.sql') ?: [] as $sql) {
         if (!preg_match('/^(\d{3})-[a-z0-9-]+\.sql$/', basename($sql), $mm) || isset($migrations[(int) $mm[1]])) {
@@ -115,7 +127,7 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
     if ($errors) return null;
     return [
         'id' => $id, 'name' => $name, 'version' => $version, 'description' => trim((string) ($raw['description'] ?? '')),
-        'table_prefix' => $prefix, 'pages' => $pages, 'api' => $api, 'admin_assets' => $assets, 'migrations' => $migrations, 'dir' => $dir,
+        'table_prefix' => $prefix, 'pages' => $pages, 'api' => $api, 'admin_assets' => $assets, 'cron' => $cron, 'migrations' => $migrations, 'dir' => $dir,
     ];
 }
 
