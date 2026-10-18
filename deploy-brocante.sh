@@ -49,6 +49,7 @@ err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 # Exclusions : un motif --exclude-glob sans chemin (« plugin/ ») vaut pour tout dossier de ce nom, à toutes les profondeurs ;
 # le prototype plugin/ de la racine est donc exclu par une expression ancrée (« ^plugin/ »), pour ne pas écarter
 # packs/communication/assets/eb80/plugin/ (sources.js de l'éditeur).
+# Documents Markdown de la racine (README.md, notes _*.md) : jamais en ligne (fonctionnement interne de la plateforme).
 # Commerces d'essai purement locaux : jamais envoyés, quel que soit le mode (dossiers tenants/<slug>/ et assets/tenants/<slug>/).
 LOCAL_ONLY_TENANTS="kllklmk"
 
@@ -163,6 +164,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob plugin-mediatheque.php \
   --exclude-glob .plugin_enabled \
   --exclude-glob '_*.md' \
+  --exclude '^[^/]+\.md$' \
   --exclude-glob '*.sql' \
   --exclude-glob '*.bak' \
   --exclude-glob '*.db' \
@@ -257,6 +259,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob plugin-mediatheque.php \
   --exclude-glob .plugin_enabled \
   --exclude-glob '_*.md' \
+  --exclude '^[^/]+\.md$' \
   --exclude-glob '*.bak' \
   --exclude-glob '*.db.bak-*' \
   --exclude-glob .DS_Store \
