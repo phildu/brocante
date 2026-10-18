@@ -8,7 +8,8 @@
     {"id": "mediatheque", "label": "Médiathèque", "icon": "folder", "file": "pages/mediatheque.php", "roles": ["admin", "community_manager"], "replaces": "media"},
     {"id": "editeur", "label": "Éditeur visuel", "icon": "palette", "file": "pages/editeur.php", "roles": ["admin", "community_manager"]},
     {"id": "publication", "label": "Publication", "icon": "cloud", "file": "pages/publication.php", "roles": ["admin", "community_manager"]},
-    {"id": "reseaux", "label": "API & Réseaux", "icon": "gear", "file": "pages/reseaux.php", "roles": ["admin"]}
+    {"id": "reseaux", "label": "API & Réseaux", "icon": "gear", "file": "pages/reseaux.php", "roles": ["admin"]},
+    {"id": "palettes", "label": "Palettes des visuels", "icon": "palette", "file": "pages/palettes.php", "roles": ["admin"]}
   ],
   "api": [
     {"id": "eb80", "file": "api/eb80.php", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"], "roles": ["admin", "community_manager"]},

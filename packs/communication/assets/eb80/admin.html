@@ -628,6 +628,7 @@ body.nav-collapsed .main{margin-left:0;}
     <div class="nav-section" data-nav-section="systeme">
       <div class="nav-label">Système</div>
       <div class="nav-item active" data-nav-key="landing" onclick="showPage('landing')"><span class="icon">✎</span><span class="nav-lbl">Landing Page</span></div>
+      <div class="nav-item" data-nav-key="appearance" onclick="showPage('appearance')"><span class="icon">🎨</span><span class="nav-lbl">Apparence</span></div>
       <div class="nav-item" data-nav-key="pro-page" onclick="showPage('pro-page')"><span class="icon">◆</span><span class="nav-lbl">Page Pro</span></div>
       <div class="nav-item" data-nav-key="effects" onclick="showPage('effects')"><span class="icon">✨</span><span class="nav-lbl">Effets Overlay</span></div>
       <div class="nav-item" data-nav-key="rs-settings" onclick="showPage('rs-settings')"><span class="icon">📡</span><span class="nav-lbl">API &amp; Réseaux</span></div>
@@ -888,7 +889,7 @@ body.nav-collapsed .main{margin-left:0;}
           <button class="btn btn-ghost" onclick="openImportUrlModal()">🌐 Import URL</button>
           <button class="btn btn-ghost" onclick="openLinkVideoModal()">🔗 Lier</button>
           <button class="btn btn-ghost" onclick="openWebcamModal()">📷 Webcam</button>
-          <button class="btn btn-ghost" onclick="showPage('editor');setEditorMode('poster')">🎨 Affiche</button>
+          <button class="btn btn-ghost" onclick="showPage('editor');setEditorMode('poster')">🎨 Image</button>
           <button class="btn btn-ghost" onclick="showPage('editor');setEditorMode('diap')">🖼 Carousel</button>
           <button class="btn btn-ghost" onclick="toggleSocialImportPanel('instagram')">📸 Instagram</button>
           <button class="btn btn-ghost" onclick="toggleSocialImportPanel('facebook')">📘 Facebook</button>
@@ -1146,15 +1147,17 @@ body.nav-collapsed .main{margin-left:0;}
 
     <!-- ===== MODAL : PROJETS ÉDITEUR ===== -->
     <div id="editor-projects-modal" style="display:none;position:fixed;inset:0;background:color-mix(in srgb, var(--black) 96%, transparent);z-index:9000;align-items:center;justify-content:center">
-      <div style="background:var(--dark);border:2px solid var(--yellow);width:520px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column">
+      <div style="background:var(--dark);border:2px solid var(--yellow);width:640px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column">
         <div style="padding:14px 18px;border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
-          <div style="font-family:'VT323',monospace;font-size:22px;letter-spacing:3px;color:var(--yellow)">📂 MES PROJETS</div>
+          <div style="font-family:'VT323',monospace;font-size:22px;letter-spacing:3px;color:var(--yellow)">📂 OUVRIR UN PROJET</div>
           <button onclick="closeEditorProjects()" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:18px;width:32px;height:32px;cursor:pointer">✕</button>
         </div>
-        <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-shrink:0">
+        <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0">
+          <input id="ep-search" class="form-input" placeholder="Rechercher un projet…" oninput="renderEditorProjectsList()" style="flex:1 1 100%;font-size:12px;padding:6px 8px;margin-bottom:2px">
           <button class="btn btn-ghost btn-sm" id="ep-filter-all"    onclick="filterEditorProjects('all',this)"    style="border-color:var(--yellow);color:var(--yellow)">Tous</button>
-          <button class="btn btn-ghost btn-sm" id="ep-filter-poster" onclick="filterEditorProjects('poster',this)">📄 Affiches</button>
+          <button class="btn btn-ghost btn-sm" id="ep-filter-poster" onclick="filterEditorProjects('poster',this)">📄 Images</button>
           <button class="btn btn-ghost btn-sm" id="ep-filter-diap"   onclick="filterEditorProjects('diap',this)">🖼 Carousels</button>
+          <button class="btn btn-ghost btn-sm" id="ep-filter-video"  onclick="filterEditorProjects('video',this)">🎬 Vidéos</button>
         </div>
         <div id="editor-projects-list" style="overflow-y:auto;flex:1;padding:10px 16px">
           <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Chargement…</div>
@@ -1163,6 +1166,18 @@ body.nav-collapsed .main{margin-left:0;}
           <span style="font-size:10px;color:var(--muted)">Les projets sont sauvegardés en base de données et restent éditables indéfiniment.</span>
           <button onclick="closeEditorProjects();newEditorProject()" style="flex-shrink:0;font-family:'VT323',monospace;font-size:14px;letter-spacing:2px;padding:6px 16px;background:transparent;border:1px solid var(--yellow);color:var(--yellow);cursor:pointer;white-space:nowrap;transition:background .15s,color .15s" onmouseenter="this.style.background='var(--yellow)';this.style.color='var(--black)'" onmouseleave="this.style.background='transparent';this.style.color='var(--yellow)'">✦ NOUVEAU</button>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== MODAL : ACTION SUR LE PROJET (nom, exporter, nouveau projet) ===== -->
+    <div id="editor-action-modal" style="display:none;position:fixed;inset:0;background:color-mix(in srgb, var(--black) 96%, transparent);z-index:9100;align-items:center;justify-content:center" onclick="if(event.target===this)_closeEdModal()">
+      <div style="background:var(--dark);border:2px solid var(--yellow);width:440px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column">
+        <div style="padding:14px 18px;border-bottom:2px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0">
+          <div id="edm-title" style="font-family:'VT323',monospace;font-size:22px;letter-spacing:2px;color:var(--yellow)"></div>
+          <button onclick="_closeEdModal()" style="background:transparent;border:1px solid var(--border);color:var(--muted);font-size:18px;width:32px;height:32px;cursor:pointer;flex-shrink:0">✕</button>
+        </div>
+        <div id="edm-body" style="padding:16px 18px;overflow-y:auto"></div>
+        <div id="edm-actions" style="padding:10px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0"></div>
       </div>
     </div>
 
@@ -1250,7 +1265,7 @@ body.nav-collapsed .main{margin-left:0;}
 
               <!-- Onglets source -->
               <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:12px;flex-wrap:wrap">
-                <button class="pub-vis-tab active" onclick="setPubVisTab('poster',this)">🖼 Affiche</button>
+                <button class="pub-vis-tab active" onclick="setPubVisTab('poster',this)">🖼 Image</button>
                 <button class="pub-vis-tab" onclick="setPubVisTab('media',this)">📁 Média</button>
                 <button class="pub-vis-tab" onclick="setPubVisTab('diap',this)">🖼 Carousel</button>
                 <button class="pub-vis-tab" onclick="setPubVisTab('upload',this)">⬆ Upload</button>
@@ -1276,7 +1291,7 @@ body.nav-collapsed .main{margin-left:0;}
                 <div style="display:flex;align-items:flex-start;gap:12px">
                   <canvas id="rs-poster-thumb" style="border:2px solid var(--border);background:var(--mid);flex-shrink:0;width:100px;height:100px;object-fit:contain"></canvas>
                   <div style="flex:1">
-                    <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;line-height:1.6">Visuel créé dans l'éditeur Affiche / RS.<br>Modifie l'affiche puis clique ici pour l'importer.</div>
+                    <div style="font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;line-height:1.6">Visuel créé dans l'éditeur visuel (Image).<br>Modifie l'image puis clique ici pour l'importer.</div>
                     <div style="display:flex;flex-direction:column;gap:6px">
                       <button class="btn btn-yellow btn-sm" onclick="importPosterToPost()">← Utiliser ce visuel</button>
                       <button class="btn btn-ghost btn-sm" onclick="showPage('editor');setTimeout(()=>setPubVisTab('poster',document.querySelector('.pub-vis-tab')),100)">✎ Aller à l'éditeur</button>
@@ -1585,7 +1600,6 @@ body.nav-collapsed .main{margin-left:0;}
         <button class="landing-tab" onclick="showLandingTab('fanzone',this)">Fan Zone</button>
         <button class="landing-tab" onclick="showLandingTab('media',this)">Médias</button>
         <button class="landing-tab" onclick="showLandingTab('identity',this)">🎨 Logo</button>
-        <button class="landing-tab" onclick="showLandingTab('colors',this)">Couleurs</button>
         <button class="landing-tab" onclick="showLandingTab('fonts',this)">🔤 Polices</button>
         <button class="landing-tab" onclick="showLandingTab('seo',this)">SEO</button>
         <button class="landing-tab" onclick="showLandingTab('links',this)">Liens</button>
@@ -2573,151 +2587,6 @@ body.nav-collapsed .main{margin-left:0;}
           </div>
         </div>
 
-      </div>
-
-      <!-- COLORS TAB -->
-      <div class="landing-section" id="ltab-colors" style="display:none">
-
-        <!-- Palettes prédéfinies -->
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-header"><div class="section-title">Palettes prédéfinies</div></div>
-          <div class="card-body">
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">
-
-              <button onclick="applyPalette('punk')" style="border:2px solid var(--border);background:var(--mid);padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#FF006E'" onmouseout="this.style.borderColor='#222'">
-                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FF006E;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FFFF00;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#00B4FF;display:inline-block"></span>
-                </div>
-                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">PUNK (défaut)</div>
-              </button>
-
-              <button onclick="applyPalette('acid')" style="border:2px solid var(--border);background:var(--mid);padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#39FF14'" onmouseout="this.style.borderColor='#222'">
-                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
-                  <span style="width:20px;height:20px;border-radius:50%;background:#39FF14;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FF00FF;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FFE600;display:inline-block"></span>
-                </div>
-                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">ACID RAVE</div>
-              </button>
-
-              <button onclick="applyPalette('metal')" style="border:2px solid var(--border);background:var(--mid);padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#FF2200'" onmouseout="this.style.borderColor='#222'">
-                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FF2200;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#C0C0C0;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#880000;display:inline-block"></span>
-                </div>
-                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">METAL</div>
-              </button>
-
-              <button onclick="applyPalette('synth')" style="border:2px solid var(--border);background:#080010;padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#BF00FF'" onmouseout="this.style.borderColor='#222'">
-                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
-                  <span style="width:20px;height:20px;border-radius:50%;background:#BF00FF;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#00FFFF;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FF69B4;display:inline-block"></span>
-                </div>
-                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">SYNTHWAVE</div>
-              </button>
-
-              <button onclick="applyPalette('blues')" style="border:2px solid var(--border);background:#00060f;padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#00AAFF'" onmouseout="this.style.borderColor='#222'">
-                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
-                  <span style="width:20px;height:20px;border-radius:50%;background:#00AAFF;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FFFFFF;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#0044AA;display:inline-block"></span>
-                </div>
-                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">COLD WAVE</div>
-              </button>
-
-              <button onclick="applyPalette('gold')" style="border:2px solid var(--border);background:#0a0800;padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#FFD700'" onmouseout="this.style.borderColor='#222'">
-                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FFD700;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#FF6600;display:inline-block"></span>
-                  <span style="width:20px;height:20px;border-radius:50%;background:#CC3300;display:inline-block"></span>
-                </div>
-                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">GOLD RUSH</div>
-              </button>
-
-            </div>
-          </div>
-        </div>
-
-        <!-- Couleurs personnalisées -->
-        <div class="card">
-          <div class="card-header">
-            <div class="section-title">Couleurs personnalisées</div>
-            <button class="btn btn-ghost btn-sm" onclick="previewColors()">👁 Aperçu live</button>
-          </div>
-          <div class="card-body">
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px">
-
-              <div class="form-group">
-                <label class="form-label">Couleur principale <span style="font-size:9px;color:var(--muted)">(boutons, badges, accent fort)</span></label>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <input type="color" class="landing-field color-picker" data-key="color_pink" value="#FF006E" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
-                  <input type="text" class="form-input color-hex" data-for="color_pink" placeholder="#FF006E" style="flex:1;font-family:monospace">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Couleur accent <span style="font-size:9px;color:var(--muted)">(titres, live badge, hover)</span></label>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <input type="color" class="landing-field color-picker" data-key="color_yellow" value="#FFFF00" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
-                  <input type="text" class="form-input color-hex" data-for="color_yellow" placeholder="#FFFF00" style="flex:1;font-family:monospace">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Couleur secondaire <span style="font-size:9px;color:var(--muted)">(section tags, détails)</span></label>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <input type="color" class="landing-field color-picker" data-key="color_blue" value="#00B4FF" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
-                  <input type="text" class="form-input color-hex" data-for="color_blue" placeholder="#00B4FF" style="flex:1;font-family:monospace">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Couleur tertiaire <span style="font-size:9px;color:var(--muted)">(glitch, effets)</span></label>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <input type="color" class="landing-field color-picker" data-key="color_cyan" value="#00FFFF" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
-                  <input type="text" class="form-input color-hex" data-for="color_cyan" placeholder="#00FFFF" style="flex:1;font-family:monospace">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Fond principal <span style="font-size:9px;color:var(--muted)">(background page)</span></label>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <input type="color" class="landing-field color-picker" data-key="color_black" value="#000000" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
-                  <input type="text" class="form-input color-hex" data-for="color_black" placeholder="#000000" style="flex:1;font-family:monospace">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Fond secondaire <span style="font-size:9px;color:var(--muted)">(cards, footer)</span></label>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <input type="color" class="landing-field color-picker" data-key="color_dark" value="#0a0a0a" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
-                  <input type="text" class="form-input color-hex" data-for="color_dark" placeholder="#0a0a0a" style="flex:1;font-family:monospace">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Texte principal <span style="font-size:9px;color:var(--muted)">(corps de texte)</span></label>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <input type="color" class="landing-field color-picker" data-key="color_white" value="#F0F0F0" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
-                  <input type="text" class="form-input color-hex" data-for="color_white" placeholder="#F0F0F0" style="flex:1;font-family:monospace">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Texte discret <span style="font-size:9px;color:var(--muted)">(nav links, labels)</span></label>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <input type="color" class="landing-field color-picker" data-key="color_muted" value="#555555" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
-                  <input type="text" class="form-input color-hex" data-for="color_muted" placeholder="#555555" style="flex:1;font-family:monospace">
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- POLICES TAB -->
@@ -4043,6 +3912,179 @@ body.nav-collapsed .main{margin-left:0;}
     <div class="page" id="page-poster" style="display:none!important"></div>
 
     <!-- ===== ÉDITEUR VISUEL UNIFIÉ ===== -->
+    <!-- ===== PAGE : APPARENCE (couleurs du site, palettes des visuels) ===== -->
+    <div class="page" id="page-appearance">
+      <!-- Couleurs du site (déplacées de l'onglet Couleurs de la landing page) -->
+      <div id="ap-site-colors">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <div class="section-title" style="margin:0">Couleurs du site</div>
+          <button class="btn btn-yellow btn-sm" onclick="saveAppearanceColors()">💾 Enregistrer les couleurs</button>
+        </div>
+
+        <!-- Palettes prédéfinies -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="section-title">Palettes prédéfinies</div></div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">
+
+              <button onclick="applyPalette('punk')" style="border:2px solid var(--border);background:var(--mid);padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#FF006E'" onmouseout="this.style.borderColor='#222'">
+                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FF006E;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FFFF00;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#00B4FF;display:inline-block"></span>
+                </div>
+                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">PUNK (défaut)</div>
+              </button>
+
+              <button onclick="applyPalette('acid')" style="border:2px solid var(--border);background:var(--mid);padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#39FF14'" onmouseout="this.style.borderColor='#222'">
+                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#39FF14;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FF00FF;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FFE600;display:inline-block"></span>
+                </div>
+                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">ACID RAVE</div>
+              </button>
+
+              <button onclick="applyPalette('metal')" style="border:2px solid var(--border);background:var(--mid);padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#FF2200'" onmouseout="this.style.borderColor='#222'">
+                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FF2200;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#C0C0C0;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#880000;display:inline-block"></span>
+                </div>
+                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">METAL</div>
+              </button>
+
+              <button onclick="applyPalette('synth')" style="border:2px solid var(--border);background:#080010;padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#BF00FF'" onmouseout="this.style.borderColor='#222'">
+                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#BF00FF;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#00FFFF;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FF69B4;display:inline-block"></span>
+                </div>
+                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">SYNTHWAVE</div>
+              </button>
+
+              <button onclick="applyPalette('blues')" style="border:2px solid var(--border);background:#00060f;padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#00AAFF'" onmouseout="this.style.borderColor='#222'">
+                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#00AAFF;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FFFFFF;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#0044AA;display:inline-block"></span>
+                </div>
+                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">COLD WAVE</div>
+              </button>
+
+              <button onclick="applyPalette('gold')" style="border:2px solid var(--border);background:#0a0800;padding:14px 10px;cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor='#FFD700'" onmouseout="this.style.borderColor='#222'">
+                <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FFD700;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#FF6600;display:inline-block"></span>
+                  <span style="width:20px;height:20px;border-radius:50%;background:#CC3300;display:inline-block"></span>
+                </div>
+                <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:2px;color:var(--white)">GOLD RUSH</div>
+              </button>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Couleurs personnalisées -->
+        <div class="card">
+          <div class="card-header">
+            <div class="section-title">Couleurs personnalisées</div>
+            <button class="btn btn-ghost btn-sm" onclick="previewColors()">👁 Aperçu live</button>
+          </div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px">
+
+              <div class="form-group">
+                <label class="form-label">Couleur principale <span style="font-size:9px;color:var(--muted)">(boutons, badges, accent fort)</span></label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="color" class="landing-field color-picker" data-key="color_pink" value="#FF006E" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
+                  <input type="text" class="form-input color-hex" data-for="color_pink" placeholder="#FF006E" style="flex:1;font-family:monospace">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Couleur accent <span style="font-size:9px;color:var(--muted)">(titres, live badge, hover)</span></label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="color" class="landing-field color-picker" data-key="color_yellow" value="#FFFF00" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
+                  <input type="text" class="form-input color-hex" data-for="color_yellow" placeholder="#FFFF00" style="flex:1;font-family:monospace">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Couleur secondaire <span style="font-size:9px;color:var(--muted)">(section tags, détails)</span></label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="color" class="landing-field color-picker" data-key="color_blue" value="#00B4FF" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
+                  <input type="text" class="form-input color-hex" data-for="color_blue" placeholder="#00B4FF" style="flex:1;font-family:monospace">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Couleur tertiaire <span style="font-size:9px;color:var(--muted)">(glitch, effets)</span></label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="color" class="landing-field color-picker" data-key="color_cyan" value="#00FFFF" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
+                  <input type="text" class="form-input color-hex" data-for="color_cyan" placeholder="#00FFFF" style="flex:1;font-family:monospace">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Fond principal <span style="font-size:9px;color:var(--muted)">(background page)</span></label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="color" class="landing-field color-picker" data-key="color_black" value="#000000" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
+                  <input type="text" class="form-input color-hex" data-for="color_black" placeholder="#000000" style="flex:1;font-family:monospace">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Fond secondaire <span style="font-size:9px;color:var(--muted)">(cards, footer)</span></label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="color" class="landing-field color-picker" data-key="color_dark" value="#0a0a0a" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
+                  <input type="text" class="form-input color-hex" data-for="color_dark" placeholder="#0a0a0a" style="flex:1;font-family:monospace">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Texte principal <span style="font-size:9px;color:var(--muted)">(corps de texte)</span></label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="color" class="landing-field color-picker" data-key="color_white" value="#F0F0F0" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
+                  <input type="text" class="form-input color-hex" data-for="color_white" placeholder="#F0F0F0" style="flex:1;font-family:monospace">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Texte discret <span style="font-size:9px;color:var(--muted)">(nav links, labels)</span></label>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="color" class="landing-field color-picker" data-key="color_muted" value="#555555" style="width:48px;height:36px;border:2px solid var(--border);background:transparent;cursor:pointer;padding:2px">
+                  <input type="text" class="form-input color-hex" data-for="color_muted" placeholder="#555555" style="flex:1;font-family:monospace">
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+            </div>
+
+      <!-- Palettes des visuels : générées par l'IA à partir des couleurs du site, utilisées par l'éditeur visuel -->
+      <div class="card" style="margin-top:18px">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="section-title">Palettes des visuels</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="savePalettes()">💾 Enregistrer les palettes</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:12px">10 palettes accordées aux couleurs du site, chacune avec 5 nuances, pour faire varier l'ambiance des visuels créés dans l'éditeur (section « Palettes »). Cliquer sur une couleur pour la modifier.</div>
+          <div style="font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Couleurs de base</div>
+          <div id="ap-base" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+            <input class="form-input" id="ap-consigne" placeholder="Consigne facultative (ex. ambiance automne, couleurs douces, contrasté…)" style="flex:1;min-width:220px;font-size:12px">
+            <button class="btn btn-yellow btn-sm" id="ap-generer" onclick="generatePalettes()">✨ Générer 10 palettes avec l'IA</button>
+          </div>
+          <div id="ap-palettes-msg" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
+          <div id="ap-palettes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-editor">
       <div style="display:flex;height:calc(100vh - 56px);margin:-30px;overflow:hidden">
 
@@ -4057,24 +4099,26 @@ body.nav-collapsed .main{margin-left:0;}
 
           <!-- Toggle de mode -->
           <div style="display:flex;border-bottom:2px solid var(--border);flex-shrink:0;background:var(--black)">
-            <button id="editor-mode-poster" class="editor-mode-tab active" onclick="setEditorMode('poster')" style="flex:1;padding:10px 4px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--yellow);font-family:'VT323',monospace;font-size:14px;letter-spacing:1px;cursor:pointer;transition:all 0.15s">📄 Affiche</button>
+            <button id="editor-mode-poster" class="editor-mode-tab active" onclick="setEditorMode('poster')" style="flex:1;padding:10px 4px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--yellow);font-family:'VT323',monospace;font-size:14px;letter-spacing:1px;cursor:pointer;transition:all 0.15s">📄 Image</button>
             <button id="editor-mode-diap" class="editor-mode-tab" onclick="setEditorMode('diap')" style="flex:1;padding:10px 4px;background:transparent;border:none;border-right:1px solid var(--border);color:var(--muted);font-family:'VT323',monospace;font-size:14px;letter-spacing:1px;cursor:pointer;transition:all 0.15s">🖼 Carousel</button>
             <button id="editor-mode-video" class="editor-mode-tab" onclick="setEditorMode('video')" style="flex:1;padding:10px 4px;background:transparent;border:none;color:var(--muted);font-family:'VT323',monospace;font-size:14px;letter-spacing:1px;cursor:pointer;transition:all 0.15s">🎬 Vidéo</button>
           </div>
 
-          <!-- Projets : save / load -->
-          <div id="editor-projects-bar" style="display:flex;gap:6px;padding:8px 10px;border-bottom:2px solid var(--border);flex-shrink:0;background:var(--mid)">
-            <button id="editor-save-btn" class="btn btn-ghost btn-sm" style="flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="saveEditorProject()">💾 Sauvegarder</button>
-            <button id="editor-dup-btn" class="btn btn-ghost btn-sm" style="font-size:11px;padding:0 8px;display:none" onclick="duplicateEditorProject()" title="Dupliquer ce projet">⧉</button>
-            <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:0 8px" onclick="newEditorProject()" title="Nouveau projet vierge">✦</button>
-            <button class="btn btn-ghost btn-sm" style="flex:1;font-size:11px" onclick="openEditorProjects()">📂 Mes projets</button>
+          <!-- Projet ouvert : affiché dans la barre en haut de l'aperçu ; ce bloc reste masqué (il sert de source à cette barre) -->
+          <div id="editor-project-head" style="display:none;padding:8px 10px 6px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--black)">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span id="eph-mode" style="font-size:9px;letter-spacing:2px;padding:2px 6px;border:1px solid var(--yellow);color:var(--yellow);flex-shrink:0;font-family:'IBM Plex Mono',monospace">IMAGE</span>
+              <span id="eph-name" title="Cliquer pour renommer" onclick="renameEditorProject()" style="flex:1;min-width:0;font-family:'VT323',monospace;font-size:21px;letter-spacing:1px;line-height:1.1;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text">Nouveau projet</span>
+            </div>
+            <div id="eph-state" style="font-size:10px;color:var(--muted);margin-top:3px">Non enregistré</div>
           </div>
-          <!-- Saisie inline du nom de projet -->
-          <div id="editor-name-bar" style="display:none;flex-direction:row;align-items:center;gap:6px;padding:6px 10px;border-bottom:2px solid var(--border);flex-shrink:0;background:var(--mid)">
-            <input class="form-input" id="editor-name-input" placeholder="Nom du projet…" style="flex:1;font-size:11px;padding:5px 8px"
-              onkeydown="if(event.key==='Enter')_confirmProjectName();if(event.key==='Escape')_cancelProjectName()">
-            <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:0 10px;color:var(--yellow);border-color:var(--yellow)" onclick="_confirmProjectName()">OK</button>
-            <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:0 8px" onclick="_cancelProjectName()">✕</button>
+
+          <!-- Projet : menu déroulant (enregistrer, ouvrir, enregistrer sous, renommer, dupliquer, nouveau, exporter) -->
+          <div id="editor-projects-bar" style="position:relative;display:flex;gap:6px;padding:8px 10px;border-bottom:2px solid var(--border);flex-shrink:0;background:var(--mid)">
+            <button id="editor-menu-btn" class="btn btn-ghost btn-sm" style="flex:1;min-width:0;font-size:12px;letter-spacing:0;text-transform:none;color:var(--yellow);border-color:var(--yellow);display:flex;justify-content:space-between;align-items:center;gap:8px" onclick="toggleEditorMenu(event)" aria-haspopup="menu" aria-expanded="false">
+              <span>📁 Projet</span><span style="font-size:10px">▾</span>
+            </button>
+            <div id="editor-menu" role="menu" style="display:none;position:absolute;left:10px;right:10px;top:calc(100% - 4px);z-index:60;background:var(--dark);border:2px solid var(--yellow);box-shadow:0 10px 28px rgba(0,0,0,.35);padding:4px 0"></div>
           </div>
 
 
@@ -4143,16 +4187,12 @@ body.nav-collapsed .main{margin-left:0;}
           <!-- Presets visuels -->
           <div class="vsec">
             <div class="vsec-hdr" onclick="_pSecToggle('style',this)">
-              <span class="p-label" style="margin-bottom:0">Style rapide</span>
+              <span class="p-label" style="margin-bottom:0">Palettes</span>
               <span class="vsec-arrow">▼</span>
             </div>
             <div id="psec-body-style" style="padding-top:8px">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
-              <button class="poster-preset" onclick="applyPosterPreset('punk')"  style="border-left:3px solid #FF006E">⚡ PUNK</button>
-              <button class="poster-preset" onclick="applyPosterPreset('rave')"  style="border-left:3px solid #00FFFF">◉ RAVE</button>
-              <button class="poster-preset" onclick="applyPosterPreset('metal')" style="border-left:3px solid #FF2200">☠ METAL</button>
-              <button class="poster-preset" onclick="applyPosterPreset('clean')" style="border-left:3px solid #AAAAAA">◻ CLEAN</button>
-            </div>
+              <!-- Palettes du site (page Apparence) : un clic applique la palette ou l'une de ses 5 nuances au visuel -->
+              <div id="editor-palettes" style="display:flex;flex-direction:column;gap:8px"></div>
             </div><!-- /psec-body-style -->
           </div><!-- /vsec style -->
 
@@ -4947,7 +4987,7 @@ body.nav-collapsed .main{margin-left:0;}
               </div>
               <div id="vsec-body-animation">
                 <div class="p-toggle" style="margin-top:6px">
-                  <button class="on" id="vanim-mode-full" onclick="setVideoAnimMode('full',this)">Affiche entière</button>
+                  <button class="on" id="vanim-mode-full" onclick="setVideoAnimMode('full',this)">Image entière</button>
                   <button            id="vanim-mode-elem" onclick="setVideoAnimMode('elements',this)">Par éléments</button>
                 </div>
                 <div id="vanim-full-opts" style="display:flex;flex-direction:column;gap:5px">
@@ -5182,14 +5222,23 @@ body.nav-collapsed .main{margin-left:0;}
             </div>
 
             <div style="padding:10px 13px;font-size:10px;color:var(--muted);line-height:1.6">
-              Le visuel de l'onglet <b style="color:var(--yellow)">Affiche</b> est utilisé comme base.
+              Le visuel de l'onglet <b style="color:var(--yellow)">Image</b> est utilisé comme base.
             </div>
           </div><!-- /editor-video-panel -->
 
         </div><!-- end lateral panel -->
 
         <!-- Zone canvas centrale (partagée poster + diap) -->
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--mid);overflow:hidden;padding:16px;gap:12px" id="editor-canvas-zone">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--mid);overflow:hidden;padding:58px 16px 16px;gap:12px;position:relative" id="editor-canvas-zone">
+
+          <!-- Barre de l'aperçu : projet ouvert (type, nom recalculé en direct, état) -->
+          <div id="editor-canvas-bar" style="position:absolute;top:0;left:0;right:0;height:42px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;background:var(--black);border-bottom:2px solid var(--border);z-index:5">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0">
+              <span id="ecz-mode" style="font-size:9px;letter-spacing:2px;padding:2px 6px;border:1px solid var(--yellow);color:var(--yellow);flex-shrink:0;font-family:'IBM Plex Mono',monospace">IMAGE</span>
+              <span id="ecz-name" onclick="renameEditorProject()" title="Cliquer pour renommer" style="font-family:'VT323',monospace;font-size:20px;letter-spacing:1px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text">Nouveau projet</span>
+            </div>
+            <span id="ecz-state" style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%"></span>
+          </div>
 
           <!-- Canvas poster (mode affiche) -->
           <div id="poster-canvas-wrap" style="display:flex;flex-direction:column;align-items:center;width:100%;height:100%;gap:0;overflow:auto">
@@ -5203,12 +5252,10 @@ body.nav-collapsed .main{margin-left:0;}
               <span id="poster-canvas-zoom-lbl" style="font-size:10px;color:var(--muted);min-width:34px;text-align:center">100%</span>
               <button class="btn btn-ghost" style="padding:0 10px;font-size:14px;line-height:1" onclick="_stepPreviewZoom('poster-canvas',+1)">+</button>
             </div>
-            <div style="font-size:10px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;flex-shrink:0" id="poster-dim-info">A4 Portrait — 2480×3508px</div>
-            <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:center;padding-bottom:10px">
-              <button class="btn btn-ghost" onclick="savePosterToLibrary()">💾 Médiathèque</button>
-              <button id="safe-zone-btn" class="btn btn-ghost" onclick="toggleSafeZones(this)" title="Afficher les zones de sécurité par réseau">⊞ Zones</button>
-              <button class="btn btn-primary" onclick="exportPosterPNG()">⬇ PNG</button>
-              <button class="btn btn-yellow" onclick="exportPosterPDF()">📄 PDF</button>
+            <!-- Format, puis les zones de sécurité à sa droite (Médiathèque, PNG et PDF : menu « 📁 Projet » → Exporter…) -->
+            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;justify-content:center;padding-bottom:10px">
+              <div style="font-size:10px;color:var(--muted);letter-spacing:3px;text-transform:uppercase" id="poster-dim-info">A4 Portrait — 2480×3508px</div>
+              <button id="safe-zone-btn" class="btn btn-ghost btn-sm" onclick="toggleSafeZones(this)" title="Afficher les zones de sécurité par réseau">⊞ Zones</button>
             </div>
           </div>
 
@@ -7276,6 +7323,7 @@ const PAGE_PERMS = {
   editor:          'editor',
   'video-channel': 'editor',
   landing:         'editor',
+  appearance:      'editor',
   messages:        'community',
   contacts:        'community',
   partners:        'community',
@@ -7361,6 +7409,7 @@ const _NAV_DEFAULTS = [
   { key:'survey',            icon:'📋', label:'Questionnaires',      section:'communaute'},
   { key:'testimonials',      icon:'⭐', label:'Témoignages',         section:'communaute'},
   { key:'landing',           icon:'✎',  label:'Landing Page',        section:'systeme'   },
+  { key:'appearance',        icon:'🎨', label:'Apparence',           section:'systeme'   },
   { key:'pro-page',          icon:'◆',  label:'Page Pro',            section:'systeme'   },
   { key:'effects',           icon:'✨', label:'Effets Overlay',      section:'systeme'   },
   { key:'rs-settings',       icon:'📡', label:'API & Réseaux',         section:'systeme'   },
@@ -7731,7 +7780,7 @@ const pageTitles = {
   dashboard:'// DASHBOARD', content:'// CONTENU', events:'// ÉVÉNEMENTS',
   media:'// MÉDIATHÈQUE', publish:'// PUBLICATION RS', fans:'// FANS', contacts:'// CONTACTS',
   partners:'// PARTENAIRES', messages:'// MESSAGES',
-  landing:'// ÉDITEUR LANDING PAGE', 'pro-page':'// PAGE PRO — Dossier artiste', settings:'// PARAMÈTRES',
+  landing:'// ÉDITEUR LANDING PAGE', appearance:'// APPARENCE', 'pro-page':'// PAGE PRO — Dossier artiste', settings:'// PARAMÈTRES',
   poster:'// AFFICHE / RS', editor:'// ÉDITEUR VISUEL',
   'video-channel': '// CHAÎNE VIDÉO', accounts: '// COMPTES & ACCÈS',
   maintenance: '// MAINTENANCE MÉDIAS',
@@ -7818,11 +7867,13 @@ function _editorEntryCreate() {
   if (!name) { document.getElementById('editor-entry-name-inp').focus(); return; }
   closeEditorEntry();
   showPage('editor');
-  newEditorProject();
-  const mode     = _getEditorMode();
-  const slug     = name.replace(/\s+/g, '_').toLowerCase();
-  const filename = `_project_${mode}_${slug}`;
-  _setCurrentProject(filename, mode);
+  _resetEditorProject();
+  const mode = _getEditorMode();
+  // Nom automatique (type d'entité, date, format), comme dans la fenêtre du nom, sauf si l'option a été décochée
+  let auto = true;
+  try { auto = localStorage.getItem('eb80_nom_auto') !== '0'; } catch (e) { /* stockage indisponible */ }
+  const nom = { base: _cleanProjectName(raw), auto };
+  _setCurrentProject(`_project_${mode}_${auto ? _nomAuto(nom.base, mode) : nom.base}`, mode, null, nom);
 }
 
 async function _resumeLastEditorProject() {
@@ -7875,6 +7926,8 @@ function renderPage(id) {
   if(id==='social-feed-admin') loadSocialFeedAdmin();
   if(id==='messages') renderMessages();
   if(id==='landing') renderLanding();
+  if(id==='appearance') renderAppearance();
+  if(id==='editor') loadEditorPalettes();
   if(id==='pro-page') renderProPage();
   if(id==='settings') { renderSettings(); loadGaSettings(); loadGateSettings(); }
   if(id==='video-channel') renderVideoChannel();
@@ -11871,25 +11924,183 @@ let _editorEditablesCache = [];
 let _currentEditorProject = null; // { filename, type, name }
 
 function _getEditorMode() {
+  // Mode posé par setEditorMode() : fiable quel que soit le thème (les couleurs des onglets changent d'un site à l'autre).
+  try { if (_editorMode === 'poster' || _editorMode === 'diap' || _editorMode === 'video') return _editorMode; } catch (e) { /* pas encore déclaré */ }
   const videoTab = document.getElementById('editor-mode-video');
   if (videoTab && getComputedStyle(videoTab).color !== 'rgb(102, 102, 102)') return 'video';
   const posterTab = document.getElementById('editor-mode-poster');
   return posterTab && getComputedStyle(posterTab).color !== 'rgb(102, 102, 102)' ? 'poster' : 'diap';
 }
 
-function _setCurrentProject(filename, type) {
+// Libellés des modes de l'éditeur (le mode « poster » s'affiche « Image »).
+const _PROJ_MODES = { poster: 'Image', diap: 'Carousel', video: 'Vidéo' };
+
+function _setCurrentProject(filename, type, savedAt, nom) {
   const name = filename ? filename.replace(/^_project_[a-z]+_/, '') : null;
-  _currentEditorProject = filename ? { filename, type, name } : null;
-  const btn = document.getElementById('editor-save-btn');
-  if (btn) btn.textContent = name ? `💾 ${name}` : '💾 Sauvegarder';
+  // nom = { base, auto } : base saisie et nom complété automatiquement (type d'entité, date, format) ou non
+  _currentEditorProject = filename ? { filename, type, name, savedAt: savedAt || null, nom: nom || null } : null;
   const vInp = document.getElementById('video-proj-name-inp');
   if (vInp && type === 'video') vInp.value = name || '';
-  const dupBtn = document.getElementById('editor-dup-btn');
-  if (dupBtn) dupBtn.style.display = filename ? 'inline-flex' : 'none';
   // Mémoriser le dernier projet ouvert pour restauration au rechargement
   try {
     if (filename) localStorage.setItem('eb80_last_proj', JSON.stringify({ filename, type }));
   } catch(e) {}
+  _updateProjectHead();
+}
+
+/** En-tête de l'éditeur : nom du projet ouvert, son type, son état ; boutons renommer / dupliquer selon qu'un projet est ouvert. */
+/** Façon de nommer effective : celle du projet ; pour un projet d'avant le nom automatique, automatique à partir de son nom
+ *  actuel, sauf si l'option « Compléter automatiquement » a été décochée. */
+function _nomEffectif(p) {
+  if (!p) return null;
+  if (p.nom) return p.nom;
+  let auto = true;
+  try { auto = localStorage.getItem('eb80_nom_auto') !== '0'; } catch (e) { /* stockage indisponible */ }
+  return { base: p.name, auto };
+}
+
+function _updateProjectHead() {
+  const p = _currentEditorProject;
+  const mode = _getEditorMode();
+  const modeEl = document.getElementById('eph-mode');
+  const nameEl = document.getElementById('eph-name');
+  const stateEl = document.getElementById('eph-state');
+  // Nom automatique recalculé en direct d'après le projet (format, source, date, lieu) ; appliqué à l'enregistrement.
+  const nom = _nomEffectif(p);
+  const live = p && p.type === mode && nom && nom.auto ? _nomAuto(nom.base, mode) : null;
+  const enAttente = !!(live && live !== p.name);
+  const set = (el, prop, v) => { if (el && el[prop] !== v) el[prop] = v; };
+  set(modeEl, 'textContent', (_PROJ_MODES[p ? p.type : mode] || '').toUpperCase());
+  if (nameEl) {
+    set(nameEl, 'textContent', p ? (live || p.name) : 'Nouveau projet');
+    nameEl.style.color = !p ? 'var(--muted)' : enAttente ? 'var(--yellow)' : 'var(--white)';
+    set(nameEl, 'title', !p ? 'Enregistrer pour donner un nom' : enAttente ? `Nom actuel : ${p.name} · cliquer pour renommer` : 'Cliquer pour renommer');
+  }
+  if (stateEl) {
+    const heure = p && p.savedAt ? p.savedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+    set(stateEl, 'textContent', !p ? 'Non enregistré · 💾 pour lui donner un nom'
+      : p.type !== mode ? `Projet ${_PROJ_MODES[p.type] || ''} : en mode ${_PROJ_MODES[mode] || ''}, Enregistrer crée un nouveau projet`
+      : enAttente ? 'Nom mis à jour d\'après le projet · Enregistrer (Ctrl+S) pour l\'appliquer'
+      : heure ? `Enregistré à ${heure}` : 'Projet enregistré');
+  }
+  // Barre en haut de l'aperçu : type, nom du projet (recalculé en direct), état de l'enregistrement
+  const zMode = document.getElementById('ecz-mode');
+  const zName = document.getElementById('ecz-name');
+  const zState = document.getElementById('ecz-state');
+  if (zName) {
+    set(zMode, 'textContent', (_PROJ_MODES[p ? p.type : mode] || '').toUpperCase());
+    set(zName, 'textContent', p ? (live || p.name) : 'Nouveau projet');
+    zName.style.color = !p ? 'var(--muted)' : enAttente ? 'var(--yellow)' : 'var(--white)';
+    set(zName, 'title', nameEl ? nameEl.title : '');
+    set(zState, 'textContent', stateEl ? stateEl.textContent : '');
+  }
+  ['editor-rename-btn', 'editor-dup-btn'].forEach((id) => {
+    const b = document.getElementById(id);
+    if (b) { b.disabled = !p; b.style.opacity = p ? '1' : '0.4'; }
+  });
+}
+
+/** Nom de projet propre : lettres (accents compris), chiffres, espaces et ponctuation courante ; 60 caractères au plus. */
+function _cleanProjectName(name) {
+  return String(name || '').replace(/[\u0000-\u001f\/\\?#%"<>|*]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+// ── Nom automatique : « base-format-type-date.proj » (ex. promo-didiersuper-9:16-event-16∕10.proj) ─────────────────────
+const _FORMAT_COURT = {
+  poster: { a4p: 'A4', a4l: 'A4-paysage', sq: '1:1', story: '9:16', og: '1.91:1', yt: '16:9' },
+  video:  { reel: '9:16', square: '1:1', wide: '16:9', landscape: '3:2' },
+  diap:   { square: '1:1', landscape: '16:9', portrait: '9:16' },
+};
+const _MOIS_NOM = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'];
+
+/** Format court : rapport largeur:hauteur (« 9:16 », « 1:1 », « 16:9 »…), « A4 » pour l'impression. */
+function _formatCourt(mode) {
+  if (mode === 'video') return _FORMAT_COURT.video[VIDEO.format] || VIDEO.format || '';
+  if (mode === 'diap') return _FORMAT_COURT.diap[DIAP.format] || DIAP.format || '';
+  if (POSTER.format === 'custom') { const f = FORMATS.custom; return f ? `${f.w}x${f.h}` : 'perso'; }
+  return _FORMAT_COURT.poster[POSTER.format] || POSTER.format || '';
+}
+
+/** Date du sujet (JJ∕MM) : celle de l'entité source, sinon celle écrite sur l'image ; vide si aucune. « ∕ » (U+2215) et non
+ *  « / », qui est un séparateur de dossier pour le serveur (il couperait le nom). */
+function _dateProjet() {
+  let iso = POSTER._source && POSTER._source.dateIso;
+  if (!iso) {
+    const t = String(POSTER.date && POSTER.date.text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    let m = t.match(/(\d{1,2})(?:er)?\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)(?:\s+(\d{4}))?/);
+    if (m) iso = `${m[3] || new Date().getFullYear()}-${String(_MOIS_NOM.indexOf(m[2]) + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    else if ((m = t.match(/\b(\d{1,2})[\/.](\d{1,2})[\/.](\d{2}|\d{4})\b/))) iso = `${m[3].length === 2 ? '20' + m[3] : m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return '';
+  const [, mo, d] = iso.slice(0, 10).split('-');
+  return `${d}\u2215${mo}`;
+}
+
+/** Type d'entité qui alimente l'image : « event », « merch », « partenaire », « piece », « promo »… ; vide sans source. */
+function _typeEntite() {
+  const src = POSTER._source;
+  if (!src || !src.source) return '';
+  const fixes = { event: 'event', merch: 'merch', partner: 'partenaire', piece: 'piece', promo: 'promo' };
+  if (fixes[src.source]) return fixes[src.source];
+  try {
+    const a = ((window.EB80Source && window.EB80Source.sourcesActives()) || []).find((x) => x.id === src.source);
+    if (a) return a.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  } catch (e) { /* sources indisponibles */ }
+  return String(src.source);
+}
+
+/** Lieu du sujet : celui de l'entité source, sinon celui écrit sur l'image (avant « — » ou la virgule) s'il n'est pas le
+ *  texte par défaut ; en minuscules, espaces → tirets ; vide si aucun. */
+function _lieuProjet() {
+  const src = POSTER._source;
+  let lieu = src ? String(src.lieu || '') : '';
+  if (!src) {
+    const t = String(POSTER.venue && POSTER.venue.text || '').trim();
+    const def = String(POSTER_DEFAULT.venue && POSTER_DEFAULT.venue.text || '').trim();
+    if (t && t !== def) lieu = t.split(/\s+[—–-]\s+|,|\n/)[0];
+  }
+  return _cleanProjectName(lieu).toLowerCase().replace(/\s+/g, '-');
+}
+
+/** « base-format-type-date-lieu.proj » (type, date et lieu pour l'image et la vidéo, qui partent de l'image ; carousel : base et format). */
+function _nomAuto(base, mode) {
+  const b = _cleanProjectName(base).replace(/\.proj$/i, '').replace(/\s+/g, '-');
+  const parts = [b, _formatCourt(mode)];
+  if (mode !== 'diap') { parts.push(_typeEntite()); parts.push(_dateProjet()); parts.push(_lieuProjet()); }
+  return _cleanProjectName(parts.filter(Boolean).join('-') + '.proj');
+}
+
+/** Base proposée : le nom de l'entité source, sinon la base du projet ouvert, sinon son nom. */
+function _baseProposee() {
+  if (POSTER._source && POSTER._source.nom) return POSTER._source.nom;
+  const p = _currentEditorProject;
+  return p ? ((p.nom && p.nom.base) || p.name) : '';
+}
+
+/** État à enregistrer, avec la façon dont le projet est nommé (pour le renommage automatique). */
+function _stateAvecNom(mode, nom) {
+  return Object.assign({}, _projectStateFor(mode), nom ? { _nom: nom } : {});
+}
+
+function _projectStateFor(mode) {
+  return mode === 'poster' ? getPosterSaveState() : mode === 'video' ? getVideoSaveState() : getDiapSaveState();
+}
+
+/** Liste des projets à jour (pour les contrôles de nom). */
+async function _refreshProjectsCache() {
+  const token = localStorage.getItem('eb80_token');
+  const res = await fetch('/api/media/projects', { headers: { 'Authorization': 'Bearer ' + token } });
+  const d = await res.json();
+  _editorProjectsCache  = d.projects  || [];
+  _editorEditablesCache = d.editables || [];
+}
+
+/** « Nom », sinon « Nom (2) », « Nom (3) »… : premier nom libre pour ce type de projet. */
+function _uniqueProjectName(type, base) {
+  const taken = new Set(_editorProjectsCache.filter((p) => p.type === type).map((p) => p.filename));
+  let name = base, i = 2;
+  while (taken.has(`_project_${type}_${name}`)) name = `${base} (${i++})`;
+  return name;
 }
 
 async function _captureProjectThumb(mode) {
@@ -11954,71 +12165,266 @@ async function _doSaveProject(filename, type, state) {
   if (!res.ok) throw new Error(d.error || 'Erreur');
 }
 
-let _pendingSaveMode = null;
+let _nameBarAction = null; // 'save' (premier enregistrement), 'saveas', 'rename', 'duplicate'
+
+// ── Menu « Projet » ───────────────────────────────────────────────────────────────────────────────────────────────────
+function _renderEditorMenu() {
+  const menu = document.getElementById('editor-menu');
+  if (!menu) return;
+  const p = !!_currentEditorProject;
+  const items = [
+    ['saveEditorProject', '💾 Enregistrer', 'Ctrl+S', true],
+    ['openEditorProjects', '📂 Ouvrir…', '', true],
+    ['saveEditorProjectAs', '📄 Enregistrer sous…', '', true],
+    ['renameEditorProject', '✎ Renommer…', '', p],
+    ['duplicateEditorProject', '⧉ Dupliquer…', '', p],
+    ['newEditorProject', '✦ Nouveau projet…', '', true],
+    null,
+    ['toggleEditorExport', '⬇ Exporter…', '', true],
+  ];
+  menu.innerHTML = items.map((it) => it === null
+    ? '<div style="height:1px;background:var(--border);margin:4px 0"></div>'
+    : `<button role="menuitem" ${it[3] ? '' : 'disabled'} onclick="_editorMenuRun('${it[0]}')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;padding:8px 12px;background:transparent;border:0;color:var(--white);font:inherit;font-size:12px;text-align:left;cursor:${it[3] ? 'pointer' : 'default'};opacity:${it[3] ? 1 : .4}" onmouseenter="if(!this.disabled)this.style.background='var(--panel)'" onmouseleave="this.style.background='transparent'"><span>${it[1]}</span><span style="font-size:10px;color:var(--muted)">${it[2]}</span></button>`).join('');
+}
+function toggleEditorMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const menu = document.getElementById('editor-menu');
+  const btn = document.getElementById('editor-menu-btn');
+  if (!menu) return;
+  const open = menu.style.display !== 'block';
+  if (open) _renderEditorMenu();
+  menu.style.display = open ? 'block' : 'none';
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function _closeEditorMenu() {
+  const menu = document.getElementById('editor-menu');
+  if (menu) menu.style.display = 'none';
+  const btn = document.getElementById('editor-menu-btn');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+function _editorMenuRun(fn) {
+  _closeEditorMenu();
+  if (typeof window[fn] === 'function') window[fn]();
+}
+document.addEventListener('click', (ev) => { if (!ev.target.closest || !ev.target.closest('#editor-projects-bar')) _closeEditorMenu(); });
+
+// ── Fenêtre d'action (nom du projet, exporter, nouveau projet) ─────────────────────────────────────────────────────────
+let _edModalActions = [];
+function _openEdModal(title, bodyHtml, actions) {
+  _edModalActions = actions || [];
+  document.getElementById('edm-title').textContent = title;
+  document.getElementById('edm-body').innerHTML = bodyHtml;
+  document.getElementById('edm-actions').innerHTML = _edModalActions.map((a, i) =>
+    `<button class="btn ${a.primary ? 'btn-yellow' : 'btn-ghost'} btn-sm" style="letter-spacing:0;text-transform:none;font-size:12px" onclick="_edModalRun(${i})">${a.label}</button>`).join('');
+  const m = document.getElementById('editor-action-modal');
+  m.style.display = 'flex';
+  const inp = m.querySelector('#edm-body input');
+  if (inp) { inp.focus(); inp.select(); }
+}
+function _closeEdModal() {
+  document.getElementById('editor-action-modal').style.display = 'none';
+  _nameBarAction = null;
+}
+function _edModalRun(i) {
+  const a = _edModalActions[i];
+  if (a && typeof a.run === 'function') a.run();
+}
+document.addEventListener('keydown', (ev) => {
+  const m = document.getElementById('editor-action-modal');
+  if (!m || m.style.display !== 'flex') return;
+  if (ev.key === 'Escape') { ev.preventDefault(); _closeEdModal(); }
+  if (ev.key === 'Enter' && ev.target && ev.target.tagName === 'INPUT') {
+    ev.preventDefault();
+    const i = _edModalActions.findIndex((a) => a.primary);
+    if (i >= 0) _edModalRun(i);
+  }
+});
+
+function _openNameBar(action, value) {
+  const titres = { save: '💾 Enregistrer le projet', saveas: '📄 Enregistrer sous', rename: '✎ Renommer le projet', duplicate: '⧉ Dupliquer le projet' };
+  const aides = {
+    save: 'Donnez un nom au projet : il sera ensuite enregistré d\'un clic (Ctrl+S).',
+    saveas: 'Une copie du projet est enregistrée sous ce nom ; vous continuez sur la copie.',
+    rename: 'Le projet garde son contenu ; seul son nom change.',
+    duplicate: 'Une copie du projet est créée sous ce nom ; vous continuez sur la copie.',
+  };
+  const boutons = { save: 'Enregistrer', saveas: 'Enregistrer', rename: 'Renommer', duplicate: 'Dupliquer' };
+  const mode = (action === 'rename' || action === 'duplicate') && _currentEditorProject ? _currentEditorProject.type : _getEditorMode();
+  const esc = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let auto = true;
+  try { auto = localStorage.getItem('eb80_nom_auto') !== '0'; } catch (e) { /* stockage indisponible */ }
+  _openEdModal(titres[action] || 'Nom du projet',
+    `<label class="form-label" for="editor-name-input">Nom du projet (${_PROJ_MODES[mode] || ''})</label>
+     <input class="form-input" id="editor-name-input" maxlength="60" placeholder="Nom du projet…" value="${esc(value)}" style="width:100%;font-size:13px;padding:8px 10px">
+     <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;cursor:pointer">
+       <input type="checkbox" id="editor-name-auto" ${auto ? 'checked' : ''}> Compléter automatiquement : format, type d'entité, date, lieu
+     </label>
+     <div style="font-size:11px;margin-top:8px;line-height:1.5">Nom enregistré : <b id="editor-name-preview" style="color:var(--yellow)"></b></div>
+     <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">${aides[action] || ''}</div>`,
+    [{ label: 'Annuler', run: _cancelProjectName }, { label: boutons[action] || 'OK', primary: true, run: _confirmProjectName }]);
+  _nameBarAction = action;
+  _nameBarMode = mode;
+  const maj = () => {
+    const base = document.getElementById('editor-name-input').value;
+    const a = document.getElementById('editor-name-auto').checked;
+    document.getElementById('editor-name-preview').textContent = (a ? _nomAuto(base, mode) : _cleanProjectName(base)) || '—';
+  };
+  document.getElementById('editor-name-input').addEventListener('input', maj);
+  document.getElementById('editor-name-auto').addEventListener('change', () => {
+    try { localStorage.setItem('eb80_nom_auto', document.getElementById('editor-name-auto').checked ? '1' : '0'); } catch (e) { /* stockage indisponible */ }
+    maj();
+  });
+  maj();
+}
+let _nameBarMode = null;
 
 async function saveEditorProject() {
   const currentMode = _getEditorMode();
-
-  // Projet connu → auto-sauvegarde sans demander
+  // Projet connu, même mode → enregistrement direct
   if (_currentEditorProject && _currentEditorProject.type === currentMode) {
-    const state = currentMode === 'poster' ? getPosterSaveState() : currentMode === 'video' ? getVideoSaveState() : getDiapSaveState();
+    const cur = _currentEditorProject;
     try {
-      await _doSaveProject(_currentEditorProject.filename, currentMode, state);
-      showToast(`"${_currentEditorProject.name}" sauvegardé ✓`, 'success');
+      let filename = cur.filename;
+      // Projet d'avant le nom automatique (sans façon de nommer) : nommé automatiquement à partir de son nom actuel,
+      // sauf si l'option « Compléter automatiquement » a été décochée.
+      const nom = _nomEffectif(cur);
+      // Nom automatique : il suit le type d'entité, la date et le format (renommage si l'un d'eux a changé)
+      if (nom.auto) {
+        const nouveau = _nomAuto(nom.base, currentMode);
+        const cible = `_project_${currentMode}_${nouveau}`;
+        if (nouveau && cible !== cur.filename) {
+          await _refreshProjectsCache();
+          const ancienExiste = _editorProjectsCache.some((x) => x.filename === cur.filename);
+          if (!ancienExiste && !_editorProjectsCache.some((x) => x.filename === cible)) {
+            filename = cible; // projet pas encore enregistré (créé depuis la fenêtre d'entrée) : enregistré sous son nom complet
+          } else if (!_editorProjectsCache.some((x) => x.filename === cible)) {
+            const token = localStorage.getItem('eb80_token');
+            const r = await fetch('/api/media/rename-batch', {
+              method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+              body: JSON.stringify({ renames: [{ old: cur.filename, new: cible }] }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (r.ok && d.ok > 0) {
+              if (typeof _mediaEditables !== 'undefined') { _mediaEditables.delete(cur.filename); _mediaEditables.set(cible, currentMode); }
+              filename = cible;
+              showToast(`Projet renommé automatiquement « ${nouveau} »`, 'info');
+            }
+          }
+        }
+      }
+      await _doSaveProject(filename, currentMode, _stateAvecNom(currentMode, nom));
+      _setCurrentProject(filename, currentMode, new Date(), nom);
+      showToast(`« ${_currentEditorProject.name} » enregistré ✓`, 'success');
     } catch(e) { showToast('Erreur sauvegarde : ' + e.message, 'error'); }
     return;
   }
+  // Premier enregistrement (ou autre mode) → nom à saisir (base proposée : l'entité source, sinon le projet ouvert)
+  _openNameBar('save', _baseProposee());
+}
 
-  // Premier enregistrement → saisie inline du nom
-  _pendingSaveMode = currentMode;
-  const bar = document.getElementById('editor-name-bar');
-  const inp = document.getElementById('editor-name-input');
-  if (bar) { bar.style.display = 'flex'; if (inp) { inp.value = ''; inp.focus(); } }
+function saveEditorProjectAs() {
+  _openNameBar('saveas', _baseProposee());
+}
+
+function renameEditorProject() {
+  if (!_currentEditorProject) { showToast('Enregistrez d\'abord le projet pour lui donner un nom', 'info'); _openNameBar('save', _baseProposee()); return; }
+  const p = _currentEditorProject;
+  _openNameBar('rename', p.nom ? p.nom.base : p.name);
+}
+
+async function duplicateEditorProject() {
+  if (!_currentEditorProject) { showToast('Aucun projet ouvert à dupliquer', 'info'); return; }
+  try { await _refreshProjectsCache(); } catch(e) {}
+  const p = _currentEditorProject;
+  _openNameBar('duplicate', String((p.nom && p.nom.base) || p.name).replace(/ \((?:copie|\d+)\)$/, '') + ' (copie)');
 }
 
 async function _confirmProjectName() {
   const inp = document.getElementById('editor-name-input');
-  const name = inp?.value.trim() || '';
-  const cleanName = name.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim();
-  if (!cleanName) { showToast('Nom invalide', 'error'); return; }
-
-  const currentMode = _pendingSaveMode || _getEditorMode();
-  const state = currentMode === 'poster' ? getPosterSaveState() : currentMode === 'video' ? getVideoSaveState() : getDiapSaveState();
-  const filename = `_project_${currentMode}_${cleanName}`;
-
-  document.getElementById('editor-name-bar').style.display = 'none';
-  _pendingSaveMode = null;
-
+  const base = _cleanProjectName(inp ? inp.value : '');
+  if (!base) { showToast('Donnez un nom au projet', 'error'); return; }
+  const action = _nameBarAction || 'save';
+  const cur = _currentEditorProject;
+  const mode = (action === 'rename' || action === 'duplicate') && cur ? cur.type : _getEditorMode();
+  const autoEl = document.getElementById('editor-name-auto');
+  const nom = { base, auto: !!(autoEl && autoEl.checked) };
+  const name = nom.auto ? _nomAuto(base, mode) : base;
+  const filename = `_project_${mode}_${name}`;
+  try { await _refreshProjectsCache(); } catch(e) {}
+  const exists = _editorProjectsCache.some((p) => p.filename === filename);
   try {
-    await _doSaveProject(filename, currentMode, state);
-    _setCurrentProject(filename, currentMode);
-    _mediaEditables.set(filename, currentMode); // mise à jour locale immédiate pour le filtre Éditables
-    showToast(`Projet "${cleanName}" sauvegardé ✓`, 'success');
-  } catch(e) { showToast('Erreur sauvegarde : ' + e.message, 'error'); }
+    if (action === 'rename') {
+      if (filename === cur.filename) { _cancelProjectName(); return; }
+      if (exists) { showToast(`Le nom « ${name} » est déjà pris`, 'error'); return; }
+      const token = localStorage.getItem('eb80_token');
+      const r = await fetch('/api/media/rename-batch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ renames: [{ old: cur.filename, new: filename }] }),
+      });
+      const d = await r.json();
+      if (!r.ok || !(d.ok > 0)) throw new Error(d.error || 'renommage refusé');
+      if (typeof _mediaEditables !== 'undefined') { _mediaEditables.delete(cur.filename); _mediaEditables.set(filename, mode); }
+      _setCurrentProject(filename, mode, cur.savedAt, nom);
+      if (mode === _getEditorMode()) await _doSaveProject(filename, mode, _stateAvecNom(mode, nom)); // façon de nommer gardée
+      showToast(`Projet renommé « ${name} » ✓`, 'success');
+    } else if (action === 'duplicate') {
+      if (exists) { showToast(`Le nom « ${name} » est déjà pris`, 'error'); return; }
+      await _doSaveProject(filename, mode, _stateAvecNom(mode, nom));
+      if (typeof _mediaEditables !== 'undefined') _mediaEditables.set(filename, mode);
+      _setCurrentProject(filename, mode, new Date(), nom);
+      showToast(`Copie « ${name} » créée : vous travaillez maintenant sur la copie ✓`, 'success');
+    } else {
+      if (exists && (!cur || filename !== cur.filename) && !confirm(`Un projet « ${name} » existe déjà. Le remplacer ?`)) return;
+      await _doSaveProject(filename, mode, _stateAvecNom(mode, nom));
+      if (typeof _mediaEditables !== 'undefined') _mediaEditables.set(filename, mode); // filtre « Éditables » de la médiathèque
+      _setCurrentProject(filename, mode, new Date(), nom);
+      showToast(`Projet « ${name} » enregistré ✓`, 'success');
+    }
+    _cancelProjectName();
+  } catch(e) { showToast('Erreur : ' + e.message, 'error'); }
 }
 
 function _cancelProjectName() {
-  document.getElementById('editor-name-bar').style.display = 'none';
-  _pendingSaveMode = null;
+  _closeEdModal();
 }
 
-async function duplicateEditorProject() {
-  if (!_currentEditorProject) return;
-  const baseName = _currentEditorProject.name.replace(/ \(\d+\)$/, '');
-  const dupName  = baseName + ' (2)';
-  const currentMode = _currentEditorProject.type;
-  const state = currentMode === 'poster' ? getPosterSaveState() : getDiapSaveState();
-  const filename = `_project_${currentMode}_${dupName}`;
-  try {
-    await _doSaveProject(filename, currentMode, state);
-    _setCurrentProject(filename, currentMode);
-    showToast(`Dupliqué en "${dupName}" ✓`, 'success');
-  } catch(e) { showToast('Erreur duplication : ' + e.message, 'error'); }
-}
+// En-tête du projet à jour dès l'ouverture, puis en continu tant que l'éditeur est affiché : le nom automatique suit le
+// paramétrage (format, source, date, lieu) au fur et à mesure.
+window.addEventListener('load', () => setTimeout(_updateProjectHead, 0));
+setInterval(() => {
+  const page = document.getElementById('page-editor');
+  if (page && page.offsetParent) _updateProjectHead();
+}, 700);
+
+// Ctrl+S (Cmd+S) dans l'éditeur visuel : enregistrer le projet.
+document.addEventListener('keydown', (ev) => {
+  if (!(ev.ctrlKey || ev.metaKey) || (ev.key || '').toLowerCase() !== 's') return;
+  const page = document.getElementById('page-editor');
+  if (!page || !page.offsetParent) return;
+  ev.preventDefault();
+  saveEditorProject();
+});
 
 function newEditorProject() {
+  const nom = _currentEditorProject ? `« ${_currentEditorProject.name} »` : 'le projet en cours';
+  _openEdModal('✦ Nouveau projet',
+    `<div style="font-size:13px;line-height:1.6">Commencer un projet vierge : image sans texte, sans couche ni image de fond.</div>
+     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">Les modifications non enregistrées de ${nom} seront perdues.</div>`,
+    [{ label: 'Annuler', run: _closeEdModal }, { label: 'Nouveau projet', primary: true, run: () => { _closeEdModal(); _resetEditorProject(); } }]);
+}
+
+/** Remet l'éditeur à zéro (projet vierge), sans rien demander. */
+function _resetEditorProject() {
   // Réinitialise l'état de tous les modes à leurs valeurs par défaut
   Object.assign(POSTER, JSON.parse(JSON.stringify(POSTER_DEFAULT)));
+  // Projet vierge : aucun texte (la mise en forme reste celle par défaut), et rien d'un ancien projet ni d'une source
+  ['logo', 'title', 'date', 'venue', 'info', 'footer'].forEach((k) => { if (POSTER[k] && 'text' in POSTER[k]) POSTER[k].text = ''; });
+  Object.keys(POSTER).forEach((k) => { if (!(k in POSTER_DEFAULT)) delete POSTER[k]; });
+  if (window.EB80Source && window.EB80Source.courante) {
+    window.EB80Source.courante.src = null;
+    const srcType = document.getElementById('src-type');
+    if (srcType) { srcType.value = ''; srcType.dispatchEvent(new Event('change')); }
+  }
   Object.assign(VIDEO,  JSON.parse(JSON.stringify(VIDEO_DEFAULT)));
   DIAP.slides = []; DIAP.currentIdx = 0; DIAP.sharedLogo = null; DIAP.format = 'square';
   // Sync UI du mode actif
@@ -12038,7 +12444,7 @@ function newEditorProject() {
   if (typeof window.EB80VideoIA !== 'undefined') window.EB80VideoIA.reinitialiser();
   else { try { localStorage.removeItem('eb80_video_ia_brouillon'); } catch(e) {} }
   _setCurrentProject(null, null);
-  showToast('Nouveau projet — canvas vierge', 'info');
+  showToast('Nouveau projet vierge', 'info');
 }
 
 async function openEditorProjects() {
@@ -12078,43 +12484,53 @@ function renderEditorProjectsList() {
   const list = document.getElementById('editor-projects-list');
   if (!list) return;
 
-  const applyFilter = arr => _editorProjectsFilter === 'all' ? arr : arr.filter(p => p.type === _editorProjectsFilter);
+  const q = (document.getElementById('ep-search')?.value || '').trim().toLowerCase();
+  const applyFilter = arr => arr.filter(p => (_editorProjectsFilter === 'all' || p.type === _editorProjectsFilter)
+    && (!q || String(p.name || p.filename).toLowerCase().includes(q)));
   const projects  = applyFilter(_editorProjectsCache);
   const editables = applyFilter(_editorEditablesCache);
 
   if (!projects.length && !editables.length) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:24px">Aucun projet sauvegardé.</div>';
+    list.innerHTML = `<div style="color:var(--muted);font-size:12px;text-align:center;padding:24px">${q ? 'Aucun projet ne correspond à la recherche.' : 'Aucun projet enregistré.'}</div>`;
     return;
   }
+  // Dates du serveur en temps universel (SQLite datetime('now')) → heure locale.
+  const quand = (t) => { const dt = new Date(String(t || '').replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(t || '') ? '' : 'Z'));
+    return isNaN(dt) ? String(t || '').substring(0, 16) : dt.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+  const escHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const escJs = (t) => String(t).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
   const rowProject = p => {
-    const icon = p.type === 'poster' ? '📄' : p.type === 'video' ? '🎬' : '🎞';
-    const typeLabel = p.type === 'poster' ? 'Affiche' : p.type === 'video' ? 'Vidéo' : 'Carousel';
-    const date = (p.updated_at || '').replace('T',' ').substring(0,16);
-    const esc  = p.filename.replace(/'/g, "\\'");
+    const icon = p.type === 'poster' ? '📄' : p.type === 'video' ? '🎬' : '🖼';
+    const typeLabel = _PROJ_MODES[p.type] || p.type;
+    const date = quand(p.updated_at);
+    const esc  = escJs(p.filename);
+    const ouvert = _currentEditorProject && _currentEditorProject.filename === p.filename;
     const thumbEl = p.thumb
-      ? `<img src="${p.thumb}" style="width:48px;height:48px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);border-radius:1px">`
-      : `<span style="font-size:20px;flex-shrink:0">${icon}</span>`;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      ? `<img src="${p.thumb}" style="width:56px;height:56px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);border-radius:1px">`
+      : `<span style="width:56px;text-align:center;font-size:22px;flex-shrink:0">${icon}</span>`;
+    return `<div data-ep="${escHtml(p.filename)}" style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--border);${ouvert ? 'border-left:3px solid var(--yellow);' : ''}">
       ${thumbEl}
-      <div style="flex:1;min-width:0">
-        <div style="font-family:'VT323',monospace;font-size:16px;letter-spacing:1px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+      <div style="flex:1;min-width:0" class="ep-name-cell">
+        <div style="font-family:'VT323',monospace;font-size:17px;letter-spacing:1px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name)}${ouvert ? ' <span style="font-size:9px;letter-spacing:1px;color:var(--yellow);font-family:monospace">· OUVERT</span>' : ''}</div>
         <div style="font-size:10px;color:var(--muted)">${typeLabel} · ${date}</div>
       </div>
       <button class="btn btn-yellow btn-sm" onclick="loadEditorProject('${esc}','${p.type}')">Ouvrir</button>
-      <button class="btn btn-ghost btn-sm" onclick="deleteEditorProject('${esc}')" style="color:var(--pink);border-color:var(--pink)">✕</button>
+      <button class="btn btn-ghost btn-sm" onclick="_epStartRename('${esc}')" title="Renommer">✎</button>
+      <button class="btn btn-ghost btn-sm" onclick="_epDuplicate('${esc}','${p.type}')" title="Dupliquer">⧉</button>
+      <button class="btn btn-ghost btn-sm" onclick="deleteEditorProject('${esc}')" style="color:var(--pink);border-color:var(--pink)" title="Supprimer">✕</button>
     </div>`;
   };
 
   const rowEditable = e => {
-    const date = (e.updated_at || '').replace('T',' ').substring(0,16);
-    const esc  = e.filename.replace(/'/g, "\\'");
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <img src="${e.url}" style="width:48px;height:48px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)" onerror="this.style.display='none'">
+    const date = quand(e.updated_at);
+    const esc  = escJs(e.filename);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--border)">
+      <img src="${e.url}" style="width:56px;height:56px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)" onerror="this.style.display='none'">
       <div style="flex:1;min-width:0">
-        <div style="font-family:'VT323',monospace;font-size:13px;letter-spacing:1px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.filename}</div>
+        <div style="font-family:'VT323',monospace;font-size:13px;letter-spacing:1px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(e.filename)}</div>
         <div style="font-size:10px;color:var(--muted);display:flex;gap:6px;align-items:center">
-          ${e.type === 'poster' ? 'Affiche' : e.type === 'video' ? 'Vidéo' : 'Carousel'} · ${date}
+          ${_PROJ_MODES[e.type] || e.type} · ${date}
           <span style="font-size:9px;background:#0d1a1a;color:var(--cyan);padding:1px 5px;letter-spacing:1px">MÉDIA</span>
         </div>
       </div>
@@ -12125,7 +12541,7 @@ function renderEditorProjectsList() {
 
   let html = '';
   if (projects.length) {
-    html += `<div style="font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;padding:8px 0 4px">Projets nommés</div>`;
+    html += `<div style="font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;padding:8px 0 4px">Projets enregistrés (${projects.length})</div>`;
     html += projects.map(rowProject).join('');
   }
   if (editables.length) {
@@ -12133,6 +12549,75 @@ function renderEditorProjectsList() {
     html += editables.map(rowEditable).join('');
   }
   list.innerHTML = html;
+}
+
+/** Renommer un projet depuis la liste : le nom devient un champ (Entrée pour valider, Échap pour annuler). */
+function _epStartRename(filename) {
+  const row = [...document.querySelectorAll('#editor-projects-list [data-ep]')].find((r) => r.dataset.ep === filename);
+  const cell = row && row.querySelector('.ep-name-cell');
+  if (!cell) return;
+  const p = _editorProjectsCache.find((x) => x.filename === filename);
+  cell.innerHTML = '<input class="form-input" maxlength="60" style="width:100%;font-size:12px;padding:5px 8px">';
+  const inp = cell.querySelector('input');
+  inp.value = p ? p.name : filename.replace(/^_project_[a-z]+_/, '');
+  inp.focus(); inp.select();
+  inp.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') renderEditorProjectsList();
+    if (ev.key === 'Enter') _epConfirmRename(filename, inp.value);
+  });
+  inp.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== inp) renderEditorProjectsList(); }, 150));
+}
+
+async function _epConfirmRename(oldFilename, value) {
+  const name = _cleanProjectName(value);
+  const m = oldFilename.match(/^_project_([a-z]+)_/);
+  if (!name || !m) { renderEditorProjectsList(); return; }
+  const newFilename = `_project_${m[1]}_${name}`;
+  if (newFilename === oldFilename) { renderEditorProjectsList(); return; }
+  if (_editorProjectsCache.some((p) => p.filename === newFilename)) { showToast(`Le nom « ${name} » est déjà pris`, 'error'); return; }
+  const token = localStorage.getItem('eb80_token');
+  try {
+    const r = await fetch('/api/media/rename-batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ renames: [{ old: oldFilename, new: newFilename }] }),
+    });
+    const d = await r.json();
+    if (!r.ok || !(d.ok > 0)) throw new Error(d.error || 'renommage refusé');
+    if (typeof _mediaEditables !== 'undefined' && _mediaEditables.has(oldFilename)) { _mediaEditables.set(newFilename, _mediaEditables.get(oldFilename)); _mediaEditables.delete(oldFilename); }
+    // Nom choisi à la main : plus de renommage automatique pour ce projet
+    try {
+      const st = await fetch('/api/media/state/' + encodeURIComponent(newFilename), { headers: { 'Authorization': 'Bearer ' + token } }).then((x) => x.json());
+      if (st && st.state && st.state._nom && st.state._nom.auto) {
+        st.state._nom = { base: name, auto: false };
+        await fetch('/api/media/state', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ filename: newFilename, type: m[1], state: st.state }) });
+      }
+    } catch (e) { /* le renommage reste fait */ }
+    if (_currentEditorProject && _currentEditorProject.filename === oldFilename) _setCurrentProject(newFilename, m[1], _currentEditorProject.savedAt, { base: name, auto: false });
+    showToast(`Projet renommé « ${name} » ✓`, 'success');
+    await loadEditorProjectsList();
+  } catch(e) { showToast('Erreur renommage : ' + e.message, 'error'); }
+}
+
+/** Dupliquer un projet depuis la liste (sans l'ouvrir) : copie de son état sous « Nom (copie) ». */
+async function _epDuplicate(filename, type) {
+  const token = localStorage.getItem('eb80_token');
+  try {
+    const r = await fetch('/api/media/state/' + encodeURIComponent(filename), { headers: { 'Authorization': 'Bearer ' + token } });
+    const d = await r.json();
+    if (!r.ok || !d.state) throw new Error(d.error || 'état introuvable');
+    await _refreshProjectsCache();
+    const base = filename.replace(/^_project_[a-z]+_/, '').replace(/ \((?:copie|\d+)\)$/, '');
+    const name = _uniqueProjectName(type, base + ' (copie)');
+    const s = await fetch('/api/media/state', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ filename: `_project_${type}_${name}`, type, state: d.state }),
+    });
+    if (!s.ok) throw new Error('copie refusée');
+    if (typeof _mediaEditables !== 'undefined') _mediaEditables.set(`_project_${type}_${name}`, type);
+    showToast(`Copie « ${name} » créée ✓`, 'success');
+    await loadEditorProjectsList();
+  } catch(e) { showToast('Erreur duplication : ' + e.message, 'error'); }
 }
 
 async function deleteEditorProjectState(filename) {
@@ -12162,7 +12647,7 @@ async function loadEditorProject(filename, type) {
     showPage('editor');
     setEditorMode(type);
     // Projets nommés seulement : on mémorise pour auto-save
-    _setCurrentProject(filename.startsWith('_project_') ? filename : null, type);
+    _setCurrentProject(filename.startsWith('_project_') ? filename : null, type, null, state._nom || null);
     // Mémoriser le dernier projet chargé (même non nommé) pour restauration
     try { localStorage.setItem('eb80_last_proj', JSON.stringify({ filename, type })); } catch(e) {}
 
@@ -12261,6 +12746,12 @@ async function deleteEditorProject(filename) {
       headers: { 'Authorization': 'Bearer ' + token }
     });
     _editorProjectsCache = _editorProjectsCache.filter(p => p.filename !== filename);
+    if (typeof _mediaEditables !== 'undefined') _mediaEditables.delete(filename);
+    // Projet ouvert supprimé : l'éditeur garde son contenu, mais comme un nouveau projet sans nom.
+    if (_currentEditorProject && _currentEditorProject.filename === filename) {
+      _setCurrentProject(null, null);
+      try { localStorage.removeItem('eb80_last_proj'); } catch(e) {}
+    }
     renderEditorProjectsList();
     showToast('Projet supprimé', 'info');
   } catch(e) {
@@ -12341,6 +12832,7 @@ function _posterSyncUI() {
 let _editorMode = 'poster';
 function setEditorMode(mode) {
   _editorMode = mode;
+  setTimeout(_updateProjectHead, 0); // type affiché dans l'en-tête du projet (après la mise à jour des onglets)
   const posterPanel = document.getElementById('editor-poster-panel');
   const diapPanel   = document.getElementById('editor-diap-panel');
   const videoPanel  = document.getElementById('editor-video-panel');
@@ -12736,7 +13228,10 @@ async function exportDiaporama() {
 
   // captureStream
   const stream = expCanvas.captureStream(fps);
-  const mime   = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  const _dfmt   = _exportVideoFormat === 'mp4' && _videoRecMime('mp4', false) ? 'mp4' : 'webm';
+  if (_exportVideoFormat === 'mp4' && _dfmt !== 'mp4') showToast('MP4 non disponible dans ce navigateur : export en WebM', 'info');
+  _exportVideoFormat = 'webm';
+  const mime   = _videoRecMime(_dfmt, false) || 'video/webm';
   const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
   const chunks   = [];
   recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
@@ -12782,10 +13277,11 @@ async function exportDiaporama() {
   recorder.stop();
   await new Promise(r => { recorder.onstop = r; });
 
-  const blob = new Blob(chunks, { type: mime });
   const ext  = mime.includes('mp4') ? 'mp4' : 'webm';
-  const fname = `diaporama-${Date.now()}.${ext}`;
-  const file  = new File([blob], fname, { type: mime });
+  const blob = new Blob(chunks, { type: 'video/' + ext });
+  const fname = `${_exportBaseName()}-carousel-${_exportDate()}.${ext}`;
+  _downloadBlob(blob, fname); // Exporter : le fichier est aussi téléchargé
+  const file  = new File([blob], fname, { type: 'video/' + ext });
   const fd    = new FormData(); fd.append('file', file);
   const token = localStorage.getItem('eb80_token');
   statusEl.textContent = '⬆ Upload…';
@@ -21528,7 +22024,7 @@ async function _siProjectModeChoose(mode, filename, thumbUrl) {
       await saveMediaState(upData.filename, 'poster', data.state);
       item.type = 'image'; item.src = upData.url; item.project = filename;
       await _siSave(key, items); renderLandingMediaGallery();
-      showToast('Affiche exportée ✓', 'success');
+      showToast('Image exportée ✓', 'success');
     } catch(e) { showToast('Erreur : ' + e.message, 'error'); }
 
   } else if (mode === 'diaporama') {
@@ -22001,6 +22497,172 @@ function previewColors() {
     const cssVar = COLOR_VAR_MAP[picker.dataset.key];
     if (cssVar && picker.value) document.documentElement.style.setProperty(cssVar, picker.value);
   });
+}
+
+// ── Apparence : couleurs du site et palettes des visuels ─────────────────────────────────────────────────────────────
+// Une palette : { nom, ambiance, couleurs: { fond, titre, texte, accent, accent2, discret }, nuances: [5 × { nom, couleurs }] },
+// rangées dans le réglage editor_palettes (JSON) ; l'éditeur visuel les propose dans sa section « Palettes ».
+const _PAL_ROLES = [['fond', 'Fond'], ['titre', 'Titre'], ['texte', 'Texte'], ['accent', 'Accent'], ['accent2', 'Accent 2'], ['discret', 'Discret']];
+let _apPalettes = [];
+
+/** Couleurs de base des palettes : celles du site (page Apparence), ou celles fournies par le site hôte (EB80_PALETTE_BASE). */
+function _paletteBase() {
+  if (window.EB80_PALETTE_BASE && typeof window.EB80_PALETTE_BASE === 'object') return window.EB80_PALETTE_BASE;
+  const base = {};
+  document.querySelectorAll('#page-appearance .color-picker[data-key]').forEach((el) => { base[el.dataset.key] = el.value; });
+  return base;
+}
+
+async function renderAppearance() {
+  initColorPickers();
+  try {
+    const d = await fetch('/api/settings').then((r) => r.json());
+    const v = (d && d.settings) || {};
+    document.querySelectorAll('#page-appearance .color-picker[data-key]').forEach((el) => {
+      if (v[el.dataset.key]) el.value = v[el.dataset.key];
+      const hex = document.querySelector(`.color-hex[data-for="${el.dataset.key}"]`);
+      if (hex) hex.value = el.value;
+    });
+    try { _apPalettes = JSON.parse(v.editor_palettes || '[]') || []; } catch (e) { _apPalettes = []; }
+  } catch (e) { showToast('Réglages indisponibles : ' + e.message, 'error'); }
+  _renderPaletteBase();
+  _renderPalettesGrid();
+}
+
+function _renderPaletteBase() {
+  const el = document.getElementById('ap-base');
+  if (!el) return;
+  el.innerHTML = Object.entries(_paletteBase()).map(([k, c]) =>
+    `<span title="${k}" style="width:26px;height:26px;background:${c};border:1px solid var(--border);display:inline-block"></span>`).join('');
+}
+
+async function saveAppearanceColors() {
+  const data = {};
+  document.querySelectorAll('#page-appearance .color-picker[data-key]').forEach((el) => { data[el.dataset.key] = el.value; });
+  try {
+    const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('eb80_token') || '') }, body: JSON.stringify(data) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    previewColors();
+    _renderPaletteBase();
+    showToast('Couleurs du site enregistrées ✓', 'success');
+  } catch (e) { showToast('Erreur : ' + e.message, 'error'); }
+}
+
+function _palSwatches(c, pi, ni) {
+  return _PAL_ROLES.map(([r, lib]) =>
+    `<label title="${lib} ${c[r] || ''}" style="flex:1;height:30px;background:${c[r] || '#000'};cursor:pointer;position:relative;border:1px solid rgba(0,0,0,.25)">
+       <input type="color" value="${c[r] || '#000000'}" onchange="_palSetColor(${pi},${ni},'${r}',this.value)" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
+     </label>`).join('');
+}
+
+function _renderPalettesGrid() {
+  const grid = document.getElementById('ap-palettes');
+  if (!grid) return;
+  const esc = (t) => String(t || '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  if (!_apPalettes.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:12px">Aucune palette : cliquez sur « Générer 10 palettes avec l\'IA ».</div>'; return; }
+  grid.innerHTML = _apPalettes.map((p, i) => `
+    <div style="border:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <input class="form-input" value="${esc(p.nom)}" onchange="_apPalettes[${i}].nom=this.value" style="flex:1;font-size:12px;padding:4px 6px">
+        <button class="btn btn-ghost btn-sm" title="Supprimer" onclick="_apPalettes.splice(${i},1);_renderPalettesGrid()" style="color:var(--pink);border-color:var(--pink)">✕</button>
+      </div>
+      ${p.ambiance ? `<div style="font-size:10px;color:var(--muted);line-height:1.4">${esc(p.ambiance)}</div>` : ''}
+      <div style="display:flex">${_palSwatches(p.couleurs || {}, i, -1)}</div>
+      <div style="font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:2px">Nuances</div>
+      ${(p.nuances || []).map((n, j) => `<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted);width:76px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(n.nom)}">${esc(n.nom)}</span><div style="display:flex;flex:1">${_palSwatches(n.couleurs || {}, i, j).replace(/height:30px/g, 'height:16px')}</div></div>`).join('')}
+    </div>`).join('');
+}
+
+function _palSetColor(pi, ni, role, value) {
+  const p = _apPalettes[pi];
+  if (!p) return;
+  const cible = ni < 0 ? p.couleurs : (p.nuances[ni] || {}).couleurs;
+  if (cible) cible[role] = value;
+  _renderPalettesGrid();
+}
+
+async function generatePalettes() {
+  const btn = document.getElementById('ap-generer');
+  const msg = document.getElementById('ap-palettes-msg');
+  if (btn) btn.disabled = true;
+  if (msg) msg.textContent = '⏳ L\'IA compose 10 palettes (les nuances sont calculées ensuite)…';
+  try {
+    const res = await fetch('/api/palettes/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('eb80_token') || '') },
+      body: JSON.stringify({ base: _paletteBase(), consigne: (document.getElementById('ap-consigne') || {}).value || '' }),
+    });
+    const brut = await res.text();
+    let d = {};
+    try { d = JSON.parse(brut); } catch (e) { /* page d'erreur du serveur au lieu de JSON */ }
+    if (!res.ok || !Array.isArray(d.palettes)) {
+      const delai = res.status === 504 || res.status === 502 || /time-?out|délai/i.test(brut);
+      throw new Error(d.error || (delai ? `délai dépassé (HTTP ${res.status}) : le serveur a coupé la requête, réessayez`
+        : `HTTP ${res.status}${brut ? ' — ' + brut.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) : ''}`));
+    }
+    _apPalettes = d.palettes;
+    _renderPalettesGrid();
+    if (msg) msg.textContent = `✓ ${d.palettes.length} palettes générées : vérifiez-les, puis « Enregistrer les palettes ».`;
+  } catch (e) {
+    if (msg) msg.textContent = '';
+    showToast('Génération impossible : ' + e.message, 'error');
+  } finally { if (btn) btn.disabled = false; }
+}
+
+async function savePalettes() {
+  try {
+    const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('eb80_token') || '') }, body: JSON.stringify({ editor_palettes: JSON.stringify(_apPalettes) }) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _editorPalettesCache = null; // l'éditeur relira les palettes
+    showToast('Palettes enregistrées ✓', 'success');
+  } catch (e) { showToast('Erreur : ' + e.message, 'error'); }
+}
+
+// ── Éditeur : section « Palettes » (à la place des styles rapides) ────────────────────────────────────────────────────
+let _editorPalettesCache = null;
+async function loadEditorPalettes(force) {
+  if (_editorPalettesCache && !force) { renderEditorPalettes(); return; }
+  try {
+    const d = await fetch('/api/settings').then((r) => r.json());
+    _editorPalettesCache = JSON.parse(((d && d.settings) || {}).editor_palettes || '[]') || [];
+  } catch (e) { _editorPalettesCache = []; }
+  renderEditorPalettes();
+}
+
+function renderEditorPalettes() {
+  const el = document.getElementById('editor-palettes');
+  if (!el) return;
+  const pals = _editorPalettesCache || [];
+  const esc = (t) => String(t || '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const bande = (c, h) => _PAL_ROLES.map(([r]) => `<span style="flex:1;height:${h}px;background:${c[r] || '#000'}"></span>`).join('');
+  if (!pals.length) {
+    el.innerHTML = `<div style="font-size:11px;color:var(--muted);line-height:1.5">Aucune palette pour l'instant.</div>
+      <button class="btn btn-ghost btn-sm" onclick="showPage('appearance')" style="letter-spacing:0;text-transform:none">🎨 Créer les palettes (Apparence)</button>`;
+    return;
+  }
+  el.innerHTML = pals.map((p, i) => `
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <button onclick="applyEditorPalette(${i},-1)" title="Appliquer « ${esc(p.nom)} »" style="display:flex;flex-direction:column;gap:3px;padding:4px;background:transparent;border:1px solid var(--border);cursor:pointer;text-align:left;color:var(--white);font:inherit">
+        <span style="font-size:11px">${esc(p.nom)}</span><span style="display:flex;width:100%">${bande(p.couleurs || {}, 14)}</span>
+      </button>
+      <div style="display:flex;gap:3px">${(p.nuances || []).map((n, j) => `<button onclick="applyEditorPalette(${i},${j})" title="${esc(n.nom)}" style="flex:1;display:flex;padding:0;border:1px solid var(--border);background:transparent;cursor:pointer">${bande(n.couleurs || {}, 8)}</button>`).join('')}</div>
+    </div>`).join('');
+}
+
+/** Applique une palette (ni = -1) ou l'une de ses nuances au visuel : fond, titre, logo, date, lieu, infos, pied, déco. */
+function applyEditorPalette(pi, ni) {
+  const p = (_editorPalettesCache || [])[pi];
+  if (!p) return;
+  const n = ni >= 0 ? (p.nuances || [])[ni] : null;
+  const c = (n ? n.couleurs : p.couleurs) || {};
+  if (c.fond) { POSTER.bg.color = c.fond; POSTER.bg.mixColor = c.fond; }
+  if (c.accent) { POSTER.logo.color = c.accent; POSTER.deco.borderColor = c.accent; }
+  if (c.titre) POSTER.title.color = c.titre;
+  if (c.accent2) { POSTER.date.color = c.accent2; POSTER.deco.accentColor = c.accent2; }
+  if (c.texte) POSTER.venue.color = c.texte;
+  if (c.discret) { POSTER.info.color = c.discret; POSTER.footer.color = c.discret; }
+  syncPosterControls();
+  schedulePreview();
+  showToast(`Palette « ${n ? p.nom + ' · ' + n.nom : p.nom} » appliquée`, 'success');
 }
 
 let _colorPickersInited = false;
@@ -22549,10 +23211,10 @@ async function renderPoster(canvas, fmt, sf, layerOnly=null) {
           ctx.fillStyle=logoSec.color; ctx.textAlign=logoSec.align||'center'; ctx.textBaseline='middle';
           const logoX=(ctx.textAlign==='left'?pad*1.5:ctx.textAlign==='right'?W-pad*1.5:W/2)+xOff;
           _pApplyFmt(ctx,logoSec,S);
-          const logoWords=(logoSec.text||'ELECTROBOY 80').split(/\s+/).filter(Boolean);
+          const logoWords=(logoSec.text||'').split(/\s+/).filter(Boolean);
           const logoHasWc=logoSec.wordColors&&logoSec.wordColors.some(c=>c);
           if (logoHasWc) _pDrawColoredText(ctx,logoWords,logoX,y,W-pad*3,fs*1.3,2,logoSec.wordColors,logoSec.color,logoSec.outline,logoSec.outlineColor||'#000',(logoSec.outlineWidth||2)*S);
-          else _pWrapText(ctx,logoSec.text||'ELECTROBOY 80',logoX,y,W-pad*3,fs*1.3,2,logoSec.outline,logoSec.outlineColor||'#000',(logoSec.outlineWidth||2)*S);
+          else _pWrapText(ctx,logoSec.text||'',logoX,y,W-pad*3,fs*1.3,2,logoSec.outline,logoSec.outlineColor||'#000',(logoSec.outlineWidth||2)*S);
           _pResetFmt(ctx);
         }
       } else if (sid==='title') {
@@ -26520,8 +27182,11 @@ async function exportVideoReel() {
     });
   }
 
-  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-    ? 'video/webm;codecs=vp9' : 'video/webm';
+  // Format demandé (Exporter → WebM ou MP4) ; MP4 seulement si ce navigateur sait l'enregistrer, sinon WebM.
+  const _vfmt = _exportVideoFormat === 'mp4' && _videoRecMime('mp4', false) ? 'mp4' : 'webm';
+  if (_exportVideoFormat === 'mp4' && _vfmt !== 'mp4') showToast('MP4 non disponible dans ce navigateur : export en WebM', 'info');
+  _exportVideoFormat = 'webm';
+  const mimeType = _videoRecMime(_vfmt, false) || 'video/webm';
 
   // Export à pleine résolution (pas à la résolution de prévisualisation)
   const _expFmt = VIDEO_FORMATS[VIDEO.format];
@@ -26572,9 +27237,9 @@ async function exportVideoReel() {
     : videoStream;
 
   // Choisir un mimeType qui inclut l'audio si disponible
-  const recMime = _expAudioTrack
-    ? (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm')
-    : mimeType;
+  const recMime = _expAudioTrack ? (_videoRecMime(_vfmt, true) || mimeType) : mimeType;
+  const _vExt = recMime.startsWith('video/mp4') ? 'mp4' : 'webm';
+  const _vType = _vExt === 'mp4' ? 'video/mp4' : 'video/webm';
 
   const _projSlug = (_currentEditorProject?.name || '')
     .replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_\-]/g,'').replace(/_+/g,'_').toLowerCase();
@@ -26584,7 +27249,7 @@ async function exportVideoReel() {
     ? `${_evSlug()}-${_EV_MEDIA_SPECS[_posterEvSlotKey].slotSuffix}`
     : `${_projSlug ? _projSlug + '-' : ''}${VIDEO.format}-${VIDEO.duration}s-${_expDate}`;
   console.log('[export] projet:', _currentEditorProject, '→ fichier:', _exportFilename);
-  setStatus('⬤ Rendu → ' + _exportFilename + '.webm');
+  setStatus('⬤ Rendu → ' + _exportFilename + '.' + _vExt);
   const _expBitrate = Math.round(W * H * 0.07); // ~7 bits/pixel → 10 Mbps pour 1280×720, 15 Mbps pour 1500×1000
   _videoRec = new MediaRecorder(recStream, { mimeType: recMime, videoBitsPerSecond: Math.max(6_000_000, _expBitrate) });
   _videoRecChunks = [];
@@ -26594,19 +27259,20 @@ async function exportVideoReel() {
     _videoOffscreen = _prevOffscreen;
     _videoLayers    = _prevLayers;
     if (_expAudioCtx) { _expAudioCtx.close(); _expAudioCtx = null; }
-    const blob  = new Blob(_videoRecChunks, { type: 'video/webm' });
-    const fname = _exportFilename + '.webm';
+    const blob  = new Blob(_videoRecChunks, { type: _vType });
+    const fname = _exportFilename + '.' + _vExt;
+    _downloadBlob(blob, fname); // Exporter : le fichier est aussi téléchargé
     setStatus('⬆ Envoi dans la médiathèque…');
     try {
       const token = localStorage.getItem('eb80_token') || '';
       const fd = new FormData();
-      fd.append('file', new File([blob], fname, { type: 'video/webm' }));
+      fd.append('file', new File([blob], fname, { type: _vType }));
       const res = await fetch('/api/media/upload', { method:'POST', headers:{'Authorization':'Bearer '+token}, body:fd });
       if (!res.ok) throw new Error(await res.text());
       const uploadData = await res.json();
 
       // ── Option B : fusion ffmpeg → mp4 avec piste audio propre ────────────
-      if (VIDEO.bgAudio?.url && uploadData?.filename) {
+      if (VIDEO.bgAudio?.url && uploadData?.filename && _vExt === 'webm') {
         setStatus('🎵 Fusion audio (mp4)…');
         try {
           const mergeRes = await fetch('/api/media/merge-av', {
@@ -26637,8 +27303,8 @@ async function exportVideoReel() {
         // Fallback si merge échoue : garder le webm (déjà uploadé)
         setStatus('✓ Sauvé (WebM — fusion audio échouée)');
       } else {
-        setStatus('✓ Sauvé dans la médiathèque ✓');
-        showToast('Reel WebM sauvé dans la médiathèque ✓', 'success');
+        setStatus('✓ Téléchargé et sauvé dans la médiathèque ✓');
+        showToast(`Vidéo ${_vExt.toUpperCase()} téléchargée et sauvée dans la médiathèque ✓`, 'success');
       }
       if (_siPendingVideoCtx) {
         const _sip = _siPendingVideoCtx; _siPendingVideoCtx = null;
@@ -26661,8 +27327,6 @@ async function exportVideoReel() {
       }
       if (typeof loadMedia === 'function') loadMedia();
     } catch(e) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = fname; a.click(); URL.revokeObjectURL(url);
       setStatus('⬇ Téléchargé (médiathèque indisponible)');
     }
     _videoRec = null;
@@ -27628,7 +28292,7 @@ async function editMediaItem(filename) {
     await restorePosterState(data.state);
     showPage('editor');
     setEditorMode('poster');
-    showToast('Affiche rechargée — modifier puis ré-exporter ✓', 'success');
+    showToast('Image rechargée — modifier puis ré-exporter ✓', 'success');
   } else if (data.type === 'diaporama') {
     restoreDiapState(data.state);
     showToast('Diaporama rechargé ✓', 'success');
@@ -27710,7 +28374,7 @@ async function savePosterToLibrary() {
       const data = await res.json();
       const actualFilename = data.filename || fname;
       await saveMediaState(actualFilename, 'poster', getPosterSaveState());
-      showToast('Affiche sauvegardée dans la médiathèque ✓', 'success');
+      showToast('Image enregistrée dans la médiathèque ✓', 'success');
       if (_posterEvGalleryCallback) {
         const cb = _posterEvGalleryCallback;
         _posterEvGalleryCallback = null;
@@ -27758,6 +28422,95 @@ async function saveRsVisualToLibrary() {
   } catch(e) { showToast('Erreur : ' + e.message, 'error'); }
 }
 
+// ── Exporter : image fixe (PNG, JPEG, WebP, PDF) ou vidéo (WebM, MP4) ─────────────────────────────────────────────────
+let _exportVideoFormat = 'webm'; // format de la prochaine vidéo exportée (exportVideoReel, exportDiaporama)
+
+/** Nom de fichier tiré du nom du projet (sans accents), sinon du mode. */
+function _exportBaseName() {
+  const n = (_currentEditorProject && _currentEditorProject.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  return n || ((_PROJ_MODES[_getEditorMode()] || 'export').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
+}
+function _exportDate() {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+}
+function _downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/** Type d'enregistrement vidéo du navigateur pour « webm » ou « mp4 », avec ou sans son ; null si ce navigateur ne sait pas. */
+function _videoRecMime(format, withAudio) {
+  const candidats = format === 'mp4'
+    ? (withAudio ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4'] : ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4'])
+    : (withAudio ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'] : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']);
+  return candidats.find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || null;
+}
+
+function toggleEditorExport() {
+  const mode = _getEditorMode();
+  const video = mode === 'video' || mode === 'diap';
+  const mp4 = !!_videoRecMime('mp4', false);
+  const formats = video
+    ? [['webm', 'WebM', 'Vidéo web légère : réseaux sociaux, site.'],
+       ['mp4', 'MP4', mp4 ? 'Le plus compatible : Instagram, TikTok, téléphones.' : 'Non disponible dans ce navigateur (Chrome ou Edge récents, Safari).']]
+    : [['png', 'PNG', 'Qualité maximale, sans perte.'], ['jpeg', 'JPEG', 'Léger, pour les réseaux et les e-mails.'],
+       ['webp', 'WebP', 'Très léger, pour le web.'], ['pdf', 'PDF', 'Prêt à imprimer.'],
+       ['library', 'Médiathèque', 'Enregistrer l\'image dans la médiathèque (publication, réutilisation).']];
+  const cartes = formats.map(([f, lib, aide]) => {
+    const off = f === 'mp4' && !mp4;
+    return `<button ${off ? 'disabled' : ''} onclick="editorExport('${f}')" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:10px 12px;background:transparent;border:1px solid var(--border);color:var(--white);font:inherit;text-align:left;cursor:${off ? 'default' : 'pointer'};opacity:${off ? .45 : 1}" onmouseenter="if(!this.disabled)this.style.borderColor='var(--yellow)'" onmouseleave="this.style.borderColor='var(--border)'">
+      <span style="font-family:'VT323',monospace;font-size:20px;letter-spacing:2px;color:var(--yellow)">${lib}</span>
+      <span style="font-size:11px;color:var(--muted);line-height:1.4">${aide}</span></button>`;
+  }).join('');
+  const nom = _currentEditorProject ? `« ${_currentEditorProject.name} »` : (video ? 'la vidéo' : 'l\'image');
+  _openEdModal(video ? `⬇ Exporter la vidéo (${_PROJ_MODES[mode]})` : '⬇ Exporter l\'image',
+    `<div style="font-size:12px;margin-bottom:10px">Format du fichier pour ${nom} :</div>
+     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${cartes}</div>
+     <div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5">${video
+       ? 'Rendu en temps réel dans le navigateur (gardez l\'onglet ouvert), puis téléchargé et enregistré dans la médiathèque.'
+       : 'Fichier en pleine résolution, téléchargé aussitôt (Médiathèque : enregistré dans la médiathèque).'}</div>`,
+    [{ label: 'Fermer', run: _closeEdModal }]);
+}
+
+async function editorExport(format) {
+  _closeEdModal();
+  const mode = _getEditorMode();
+  if (mode === 'video' || mode === 'diap') {
+    _exportVideoFormat = format === 'mp4' ? 'mp4' : 'webm';
+    if (mode === 'video') await exportVideoReel(); else await exportDiaporama();
+    return;
+  }
+  if (format === 'pdf') return exportPosterPDF();
+  if (format === 'library') return savePosterToLibrary();
+  return exportPosterImage(format);
+}
+
+/** Image fixe en PNG, JPEG ou WebP, pleine résolution, téléchargée. */
+async function exportPosterImage(format) {
+  const types = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' };
+  const type = types[format] || 'image/png';
+  const fmt = FORMATS[POSTER.format];
+  const exp = document.createElement('canvas');
+  showToast(`Génération ${format.toUpperCase()} en cours…`, 'info');
+  try {
+    await renderPoster(exp, fmt, 1);
+    if (type !== 'image/png') { // fond blanc sous les zones transparentes (JPEG n'a pas de transparence)
+      const flat = document.createElement('canvas'); flat.width = exp.width; flat.height = exp.height;
+      const fctx = flat.getContext('2d'); fctx.fillStyle = '#ffffff'; fctx.fillRect(0, 0, flat.width, flat.height); fctx.drawImage(exp, 0, 0);
+      exp.width = flat.width; exp.getContext('2d').drawImage(flat, 0, 0);
+    }
+    const blob = await new Promise((r) => exp.toBlob(r, type, 0.92));
+    if (!blob) throw new Error('image vide');
+    const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/jpeg' ? 'jpg' : 'png';
+    if (format === 'webp' && ext !== 'webp') showToast('WebP non disponible dans ce navigateur : export en PNG', 'info');
+    _downloadBlob(blob, `${_exportBaseName()}-${POSTER.format}-${_exportDate()}.${ext}`);
+    showToast(`${ext.toUpperCase()} téléchargé ✓`, 'success');
+  } catch (e) { showToast('Erreur export : ' + e.message, 'error'); }
+}
+
 async function exportPosterPNG() {
   const fmt=FORMATS[POSTER.format];
   const exp=document.createElement('canvas');
@@ -27765,7 +28518,7 @@ async function exportPosterPNG() {
   try {
     await renderPoster(exp, fmt, 1);
     const link=document.createElement('a');
-    link.download=`electroboy80-affiche-${POSTER.format}-${Date.now()}.png`;
+    link.download=`${_exportBaseName()}-${POSTER.format}-${_exportDate()}.png`;
     link.href=exp.toDataURL('image/png');
     link.click();
     showToast('PNG téléchargé ✓', 'success');
@@ -27786,7 +28539,7 @@ async function exportPosterPDF() {
     const pdf=new jsPDF({orientation:isLandscape?'landscape':'portrait', unit:'mm', format:pdfFmt});
     const pW=pdf.internal.pageSize.getWidth(), pH=pdf.internal.pageSize.getHeight();
     pdf.addImage(imgData,'JPEG',0,0,pW,pH);
-    pdf.save(`electroboy80-affiche-${Date.now()}.pdf`);
+    pdf.save(`${_exportBaseName()}-${POSTER.format}-${_exportDate()}.pdf`);
     showToast('PDF téléchargé ✓', 'success');
   } catch(e) { showToast('Erreur PDF: '+e.message,'error'); }
 }
@@ -28509,7 +29262,7 @@ async function renderAndSelectProject(filename) {
     await saveMediaState(upData.filename, 'poster', data.state);
 
     selectFromPicker(upData.url);
-    showToast('Affiche exportée et sélectionnée ✓', 'success');
+    showToast('Image exportée et sélectionnée ✓', 'success');
   } catch(e) {
     showToast('Erreur : ' + e.message, 'error');
   }
@@ -32236,7 +32989,7 @@ async function deleteAllOrphanCrops() {
 }
 </script>
 
-<script src="plugin/sources.js?v=1.2.0&h=5b44533250" defer></script>
+<script src="plugin/sources.js?v=1.2.0&h=5db1d5e7da" defer></script>
 <script src="js/video-promo/video-ia.js?v=20261018b&h=22c1c3b760" defer></script>
 <script src="js/media-validation.js?v=20261012p&h=3c32d48268" defer></script>
 <script src="js/media-picker-outils.js?v=20261012p&h=12f2584569" defer></script>

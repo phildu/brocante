@@ -12,7 +12,14 @@
   window.canAccess = function (id) { return allowed.indexOf(id) !== -1; };
   if (typeof window.showPage === 'function') {
     var showPage = window.showPage;
-    window.showPage = function (id) { return showPage(allowed.indexOf(id) === -1 ? start : id); };
+    window.showPage = function (id) {
+      // Apparence (palettes des visuels) depuis une autre page : la page « Palettes des visuels » de la boutique
+      if (id === 'appearance' && start !== 'appearance' && allowed.indexOf('appearance') !== -1) {
+        try { var u = new URL(window.parent.location.href); u.searchParams.set('v', 'palettes'); window.parent.location.href = u.toString(); } catch (e) { /* page hôte injoignable */ }
+        return;
+      }
+      return showPage(allowed.indexOf(id) === -1 ? start : id);
+    };
   }
   // Éditeur d'affiche : textes par défaut de la boutique au lieu de ceux d'Electroboy 80 (concert, salle, site). Les blocs gardent
   // leurs libellés génériques (Logo, Titre, Date, Lieu, Infos, Pied) ; un projet enregistré garde ses propres textes.
@@ -23,6 +30,8 @@
       if (!st) return;
       Object.keys(texts).forEach(function (k) { if (st[k] && 'text' in st[k]) st[k].text = texts[k]; });
     });
+    // Les champs de l'éditeur ont été remplis avant ce script : ils doivent montrer ces textes, pas ceux d'Electroboy 80.
+    if (typeof _posterSyncUI === 'function') _posterSyncUI();
   } catch (e) { /* éditeur absent de cette page */ }
   // Mode « sélecteur » (fenêtre ouverte par picker.js depuis une page de la plateforme) : seul le sélecteur de médias
   // d'electroboy80 est montré ; le choix est remis à la page hôte (P.onPick), sa fermeture aussi (P.onClose).
@@ -41,6 +50,8 @@
   // l'administration (le serveur les lit et les écrit chez elle, lib/reglages.php) : chacun est marqué et renvoie à sa page. Ceux
   // qu'aucune fonction de la boutique n'utilise sont grisés (et ignorés à l'enregistrement). L'adresse de retour TikTok est celle
   // de la boutique.
+  // Palettes des visuels : seulement la partie palettes de la page Apparence (couleurs du site d'electroboy80 masquées).
+  if (start === 'appearance') document.documentElement.classList.add('eb80-palettes-only');
   if (start === 'rs-settings') {
     document.documentElement.classList.add('eb80-api-page');
     var base = '';

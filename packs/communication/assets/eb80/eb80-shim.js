@@ -94,6 +94,17 @@
     };
     var root = document.documentElement;
     Object.keys(map).forEach(function (k) { root.style.setProperty(k, map[k]); });
+    // Palettes des visuels : composées à partir des couleurs du thème de la boutique (page Apparence de la plateforme)
+    var hex = function (c) {
+      c = String(c || '').trim();
+      if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+      if (/^#[0-9a-f]{3}$/i.test(c)) return '#' + c.slice(1).split('').map(function (x) { return x + x; }).join('');
+      var m = c.match(/rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/i);
+      return m ? '#' + [m[1], m[2], m[3]].map(function (n) { return ('0' + Number(n).toString(16)).slice(-2); }).join('') : null;
+    };
+    var base = { fond_site: pal.bg, surface: pal.surface, texte_site: pal.ink, texte_doux: pal.soft, bordure: pal.line, accent: pal.accent, accent_2: pal.accent2 };
+    window.EB80_PALETTE_BASE = {};
+    Object.keys(base).forEach(function (k) { var h = hex(base[k]); if (h) window.EB80_PALETTE_BASE[k] = h.toUpperCase(); });
     root.classList.add('eb80-boutique');
   } catch (e) { /* couleurs d'origine */ }
 })();

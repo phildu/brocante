@@ -22,3 +22,5 @@
 .eb80-field-off { opacity: .55; } .eb80-field-off input { cursor: not-allowed; }
 .eb80-platform-note { margin: 0 0 14px; padding: 10px 12px; border: 1px dashed var(--border); font-size: 12px; line-height: 1.6; color: var(--muted); }
 .eb80-platform-note a { color: var(--yellow); }
+/* Page « Palettes des visuels » : les couleurs du site d'electroboy80 ne concernent pas la boutique. */
+.eb80-palettes-only #ap-site-colors { display: none !important; }

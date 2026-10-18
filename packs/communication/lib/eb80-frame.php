@@ -13,7 +13,7 @@ function com_eb80_frame(array $plugin, string $csrf, string $role, string $start
         'uploads' => '/uploads/' . tenant_slug() . '/',
         'start' => $start,
         // Pages ouvertes dans le cadre : les réglages des réseaux (jetons) restent réservés aux administrateurs.
-        'allowed' => $role === 'admin' ? ['media', 'editor', 'publish', 'rs-settings'] : ['media', 'editor', 'publish'],
+        'allowed' => $role === 'admin' ? ['media', 'editor', 'publish', 'rs-settings', 'appearance'] : ['media', 'editor', 'publish'],
         'role' => $role,
         'shop' => (string) get_content()['site_name'],
         'site' => preg_replace('#^https?://#', '', rtrim($site, '/')),

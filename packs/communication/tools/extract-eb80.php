@@ -16,7 +16,8 @@
 //   packs/communication/eb80/api/*.php          config.php, media.php, media-links.php, generate-web-images.php, settings.php,
 //                                               ai-generate.php (script vidéo par l'IA), rs-v2.php, rs-schedule.php,
 //                                               rs-tiktok-callback.php, social-feed.php (publication sur les réseaux),
-//                                               video-jobs.php, video-jobs-ai.php (Vidéo IA : file de rendu, scénario)
+//                                               video-jobs.php, video-jobs-ai.php (Vidéo IA : file de rendu, scénario),
+//                                               palettes.php (palettes des visuels générées par l'IA)
 //                                               (et eb80/reglages-publics.php, le filtre des réglages publics) ;
 //                                               packs/communication/eb80/compat.php remplace les fonctions renommées ici
 //   packs/communication/eb80/SOURCE.txt         d'où vient la copie (dossier, commit, date)
@@ -341,7 +342,7 @@ foreach (['requireAuth', 'requirePerm', 'getCurrentUser', 'uploadFile', 'jsonRes
 }
 write_file($pack . '/eb80/api/config.php', $cfg);
 
-$controllers = ['media.php', 'media-links.php', 'generate-web-images.php', 'settings.php', 'ai-generate.php', 'rs-v2.php', 'rs-schedule.php', 'rs-tiktok-callback.php', 'social-feed.php', 'video-jobs.php', 'video-jobs-ai.php'];
+$controllers = ['media.php', 'media-links.php', 'generate-web-images.php', 'settings.php', 'ai-generate.php', 'rs-v2.php', 'rs-schedule.php', 'rs-tiktok-callback.php', 'social-feed.php', 'video-jobs.php', 'video-jobs-ai.php', 'palettes.php'];
 foreach ($controllers as $f) {
     $php = src_read($source . '/api/' . $f);
     $php = patch_re("$f : en-tête PHP", $php, '/^<\?php\s*/', $guard, 1);
@@ -379,6 +380,11 @@ foreach ($controllers as $f) {
         // Adresse de retour : la route eb80 du plugin, sous le préfixe de la boutique (identique à celle envoyée par le navigateur).
         $php = patch_re('rs-tiktok-callback.php : adresse de retour', $php, '/^\$redirectUri\s*=.*$/m',
             "\$redirectUri = appBaseUrl() . app_prefix(plugin_api_url('communication', 'eb80') . '&path=' . rawurlencode('/rs/tiktok-callback'));", 1);
+    }
+    if ($f === 'palettes.php') {
+        // Palettes des visuels : la boutique au lieu d'Electroboy 80, et l'IA de la boutique (Gemini ou Claude, quota, simulateur).
+        $php = patch_re('palettes.php : identité', $php, '/^function palettesIdentite\(/m', 'function _eb80_orig_palettesIdentite(', 1);
+        $php = patch_re('palettes.php : appel de l\'IA', $php, '/^function palettesAppelIA\(/m', 'function _eb80_orig_palettesAppelIA(', 1);
     }
     if ($f === 'video-jobs.php') {
         // File de rendu : morceaux hors de uploads/, pas d'écrasement, fichier rendu contrôlé (compat.php : EB80_TMP_DIR, EB80_VIDEO_MAX_OCTETS).

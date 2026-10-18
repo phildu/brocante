@@ -1,7 +1,7 @@
-Copie d'electroboy80 faite le 2026-10-18 15:51
+Copie d'electroboy80 faite le 2026-10-18 20:59
 Dossier : /Users/admin/Documents/projet/web local/electroboy80
-Commit : e7ef5ae 2026-10-18 12:04:33 +0200 Sources éditeur 1.2.0 : sources intégrées déclarées par le site hôte, choix des champs ; Vidéo IA : liste des scènes rafraîchie
-Empreinte : a5ee9d65de97d064229de279f6302e32
+Commit : 569921a 2026-10-18 20:59:33 +0200 Éditeur visuel : menu Projet, export, nom automatique ; Apparence et palettes des visuels par l'IA
+Empreinte : d04dff08d0ec534ee351055432d11d3b
 
 Retouches :
 admin.html : adaptation au début : 1
@@ -12,8 +12,8 @@ admin.html : /uploads/ + nom : 6
 admin.html : `/uploads/${…}` : 1
 admin.html : clé IA non exigée dans le navigateur : 3
 admin.html : texte du bouton IA du SEO : 1
-admin.html : fonds sombres : 216
-admin.html : fonds noirs translucides : 76
+admin.html : fonds sombres : 215
+admin.html : fonds noirs translucides : 77
 admin.html : bordures sombres : 63
 admin.html : textes clairs : 54
 admin.html : textes atténués : 128
@@ -178,4 +178,12 @@ video-jobs-ai.php : palette sans charte Electroboy : 1
 video-jobs-ai.php : musique sans Electroboy : 1
 video-jobs-ai.php : message sans photo : 1
 video-jobs-ai.php : appel de l'IA remplacé : 1
+palettes.php : en-tête PHP : 1
+palettes.php : curl_close retiré : 0
+palettes.php : imagedestroy retiré : 0
+palettes.php : config : 1
+palettes.php : adresses des fichiers : 0
+palettes.php : constantes : 0
+palettes.php : identité : 1
+palettes.php : appel de l'IA : 1
 reglages-publics.php : en-tête PHP : 1

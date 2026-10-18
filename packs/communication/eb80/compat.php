@@ -390,6 +390,28 @@ function eb80_gemini_schema(array $schema): array
 function eb80_via_simulation(array $schema): array
 {
     $required = (array) ($schema['required'] ?? []);
+    if (in_array('palettes', $required, true)) { // palettes des visuels : 10 palettes factices, teintes réparties
+        $hsl = static function (float $h, float $s, float $l): string {
+            $f = static function (float $n) use ($h, $s, $l): int {
+                $k = fmod($n + $h / 30, 12);
+                return (int) round(255 * ($l - $s * min($l, 1 - $l) * max(-1, min($k - 3, 9 - $k, 1))));
+            };
+            return sprintf('#%02X%02X%02X', $f(0), $f(8), $f(4));
+        };
+        $jeu = static fn (float $h, float $l) => ['fond' => $hsl($h, .35, $l), 'titre' => $hsl($h, .2, $l > .5 ? .12 : .95), 'texte' => $hsl($h, .15, $l > .5 ? .2 : .85),
+            'accent' => $hsl(fmod($h + 30, 360), .7, .5), 'accent2' => $hsl(fmod($h + 180, 360), .65, .55), 'discret' => $hsl($h, .1, $l > .5 ? .45 : .6)];
+        $palettes = [];
+        for ($i = 0; $i < 10; $i++) {
+            $h = $i * 36.0;
+            $l = $i % 2 ? .9 : .12;
+            $nuances = [];
+            foreach (['Plus claire' => .15, 'Plus sombre' => -.1, 'Douce' => .05, 'Saturée' => 0, 'Inversée' => null] as $nom => $d) {
+                $nuances[] = ['nom' => $nom, 'couleurs' => $jeu($h, $d === null ? 1 - $l : max(.05, min(.95, $l + $d)))];
+            }
+            $palettes[] = ['nom' => 'Palette simulée ' . ($i + 1), 'ambiance' => 'Palette factice (aucun appel à l\'IA).', 'couleurs' => $jeu($h, $l), 'nuances' => $nuances];
+        }
+        return [['palettes' => $palettes], ['model' => 'simulateur']];
+    }
     if (in_array('accent', $required, true)) {
         return [['accent' => '#B5502E', 'label' => 'À DÉCOUVRIR', 'palette' => 'chaud', 'explication' => 'Charte simulée (aucun appel à l\'IA).'], ['model' => 'simulateur']];
     }
@@ -413,9 +435,19 @@ function viaClaude(string $cle, string $systeme, array $contenu, array $schema, 
 {
     if ($cle === 'simulateur') return eb80_via_simulation($schema);
     if ($cle !== 'gemini') {
-        [$json, $rep] = _eb80_orig_viaClaude($cle, $systeme, $contenu, $schema, $maxTokens, $delai);
-        ai_usage_log_claude((array) ($rep['usage'] ?? []), (string) ($rep['model'] ?? VIA_MODELE));
-        return [$json, $rep];
+        // Claude ; s'il échoue (clé invalide, quota, réseau…) et qu'une clé Gemini existe : repli sur Gemini
+        $erreurClaude = null;
+        $GLOBALS['eb80_capture'] = com_ai_ready();
+        try {
+            [$json, $rep] = _eb80_orig_viaClaude($cle, $systeme, $contenu, $schema, $maxTokens, $delai);
+            ai_usage_log_claude((array) ($rep['usage'] ?? []), (string) ($rep['model'] ?? VIA_MODELE));
+            return [$json, $rep];
+        } catch (Eb80Response $r) {
+            $erreurClaude = (string) (($r->data['error'] ?? '') ?: 'erreur');
+        } finally {
+            $GLOBALS['eb80_capture'] = false;
+        }
+        error_log('Pack Communication : Claude indisponible (' . $erreurClaude . '), repli sur Gemini');
     }
     $parts = [];
     foreach ($contenu as $bloc) {
@@ -442,5 +474,18 @@ function viaClaude(string $cle, string $systeme, array $contenu, array $schema, 
     $json = json_decode($text, true);
     if (!is_array($json)) errorResponse(($rep['candidates'][0]['finishReason'] ?? '') === 'MAX_TOKENS' ? 'Réponse de Gemini tronquée, réessayez.' : 'Réponse de Gemini illisible.', 502);
     return [$json, ['model' => 'gemini-2.5-flash', 'usage' => $rep['usageMetadata'] ?? []]];
+}
+
+// ── Palettes des visuels (eb80/api/palettes.php) : la boutique et son IA ─────────────────────────────────────────────────
+function palettesIdentite(): string
+{
+    return eb80_via_identite_courte();
+}
+
+/** Même appel que le scénario de la Vidéo IA (eb80_via_cle, viaClaude) : Gemini ou Claude, quota de la boutique, simulateur. */
+function palettesAppelIA(string $systeme, string $texte, array $schema): array
+{
+    [$json, $rep] = viaClaude(eb80_via_cle(), $systeme, [['type' => 'text', 'text' => $texte]], $schema, 4000, 100);
+    return [$json, (string) ($rep['model'] ?? '')];
 }
 

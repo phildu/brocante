@@ -72,13 +72,15 @@ if ($path === '/rs/schedule/run') plugin_json(['error' => 'Réservé à la tâch
 if (preg_match('#^/rs/(?:[a-z]+-refresh-token|test/|diagnose|tiktok-callback)#', $path) && $role !== 'admin') plugin_json(['error' => 'Réservé aux administrateurs.'], 403);
 // Vidéo IA : le jeton de l'agent de rendu ne se crée que par l'administrateur ; l'agent lui-même passe par /api/video-jobs/…
 // (plugin-agent.php, api/agent.php), jamais par cette route de l'administration.
+if ($path === '/palettes/generate' && $role !== 'admin') plugin_json(['error' => 'Réservé aux administrateurs.'], 403);
 if ($path === '/video-jobs/worker-token' && $role !== 'admin') plugin_json(['error' => 'Réservé aux administrateurs.'], 403);
 if ($path === '/video-jobs/next' || preg_match('#^/video-jobs/\d+/result$#', $path)) plugin_json(['error' => 'Réservé à l\'agent de rendu.'], 403);
 
 $dir = __DIR__ . '/../eb80/api/';
 $ported = ['media' => 'media.php', 'settings' => 'settings.php', 'generate-web-images' => 'generate-web-images.php', 'ai-generate' => 'ai-generate.php'];
 $ported['social-feed'] = 'social-feed.php';
-$ported['video-jobs'] = 'video-jobs.php'; // file de rendu de la Vidéo IA ; /video-jobs/ai → video-jobs-ai.php (relais du fichier)
+$ported['video-jobs'] = 'video-jobs.php';
+$ported['palettes'] = 'palettes.php'; // palettes des visuels générées par l'IA (page Palettes, administrateur) // file de rendu de la Vidéo IA ; /video-jobs/ai → video-jobs-ai.php (relais du fichier)
 // Même aiguillage qu'electroboy80 (api/entry.php) pour /rs/… : retour TikTok, programmation, le reste dans rs-v2.php.
 if ($controller === 'rs') {
     if ($path === '/rs/tiktok-callback') {

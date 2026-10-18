@@ -137,7 +137,7 @@
         return {
           id: e.id, nom: e.name, sousTitre: e.subtitle || '', description: court(e.description, 400),
           prix: e.entry_type === 'paid' ? (e.entry_price || '') : '',
-          date: dateLongue(e.date), heure: heure(e.time), lieu: e.venue || '', ville: e.city || '',
+          date: dateLongue(e.date), dateIso: String(e.date || '').slice(0, 10), heure: heure(e.time), lieu: e.venue || '', ville: e.city || '',
           photos: unique([e.poster]), lien: e.ticket_url || e.info_url || '',
           info: [entree, e.doors_time ? 'Portes ' + String(e.doors_time).replace(':', 'h') : ''].filter(Boolean).join(' · '),
         };
@@ -203,7 +203,7 @@
       return {
         id: lire(o, c.id || 'id'), nom: String(lire(o, c.nom)), sousTitre: String(lire(o, c.sousTitre)),
         description: court(lire(o, c.description), 400), prix,
-        date: dateLongue(date), heure: heure(lire(o, c.heure)), lieu: String(lire(o, c.lieu)), ville: String(lire(o, c.ville)),
+        date: dateLongue(date), dateIso: /^\d{4}-\d{2}-\d{2}/.test(date) ? date.slice(0, 10) : '', heure: heure(lire(o, c.heure)), lieu: String(lire(o, c.lieu)), ville: String(lire(o, c.ville)),
         mentions: unique((Array.isArray(c.mentions) ? c.mentions.map((e) => String(lire(o, e))) : String(lire(o, c.mentions)).split(',')).map((m) => court(m, 24))).slice(0, 3),
         photos: unique([...listePhotos(o, c.photo), ...listePhotos(o, c.photos)]),
         logo: String(lire(o, c.logo)), lien: lienAbsolu('', String(lire(o, c.lien))), info: String(lire(o, c.info)),
@@ -372,7 +372,8 @@
     if (o.logo && s.logo) {
       POSTER.layers.push({ id: 'layer_src_' + Date.now(), type: 'image', src: s.logo, x: 0.5, y: 0.9, width: 0.2, opacity: 1, _srcAuto: true });
     }
-    POSTER._source = { source: s.source, profil: s.profil, id: s.id, nom: s.nom };
+    // Sujet de l'image (source, entité, date AAAA-MM-JJ et lieu si connus) : repris par l'éditeur pour nommer le projet.
+    POSTER._source = { source: s.source, profil: s.profil, id: s.id, nom: s.nom, dateIso: s.dateIso || '', lieu: s.lieu || '' };
     courante.src = s;
     if (typeof schedulePreview === 'function') schedulePreview();
   };
@@ -391,10 +392,6 @@
       <div id="src-feeder" style="display:flex;flex-direction:column;gap:6px;padding:0 10px 10px">
         <select id="src-type" class="form-input" style="font-size:11px"></select>
         <select id="src-entity" class="form-input" style="font-size:11px"><option value="">— Choisir —</option></select>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted,#888)"><input type="checkbox" id="src-auto" checked> Appliquer dès le choix</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted,#888)"><input type="checkbox" id="src-fond" checked> Photo en fond</label>
-        </div>
         <button class="btn btn-ghost btn-sm" id="src-appliquer" style="font-size:11px">↻ Alimenter l'affiche</button>
         <div style="font-size:9px;color:var(--muted,#888);line-height:1.5">L'affiche, le Prompt créatif ✨ et la Vidéo IA reprennent ce sujet. Les entités proposées se règlent dans « API &amp; Réseaux → Sources éditeur ».</div>
       </div>
@@ -428,7 +425,7 @@
     if (!id || !ent) { statut('Choisis un élément', false); return; }
     try {
       const s = await charger(id, ent);
-      appliquerAffiche(s, { fond: $('src-fond').checked });
+      appliquerAffiche(s, { fond: true }); // photo de l'entité en fond
       statut('✓ Affiche alimentée : ' + s.nom);
     } catch (e) { statut(e.message, false); }
   };
@@ -440,7 +437,7 @@
     c.innerHTML = PANNEAU;
     remplirTypes();
     $('src-type').addEventListener('change', remplirEntites);
-    $('src-entity').addEventListener('change', () => { if ($('src-auto').checked) appliquer(); });
+    $('src-entity').addEventListener('change', appliquer); // appliqué dès le choix de l'entité
     $('src-appliquer').addEventListener('click', appliquer);
     const ouvert = (v) => {
       $('src-feeder').style.display = v ? 'flex' : 'none';
@@ -449,8 +446,6 @@
     };
     $('src-head').addEventListener('click', () => ouvert($('src-feeder').style.display === 'none'));
     if (lireLocal('eb80_src_open') === '0') ouvert(false);
-    $('src-auto').checked = lireLocal('eb80_src_auto') !== '0';
-    $('src-auto').addEventListener('change', () => stockerLocal('eb80_src_auto', $('src-auto').checked ? '1' : '0'));
     document.addEventListener('eb80-sources-change', remplirTypes);
   };
 

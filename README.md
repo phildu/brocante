@@ -917,10 +917,33 @@ doublons, dérivés, recadrages orphelins, variantes, préfixes, import par adre
   seule : les retirer depuis la médiathèque ne touche pas leur fichier (elles se gèrent dans la galerie de chaque pièce).
 - **Éditeur visuel** (menu « Éditeur visuel », même cadre ouvert sur la page « editor » d'electroboy80) : affiche, carrousel,
   vidéo et reel, formats et zones de sécurité, styles rapides, couches libres, timeline, effets (`eb80-effects.js`), projets
-  enregistrés (« Mes projets »), export vers la médiathèque, PNG, PDF. L'affiche part des textes de la boutique (son nom, l'adresse
+  enregistrés, export vers la médiathèque, PNG, PDF. En haut de l'aperçu, le **projet ouvert** (nom, type Image / Carousel /
+  Vidéo, heure du dernier enregistrement ; cliquer sur le nom pour le renommer) et le menu déroulant **📁 Projet** : Enregistrer
+  (Ctrl+S), Ouvrir… (recherche, filtres, renommer, dupliquer, supprimer), Enregistrer sous…, Renommer…, Dupliquer…, Nouveau
+  projet…, Exporter… ; le nom, le format d'export et la confirmation s'ouvrent dans une fenêtre. **Nom automatique** (case
+  cochée par défaut dans la fenêtre du nom, aperçu en direct) : « base-format-type-date-lieu.proj », par exemple
+  `promo-didier-super-9:16-event-16∕10-le-trabendo.proj` ; la base proposée est le nom de l'entité qui alimente l'image (espaces → tirets),
+  le format en rapport (9:16, 1:1, 16:9, 3:2, 1.91:1 ; A4, A4-paysage pour l'impression), le type d'entité (event, merch,
+  partenaire, piece, promo…), la date jour∕mois de l'entité (sinon celle écrite sur l'image) — avec « ∕ » (U+2215), car un
+  vrai « / » est un séparateur de dossier pour le serveur —, puis le lieu s'il existe (celui de l'entité, sinon celui écrit sur
+  l'image, hors texte par défaut). Le nom affiché dans la barre en haut de l'aperçu (type, nom,
+  état) se met à jour au fur et à mesure du paramétrage (en couleur tant qu'il n'est pas appliqué) ; un projet nommé ainsi est renommé tout seul à l'enregistrement si le type, la date ou le format
+  changent ; un nom saisi à la main (case décochée, ou renommage depuis la liste) ne bouge plus. Les projets créés depuis la
+  fenêtre d'entrée de l'éditeur et ceux d'avant cette fonction sont nommés de la même façon à leur prochain enregistrement. Nouveau projet (après
+  confirmation : image vierge, sans texte, couche, image de fond ni source) et **Exporter** : image fixe en PNG, JPEG, WebP ou PDF
+  (téléchargée aussitôt), vidéo ou carousel en WebM ou MP4 (rendu dans le navigateur, téléchargé et enregistré dans la
+  médiathèque ; MP4 enregistré directement par le navigateur — Chrome ou Edge récents, Safari —, sans ffmpeg sur le serveur,
+  sinon WebM). Fichiers nommés d'après le projet. Le mode « Affiche » s'appelle désormais « Image ». L'affiche part des textes de la boutique (son nom, l'adresse
   de son site, « Nouveautés en boutique »…) au lieu de ceux d'Electroboy 80 ; les blocs gardent leurs libellés génériques. Le script
-  vidéo par l'IA (`ai-generate.php`) passe par Gemini et le quota de la boutique. La **Vidéo IA** (voir plus bas) s'ouvre aux couleurs et avec les textes de la boutique. Pas disponible : la conversion de l'export vidéo en MP4, qu'electroboy80
-  fait avec ffmpeg sur le serveur (l'export reste en WebM).
+  vidéo par l'IA (`ai-generate.php`) passe par Gemini et le quota de la boutique. La **Vidéo IA** (voir plus bas) s'ouvre aux couleurs et avec les textes de la boutique. La conversion en MP4 par ffmpeg sur le serveur (electroboy80) n'existe pas dans la boutique : l'export MP4 se fait
+  dans le navigateur (menu Exporter).
+- **Palettes des visuels** (menu « Palettes des visuels », administrateurs) : la partie palettes de la page Apparence
+  d'electroboy80. L'IA de la boutique (Gemini ou Claude selon API & Réseaux → IA, quota de la boutique ; simulateur
+  `EB80_IA_SIMULATEUR`) compose **10 palettes** accordées aux couleurs du **thème de la boutique** (fond, surface, textes,
+  bordure, accents : `EB80_PALETTE_BASE` lu par `eb80-shim.js`), chacune avec **5 nuances** ; noms et couleurs se modifient,
+  « Enregistrer les palettes » les range (réglage `editor_palettes`). Dans l'éditeur, la section **Palettes** (à la place des
+  styles rapides) applique une palette ou une nuance au visuel d'un clic (fond, titre, textes, logo, date, cadre). Contrôleur
+  `palettes.php` recopié ; génération réservée à l'administrateur ; le community manager utilise les palettes.
 - **Vidéo IA** (éditeur, mode Vidéo → « ✨ Vidéo IA ») : la fenêtre d'electroboy80, avec son aperçu dans le navigateur, aux
   couleurs de la boutique et avec ses textes (scènes titre, photos, mots-chocs, carte infos, fin, exemples : `EB80_VIA_TEXTES` dans
   `eb80-shim.js`, retouches de `video-ia.js`). Choisir une pièce ou une promo refait les scènes avec ses photos, son nom et son prix.
