@@ -46,6 +46,9 @@ ok()   { echo -e "${GREEN}✅${NC} $1"; }
 warn() { echo -e "${YELLOW}⚠️ ${NC} $1"; }
 err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 
+# Exclusions : un motif --exclude-glob sans chemin (« plugin/ ») vaut pour tout dossier de ce nom, à toutes les profondeurs ;
+# le prototype plugin/ de la racine est donc exclu par une expression ancrée (« ^plugin/ »), pour ne pas écarter
+# packs/communication/assets/eb80/plugin/ (sources.js de l'éditeur).
 # Commerces d'essai purement locaux : jamais envoyés, quel que soit le mode (dossiers tenants/<slug>/ et assets/tenants/<slug>/).
 LOCAL_ONLY_TENANTS="kllklmk"
 
@@ -156,7 +159,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .env* \
   --exclude-glob config.local.php \
   --exclude-glob deploy-brocante.sh \
-  --exclude-glob plugin/ \
+  --exclude '^plugin/' \
   --exclude-glob plugin-mediatheque.php \
   --exclude-glob .plugin_enabled \
   --exclude-glob '_*.md' \
@@ -250,7 +253,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .env* \
   --exclude-glob config.local.php \
   --exclude-glob deploy-brocante.sh \
-  --exclude-glob plugin/ \
+  --exclude '^plugin/' \
   --exclude-glob plugin-mediatheque.php \
   --exclude-glob .plugin_enabled \
   --exclude-glob '_*.md' \
