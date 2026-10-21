@@ -1,0 +1,22 @@
+{
+  "id": "annonces-marche",
+  "name": "Annonces places de marché",
+  "version": "1.0.0",
+  "description": "Option payante : publier plus vite sur Leboncoin et Vinted depuis le catalogue de la boutique, via une extension Chrome (préremplissage assisté, validation humaine).",
+  "table_prefix": "am_",
+  "pages": [
+    { "id": "index", "label": "Annonces LBC / Vinted", "icon": "cloud", "file": "pages/index.php", "roles": ["admin", "community_manager"] },
+    { "id": "merci", "label": "Paiement", "icon": "cloud", "file": "pages/merci.php", "roles": ["admin"], "menu": false }
+  ],
+  "api": [
+    { "id": "status", "file": "api/status.php", "methods": ["GET"], "roles": ["admin", "community_manager"] },
+    { "id": "token", "file": "api/token.php", "methods": ["POST"], "roles": ["admin"] },
+    { "id": "subscribe", "file": "api/subscribe.php", "methods": ["POST"], "roles": ["admin"] },
+    { "id": "trial", "file": "api/trial.php", "methods": ["POST"], "roles": ["admin"] },
+    { "id": "listings", "file": "api/listings.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
+    { "id": "extension-zip", "file": "api/extension-zip.php", "methods": ["GET"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/annonces", "file": "api/agent.php" }
+  ]
+}

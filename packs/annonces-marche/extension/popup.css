@@ -1,0 +1,83 @@
+:root {
+  --bg: #f6f5f1;
+  --ink: #2b2620;
+  --soft: #6a645c;
+  --line: #d9d4cb;
+  --accent: #1e5f8c;
+  --panel: #fffaf2;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 360px;
+  max-height: 520px;
+  overflow: auto;
+  font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.link { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; }
+.panel { padding: 12px; display: grid; gap: 8px; }
+label { display: grid; gap: 4px; font-weight: 600; }
+input[type="url"], input[type="password"], input[type="search"] {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  background: #fff;
+}
+.row { display: flex; gap: 6px; }
+.row input { flex: 1; }
+button {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.ghost, button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+button:disabled { opacity: 0.45; cursor: default; }
+.msg { margin: 0; color: var(--soft); font-size: 12px; min-height: 1.2em; }
+.msg.err { color: #b3261e; }
+.msg.ok { color: #1f6b3a; }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 220px; overflow: auto; }
+.list li {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: pointer;
+}
+.list li img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: #eee; }
+.list li strong { display: block; font-size: 12px; }
+.list li small { color: var(--soft); }
+.detail {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+.detail h2 { margin: 0; font-size: 14px; }
+.detail .meta { color: var(--soft); font-size: 12px; }
+.detail .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.photos { display: flex; gap: 4px; overflow-x: auto; }
+.photos img { width: 56px; height: 56px; object-fit: cover; border-radius: 4px; }

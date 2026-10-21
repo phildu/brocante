@@ -1,0 +1,16 @@
+.am-page { display: grid; gap: 16px; max-width: 820px; }
+.am-card { border: 1px solid var(--line); background: var(--surface, var(--panel, #fff)); padding: 16px 18px; display: grid; gap: 10px; }
+.am-card.is-dim { opacity: 0.55; }
+.am-card h2 { margin: 0; font-size: 1.1rem; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.am-pill { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid var(--line); padding: 2px 8px; color: var(--ink-soft); }
+.am-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.am-status { margin: 0; font-size: 0.88rem; color: var(--ink-soft); }
+.am-status:empty { display: none; }
+.am-ok { color: var(--accent-2, #2f6b4f); }
+.am-token { margin: 0; padding: 10px 12px; background: var(--surface-2, #f3f1ea); border: 1px dashed var(--line); font-size: 0.85rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+.am-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; color: var(--ink-soft); font-size: 0.92rem; }
+.am-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.am-table th, .am-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.am-table .muted { color: var(--ink-soft); }
+.am-flash[data-kind="ok"] { color: #1f6b3a; }
+.am-flash[data-kind="error"] { color: #b3261e; }

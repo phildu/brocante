@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Annonces catalogue</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <strong>Annonces catalogue</strong>
+    <button type="button" id="btn-settings" class="link" aria-expanded="false">Réglages</button>
+  </header>
+
+  <section id="settings" class="panel" hidden>
+    <label>Adresse de la boutique ou de l’API
+      <input type="url" id="shop-url" placeholder="https://ma-boutique.fr ou …/api/annonces" autocomplete="off">
+    </label>
+    <label>Jeton
+      <input type="password" id="token" placeholder="am_…" autocomplete="off">
+    </label>
+    <div class="row">
+      <button type="button" id="btn-save">Enregistrer</button>
+      <button type="button" id="btn-ping" class="ghost">Tester</button>
+    </div>
+    <p id="settings-msg" class="msg" role="status"></p>
+  </section>
+
+  <section id="main" class="panel">
+    <p id="conn" class="msg">Configurez la boutique dans Réglages.</p>
+    <div class="row">
+      <input type="search" id="q" placeholder="Chercher un article…" disabled>
+      <button type="button" id="btn-search" disabled>OK</button>
+    </div>
+    <ul id="list" class="list"></ul>
+    <div id="detail" class="detail" hidden></div>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

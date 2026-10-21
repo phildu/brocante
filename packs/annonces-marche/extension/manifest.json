@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Annonces places de marché",
+  "description": "Préremplit Leboncoin et Vinted depuis le catalogue de votre boutique (validation humaine).",
+  "version": "1.0.0",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Annonces catalogue",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://www.leboncoin.fr/*",
+    "https://leboncoin.fr/*",
+    "https://www.vinted.fr/*",
+    "https://vinted.fr/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.leboncoin.fr/*", "https://leboncoin.fr/*"],
+      "js": ["content/fill.js", "content/leboncoin.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.vinted.fr/*", "https://vinted.fr/*"],
+      "js": ["content/fill.js", "content/vinted.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -35,6 +35,19 @@ if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'
     $res = saas_ai_credit_apply_session($obj);
     if ($res['state'] === 'added') saas_event('ai_credit_purchased', ['slug' => $res['slug'], 'amount' => $res['amount'] ?? 0, 'note' => 'Pack ' . ($res['pack'] ?? '') . ' : ' . number_format($res['credit_eur'], 2, ',', '') . ' € de crédit IA', 'actor' => 'stripe']);
     error_log('webhook stripe ai_credit ' . ($res['slug'] ?? '?') . ' → ' . $res['state']);
+} elseif ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'] ?? '') === 'marketplace_addon')) {
+    // Option Annonces places de marché (packs/annonces-marche) : active l'abonnement de la boutique.
+    require_once dirname(__DIR__) . '/packs/annonces-marche/lib/subscribe.php';
+    $res = am_apply_checkout_session($obj);
+    if (($res['state'] ?? '') === 'added') {
+        saas_event('addon_subscribed', [
+            'slug' => $res['slug'] ?? '',
+            'amount' => (int) ($obj['amount_total'] ?? 0),
+            'note' => 'Annonces Leboncoin & Vinted',
+            'actor' => 'stripe',
+        ]);
+    }
+    error_log('webhook stripe marketplace_addon ' . ($res['slug'] ?? '?') . ' → ' . ($res['state'] ?? '?'));
 } elseif ($event['type'] === 'checkout.session.completed') {
     $reqId = (string) ($obj['client_reference_id'] ?? '');
     if (preg_match('/^[a-f0-9]{16}$/', $reqId)) {
@@ -51,6 +64,14 @@ if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'
             $r['payment']['canceled_at'] = time();
             saas_request_save($r);
             saas_event('subscription_canceled', ['ref' => $r['id'], 'slug' => $r['slug'] ?? '', 'email' => $r['email'], 'plan' => $r['plan'], 'actor' => 'stripe']);
+        }
+    }
+    // Option Annonces (abonnement distinct de celui de la boutique).
+    if ($sub !== '') {
+        require_once dirname(__DIR__) . '/packs/annonces-marche/lib/subscribe.php';
+        $addonSlug = am_cancel_subscription($sub);
+        if ($addonSlug) {
+            saas_event('addon_canceled', ['slug' => $addonSlug, 'note' => 'Annonces Leboncoin & Vinted', 'actor' => 'stripe']);
         }
     }
 } elseif ($event['type'] === 'invoice.paid' && ($obj['billing_reason'] ?? '') === 'subscription_cycle') {
