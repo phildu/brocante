@@ -64,7 +64,7 @@ $zipUrl = $pluginApi('extension-zip');
     <ol class="am-steps">
       <li>Téléchargez l’archive, décompressez-la.</li>
       <li>Ouvrez <code>chrome://extensions</code>, activez le « mode développeur », « Charger l’extension non empaquetée », choisissez le dossier.</li>
-      <li>Dans l’extension : URL de l’API <code><?= h($apiBase) ?></code> (ou l’adresse de la boutique) + jeton.</li>
+      <li>Dans l’extension : adresse de la boutique <code><?= h(rtrim(shop_abs_url('/'), '/')) ?></code> (ou directement <code><?= h($apiBase) ?></code>) + jeton.</li>
       <li>Sur Leboncoin ou Vinted, ouvrez « Déposer une annonce », choisissez un article dans l’extension, puis validez à la main.</li>
     </ol>
     <div class="am-actions">

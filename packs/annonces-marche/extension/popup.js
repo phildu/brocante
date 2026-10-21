@@ -7,17 +7,37 @@
   const detail = $('detail');
   const q = $('q');
   const btnSearch = $('btn-search');
+  const store = chrome.storage.local;
 
+  /**
+   * Accepte l’URL boutique, …/api ou …/api/annonces et renvoie toujours …/api/annonces.
+   * Ex. https://host/slug/api → https://host/slug/api/annonces
+   */
   function normalizeApiBase(raw) {
-    let u = (raw || '').trim().replace(/\/+$/, '');
+    let u = (raw || '').trim();
     if (!u) return '';
     if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
-    if (!/\/api\/annonces$/i.test(u)) u += '/api/annonces';
-    return u;
+    try {
+      const parsed = new URL(u);
+      let path = parsed.pathname.replace(/\/+$/, '') || '';
+      if (/\/api\/annonces$/i.test(path)) {
+        /* déjà bon */
+      } else if (/\/api$/i.test(path)) {
+        path = path.replace(/\/api$/i, '/api/annonces');
+      } else {
+        path += '/api/annonces';
+      }
+      parsed.pathname = path;
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.toString().replace(/\/+$/, '');
+    } catch (_) {
+      return '';
+    }
   }
 
   async function loadConfig() {
-    const data = await chrome.storage.sync.get(['apiBase', 'token', 'shopName']);
+    const data = await store.get(['apiBase', 'token', 'shopName']);
     return {
       apiBase: data.apiBase || '',
       token: data.token || '',
@@ -26,26 +46,38 @@
   }
 
   async function saveConfig(apiBase, token) {
-    await chrome.storage.sync.set({ apiBase, token });
+    await store.set({ apiBase, token });
+  }
+
+  function readFormConfig() {
+    return {
+      apiBase: normalizeApiBase($('shop-url').value),
+      token: ($('token').value || '').trim(),
+    };
   }
 
   async function api(path, opts = {}) {
-    const cfg = await loadConfig();
-    if (!cfg.apiBase || !cfg.token) throw new Error('Configurez l’URL et le jeton.');
+    const cfg = opts.cfg || (await loadConfig());
+    if (!cfg.apiBase || !cfg.token) throw new Error('Indiquez l’adresse de la boutique et le jeton, puis Enregistrer.');
     const url = cfg.apiBase.replace(/\/+$/, '') + path;
     const headers = Object.assign(
       { Accept: 'application/json', 'X-Annonces-Token': cfg.token },
       opts.headers || {}
     );
     if (opts.body) headers['Content-Type'] = 'application/json';
-    const res = await fetch(url, {
-      method: opts.method || 'GET',
-      headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
-    });
+    let res;
+    try {
+      res = await fetch(url, {
+        method: opts.method || 'GET',
+        headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      });
+    } catch (_) {
+      throw new Error('Réseau inaccessible. Vérifiez l’URL (doit finir par /api/annonces).');
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const err = new Error(data.error || 'Erreur ' + res.status);
+      const err = new Error(data.error || 'Erreur HTTP ' + res.status + ' — URL : ' + cfg.apiBase);
       err.code = data.code || '';
       err.status = res.status;
       throw err;
@@ -58,42 +90,56 @@
     $('btn-settings').setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
-  async function refreshConn() {
-    const cfg = await loadConfig();
-    $('shop-url').value = cfg.apiBase;
-    $('token').value = cfg.token;
+  function lockSearch(message) {
+    conn.textContent = message;
+    q.disabled = true;
+    btnSearch.disabled = true;
+  }
+
+  function unlockSearch(message) {
+    conn.textContent = message;
+    q.disabled = false;
+    btnSearch.disabled = false;
+  }
+
+  /**
+   * @param {{ apiBase?: string, token?: string } | null} override
+   * @returns {Promise<{ ok: boolean, message: string }>}
+   */
+  async function refreshConn(override) {
+    const cfg = override
+      ? { apiBase: override.apiBase || '', token: override.token || '', shopName: '' }
+      : await loadConfig();
+    if (cfg.apiBase) $('shop-url').value = cfg.apiBase;
+    if (cfg.token) $('token').value = cfg.token;
+
     if (!cfg.apiBase || !cfg.token) {
-      conn.textContent = 'Configurez la boutique dans Réglages.';
-      q.disabled = true;
-      btnSearch.disabled = true;
+      lockSearch('Configurez la boutique dans Réglages.');
       showSettings(true);
-      return;
+      return { ok: false, message: 'Adresse et jeton requis.' };
     }
+
     try {
-      const ping = await api('/ping');
-      await chrome.storage.sync.set({ shopName: ping.shop || '' });
+      const ping = await api('/ping', { cfg });
+      await store.set({ shopName: ping.shop || '', apiBase: cfg.apiBase, token: cfg.token });
       if (!ping.entitled) {
-        conn.textContent = (ping.shop || 'Boutique') + ' — option non active (abonnez-vous dans l’admin).';
-        q.disabled = true;
-        btnSearch.disabled = true;
-        return;
+        lockSearch((ping.shop || 'Boutique') + ' — option non active (essai ou abonnement dans l’admin).');
+        showSettings(true);
+        return { ok: false, message: 'Option non active sur cette boutique.' };
       }
       if (!ping.authenticated) {
-        conn.textContent = 'Jeton refusé. Régénérez-le dans l’administration.';
-        q.disabled = true;
-        btnSearch.disabled = true;
-        return;
+        lockSearch('Jeton refusé. Régénérez-le dans l’administration.');
+        showSettings(true);
+        return { ok: false, message: 'Jeton invalide.' };
       }
-      conn.textContent = (ping.shop || 'Boutique') + ' — connecté';
-      q.disabled = false;
-      btnSearch.disabled = false;
+      unlockSearch((ping.shop || 'Boutique') + ' — connecté');
       showSettings(false);
-      await search('');
+      await search('', cfg);
+      return { ok: true, message: 'Connecté à « ' + (ping.shop || 'boutique') + ' ».' };
     } catch (e) {
-      conn.textContent = e.message || 'Connexion impossible.';
-      q.disabled = true;
-      btnSearch.disabled = true;
+      lockSearch(e.message || 'Connexion impossible.');
       showSettings(true);
+      return { ok: false, message: e.message || 'Connexion impossible.' };
     }
   }
 
@@ -120,14 +166,14 @@
     });
   }
 
-  async function search(query) {
+  async function search(query, cfg) {
     conn.textContent = 'Recherche…';
     try {
-      const data = await api('/catalogue?q=' + encodeURIComponent(query || '') + '&limit=25');
-      conn.textContent = data.total + ' article' + (data.total > 1 ? 's' : '');
+      const data = await api('/catalogue?q=' + encodeURIComponent(query || '') + '&limit=25', cfg ? { cfg } : {});
+      unlockSearch(data.total + ' article' + (data.total > 1 ? 's' : ''));
       renderList(data.items || []);
     } catch (e) {
-      conn.textContent = e.message;
+      lockSearch(e.message);
       list.innerHTML = '';
     }
   }
@@ -210,24 +256,30 @@
   });
 
   $('btn-save').addEventListener('click', async () => {
-    const apiBase = normalizeApiBase($('shop-url').value);
-    const token = ($('token').value || '').trim();
-    await saveConfig(apiBase, token);
-    $('settings-msg').textContent = 'Enregistré.';
-    await refreshConn();
+    const cfg = readFormConfig();
+    if (!cfg.apiBase || !cfg.token) {
+      $('settings-msg').textContent = 'Adresse et jeton requis.';
+      return;
+    }
+    $('shop-url').value = cfg.apiBase;
+    await saveConfig(cfg.apiBase, cfg.token);
+    $('settings-msg').textContent = 'Enregistrement…';
+    const result = await refreshConn(cfg);
+    $('settings-msg').textContent = result.ok ? 'Enregistré — ' + result.message : result.message;
   });
 
   $('btn-ping').addEventListener('click', async () => {
-    const apiBase = normalizeApiBase($('shop-url').value);
-    const token = ($('token').value || '').trim();
-    await saveConfig(apiBase, token);
-    $('settings-msg').textContent = 'Test…';
-    try {
-      await refreshConn();
-      $('settings-msg').textContent = 'OK.';
-    } catch (e) {
-      $('settings-msg').textContent = e.message || 'Échec';
+    const cfg = readFormConfig();
+    if (!cfg.apiBase || !cfg.token) {
+      $('settings-msg').textContent = 'Adresse et jeton requis.';
+      lockSearch('Configurez la boutique dans Réglages.');
+      return;
     }
+    $('shop-url').value = cfg.apiBase;
+    await saveConfig(cfg.apiBase, cfg.token);
+    $('settings-msg').textContent = 'Test…';
+    const result = await refreshConn(cfg);
+    $('settings-msg').textContent = result.ok ? 'OK — ' + result.message : 'Échec : ' + result.message;
   });
 
   btnSearch.addEventListener('click', () => search(q.value));
