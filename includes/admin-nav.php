@@ -27,10 +27,13 @@ $adminNavItems = [
     'media' => ['/admin/media.php', 'Médiathèque', 'folder'],
     'shipping' => ['/admin/shipping.php', 'Frais de port', 'truck'],
     'apparence' => ['/admin/appearance.php', 'Apparence', 'palette'],
+    'plugins' => ['/admin/plugins.php', 'Plugins', 'puzzle'],
     'sync' => ['/admin/sync.php', 'Envoyer en préprod', 'cloud'],
     'reglages' => ['/admin/index.php', 'Réglages du site', 'gear'],
     'profil' => ['/admin/profile.php', 'Mon profil', 'user'],
 ];
+// Page « Plugins » de la boutique : seulement sans portail (Petit Chalet) ; ailleurs, les plugins s'activent depuis le portail.
+if (is_file(__DIR__ . '/../portail/index.php')) unset($adminNavItems['plugins']);
 // Offres de prix à traiter, en regard du menu.
 try {
     if ($pendingOffers = (int) db()->query("SELECT COUNT(*) FROM price_offers WHERE status = 'new'")->fetchColumn()) $adminNavItems['offres'][1] .= ' (' . $pendingOffers . ')';
