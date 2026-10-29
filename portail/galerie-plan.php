@@ -855,23 +855,56 @@ ga_head('Plan des commerces');
       $('bookCard').hidden = !data.features.exposants;
       var bk = saved.booking || {}; $('bkOn').checked = !!bk.enabled; $('bkDays').value = bk.hold_days || 7; $('bkIntro').value = bk.intro || '';
 
-      // --- Plein écran (modale) ---
+      // --- Plein écran : la carte occupe l'écran, les modules s'ouvrent en panneaux repliables ---
       var card = $('planCard'), fsSide = $('fsSide'), fsOn = false;
+      var fsCards = ['catCard', 'numCard', 'bookCard', 'placesCard'];
       function resizeMap() { setTimeout(function () { map.invalidateSize(); }, 60); }
+      function afterLayout() { requestAnimationFrame(function () { if (bearing) syncGeometry(); else resizeMap(); }); }
+      function fsPanels(on) {
+        if (on) {
+          fsSide.appendChild($('saveBar'));
+          fsCards.forEach(function (id) {
+            var el = $(id), h = el.querySelector('h2');
+            fsSide.appendChild(el);
+            if (h) { h.tabIndex = 0; h.setAttribute('role', 'button'); h.setAttribute('aria-expanded', el.classList.contains('collapsed') ? 'false' : 'true'); }
+          });
+        } else {
+          var form = $('saveForm');
+          fsCards.forEach(function (id) {
+            var el = $(id), h = el.querySelector('h2');
+            form.parentNode.insertBefore(el, form);
+            if (h) { h.removeAttribute('tabindex'); h.removeAttribute('role'); h.removeAttribute('aria-expanded'); }
+          });
+          $('fsMain').appendChild($('saveBar'));
+        }
+      }
+      fsSide.addEventListener('click', function (e) {
+        var h = e.target.closest ? e.target.closest('h2') : null;
+        if (!h || h.parentNode.parentNode !== fsSide) return;
+        var el = h.parentNode;
+        el.classList.toggle('collapsed');
+        h.setAttribute('aria-expanded', el.classList.contains('collapsed') ? 'false' : 'true');
+      });
+      fsSide.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var h = e.target.closest ? e.target.closest('h2') : null;
+        if (!h || h.parentNode.parentNode !== fsSide) return;
+        e.preventDefault(); h.click();
+      });
       function openFs() {
         fsOn = true; card.classList.add('fs'); card.setAttribute('role', 'dialog'); card.setAttribute('aria-modal', 'true'); card.setAttribute('aria-label', 'Plan en plein écran');
-        fsSide.hidden = false; fsSide.appendChild($('catCard')); fsSide.appendChild($('numCard'));
-        $('fsOpen').hidden = true; $('fsClose').hidden = false; document.body.style.overflow = 'hidden'; card.scrollTop = 0; resizeMap(); $('fsClose').focus();
+        fsSide.hidden = false; fsPanels(true);
+        $('fsOpen').hidden = true; $('fsClose').hidden = false; document.body.style.overflow = 'hidden'; card.scrollTop = 0; afterLayout(); $('fsClose').focus();
       }
       function closeFs() {
         if (!fsOn) return;
         fsOn = false; card.classList.remove('fs'); card.removeAttribute('role'); card.removeAttribute('aria-modal'); card.removeAttribute('aria-label');
-        var before = $('placesCard'); before.parentNode.insertBefore($('catCard'), before); before.parentNode.insertBefore($('numCard'), before);
-        fsSide.hidden = true; $('fsOpen').hidden = false; $('fsClose').hidden = true; document.body.style.overflow = ''; resizeMap(); $('fsOpen').focus();
+        fsPanels(false);
+        fsSide.hidden = true; $('fsOpen').hidden = false; $('fsClose').hidden = true; document.body.style.overflow = ''; afterLayout(); $('fsOpen').focus();
       }
       $('fsOpen').addEventListener('click', openFs);
       $('fsClose').addEventListener('click', closeFs);
-      window.addEventListener('resize', function () { if (fsOn) resizeMap(); });
+      window.addEventListener('resize', function () { if (fsOn) { resizeMap(); if (bearing) syncGeometry(); } });
       document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;
         if (e.__posee) return;        // un premier Échap termine la pose, le suivant ferme le plein écran

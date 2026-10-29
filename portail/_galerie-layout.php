@@ -20,6 +20,9 @@ function ga_head(string $title): void
 {
     global $gaGallery, $limited;
     $flash = portail_flash();
+    ob_start();
+    include __DIR__ . '/_galerie-nav.php';
+    $gaNav = (string) ob_get_clean();
     ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -29,6 +32,7 @@ function ga_head(string $title): void
 <title><?= e($title) ?> — <?= e($gaGallery['name']) ?></title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=1">
 <style>
   .gwrap { display: grid; gap: 16px; max-width: 980px; margin: 0 auto; padding: 0 16px 48px; }
   .gcard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
@@ -45,10 +49,14 @@ function ga_head(string $title): void
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <div class="brand"><h1><?= e($title) ?></h1><p><?= e($gaGallery['name']) ?></p></div>
-    <span style="display:flex;gap:8px;flex-wrap:wrap;"><?php include __DIR__ . '/_galerie-nav.php'; ?></span>
-  </header>
+<?php portail_page_start([
+    'title' => $title,
+    'eyebrow' => $gaGallery['name'],
+    'section' => $limited ? 'Galerie' : 'Boutiques',
+    'desc' => $limited ? 'Espace d’administration de votre galerie.' : 'Administration de la galerie et de ses exposants.',
+    'nav_html' => $limited ? $gaNav : '',
+    'tabs' => $limited ? null : $gaNav,
+]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
   <div class="gwrap">
 <?php
