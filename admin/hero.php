@@ -5,6 +5,7 @@ require_admin();
 
 $content = get_content();
 $slides = hero_slides_list();
+require_once __DIR__ . '/../includes/autofeed.php';
 $mediaPhotos = get_media_items('photo');
 $flash = flash_get();
 ?><!DOCTYPE html>
@@ -48,6 +49,23 @@ $flash = flash_get();
   .media-pick-item img { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--surface-2); display: block; }
   .media-pick-item span { display: block; font-size: 0.68rem; padding: 4px 6px; color: var(--ink-soft); }
   .media-pick-item:hover { outline: 2px solid var(--accent); }
+
+  .slide-add-head { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .slide-counter { display: inline-flex; align-items: stretch; border: 1px solid var(--line); background: var(--bg); }
+  .slide-counter button {
+    width: 38px; border: none; background: var(--surface); color: var(--ink);
+    font-size: 1.1rem; cursor: pointer;
+  }
+  .slide-counter button:hover { background: var(--surface-2); }
+  .slide-counter input {
+    width: 58px; border: none; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); text-align: center;
+    font-family: var(--font-body); font-size: 0.95rem; padding: 8px 0; -moz-appearance: textfield;
+  }
+  .slide-counter input::-webkit-outer-spin-button, .slide-counter input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .slide-file-list { display: grid; gap: 10px; margin-top: 16px; max-width: 720px; }
+  .slide-file-row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; font-size: 0.85rem; color: var(--ink-soft); }
+  .slide-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
 </style>
 </head>
 <body>
@@ -75,6 +93,12 @@ $flash = flash_get();
               <input type="text" name="caption" value="<?= h($s['caption']) ?>" placeholder="Légende (optionnelle)">
               <button type="submit" class="btn-small">Renommer</button>
             </form>
+            <form method="post" action="/admin/regenerate-image.php" style="display:flex;gap:8px;align-items:center;margin-top:6px;" onsubmit="return confirm('Générer une nouvelle image pour cette photo ? Elle la remplace et sera décomptée de votre crédit IA (≈ <?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>).');">
+              <input type="hidden" name="target" value="slide"><input type="hidden" name="back" value="hero">
+              <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
+              <input type="text" name="hint" maxlength="200" placeholder="Précisez (facultatif)">
+              <button type="submit" class="btn-small">✨ Régénérer</button>
+            </form>
           </div>
           <div class="gm-actions">
             <div class="gm-order">
@@ -94,17 +118,44 @@ $flash = flash_get();
       <?php endif; ?>
     </div>
 
-    <div class="admin-block" style="margin-top:24px;">
-      <h2 style="font-size:1.1rem;">Ajouter une photo</h2>
-      <div class="field-row" style="margin-top:14px;display:flex;gap:14px;flex-wrap:wrap;">
-        <form method="post" action="/admin/hero-action.php" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <input type="hidden" name="action" value="add">
-          <input type="text" name="caption" placeholder="Légende (optionnelle)" style="max-width:220px;">
-          <input type="file" name="photo" accept="image/*" data-check-resolution required>
-          <button type="submit" class="btn btn-primary">Envoyer</button>
-        </form>
-        <button type="button" class="btn-small" id="open-media-pick">Choisir dans la médiathèque</button>
-      </div>
+    <div class="admin-block" style="margin-top:24px;" id="slides-ajout">
+      <h2 style="font-size:1.1rem;">Ajouter des slides</h2>
+      <p class="hint" style="margin-top:10px;">Choisissez le nombre de slides à ajouter, puis envoyez des photos ou générez-les avec l'IA. Chaque image est aussi conservée dans la <a href="/admin/media.php">médiathèque</a>.</p>
+      <form method="post" action="/admin/hero-action.php" enctype="multipart/form-data" id="slide-add-form"
+        data-ai-cost="<?= h((string) autofeed_regen_cost_eur()) ?>">
+        <input type="hidden" name="action" value="add_multi">
+        <input type="hidden" name="back" value="hero">
+        <div class="slide-add-head">
+          <label for="slide-count" style="font-weight:600;">Nombre de slides</label>
+          <div class="slide-counter">
+            <button type="button" data-count-step="-1" aria-label="Diminuer le nombre de slides">−</button>
+            <input type="number" id="slide-count" name="count" value="1" min="1" max="10" inputmode="numeric" aria-label="Nombre de slides">
+            <button type="button" data-count-step="1" aria-label="Augmenter le nombre de slides">+</button>
+          </div>
+          <span class="hint" style="margin:0;">de 1 à 10</span>
+        </div>
+        <div class="slide-file-list" id="slide-file-list"></div>
+        <div class="field-row" style="margin-top:14px;display:flex;gap:14px;flex-wrap:wrap;">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:0.82rem;color:var(--ink-soft);">Légende des photos envoyées (optionnelle)
+            <input type="text" name="caption" maxlength="120" placeholder="ex : Arrivage de céramiques" style="max-width:280px;">
+          </label>
+          <?php if (autofeed_api_key() !== ''): ?>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:0.82rem;color:var(--ink-soft);">Description pour l'IA (optionnelle)
+            <input type="text" name="hint" maxlength="200" placeholder="ex : ambiance lumineuse, vases anciens" style="max-width:320px;">
+          </label>
+          <?php endif; ?>
+        </div>
+        <div class="slide-actions">
+          <button type="submit" class="btn btn-primary" id="slide-upload-btn">Envoyer les photos</button>
+          <?php if (autofeed_api_key() !== ''): ?>
+          <button type="submit" class="btn" id="slide-ai-btn" formaction="/admin/regenerate-image.php" formnovalidate name="target" value="hero_slides">✨ Générer <span id="slide-ai-count">1</span> <span id="slide-ai-word">slide</span> avec l'IA</button>
+          <?php endif; ?>
+          <button type="button" class="btn-small" id="open-media-pick">Choisir dans la médiathèque</button>
+        </div>
+        <?php if (autofeed_api_key() !== ''): ?>
+        <p class="hint" id="slide-ai-cost" style="margin-top:10px;">Coût estimé : <?= h(ai_format_eur(autofeed_regen_cost_eur())) ?> pour 1 image, décompté de votre crédit IA. Chaque image est ajoutée au diaporama et à la médiathèque.</p>
+        <?php endif; ?>
+      </form>
     </div>
   </div>
 </section>
@@ -154,6 +205,75 @@ $flash = flash_get();
       document.getElementById('media-pick-form').submit();
     });
   });
+})();
+</script>
+<script>
+(function () {
+  var form = document.getElementById('slide-add-form');
+  if (!form) return;
+  var countInput = document.getElementById('slide-count');
+  var list = document.getElementById('slide-file-list');
+  var aiBtn = document.getElementById('slide-ai-btn');
+  var uploadBtn = document.getElementById('slide-upload-btn');
+  var aiCount = document.getElementById('slide-ai-count');
+  var aiWord = document.getElementById('slide-ai-word');
+  var costEl = document.getElementById('slide-ai-cost');
+  var unit = parseFloat(form.dataset.aiCost || '0');
+
+  function clamp(n) { return Math.max(1, Math.min(10, n || 1)); }
+  function costLabel(n) {
+    var v = unit * n;
+    if (v > 0 && v < 0.005) return '< 0,01 €';
+    return v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  }
+  function render() {
+    var n = clamp(parseInt(countInput.value, 10));
+    countInput.value = n;
+    list.innerHTML = '';
+    for (var i = 0; i < n; i++) {
+      var row = document.createElement('label');
+      row.className = 'slide-file-row';
+      var caption = document.createElement('span');
+      caption.textContent = 'Photo ' + (i + 1);
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.name = 'photo_' + i;
+      input.accept = 'image/*';
+      input.setAttribute('data-check-resolution', '');
+      row.appendChild(caption);
+      row.appendChild(input);
+      list.appendChild(row);
+    }
+    if (aiCount) aiCount.textContent = String(n);
+    if (aiWord) aiWord.textContent = n > 1 ? 'slides' : 'slide';
+    if (costEl) {
+      costEl.textContent = 'Coût estimé : ' + costLabel(n) + ' pour ' + n + ' image' + (n > 1 ? 's' : '')
+        + ', décompté de votre crédit IA. Chaque image est ajoutée au diaporama et à la médiathèque.';
+    }
+  }
+  countInput.addEventListener('input', render);
+  document.querySelectorAll('[data-count-step]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      countInput.value = clamp((parseInt(countInput.value, 10) || 1) + parseInt(btn.dataset.countStep, 10));
+      render();
+    });
+  });
+  if (aiBtn) {
+    form.addEventListener('submit', function (e) {
+      var submitter = e.submitter || document.activeElement;
+      if (submitter !== aiBtn) return;
+      var n = clamp(parseInt(countInput.value, 10));
+      if (!confirm('Générer ' + n + ' slide' + (n > 1 ? 's' : '') + ' avec l’IA ? Coût estimé : ' + costLabel(n) + ' (décompté de votre crédit IA).')) {
+        e.preventDefault();
+        return;
+      }
+      aiBtn.disabled = true;
+      if (uploadBtn) uploadBtn.disabled = true;
+      aiBtn.textContent = 'Génération en cours…';
+      if (costEl) costEl.textContent = 'Génération de ' + n + ' image' + (n > 1 ? 's' : '') + ' en cours : cela peut durer quelques minutes. Ne fermez pas la page.';
+    });
+  }
+  render();
 })();
 </script>
 <script src="/assets/admin-upload-check.js"></script>

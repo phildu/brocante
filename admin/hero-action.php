@@ -18,8 +18,29 @@ switch ($action) {
             flash_set("Impossible d'ajouter cette photo (format non reconnu).", 'error');
             break;
         }
-        add_hero_slide($path, trim((string) ($_POST['caption'] ?? '')));
-        flash_set('Photo ajoutée au diaporama.');
+        $caption = trim((string) ($_POST['caption'] ?? ''));
+        add_hero_slide($path, $caption);
+        media_library_register($path, $caption !== '' ? $caption : "Slide page d'accueil", 'Diaporama accueil', 'diaporama, accueil');
+        flash_set('Photo ajoutée au diaporama et à la médiathèque.');
+        break;
+    }
+
+    case 'add_multi': {
+        $count = max(1, min(10, (int) ($_POST['count'] ?? 1)));
+        $caption = trim((string) ($_POST['caption'] ?? ''));
+        $added = 0;
+        for ($i = 0; $i < $count; $i++) {
+            $path = store_uploaded_photo('photo_' . $i, 'hero-slide');
+            if (!$path) continue;
+            add_hero_slide($path, $caption);
+            media_library_register($path, $caption !== '' ? $caption : "Slide page d'accueil", 'Diaporama accueil', 'diaporama, accueil');
+            $added++;
+        }
+        if ($added === 0) {
+            flash_set('Choisissez au moins une photo à envoyer.', 'error');
+            break;
+        }
+        flash_set($added . ' photo' . ($added > 1 ? 's ajoutées' : ' ajoutée') . ' au diaporama et à la médiathèque.');
         break;
     }
 

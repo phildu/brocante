@@ -1,5 +1,6 @@
 .secrets/
 .venv/
+vendor/
 var/log/
 var/tmp/
 uploads/import/

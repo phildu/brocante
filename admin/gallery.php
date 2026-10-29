@@ -15,6 +15,8 @@ $content = get_content();
 $photos = product_photos_list($ref);
 $flash = flash_get();
 $ffmpegOk = FFMPEG_BIN && shell_exec_available();
+// IA facultative : désactivée dans le portail, ses options disparaissent de la galerie (la vidéo gratuite reste).
+$aiOn = ai_shop_enabled();
 $photoPaths = [];
 foreach ($photos as $ph) if (($ph['type'] ?? 'photo') === 'photo') $photoPaths[(int) $ph['id']] = $ph['path'];
 $pendingVideos = db()->prepare("SELECT id, label, created_at FROM veo_jobs WHERE product_ref = ? AND status IN ('pending', 'saving') AND created_at > datetime('now', '-15 minutes') ORDER BY id");
@@ -123,7 +125,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
 
     <div class="admin-block" style="margin-bottom:24px;">
       <h2 style="font-size:1.1rem;">Générer une nouvelle vue</h2>
-      <p class="hint">Choisissez la photo de départ et le type de vue. Pour "Autre angle", précisez si besoin l'angle souhaité et des mots-clés libres.</p>
+      <p class="hint"><?= $aiOn ? 'Choisissez la photo de départ et le type de vue. Pour "Autre angle", précisez si besoin l\'angle souhaité et des mots-clés libres.' : 'Choisissez la photo de départ : une petite vidéo (zoom, travelling) peut être fabriquée gratuitement.' ?></p>
       <p class="publish-status" id="video-status" role="status" aria-live="polite" hidden style="margin:0 0 16px;"></p>
       <form method="post" action="/admin/gallery-action.php" id="generate-form"
         data-csrf="<?= h(admin_csrf_token()) ?>" data-ffmpeg="<?= $ffmpegOk ? '1' : '0' ?>"
@@ -148,12 +150,16 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
           <div class="field">
             <label>Type de génération</label>
             <select name="kind" id="gen-kind">
+              <?php if ($aiOn): ?>
               <option value="angle">🔄 Autre angle</option>
               <option value="ambiance">🪄 Mise en situation (ambiance)</option>
               <option value="detoure">✂️ Détourage (fond transparent)</option>
               <option value="complete">🧩 Compléter l'objet (tronqué)</option>
+              <?php endif; ?>
               <option value="video">🎬 Petite vidéo (zoom, travelling) — gratuite</option>
+              <?php if ($aiOn): ?>
               <option value="video_ai">🎞 Vidéo IA (Veo) — animation réaliste, payante</option>
+              <?php endif; ?>
             </select>
           </div>
           <div class="field" id="gen-angle-field">
@@ -190,11 +196,10 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
           <div class="field">
             <label>Modèle</label>
             <select name="model">
-              <?php foreach (VEO_MODELS as $key => $m): ?>
-                <option value="<?= h($key) ?>"<?= $key === 'fast' ? ' selected' : '' ?>>Google Veo — <?= h($m['label']) ?></option>
+              <?php $videoDefault = ai_provider_video_default_key(); ?>
+              <?php foreach (ai_provider_video_choices() as $videoKey => $choice): ?>
+                <option value="<?= h($videoKey) ?>"<?= (string) $videoKey === $videoDefault ? ' selected' : '' ?><?= $choice['available'] ? '' : ' disabled' ?>><?= h($choice['label']) ?><?= h($choice['note']) ?></option>
               <?php endforeach; ?>
-              <option value="<?= MODAL_MODEL_KEY ?>"<?= modal_video_available() ? '' : ' disabled' ?>>Wan 2.2 5B (Modal) — crédit gratuit Modal<?= modal_video_available() ? '' : ' · service à configurer dans les réglages' ?></option>
-              <option value="<?= SF_MODEL_KEY ?>"<?= sf_available() ? '' : ' disabled' ?>>Wan 2.2 (SiliconFlow) — économique<?= sf_available() ? '' : ' · clé à renseigner dans les réglages' ?></option>
             </select>
           </div>
           <div class="field" id="gen-seconds-field">
@@ -288,7 +293,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
             : k === 'video_ai' ? n + ' photos : une vidéo IA par photo — le coût est multiplié par ' + n + '.'
             : n + ' photos envoyées ensemble à l\'IA pour produire UNE image' + (n > 4 ? ' (seules les 4 premières sont envoyées).' : '.');
           var model = genForm.elements.model.value;
-          var wan = model === 'wan22' || model === 'wan5b';
+          var wan = model === 'wan22' || model === 'wan5b' || model.indexOf('sf:') === 0;
           genForm.elements.seconds.disabled = wan;
           document.getElementById('gen-seconds-label').textContent = wan ? 'Durée (fixée par le service)' : 'Durée';
           document.getElementById('gen-seconds-note').style.display = wan ? '' : 'none';
@@ -377,6 +382,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         });
       })();
     </script>
+    <?php if ($aiOn): ?>
     <?php if (!GEMINI_API_KEY): ?>
       <p class="publish-status" data-kind="error" style="margin-bottom:20px;">Clé Gemini absente — les générations "ambiance", "autre angle" et "compléter l'objet" ne fonctionneront pas tant que la clé n'est pas renseignée dans Réglages du site. La vidéo « zoom, travelling » fonctionne sans elle ; la vidéo IA Veo la demande (la vidéo IA Wan 2.2 demande plutôt une clé SiliconFlow).</p>
     <?php endif; ?>
@@ -395,8 +401,9 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
     <?php if (!sf_available()): ?>
       <p class="publish-status" style="margin-bottom:20px;">Vidéo IA économique (Wan 2.2) : renseignez une clé SiliconFlow dans <a href="/admin/index.php#siliconflow-settings" style="color:var(--accent);">Réglages du site</a> pour l'activer.</p>
     <?php endif; ?>
+    <?php endif; ?>
     <?php if (!$ffmpegOk): ?>
-      <p class="publish-status" style="margin-bottom:20px;">ffmpeg n'est pas disponible sur cet hébergement : la vidéo « zoom, travelling » est fabriquée dans votre navigateur (gratuite, 3 secondes) et envoyée à la galerie. La vidéo IA (Veo) passe par Google et ne dépend pas du serveur.</p>
+      <p class="publish-status" style="margin-bottom:20px;">ffmpeg n'est pas disponible sur cet hébergement : la vidéo « zoom, travelling » est fabriquée dans votre navigateur (gratuite, 3 secondes) et envoyée à la galerie.<?= $aiOn ? ' La vidéo IA (Veo) passe par Google et ne dépend pas du serveur.' : '' ?></p>
     <?php endif; ?>
 
     <div class="gm-list">

@@ -531,3 +531,6 @@ function portail_shop_content_normalize(array $raw, string $fixedName): array
     }
     return $out;
 }
+
+// Coquille d'administration commune (sidebar, barre, en-tête, recherche).
+require_once __DIR__ . '/_chrome.php';

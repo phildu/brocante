@@ -117,6 +117,17 @@ L'apparence est enregistrée dans la base du commerce (table `settings`) et
 prime sur les couleurs et polices de son `tenant.php` ; « Revenir à
 l'apparence d'origine » l'efface.
 
+## Présence physique ou en ligne
+
+À la création d'un commerce, choisissez **Physique**, **En ligne** ou **Physique
+et en ligne**. Le choix se modifie ensuite dans Administration → **Boutique
+physique / en ligne** et s'affiche dans l'en-tête public. Les galeries ont le
+même réglage à leur création et dans leur formulaire de présentation ; la
+mention apparaît sur leur page publique et dans le portail. Les anciennes
+fiches conservent par défaut la valeur **En ligne**. C'est une indication
+descriptive qui ne change pas les ventes, les livraisons ni les horaires ;
+« virtuel » n'est pas séparé d'« en ligne » dans cette version.
+
 ## Ajouter une pièce depuis un smartphone
 
 Administration → **Nouvelle pièce (photo)** (`admin/quick-add.php`), pensé pour
@@ -159,6 +170,7 @@ Dans la fiche du catalogue, le bloc **Gestion du prix de vente** complète le ch
   Garde-fous : champ piège anti-robot, 5 offres par heure et par visiteur, doublons ignorés, offre ≥ prix affiché refusée.
 - **Prix du neuf et lien** (`new_price`, `new_url`) avec une case **« Afficher le prix et le lien du neuf sur la fiche »** (lien « Voir le prix du neuf (site) ↗ », en `nofollow`). Le panneau de la recherche « Marché » propose **« Chercher le lien du prix du neuf »** : une recherche web à part ouvre les trois premières pages marchandes
   (les redirections de Google sont suivies aussitôt, c'est l'adresse finale qui est gardée) et propose la première où un prix du neuf plausible est retrouvé (« page ouverte : prix retrouvé ✓ »), sinon une page marchande à contrôler. Rien n'est enregistré sans le clic « Utiliser ce lien du neuf » puis l'enregistrement de la fiche.
+- **Barème des états** (Administration → **Barème des états**) : chaque boutique règle le pourcentage associé à chacun des états, indépendamment des autres boutiques. Dans le catalogue et dans la relecture de la création photo, avec un état et un prix du neuf renseignés, une suggestion est calculée (prix du neuf × pourcentage) ; le bouton **« Utiliser ce prix »** la reporte dans le prix affiché, sans jamais le remplacer automatiquement. Les valeurs initiales sont indicatives et modifiables.
 
 ## IA des formules : quota gratuit, calculateur de coûts, rachat de crédit
 
@@ -686,13 +698,12 @@ Sur le domaine du portail (déploiement « portail »), la racine `/` n'ouvre pl
 - **`/`** (`accueil/index.php`) : présentation, étapes, **formules**, galeries publiées, commerces à la une, questions fréquentes.
 - **`/annuaire/`** (`annuaire/index.php`) : tous les commerces (de ce serveur et « d'ailleurs »), recherche et filtre par univers, avec aperçu
   des pièces ; calculé depuis le catalogue de chaque commerce et mis en cache 10 minutes (`data/saas/cache.json`).
-- **`/inscription/`** (`inscription/index.php`) : demande de boutique d'un commerçant (nom, adresse, compte, formule, galerie souhaitée). **Rien
-  n'est créé tout de suite** : la demande est enregistrée (`data/inscriptions/<id>.json`, mot de passe seulement haché), l'exploitant est prévenu
-  par e-mail, et le commerçant reçoit un accusé. Protections : jeton CSRF, champ piège, 5 demandes par heure et par IP, adresse et e-mail uniques,
+- **`/inscription/`** (`inscription/index.php`) : création d'une boutique (formule, galerie souhaitée). L'e-mail n'est pas demandé à cette étape. La demande est enregistrée
+  (`data/inscriptions/<id>.json`, mot de passe seulement haché) ; après paiement éventuel, le commerçant crée sa boutique lui-même. Protections :
+  jeton CSRF, champ piège, 5 demandes par heure et par IP, adresse de site unique. Une adresse e-mail peut être réutilisée pour plusieurs boutiques ;
+  leurs accès d'administration sont indépendants,
   adresses réservées (`galerie`, `portail`, `admin`…).
-- **Validation** : portail → **« Inscriptions »** (`portail/inscriptions.php`) : « Valider et créer la boutique » crée `tenants/<adresse>/` (base,
-  logo, une catégorie « Nos articles » ; le commerçant règle ensuite ses univers), y installe le compte choisi par le commerçant (identifiant = son
-  e-mail, mot de passe haché tel que saisi), l'ajoute à la galerie demandée et lui écrit les liens ; « Refuser » le prévient, avec un motif facultatif.
+- **Demandes historiques** : portail → **« Inscriptions »** (`portail/inscriptions.php`) permet encore de traiter les anciennes demandes en attente.
 - **Réglages** : portail → **« Offres et annuaire »** (`portail/offres.php`) : nom, slogan, couleur et e-mail de contact de la plateforme (`data/saas.json`),
   jusqu'à 4 formules (nom, prix, avantages ; ⚠ les limites écrites, « jusqu'à 20 pièces », sont du texte : **elles ne sont pas appliquées**), commerces
   visibles dans l'annuaire, commerces d'ailleurs (comme le Petit Chalet, via son `/catalogue.php`).
@@ -705,19 +716,27 @@ Sur le domaine du portail (déploiement « portail »), la racine `/` n'ouvre pl
 
 Le parcours public (`/inscription/`) se fait en **trois étapes, le paiement AVANT la création, et aucune validation de l'exploitant** : le client arrive sur sa boutique.
 
-1. **Ma formule** (`inscription/index.php`) : formule + e-mail (+ conditions). Le formulaire complet ne s'affiche qu'après le paiement.
-2. **Paiement** : formule payante et Stripe configuré → Stripe Checkout (abonnement mensuel). Le retour (`inscription/merci.php`) INTERROGE Stripe pour confirmer la
-   session payée, marque la demande « paid » et envoie le client à l'étape 3 ; le webhook signé (`inscription/webhook.php`, `checkout.session.completed` et
+1. **Ma formule** (`inscription/index.php`) : choix entre une boutique avec vente en ligne et un site vitrine sans prix, panier ni paiement, puis formule.
+   Aucun e-mail ni compte social n'est demandé à cette étape. Les prix annuels remisés sont affichés en premier, avec l'équivalent mensuel et l'économie réalisée sur douze mois.
+   Les tarifs sont distincts pour les deux modes et peuvent aussi varier par galerie ; les vitrines proposent par défaut les offres gratuites, 10 € et 30 € par mois.
+   Les avantages des formules vitrine sont configurables depuis le portail, sans liste prédéfinie. Le formulaire affiche aussi le catalogue des plugins avec les tarifs configurés
+   (achat après création), et permet de demander un devis pour un design personnalisé, l’accompagnement au setup, une formation à distance ou en présentiel, la hotline ou un chatbot.
+   Ces demandes sont conservées avec l’inscription et signalées à l’exploitant à la création ; elles ne s’ajoutent pas au paiement de la formule. Le formulaire complet ne s'affiche qu'après le paiement.
+2. **Coordonnées et paiement** (`inscription/paiement.php`) : pour une formule payante avec Stripe configuré, le client saisit un nom de boutique, peut décrire son activité et sa zone, puis demander à OVH de vérifier les extensions `.fr`, `.com`, `.net` et `.shop`. Des variantes proches sont testées si le nom exact est déjà pris ; Gemini peut proposer d’autres noms adaptés au métier et à l’emplacement. Le client peut garder l’adresse incluse sous le domaine de la plateforme ou présélectionner un domaine pour l’acheter après la création. Cette présélection n’est pas une réservation : disponibilité, devis et achat seront confirmés ultérieurement avec OVH et un paiement Stripe dédié. L’adresse sans domaine personnalisé est de la forme `brocs.arrimage.com/nom-de-la-boutique` ; une migration ultérieure peut demander des redirections et affecter le référencement. Il saisit ensuite son e-mail ou continue avec Google. L'adresse e-mail vérifiée par Google est liée à la demande et sert à la connexion ultérieure à l'administration de la boutique ; le consentement est enregistré à cette étape. Le client est ensuite redirigé vers Stripe Checkout pour le paiement (abonnement mensuel ou annuel). Le retour (`inscription/merci.php`) INTERROGE Stripe pour confirmer la
+   session payée, enregistre l'e-mail fourni par Stripe, marque la demande « paid » et envoie le client à l'étape 3 ; le webhook signé (`inscription/webhook.php`, `checkout.session.completed` et
    `customer.subscription.deleted`) fait de même et envoie par e-mail le lien de création si le client a fermé la page. Formule gratuite, paiement en ligne non configuré
    ou indisponible : on passe directement à l'étape 3 (paiement « manuel » noté sur la demande et dans l'e-mail à l'exploitant).
-3. **Ma boutique** (`inscription/creer.php`, accessible seulement par le lien personnel `r` + jeton secret `k`) : nom, adresse, **design** (3 modèles avec aperçu), compte et mot
-   de passe (seulement haché), galerie. À la validation du formulaire la boutique est **générée tout de suite** (`saas_generate_shop()` : modèle, compte, galerie, textes de départ
-   modifiables, e-mail) et le client est **redirigé vers sa boutique**. L'exploitant reçoit un e-mail « nouvelle boutique créée » (payée / gratuite / paiement à régler).
+3. **Ma boutique** (`inscription/creer.php`, accessible seulement par le lien personnel `r` + jeton secret `k`) : pour une offre gratuite ou un paiement manuel, e-mail et consentement ; puis nom, adresse, compte et mot de passe (seulement haché).
+   À la validation du formulaire la boutique est **générée tout de suite** (`saas_generate_shop()` : modèle Brocante par défaut, mode avec vente ou vitrine, compte et textes
+   de départ modifiables). La galerie sélectionnée pour le tarif ne reçoit pas automatiquement la boutique. Depuis l'étape d'identité (`inscription/identite.php`), le commerçant
+   peut tester en privé l'affichage de sa boutique dans cette galerie ; l'aperçu n'enregistre aucune adhésion et ne modifie pas le cache public. Il décide ensuite explicitement
+   de rejoindre ou non la galerie, et peut retirer sa boutique plus tard depuis le même lien. Le design et les options d'identité sont également proposés à cette étape.
+   L'exploitant reçoit un e-mail « nouvelle boutique créée » (payée / gratuite / paiement à régler).
 
 États d'une demande (`data/inscriptions/<id>.json`) : `draft` (étape 1 faite, 24 h) → `awaiting_payment` (chez Stripe, 24 h) → `paid` (payée, boutique à créer ; ne s'expire jamais) →
 `approved` (boutique créée). Le portail → « Inscriptions » (`portail/inscriptions.php`) suit les boutiques créées, les paiements dont la boutique n'est pas encore créée (« Renvoyer le lien de création »,
-« Créer la boutique maintenant » si le formulaire est rempli mais la création a échoué) et les paiements en attente. Une adresse ou un e-mail est réservé tant que la demande est active.
-**Garde-fous** (puisqu'il n'y a plus de validation humaine) : jeton CSRF, champ piège, 5 demandes par heure et par adresse IP à l'étape 1, adresse et e-mail uniques, et un **plafond de boutiques
+« Créer la boutique maintenant » si le formulaire est rempli mais la création a échoué) et les paiements en attente. Une adresse de boutique est réservée tant que la demande est active ; un e-mail peut servir à plusieurs boutiques.
+**Garde-fous** (puisqu'il n'y a plus de validation humaine) : jeton CSRF, champ piège, 5 demandes par heure et par adresse IP à l'étape 1, adresse de boutique unique, et un **plafond de boutiques
 gratuites par 24 h** (10 par défaut ; portail → Offres et annuaire ; `free_daily_cap` dans `data/saas.json`, 0 = aucun plafond ; les formules payantes ne sont pas comptées). L'e-mail n'est pas
 vérifié : ajouter une confirmation par lien serait la suite logique si des créations abusives apparaissent.
 
@@ -730,6 +749,8 @@ vérifié : ajouter une confirmation par lien serait la suite logique si des cr�
   commerces, qui encaissent leurs propres clients. Clés `sk_test_…` pour essayer sans débit (carte `4242 4242 4242 4242`) ; le portail affiche « mode test » ou « mode RÉEL ».
   Point de terminaison du webhook à déclarer chez Stripe : `<domaine>/inscription/webhook.php`. Les essais automatiques utilisent un faux Stripe local (`api_base` du fichier de
   clés, accepté uniquement avec `config.local.php`).
+- **Tarifs** : portail → **Tarifs** (`portail/tarifs.php`) permet de modifier séparément les grilles « Avec vente » et « Vitrine », par défaut et par galerie.
+  Les vitrines n'affichent pas de prix de produits et leurs routes de panier/paiement sont désactivées ; les boutiques existantes restent en mode vente par défaut.
 - **Création de boutique partagée** : `includes/tenant-factory.php` (portail, `portail/nouveau.php`, `portail/inscriptions.php` et étape 3).
 - **Pas encore** : modèle modifiable après coup depuis l'administration de la boutique, changement de formule, facturation / portail client Stripe, application des limites par formule.
 
@@ -795,7 +816,11 @@ présente, et chaque pièce renvoie vers sa fiche chez le commerçant (pas de pa
 - **Gestion** : portail → **« Galeries commerciales »** (`portail/galeries.php`, réservé à l'exploitant) : créer une galerie (nom,
   identifiant, slogan, couleur), cocher les commerces membres (★ = à la une), ajouter un **commerce d'ailleurs** (autre serveur, comme
   le Petit Chalet : son adresse, testée à l'ajout), publier. Une galerie non publiée s'ouvre par un lien d'aperçu secret (`?apercu=…`).
-  Les galeries sont des fichiers `data/galeries/<identifiant>.json` (jamais envoyés par le déploiement).
+  Les galeries sont des fichiers `data/galeries/<identifiant>.json` (jamais envoyés par le déploiement). L'exploitant et l'administrateur
+  d'une galerie peuvent la mettre en pause puis la réactiver : elle est masquée du public sans résilier l'offre ni retirer ses boutiques.
+  L'exploitant peut supprimer la fiche et ses images (sans toucher aux boutiques), exporter un JSON portable avec les images ou importer cet
+  export. L'import d'une nouvelle galerie la crée en brouillon sans comptes administrateurs ni offre Stripe ; le remplacement conserve les
+  administrateurs et l'offre de la galerie cible. Les comptes et identifiants de paiement ne figurent jamais dans un export.
 - **Données** : chaque boutique sert son **catalogue public** en JSON à `/catalogue.php` (infos du commerce, logo, pièces non masquées et
   en stock, prix, photo de couverture, lien de la fiche). La galerie lit directement la base des commerces de ce serveur et le flux
   `/catalogue.php` des commerces d'ailleurs ; le catalogue regroupé est mis en cache 10 minutes (`data/galeries/cache/`, bouton
@@ -845,6 +870,16 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   Entre les deux, le plugin reste **en pause** dans ces boutiques (page « module en cours de mise à jour », API en 503) pour ne jamais
   tourner sur une base pas encore migrée. Avant chaque migration, la base est copiée dans
   `data/backups/<base>-plugin-<id>-<de>-<vers>-<date>.db`. Chaque action est journalisée (portail → Activité).
+- **Tarifs et accès des modules payants** (`includes/addons.php`) : portail → **Plugins → Tarifs et modalités**, ou depuis la gestion
+  d'une galerie. Configuration héritée **plateforme → galerie → boutique** ; un gestionnaire de galerie peut régler une offre pour toute
+  sa galerie ou pour une boutique membre. Les prix et modalités proposés sont abonnement mensuel/annuel Stripe, paiement unique Stripe,
+  paiement manuel avec contact de l'exploitant, ou activation gratuite ; essai (0 à 90 jours), accès inclus/indisponible, et conditions
+  affichées dans le panneau du module. Une offre « incluse » installe et active le plugin pour les boutiques concernées. Les réglages sont
+  conservés dans `data/saas/addons.json` ; l'ancien format de configuration des prix est repris automatiquement. Si une boutique appartient
+  à plusieurs galeries qui ont défini des règles pour le même plugin, la première (ordre alphabétique de l'identifiant) est appliquée, puis
+  la surcharge explicite de la boutique prime. Le pack Annonces Leboncoin/Vinted utilise aussi ce panneau ; les anciennes souscriptions
+  de ce pack sont reprises automatiquement dans le nouveau registre d'accès à leur première ouverture. Dans une portée héritée, un champ vide
+  conserve la valeur supérieure ; les cases « hériter » permettent de rétablir l'héritage d'un champ configuré localement.
 - **Tâches planifiées** : une seule entrée dans la tâche planifiée de l'hébergeur (OVH : Hébergement → Tâches planifiées - Cron,
   langage PHP 8, toutes les 5 ou 15 minutes) lance `scripts/plugins-cron.php`. Le script fait le tour des boutiques et, pour chaque
   plugin activé et à jour, exécute ses tâches (`cron` du manifeste) dans un processus séparé, avec `TENANT=<boutique>` : une tâche ne
@@ -1112,6 +1147,10 @@ Un bouton « Continuer avec… » apparaît à trois endroits, dès qu'au moins 
 - **Compte client** (`/compte.php`, lien « Mon compte » du menu) : suivi des commandes payées avec la même adresse ; l'e-mail est
   prérempli au paiement. Le visiteur devient un contact de la boutique (Comptes → source « Connexion sociale »).
 
+**Galeries** : les mêmes boutons « Continuer avec… » (clés de la plateforme, e-mail vérifié exigé) existent sur trois pages de galerie. **Création de galerie** (`/galerie/creer.php`) : on choisit l'offre et le nom, puis le réseau social fournit l'e-mail (contexte `gcreate` : la demande est mémorisée en session puis rejouée au retour). **Connexion des administrateurs** (`/galerie/admin.php`, contexte `gadmin`) : l'adresse vérifiée doit être celle d'un administrateur déjà déclaré dans une galerie. **Espace visiteur de la galerie** (`/galerie/visiteur.php`, contexte `gvisitor`) : inscription et connexion immédiates, sans e-mail à ouvrir, avec la case de consentement cochée ; le membre reçoit les points de bienvenue. L'espace visiteur du plugin de chaque boutique garde sa connexion par lien e-mail.
+
+**Espace visiteur d'une boutique** (plugin « Espace visiteur & fidélité », `/visiteur.php`) : les mêmes boutons « Continuer avec… » sont proposés sous le formulaire de connexion (contexte `customer` avec `next=/visiteur.php`, réglages « Connexion sociale » de la boutique : comptes clients). La case d'accord doit être cochée avant le clic ; au retour, le hook `packs/espace-visiteur/hooks/visiteur_social.php` crée ou retrouve le membre (points de bienvenue crédités à l'ouverture) et renvoie sur son espace avec son lien personnel. Le chemin `next` peut arriver préfixé par celui de la boutique (`/naty/visiteur.php`) : `oauth/start.php` le ramène à la forme canonique. **Les boutons n'apparaissent que si un fournisseur est activé avec ses clés** (portail → Connexion sociale pour la plateforme, ou Administration → Connexion sociale pour les clés propres d'une boutique) ; sans clés, aucun bouton nulle part.
+
 **Un seul jeu de clés pour toute la plateforme.** Un fournisseur n'accepte que des adresses de retour déclarées à l'avance : le retour se fait
 donc sur UNE adresse centrale, `<domaine du portail>/oauth/callback.php` (affichée dans le portail), qui renvoie la personne sur sa boutique
 (`oauth/finish.php`) avec un justificatif signé (HMAC, 2 minutes, destiné à cette boutique, lié à sa session, usage unique). Domaines de
@@ -1210,3 +1249,199 @@ fichier modifié est rangé à côté de l'ancien, jamais par-dessus. La clé n'
 stockée que sous forme d'empreinte dans `.secrets/` ; « Désactiver la
 réception » coupe tout envoi.
 
+
+## Administrateurs de galerie
+
+Chaque galerie commerciale peut avoir ses propres administrateurs (jusqu'à 10), créés par l'exploitant dans **Portail → Galeries → [galerie] → Administrateurs de la galerie** (adresse e-mail, mot de passe provisoire envoyé par e-mail et affiché une fois). Ils se connectent sur `/galerie/admin.php` et n'accèdent qu'à **leur** galerie (mode restreint de `portail/_bootstrap.php` : seules les pages `galeries.php`, `galerie-tableau.php`, `galerie-prospects.php` et `galerie-compte.php` sont ouvertes) :
+
+- **Présentation et commerces** : mêmes réglages que le portail (nom, apparence, commerces membres, publication) ; ni création, ni suppression de galerie, ni gestion des comptes.
+- **Tableau de bord** : visiteurs et pages vues de la page publique (sans cookie), affichages et clics des promos, pièces et commandes par commerce (commerces de ce serveur), prospects.
+- **Prospects** : relance des commerçants en cours d'inscription pour cette galerie (3 relances au plus, 3 jours entre deux), liste libre de commerces à recruter (messages avec lien de désinscription obligatoire) et abonnés aux nouveautés de la galerie (double confirmation, un message par jour au plus).
+
+Comptes dans `data/galeries/<id>.json` (clé `admins`, mots de passe hachés) ; activité, prospects et abonnés dans `data/galeries/<id>.{stats,prospects,subs}.json` (jamais déployés). Logique : `includes/gallery-admin.php`.
+
+## Offres de galerie (produit à vendre)
+
+La création d'une galerie commerciale se vend sur `/galerie/creer.php` (lien « Créer ma galerie » sur la liste des galeries). Trois offres par défaut, modifiables par l'exploitant dans **Portail → Offres galerie** (`portail/offres-galerie.php`, stockées dans `data/saas/galeries-offres.json`) :
+
+- **Test gratuit** : 14 jours, 3 commerces, sans carte bancaire, un seul test par adresse e-mail (formulaire protégé par un champ piège et une limite de fréquence).
+- **Essentiel** : 10 commerces, abonnement mensuel ou annuel (Stripe Checkout, clé de la plateforme).
+- **Pro** : 30 commerces, même fonctionnement.
+
+La galerie est créée **non publiée** avec son administrateur (mot de passe provisoire envoyé par e-mail). Statuts (`go_status()`) : essai, actif, expiré, résilié ; une galerie « sans offre » (créée à la main) reste en ligne sans limite. Une galerie expirée ou résiliée disparaît de la liste et sa page publique renvoie 404 (le lien d'aperçu reste valable). La limite de commerces ne s'applique qu'aux administrateurs de galerie, pas à l'exploitant. L'administrateur voit **Mon offre** (`portail/galerie-offre.php`) : changer d'offre (l'ancien abonnement Stripe est fermé), résilier en fin de période. Le webhook `inscription/webhook.php` traite `gallery_offer` et `customer.subscription.deleted`. Logique : `includes/gallery-offers.php`.
+
+## Commissions et Stripe Connect
+
+Réglage dans **Portail → Commissions** (`portail/commissions.php`, exploitant seulement) ; logique dans `includes/commissions.php` (suivi) et `includes/connect.php` (paiement).
+
+- **Quatre commissions**, chacune à 0 % par défaut : plateforme sur les ventes des boutiques, galerie sur les ventes de ses membres, part de la galerie sur les abonnements qu'elle a recrutés. Taux modifiables par galerie, attribution boutique → galerie, versement minimum, date de départ du suivi (`since`).
+- **Stripe Connect** (modèle « destination charge ») : une boutique **hébergée avec le portail** dont le compte Connect est prêt encaisse via la plateforme avec `application_fee_amount` + `transfer_data[destination]`. La part de la galerie reste sur la plateforme puis part par virement Stripe (Transfer). Base de calcul : marchandises après remise, **hors livraison**. Les commandes portent `payment_via`, `connect_fee_cents`, `connect_gallery_cents`. Les boutiques à clés propres (ex. Petit Chalet) ne changent pas : leurs commissions sont seulement **suivies, à facturer** hors Stripe.
+- **Journal** `data/saas/commissions.jsonl` (ventes, abonnements, remboursements ; `collected` = argent détenu par la plateforme), état et versements dans `commissions-state.json` / `commissions-payouts.json`, comptes dans `connect.json`, taux publiés aux boutiques dans `connect-rates.json` (seulement une fois le compte validé).
+- **Relevés** par galerie, versement « par Stripe » (limité au solde réellement encaissé et au minimum) ou « déjà viré » (référence obligatoire), export CSV (`?csv=all|slug&from&to`). Chaque administrateur de galerie voit ses commissions en lecture seule dans son tableau de bord.
+- **À faire avant usage réel** : activer Connect dans le tableau de bord Stripe, essayer en mode test (KYC, frais, litiges, remboursements), faire valider TVA et conditions générales ; les autres encaissements (caisse, réservation, retrait) exigent encore les clés propres de la boutique.
+
+## Plan d'implantation d'une galerie
+
+Chaque galerie peut dessiner où se trouvent ses commerces : **Portail → Galeries → [galerie] → Plan des commerces** (`portail/galerie-plan.php`, ouvert aussi aux administrateurs de la galerie). On cherche une adresse (recherche OpenStreetMap/Nominatim), puis on place des **repères**, **rectangles**, **zones** et **tracés** avec les outils à gauche de la carte (Leaflet 1.9.4 + Leaflet-Geoman 2.17.0, chargés depuis cdnjs et jsDelivr). Un clic sur un élément permet de lui donner un nom, une couleur, une précision et de le **lier à un commerce membre** ; le fond est « Plan » (OpenStreetMap) ou « Satellite » (Esri).
+
+- **Données** : clé `map` de `data/galeries/<id>.json` (`center`, `zoom`, `base`, `items[]` = `kind` marker/polygon/line, `pts` en latitude-longitude, `label`, `note`, `color`, `shop`). Tout est revalidé côté serveur par `gallery_map_normalize()` (`includes/gallery-map.php`) : 300 éléments et 60 points au plus, couleurs `#rrggbb`, commerce lié limité aux membres de la galerie.
+- **Page publique** : section « Plan des commerces » de `/galerie/<id>/` (ancre `#plan-commerces`). La carte ne se charge **qu'au clic** du visiteur (aucune requête vers OpenStreetMap avant), et les noms sont insérés en texte brut (pas de HTML). Un repère ou une zone liée à un commerce ouvre sa boutique.
+- **Google Maps** n'est pas utilisé : clé d'API facturable et conditions d'utilisation qui interdisent de recopier son fond de carte. Les fonds OpenStreetMap et Esri demandent une attribution (affichée) et un usage raisonnable : pour un fort trafic, prévoir un fournisseur de tuiles dédié.
+
+## Réservation : arrhes ou acompte
+
+Le module « Réservation » (Administration → Réservations, `packs/reservation-arrhes`) propose deux types de versement, au choix de la boutique (réglage « Type de versement ») :
+
+- **Arrhes** (par défaut) : chacun peut renoncer — le client qui renonce perd les arrhes, la boutique qui renonce rend le double (art. L214-1 du Code de la consommation).
+- **Acompte** : la vente est ferme, le solde reste dû et la boutique peut l'exiger. Si le client est absent, l'acompte est conservé et le solde reste dû.
+
+Chaque type a son texte de conditions modifiable (`{arrhes}`/`{acompte}`, `{pourcent}`, `{piece}`, `{date}`). Le type et le texte sont figés dans chaque réservation au moment où elle est faite ; changer le réglage n'affecte donc pas les réservations en cours. Les mots (fiche pièce, page Stripe, e-mails, tableau d'administration) suivent le type de la réservation. La colonne `mode` de `ra_reservations` est ajoutée automatiquement à la première utilisation, sans « Mettre à jour » du module. Les conditions fournies sont un modèle : à faire valider (droit de rétractation de 14 jours des ventes à distance, nature juridique du versement).
+
+### Plan : surfaces, numérotation, division, fond masqué, localisation de la marchandise
+
+La page « Plan des commerces » comporte une aide pas à pas (dépliable) et :
+
+- **Catalogue de surfaces** (`map.catalog`) : tailles d'emplacement en mètres (ex. « Stand 3 × 2 m »). « Poser » dessine un rectangle à l'échelle réelle là où l'on clique, avec un angle réglable ; l'échelle de la carte est affichée. Trois exemples sont proposés au départ.
+- **Numérotation** : un numéro par élément (`num`, 12 caractères au plus), préfixe et compteur « prochain numéro » utilisés à la pose et à la division, et « Numéroter tout » (ordre de création, gauche→droite/haut→bas, ou haut→bas/gauche→droite ; seulement les emplacements sans numéro, ou tous).
+- **Division d'une zone** à 4 coins en lignes × colonnes (jusqu'à 40 × 40, 600 éléments au plus sur le plan) : la zone est remplacée par les cases, qui gardent couleur et commerce lié et reçoivent chacune le numéro suivant. La surface en m² de chaque zone s'affiche dans sa fiche et dans la liste des emplacements.
+- **Masquer le fond de carte** (`base: "none"`) : plan seul sur une grille, sans requête vers OpenStreetMap ni Esri ; vaut aussi pour la page publique.
+- **Localisation de la marchandise** (`map.places[<commerce>]` : adresse, code postal, ville, emplacement, précision) : saisie à la main ou reprise de l'adresse du repère du commerce (recherche inverse Nominatim). Pour un commerce de ce serveur, `gallery_member_place()` la lit dans la première galerie qui la renseigne et `packs/annonces-marche/lib/catalog.php` l'ajoute à chaque annonce exportée (clé `location`, dont `address`). Le bot Leboncoin l'utilise comme « adresse du bien » à la place de celle du profil et remplace l'adresse mémorisée par Leboncoin si elle diffère (`remplir_adresse(..., forcer=True)` dans `lbc_formulaire.py`). Les commerces d'ailleurs (autre hébergement, comme le Petit Chalet) ne sont pas concernés : leur export reste sans `location`.
+- **Plein écran** : le bouton « ⛶ Plein écran » ouvre le plan dans une modale qui occupe tout l'écran, avec le catalogue de surfaces et la numérotation dans une colonne à gauche (les mêmes cartes sont déplacées, rien n'est perdu à la fermeture). Échap termine d'abord une pose en cours, puis ferme la modale ; Tab reste à l'intérieur tant qu'elle est ouverte ; sur petit écran la colonne passe sous la carte.
+- **Rotation** : la fiche d'une zone ou d'un tracé propose ↻ / ↺ de 1°, 15° ou 90° et un angle précis (rotation autour du centre, calculée en mètres : longueurs et surface sont conservées). L'outil de rotation de la carte permet aussi de tourner à la souris. L'angle de pose du catalogue règle l'orientation des surfaces à leur création.
+
+## Espace visiteur & fidélité (plugin `espace-visiteur`)
+
+Module payant avec essai (comme les autres, voir `includes/addons.php`), à activer boutique par boutique (portail → Plugins) puis à régler dans **Administration → Espace visiteur**.
+
+- **Web app des visiteurs** : page `/visiteur.php` de chaque boutique (`visiteur.php` + `packs/espace-visiteur/front/visiteur_app.php`, habillée comme la boutique, mobile d'abord). Rubriques : **Fidélité** (points, paliers, récompenses, historique), **Mes alertes** (module Alerte chineur), **Réservations** (billets de Retrait sur stand, réservations avec arrhes ou acompte), **Scanner un QR** (module QR Code Story : lecture par l'appareil photo, uniquement vers une page de la même boutique). Une rubrique d'un autre module n'apparaît que si ce module est activé, à jour et sous licence ; sans le plugin ou sans licence, la page renvoie 404.
+- **Accès sans mot de passe** : le visiteur saisit son e-mail (et coche son accord à la première fois) ; un lien personnel `…/visiteur.php?t=<jeton>` lui est envoyé. La réponse est la même que l'adresse soit connue ou non, 5 demandes par heure et par visiteur, champ piège anti-robot. Le jeton est gardé dans le navigateur ; « Effacer mon espace et mes points » supprime le membre, son journal et ses récompenses (droit à l'effacement) ; l'administration peut aussi effacer un membre.
+- **Points** : `points par euro × montant des pièces payé en ligne (hors livraison, après remises)`, crédités au paiement (événement `order_paid`) au membre dont l'adresse est celle de la commande, **une seule fois par commande**. Points de bienvenue après le premier passage par le lien (adresse vérifiée) ; seules les adresses vérifiées gagnent des points. Ajustements manuels (+/−, avec motif) dans la liste des membres, export CSV.
+- **Récompenses** : paliers « N points = X € de remise » (jusqu'à 5). Le visiteur échange ses points contre un code `FID-XXXXXXXX`, appliqué par « Utiliser sur mon panier » (`/cart.php?recompense=CODE`, mémorisé en session) : la remise s'ajoute à celle des paliers du panier, au moins 1 € reste à payer, le code est réservé à la commande dès l'ouverture du paiement (50 min) puis soldé au paiement ; il ne sert qu'une fois.
+- **Liens** : bandeau « Votre espace visiteur » sur la page d'accueil de la boutique (emplacement `visiteur_link`) et lien « Espace visiteur ↗ » sur la carte du commerce dans la page de chaque galerie (clé `visitor_url` du catalogue, présente seulement si le plugin est actif et sous licence dans cette boutique).
+- **Socle** : nouveau filtre de plugins `plugin_filter()` (`includes/plugins.php`, hooks `packs/<id>/hooks/<sujet>.php` qui retournent la valeur modifiée) utilisé pour `cart_discount` ; nouvel événement `checkout_created` (commande ouverte au paiement). Les adresses `/api/…` des modules (reçus, billets, retours de paiement, alertes, espace visiteur) reçoivent maintenant le préfixe du commerce hébergé avec le portail (`shop_abs_url()`), sans quoi elles pointaient vers une autre boutique.
+- **À faire valider de votre côté** : information et accord des membres (l'adresse sert uniquement au programme), durée de conservation, conditions du programme de fidélité ; les récompenses sont des remises que vous financez.
+
+## Types de galerie
+
+Le portail (**Types de galerie**, `portail/offres-galerie.php`) propose plusieurs produits à partir du même moteur : **Galerie marchande**, **Marché aux puces**, **Vide-grenier** et **Quartier marchand** (nom proposé pour réunir les commerçants d'une rue, d'un quartier ou d'un village ; modifiable), plus les types que l'exploitant ajoute. Chaque type a (registre `includes/gallery-types.php`, réglages dans `data/saas/galeries-types.json`) :
+
+- ses **dénominations** (galerie / marché / vide-grenier ; commerces / marchands / exposants / commerçants ; titres, bouton « Rejoindre », page de création…), appliquées à la page publique, à la page de création, aux e-mails et au portail ;
+- ses **fonctionnalités** cochées : plan, tarifs par zone, demandes d'emplacement des exposants, prospects, tableau de bord, abonnés (les boutons du menu d'une galerie et les blocs du plan en dépendent) ;
+- ses **trois offres** (test gratuit, deux abonnements) avec prix mensuel et annuel, nombre de membres et durée d'essai propres ;
+- sa **page de création** : `/galerie/creer.php` propose le choix du type, `/galerie/creer.php?type=<type>` mène directement au bon produit (offres et vocabulaire du type). Le test gratuit est limité à une fois par adresse et par type.
+
+Le type d'une galerie est la clé `type` de `data/galeries/<id>.json` (galerie marchande si absent) et se change dans le tableau « Type et offre de chaque galerie ». Les offres réglées avant l'arrivée des types restent celles de la galerie marchande. Un changement d'offre ou un paiement Stripe retrouve les offres du type de la galerie (métadonnée `gallery_type`).
+
+## Plan : zones nommées, tarifs et exposants
+
+- **Zones** : un polygone dessiné peut être une **zone** (rue, hall, allée, cour, parking, quartier, autre) avec un nom ; les **emplacements** qu'elle contient lui appartiennent (calculé côté serveur : plus petite zone contenant leur centre). Les zones sont affichées en pointillés avec leur nom ; la numérotation peut recommencer à 1 dans chaque zone (le N° de la zone sert de préfixe).
+- **Tarifs par zone** : par emplacement, par mètre linéaire de façade (premier côté de l'emplacement) ou par m², avec un tarif **professionnel** facultatif. Le tarif d'un emplacement hérite de sa zone ; il s'affiche dans la fiche, la liste et le plan public (si le type a la fonctionnalité « tarifs »).
+- **Exposants** : réglage « Exposants : choisir son emplacement » du plan. Sur la page publique, le bouton « Je suis exposant » colore les emplacements (libre, demandé, attribué) ; l'exposant choisit un emplacement libre, remplit sa demande (accord à l'enregistrement de ses coordonnées, champ anti-robot, 6 demandes par heure et par connexion, 2 demandes en attente par adresse) et reçoit un e-mail avec un lien d'annulation (confirmation demandée). Une demande en attente bloque l'emplacement le nombre de jours réglé. L'organisateur la traite dans **Exposants** (accepter, refuser, libérer ; e-mail à l'exposant ; export CSV). Les demandes sont dans `data/galeries/<id>.slots.json`. Le règlement se fait hors ligne.
+- **Plein écran** : le catalogue et la numérotation passent dans une colonne qui défile sans déborder sur la carte.
+
+## Page d'accueil de la plateforme
+
+`accueil/index.php` (racine du domaine du portail) est organisée par parcours : **Je vends** (boutique et ses formules), **J'organise** (les types de galerie, leurs fonctionnalités et prix, avec un tableau comparatif construit à partir des types actifs), **J'expose** (galeries dont les demandes d'emplacement sont ouvertes et qui ont encore des emplacements libres), **Je découvre** (galeries avec leur type, boutiques, annuaire), plus les **options à la carte** (modules de `addon_defaults()`), une barre d'ancres, la FAQ et un bandeau « Déjà client ? ». Tout est lu dans les réglages (types de galerie, offres, modules) : modifier un prix, un nom de type ou une fonctionnalité dans le portail met la page à jour.
+
+## Import de prospects et de clients
+
+Deux entrées, un même moteur (`includes/contacts-import.php`, écrans dans `includes/contacts-import-ui.php`) :
+
+- **Boutique** : Administration → Comptes → « Importer des contacts » (`admin/contacts-import.php`, administrateurs seulement). Les contacts deviennent des fiches **prospects** ou **clients** (au choix) avec leur téléphone, leur société et leur origine dans les notes ; source « Import (fichier ou CRM) ». Une fiche exige une adresse e-mail : les lignes sans e-mail sont écartées avec leur motif.
+- **Galerie** : Prospects → « Importer des contacts » (`portail/galerie-import.php`). Les contacts rejoignent la liste des commerces à recruter (le téléphone est maintenant conservé) ; un contact sans e-mail mais avec téléphone est accepté.
+
+**Sources** : fichiers **CSV** (séparateur `;` `,` tabulation ou `|` détecté, UTF-8 ou Windows-1252 d'Excel), **Excel `.xls` / `.xlsx`** (première feuille) et carnet **vCard** `.vcf` (export des contacts d'un téléphone), ou lecture directe de **HubSpot**, **Brevo**, **Mailchimp** et **Pipedrive** avec leur clé API. Fichiers jusqu'à 10 Mo, 5 000 contacts et 200 colonnes. Zoho CRM, Google Contacts, Outlook, Odoo et Salesforce passent par leur export CSV : leurs en-têtes sont reconnus (« Modèle reconnu » dans l'aperçu), les colonnes peuvent aussi être choisies à la main.
+
+**Déroulement** : fichier ou CRM → **aperçu** (à créer, déjà présents, écartés et pourquoi, 15 premières lignes, colonnes modifiables) → confirmation → résultat. Les en-têtes sont associés aux champs du site ; une colonne sans correspondance peut créer un champ personnalisé (par exemple « Site web »), conservé dans la fiche d'un compte ou d'un prospect de galerie et modifiable depuis sa liste. L'aperçu est gardé 1 h dans `data/imports/` (non servi) puis supprimé ; une fois l'import fait ou annulé, il est effacé.
+
+**Règles** : une fiche par adresse (jamais de doublon, y compris dans le fichier) ; les téléphones sont mis au format international (06 12 34 56 78 → +33612345678) et ceux qui sont invraisemblables sont ignorés ; les **désinscrits, bloqués ou nettoyés des CRM** (unsubscribed, cleaned, blacklisted, opt-out…) ne sont jamais importés ; l'importateur confirme avoir le droit de contacter ces personnes ; « compléter les fiches existantes » ne renseigne que ce qui manque (nom, téléphone et champs personnalisés) et ne change jamais un rôle ni un nom existant.
+
+**Clés des CRM** : collées à chaque lecture, utilisées uniquement pendant la requête (adresses des API fixées en dur ; Mailchimp : datacenter tiré de la clé et validé), ni enregistrées ni journalisées. Aucun jeton OAuth n'est géré : pour les CRM sans clé simple, passer par l'export CSV. À faire valider de votre côté : l'information des personnes importées (RGPD) et la conservation de leurs données.
+
+## Plan : découpage d'une zone en parcelles
+
+Dans l'éditeur de plan (portail → galerie → Plan), sélectionnez une zone ou un emplacement à 4 coins : la fiche « Découper en parcelles » apparaît.
+
+- **Par nombre** (parcelles par rangée × rangées) **ou par dimensions** (largeur × profondeur en mètres, le nombre est déduit de la taille de la zone). Un aperçu indique le nombre et la taille des parcelles avant de valider.
+- **Allée au milieu** : un couloir de largeur réglable (3 m par défaut) sépare deux blocs de parcelles qui se font face ; sens dans la longueur ou dans la largeur de la zone ; l'allée est dessinée comme une zone de type « allée » (case décochable) sans tarif.
+- Une **zone** (rue, hall…) est conservée et reçoit les parcelles à l'intérieur (elles en héritent le tarif) ; un **emplacement** est remplacé par ses parcelles.
+- Si « numéroter » est coché, les parcelles reçoivent les numéros suivants, du nord vers le sud et de gauche à droite. Limite : 600 éléments par plan.
+
+Aucun changement de format : les parcelles sont des emplacements ordinaires du plan. Code : `portail/galerie-plan.php` uniquement.
+
+### Aperçu, aide au calcul et simulation du CA (découpage)
+
+- **Aperçu avant validation** : dès qu'une zone à 4 coins est sélectionnée, les parcelles (et l'allée) apparaissent en pointillés bleus sur la carte, avec leurs futurs numéros ; elles bougent à chaque changement d'option et ne sont créées qu'au clic sur « Découper » (case « Aperçu sur la carte » pour le masquer). Le sens de découpage se règle (« parcelles alignées le long du côté le plus long / le plus court »).
+- **Aide au calcul** : on indique la largeur mini et maxi d'une parcelle (ex. 2 à 4 m) ; la liste donne toutes les divisions entières possibles (nombre par rangée, largeur, nombre total de parcelles, prix, €/m²). « Utiliser » applique une ligne. La ligne ★ est la meilleure marge au scénario central ; à marge égale (tarif au ml ou au m²), on retient une largeur ronde (multiple de 0,5 m).
+- **Simulation du CA** : tarif et unité repris de la zone (modifiables pour tester un autre positionnement), coûts fixes, coût par parcelle occupée, frais en % du CA, et trois scénarios (bas / central / haut : taux d'occupation et écart de prix). Pour la division en cours : CA, coûts, résultat de chaque scénario sur l'ensemble du plan (les autres emplacements tarifés sont comptés), et seuil de rentabilité en nombre de parcelles occupées (et en %), comparé aux scénarios bas et central. Le tarif particulier est utilisé (pas le tarif pro).
+- Les hypothèses (coûts, taux d'occupation, écarts) sont enregistrées avec le plan (clé `costs` de `data/galeries/<id>.json`, validée côté serveur) ; ce sont des estimations internes, jamais affichées au public. Code : `portail/galerie-plan.php` et `includes/gallery-map.php`.
+
+## Appli visiteurs : appel dans la galerie, installation ; impression d'étiquettes
+
+- **Page d'une galerie** : un bouton « 📱 Application visiteurs » apparaît dans l'en-tête dès qu'au moins un commerce membre a activé le module « Espace visiteur & fidélité » (plugin activé, à jour, essai ou licence valide). Un seul commerce : lien direct ; plusieurs : liste à déplier. Sans module actif chez aucun membre, rien n'est affiché (le module s'active commerce par commerce, depuis le portail ou la page Plugins).
+- **Installation** : la page `/visiteur.php` propose « Installer l'appli » (invite du navigateur quand elle existe, sinon la marche à suivre iPhone / autres). Manifeste : `visiteur-manifest.php` (nom et icône de la boutique, ouverture sur l'espace visiteur). Pas de mode hors ligne.
+- **Étiquettes** : menu de l'administration → « Étiquettes (impression) » (`/admin/labels.php`) : on coche les pièces (filtre par nom ou référence), puis on choisit le format (planches A4, rouleaux) ; le bouton « 🏷️ Étiquettes » du catalogue, après avoir coché des pièces, mène à la même page.
+
+## Espace visiteur et fidélité de la galerie (indépendant des boutiques)
+
+La galerie a sa propre web app visiteurs et son propre programme de fidélité, sans rien exiger des boutiques membres (le plugin « Espace visiteur & fidélité » de chaque boutique reste un programme à part).
+
+- **Réglages** : portail → galerie → « Fidélité visiteurs » (`portail/galerie-fidelite.php`, fonctionnalité `fidelite` des types de galerie, activée par défaut) : programme ouvert ou non, nom, points de bienvenue, points par lieu scanné, jusqu'à 5 récompenses (palier en points + libellé), message d'accueil, lieux de scan (un par ligne ; bouton pour reprendre les membres de la galerie).
+- **Gagner des points** : chaque lieu (commerce, stand, entrée, buvette…) a un QR code secret (`gl_stand_code`) ; planche à imprimer depuis la page d'administration. Le visiteur le scanne avec l'appareil photo de son téléphone : points une fois par lieu et par jour (25 scans par jour au plus). Un lieu retiré de la liste ne rapporte plus rien.
+- **Visiteur** : `galerie/visiteur.php?g=<galerie>` : inscription par e-mail (lien personnel, sans mot de passe, consentement obligatoire), points, barre de progression, échange contre une récompense (code à présenter à l'organisateur), lieux déjà scannés, déconnexion et effacement de ses données. Installable sur l'écran d'accueil (invite du navigateur ou marche à suivre iPhone). Le QR scanné avant connexion est crédité à l'ouverture du lien reçu, si c'est dans le même navigateur.
+- **Organisateur** : récompenses à remettre (« Remise ✓ » ou « Annuler » qui rend les points), membres (ajuster les points, supprimer, export CSV).
+- **Page publique** : le bouton « 📱 Application visiteurs » de l'en-tête de la galerie pointe vers cette appli dès que le programme est ouvert et la galerie publiée ; sinon, il liste les espaces visiteurs des boutiques membres qui ont activé le module.
+- Données : `data/galeries/<id>.fidelite.json` (jamais déployé, écriture sous verrou, limite de 8 inscriptions par heure et par connexion). Code : `includes/gallery-loyalty.php`. Hors périmètre : scan du QR dans l'appli elle-même (l'appareil photo du téléphone suffit), e-mail de relance des membres.
+
+## Mobile d'abord (passe 1, front et administration)
+
+Audit à 375 px de large du front de la boutique (accueil, boutique, fiche pièce, panier, compte, galeries, inscription) et de l'administration (catalogue, commandes, comptes, univers, promos, remises, frais de port, médiathèque, diaporamas, apparence). Le front était déjà bien adapté (menu burger, barre d'achat collée en bas de la fiche pièce) ; corrigé :
+
+- **Socle** (`assets/style.css`, bloc « Mobile d'abord ») : champs à 16 px (sinon iOS zoome au focus), zones tactiles d'au moins 44 px (boutons, liens du pied de page et du fil d'Ariane, bouton menu, puce « IA ce mois-ci »), cases à cocher de 20 px, images et vidéos jamais plus larges que l'écran.
+- **Catalogue** (`admin/catalog.php`) : la table de 1 178 px de large devient une liste de cartes (case, vignette, nom, prix, date, tri en tête) ; la barre d'actions groupées tient sur une ligne défilante (sur grand écran, elle passe à la ligne au lieu de déborder).
+- **Tableaux** des comptes et des frais de port : défilement horizontal dans leur cadre. **Diaporamas** : cartes empilées. **Médiathèque** : filtres pleine largeur, grille de 150 px. **Apparence** : couleurs sur une colonne. **Univers** : puces de 40 px de haut.
+- **Inscription** (`assets/pricing.css`) : les boutons radio masqués des formules élargissaient la page de 57 px.
+
+Non couvert (à faire dans une passe suivante) : éditeur de plan des galeries, Studio, pages du portail de la plateforme, fiche d'édition d'une pièce dans le catalogue (formulaire déjà en une colonne, mais long) et caisse (POS).
+
+## Catalogue : fiche d'édition en modale
+
+Un clic sur le nom d'une pièce (`admin/catalog.php`) ouvre sa fiche dans une **modale** : fenêtre centrée à deux colonnes sur ordinateur (photos, bande de médias et liens à gauche ; champs à droite), **plein écran** sur mobile (médias repliés, pied de page collé en bas, 44 px de haut mini).
+
+- **Quatre sections** : *Essentiel* (nom, univers, mention, prix affiché avec « Marché » et promo, visuel promo, description), *Détails* (matières, état, couleurs, marque, distributeur, code-barres, nature, sous-catégorie, taille, poids), *Prix* (prix minimum, négociation, fourchette estimée, prix du neuf ; pastille = offres à traiter) et *Vente* (mise en avant, masquer, stock, lot, canaux, marquer vendu, réassort, maintenue au catalogue). La section choisie est mémorisée.
+- **Pied de page** : « Enregistrer » (reste sur la fiche, avec un bandeau de confirmation), « Enregistrer et fermer » (retour à la liste), « Supprimer » (confirmation). La touche Entrée enregistre. Un indicateur signale les modifications non enregistrées et la fermeture (✕, Échap, clic à côté) demande confirmation.
+- **Navigation** : flèches ‹ › pour passer à la pièce précédente / suivante de la liste affichée (tri et recherche respectés). L'adresse `catalog.php#produit-<réf>` ouvre directement la fiche.
+- **Rien n'a changé côté serveur** (mêmes champs, mêmes actions ; `save-product.php` ne fait que revenir à la liste pour « Enregistrer et fermer »). Les formulaires restent dans la page et sont déplacés dans la fenêtre à l'ouverture : l'IA, le prix, la promo, le code-barres et la nature fonctionnent comme avant. Un champ invalide dans une section masquée la rouvre.
+- Correction au passage : le champ « Couleurs » apparaissait deux fois dans l'ancien formulaire (le second, vide, écrasait la valeur à l'enregistrement).
+- Code : `assets/product-modal.js`, `assets/product-modal.css`.
+
+## Boutique installable (web app) : incitation à l'installer
+
+Chaque boutique est une web app installable (écran d'accueil du téléphone, plein écran, icône et nom de la boutique) :
+
+- **Manifeste et icône** : `pwa-manifest.php` (nom, couleurs de l'apparence, ouverture sur l'accueil), `pwa-icon.php` (le logo carré de « Apparence » sur le fond de la boutique, à défaut l'initiale sur la couleur d'accent), `pwa-sw.php` (service worker minimal, rien n'est mis en cache : pas de mode hors ligne). Posés par `includes/header.php`, avec `apple-touch-icon` et `theme-color`.
+- **Incitation** (`assets/pwa-install.js`, uniquement sur téléphone / tablette, jamais si l'appli est déjà installée) : un bandeau en bas d'écran « Ajoutez la boutique à votre écran d'accueil » apparaît à partir de la 2<sup>e</sup> page vue (après 4 s), ou après 20 s sur une fiche pièce ; jamais dans le panier, le paiement, le compte ni l'administration, ni dans le navigateur intégré de Facebook / Instagram. « Ajouter » ouvre l'invite d'installation du navigateur (Android, Chrome, Edge) ou, ailleurs, la marche à suivre (iPhone : Partager → « Sur l'écran d'accueil » ; autres navigateurs : menu → « Installer l'application »). « Plus tard » : 14 jours de répit ; « × » : 90 jours ; installée : plus jamais.
+- **Lien permanent** « 📲 Installer l'appli » en pied de page, sur toutes les mises en page.
+- **Réglage** : Administration → Réglages du site → « Boutique installable (web app) » (activé par défaut ; décoché, plus de manifeste ni de bandeau).
+- Distinct du **Studio** (appli de prise de vue de l'équipe, `studio.php`) et de l'espace visiteur (`visiteur.php`), qui gardent leur propre installation. L'invite du navigateur ne s'affiche qu'en HTTPS (ou localhost).
+
+## Panier : auto-complétion de l'adresse et localisation
+
+Bloc « Destination » du panier (`cart.php`, script `assets/cart-address.js`) :
+
+- **Auto-complétion** (France, Guadeloupe, Martinique, Guyane, Réunion, Mayotte) : la Base Adresse Nationale (api-adresse.data.gouv.fr, La Poste / Etalab, gratuite, sans clé) propose les adresses dès 3 caractères, au clavier (↑ ↓ Entrée Échap) comme au doigt. L'adresse choisie reste affichée (session, 160 caractères au plus) et son code postal fixe la zone tarifaire (Corse, outre-mer…) ; changer de pays ou de code postal l'efface.
+- **📍 Me localiser** : demande la position de l'appareil, retrouve l'adresse (BAN en France, sinon OpenStreetMap / Nominatim, une requête par clic), puis renseigne le pays, le code postal et l'adresse, et recalcule les frais de livraison. Message clair si la localisation est refusée, indisponible, introuvable ou si la boutique ne livre pas dans ce pays. La position (latitude, longitude) n'est jamais envoyée à la boutique ni enregistrée : seuls l'adresse retrouvée et son code postal sont gardés. Le navigateur n'autorise la localisation qu'en HTTPS (ou localhost).
+- L'adresse de livraison définitive reste saisie à l'étape de paiement Stripe (non préremplie) ; le panier ne sert qu'à choisir le pays, la zone et le mode de livraison.
+- Au passage : la ligne d'article du panier s'affichait coupée sur mobile (prix et « Retirer » hors écran) ; elle passe en deux lignes sous 640 px.
+
+## Panier : coordonnées (téléphone), conditions à accepter, compte client, pages légales
+
+**Au panier** (`cart.php` → `checkout.php`), un bloc « Vos coordonnées » est obligatoire avant « Passer à la caisse » : e-mail et **téléphone** (contrôlés côté serveur : 8 à 15 chiffres, un numéro français saisi « 06 12 34 56 78 » est enregistré « +33612345678 »), nom facultatif, et la case **« J'ai lu et j'accepte les conditions générales de vente, les conditions d'utilisation et la politique de confidentialité »** (refus sans elle, messages sous les champs). L'e-mail est prérempli (verrouillé) sur la page Stripe. La commande conserve l'e-mail, le téléphone, la **date d'acceptation** et la **version des textes acceptés** (`orders.phone`, `terms_at`, `terms_version`) ; le téléphone s'affiche dans Administration → Commandes (lien d'appel) et sur la fiche du client (Comptes). Connecté·e, le client retrouve ses coordonnées préremplies.
+
+**Compte client** (`compte.php`, `includes/customers.php`) : en plus de la connexion par réseau social, un compte se crée par **e-mail + mot de passe**, soit depuis « Créer mon compte » (nom, e-mail, téléphone, acceptation des conditions d'utilisation et de la confidentialité), soit en cochant « Créer mon compte client » au panier. Dans les deux cas, l'adresse est **vérifiée par un lien** (valable 24 h, à usage unique, empreinte SHA-256 en base) qui permet de choisir le mot de passe (8 caractères au moins) : sans clic, aucun compte n'existe. Même lien pour « Mot de passe oublié ». Le compte (rôle prospect, puis client à la première commande payée) permet de suivre ses commandes, modifier nom et téléphone, changer de mot de passe et **supprimer son compte** (un prospect est effacé ; un client perd accès et coordonnées, ses commandes restent pour la comptabilité). Garde-fous : 8 essais de connexion par quart d'heure et par adresse/connexion, 5 liens par heure, mêmes réponses que l'adresse existe ou non, jamais de compte client sur l'adresse d'un membre de l'équipe (leur mot de passe d'administration n'est pas touché). Le paiement reste possible sans compte.
+
+**Pages légales** (`legal.php?page=cgv|cgu|confidentialite|mentions`, liens en pied de page de toutes les mises en page) : conditions générales de vente, conditions d'utilisation, politique de confidentialité et mentions légales. Chaque texte part d'un **modèle** rempli avec l'identité du vendeur ; Administration → **Pages légales** (`admin/legal.php`) permet de saisir cette identité (nom, SIRET, adresse, e-mail, TVA, hébergeur, médiateur, délai de rétractation), de modifier chaque texte (mise en forme : « ## Titre », paragraphes, listes « - »), de rétablir le modèle et de **valider** l'ensemble : l'écran indique « À valider » tant que ce n'est pas fait ou dès qu'un texte ou l'identité change. **Ces modèles ne sont pas un avis juridique** : à compléter (les « [À COMPLÉTER] ») et à faire relire avant la mise en ligne.
+
+**Livraison à une autre personne** : au panier, la case « La livraison est pour une autre personne » ajoute le **nom** et le **téléphone du destinataire** (exigés si la case est cochée, contrôlés côté serveur). Ils sont conservés avec la commande (`orders.ship_name`, `ship_phone`) et affichés dans Administration → Commandes (« 🎁 Livrer à … », lien d'appel, mention « différent du client »). L'adresse de livraison elle-même se saisit à l'étape de paiement Stripe et peut toujours différer de celle du client ; les coordonnées du client (e-mail, téléphone) restent celles de la facturation et du compte.
+
+**Adresse de livraison saisie au panier** (bloc « Destination » de `cart.php`) : pays, **adresse (numéro et rue)**, **complément** (bâtiment, étage, digicode…), **code postal** et **ville**. La recherche d'adresse (« Rechercher mon adresse », Base Adresse Nationale) et « 📍 Me localiser » remplissent tous ces champs, qui restent modifiables à la main (autres pays compris). Le code postal fixe la zone tarifaire. À « Passer à la caisse », l'adresse affichée part avec le formulaire de paiement (même sans avoir cliqué « Actualiser ») et est **contrôlée côté serveur** : adresse, ville et code postal (5 chiffres en France) sont exigés dès que la livraison n'est pas un retrait sur place. Le paiement Stripe est **prérempli** avec cette adresse (client Stripe portant l'adresse et le nom du destinataire, modifiable par le client) ; si la création du client échoue, le paiement continue sans préremplissage. L'adresse saisie est conservée avec la commande (`orders.declared_address`) et sert de repli si Stripe n'en renvoie pas ; l'adresse finale confirmée chez Stripe reste prioritaire.

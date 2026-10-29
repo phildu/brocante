@@ -2,15 +2,82 @@
 // Plugins de la plateforme (packs/<id>/, voir includes/plugins.php) : catalogue, situation dans chaque boutique de ce serveur,
 // activer / désactiver / mettre à jour une boutique, ou mettre à jour d'un clic toutes celles qui l'ont. Chaque action est
 // journalisée (portail → Activité) ; une mise à jour sauvegarde d'abord la base de la boutique dans data/backups/.
+// Les plugins se rangent par catégorie (Vente, Promo, CRM, Actions commerciales…) : catégories et affectations sont gérées
+// ici et conservées dans data/saas/plugins-categories.json (propre à chaque serveur, hors déploiement).
 // Plugin recopié d'un autre projet (entrée « sync » du manifeste, ex. Communication ← electroboy80) : en local seulement, le
 // portail montre si la copie est à jour et propose « Recopier » (le script d'extraction du plugin) ; le résultat se vérifie,
 // se teste, puis se commite et se déploie comme tout le code. En ligne, il indique seulement de quel commit vient la copie.
 require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas-events.php';
 require_once PORTAIL_ROOT . '/includes/plugins.php';
+require_once PORTAIL_ROOT . '/includes/addons.php';
+
+// Catégories livrées par défaut au premier chargement (ensuite modifiables dans la page).
+const PLUGIN_CATEGORY_DEFAULTS = [
+    'vente' => 'Vente',
+    'promo' => 'Promo',
+    'crm' => 'CRM',
+    'actions-commerciales' => 'Actions commerciales',
+];
+
+function plugins_categories_file(): string
+{
+    return saas_data_dir() . '/saas/plugins-categories.json';
+}
+
+/** Catégories et affectations : [categories => [{id,label}], plugins => [pluginId => catId]]. */
+function plugins_categories_load(): array
+{
+    $data = ['categories' => [], 'plugins' => ['vente-en-ligne' => 'vente']];
+    foreach (PLUGIN_CATEGORY_DEFAULTS as $id => $label) $data['categories'][] = ['id' => $id, 'label' => $label];
+    $raw = json_decode((string) @file_get_contents(plugins_categories_file()), true);
+    if (!is_array($raw)) return $data;
+    $cats = [];
+    foreach ((array) ($raw['categories'] ?? []) as $c) {
+        $id = (string) ($c['id'] ?? '');
+        $label = trim((string) ($c['label'] ?? ''));
+        if ($id !== '' && $label !== '' && !isset($cats[$id])) $cats[$id] = ['id' => $id, 'label' => $label];
+    }
+    $assign = [];
+    foreach ((array) ($raw['plugins'] ?? []) as $pid => $cid) {
+        if (is_string($pid) && is_string($cid) && isset($cats[$cid])) $assign[$pid] = $cid;
+    }
+    return ['categories' => array_values($cats), 'plugins' => $assign];
+}
+
+function plugins_categories_save(array $data): void
+{
+    $file = plugins_categories_file();
+    if (!is_dir(dirname($file))) @mkdir(dirname($file), 0755, true);
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    $tmp = $file . '.tmp';
+    if ($json === false || @file_put_contents($tmp, $json . "\n") === false || !@rename($tmp, $file)) {
+        throw new RuntimeException("Impossible d'enregistrer les catégories (écriture refusée dans data/saas/).");
+    }
+}
+
+/** Identifiant de catégorie à partir de son nom (« Actions commerciales » → actions-commerciales). */
+function plugins_cat_slug(string $label): string
+{
+    $s = strtr(mb_strtolower(trim($label)), [
+        'à' => 'a', 'â' => 'a', 'ä' => 'a', 'á' => 'a', 'ã' => 'a', 'å' => 'a', 'ç' => 'c',
+        'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
+        'ó' => 'o', 'ô' => 'o', 'ö' => 'o', 'õ' => 'o', 'ú' => 'u', 'ù' => 'u', 'û' => 'u',
+        'ü' => 'u', 'ñ' => 'n', 'œ' => 'oe', 'æ' => 'ae', 'ÿ' => 'y',
+    ]);
+    return trim((string) preg_replace('/[^a-z0-9]+/', '-', $s), '-');
+}
+
+/** Message de confirmation pour un attribut onsubmit (chaîne JS sûre, sans guillemets bruts). */
+function plugins_confirm_js(string $text): string
+{
+    return e((string) json_encode($text, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT));
+}
 
 $shops = tenant_list();
 $catalog = plugin_catalog();
+$catData = plugins_categories_load();
+$catIds = array_column($catData['categories'], 'id');
 
 /** Situation d'un plugin dans une boutique : ['status', 'row', 'error']. */
 function plugins_shop_situation(string $slug, array $m): array
@@ -100,8 +167,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
     $m = $catalog[(string) ($_POST['plugin'] ?? '')] ?? null;
     $slug = (string) ($_POST['slug'] ?? '');
-    if (!$m) {
+    $backCat = (string) ($_POST['cat'] ?? '');
+
+    /** Retour à la page, filtre conservé, ancre sur l'élément concerné. */
+    $back = static function (string $anchor = '') use ($backCat): never {
+        $url = '/portail/plugins.php';
+        if (in_array($backCat, ['all', 'none'], true) || preg_match('/^[a-z0-9-]{1,32}$/', $backCat)) $url .= '?cat=' . rawurlencode($backCat);
+        header('Location: ' . $url . ($anchor !== '' ? '#' . $anchor : ''));
+        exit;
+    };
+
+    if ($action === 'save_categories') {
+        $assign = (array) ($_POST['plugin_cat'] ?? []);
+        $saved = [];
+        foreach ($catalog as $pid => $pm) {
+            $cid = (string) ($assign[$pid] ?? '');
+            if ($cid !== '' && in_array($cid, $catIds, true)) $saved[$pid] = $cid;
+        }
+        $catData['plugins'] = $saved;
+        try {
+            plugins_categories_save($catData);
+            portail_flash('Catégories des plugins enregistrées.');
+        } catch (Throwable $e) {
+            portail_flash($e->getMessage(), 'error');
+        }
+        $back('categories');
+    } elseif ($action === 'add_category') {
+        $label = trim((string) ($_POST['label'] ?? ''));
+        $id = plugins_cat_slug($label);
+        if ($label === '' || $id === '') {
+            portail_flash('Indiquez un nom de catégorie.', 'error');
+        } elseif (in_array($id, $catIds, true)) {
+            portail_flash('Cette catégorie existe déjà.', 'error');
+        } else {
+            $catData['categories'][] = ['id' => $id, 'label' => mb_substr($label, 0, 40)];
+            try {
+                plugins_categories_save($catData);
+                portail_flash('Catégorie « ' . $label . ' » ajoutée — affectez-lui des plugins dans le tableau.');
+            } catch (Throwable $e) {
+                portail_flash($e->getMessage(), 'error');
+            }
+        }
+        $back('categories');
+    } elseif ($action === 'delete_category') {
+        $cid = (string) ($_POST['cat_id'] ?? '');
+        $keep = array_values(array_filter($catData['categories'], static fn (array $c): bool => $c['id'] !== $cid));
+        if (count($keep) === count($catData['categories'])) {
+            portail_flash('Catégorie introuvable.', 'error');
+        } else {
+            $catData['categories'] = $keep;
+            $catData['plugins'] = array_filter($catData['plugins'], static fn (string $v): bool => $v !== $cid);
+            try {
+                plugins_categories_save($catData);
+                portail_flash('Catégorie supprimée ; les plugins concernés sont repassés en « sans catégorie ».');
+            } catch (Throwable $e) {
+                portail_flash($e->getMessage(), 'error');
+            }
+        }
+        $back('categories');
+    } elseif (!$m) {
         portail_flash('Plugin introuvable.', 'error');
+        $back();
     } elseif (in_array($action, ['enable', 'disable', 'update'], true)) {
         if (!isset($shops[$slug])) {
             portail_flash('Boutique introuvable.', 'error');
@@ -113,6 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 portail_flash('Échec pour « ' . $slug . ' » : ' . $e->getMessage() . '. La base n\'a pas été modifiée.', 'error');
             }
         }
+        $back('plugin-' . $m['id']);
     } elseif ($action === 'sync') {
         // Recopie depuis le projet d'origine : uniquement dans le portail local, là où se trouve ce projet.
         if (!$portailLocal || !$m['sync']) {
@@ -126,6 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? 'Copie ' . plugins_de($m['sync']['source']) . ' refaite : ' . count($files) . ' fichier(s) du plugin diffèrent du dernier commit. À relire et tester avant le commit.'
                 : 'Copie interrompue, aucun fichier modifié : ' . (strtok(trim($err ?: $out), "\n") ?: 'erreur inconnue') . '.', $code === 0 ? 'ok' : 'error');
         }
+        $back('plugin-' . $m['id']);
     } elseif ($action === 'update_all') {
         $ok = [];
         $failed = [];
@@ -142,14 +270,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         portail_flash($ok || $failed
             ? '« ' . $m['name'] . ' » v' . $m['version'] . ' : ' . count($ok) . ' boutique(s) mise(s) à jour' . ($failed ? ' ; échec : ' . implode(', ', $failed) : '') . '.'
             : 'Aucune boutique à mettre à jour.', $failed ? 'error' : 'ok');
+        $back('plugin-' . $m['id']);
     } else {
         portail_flash('Action inconnue.', 'error');
+        $back();
     }
-    header('Location: /portail/plugins.php' . ($m ? '#plugin-' . $m['id'] : ''));
-    exit;
 }
 $flash = portail_flash();
 $tags = ['absent' => '', 'disabled' => 'warn', 'ready' => 'ok', 'update' => 'warn', 'newer' => 'bad', 'nobase' => ''];
+
+// Filtre par catégorie : all (tout), none (sans catégorie) ou identifiant de catégorie.
+$filter = (string) ($_GET['cat'] ?? 'all');
+if (!in_array($filter, ['all', 'none'], true) && !in_array($filter, $catIds, true)) $filter = 'all';
+$assign = $catData['plugins'];
+$countByCat = array_fill_keys($catIds, 0);
+foreach ($catalog as $id => $m) {
+    $cid = $assign[$id] ?? '';
+    if (isset($countByCat[$cid])) $countByCat[$cid]++;
+}
+$countNone = count($catalog) - array_sum($countByCat);
+$visible = array_filter($catalog, static function (array $m, string $id) use ($filter, $assign): bool {
+    $cid = $assign[$id] ?? '';
+    return $filter === 'all' || ($filter === 'none' ? $cid === '' : $cid === $filter);
+}, ARRAY_FILTER_USE_BOTH);
+$catLabel = static function (string $id) use ($catData): string {
+    foreach ($catData['categories'] as $c) if ($c['id'] === $id) return $c['label'];
+    return '';
+};
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -159,16 +306,17 @@ $tags = ['absent' => '', 'disabled' => 'warn', 'ready' => 'ok', 'update' => 'war
 <title>Plugins — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=1">
 <style>
   .owrap { display: grid; gap: 16px; max-width: 1100px; margin: 0 auto; padding: 0 16px 56px; }
-  .ocard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+  .ocard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; min-width: 0; }
   .ocard h2 { margin: 0; font-size: 1.05rem; } .ocard h2 small { font-weight: 400; color: var(--muted); margin-left: 6px; font-family: 'IBM Plex Mono', monospace; }
   .hint { color: var(--muted); font-size: .84rem; margin: 0; }
   table.t { width: 100%; border-collapse: collapse; font-size: .88rem; } .t th { text-align: left; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   .t td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; } .t tr:last-child td { border-bottom: 0; }
   .scroll { overflow-x: auto; }
   .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem; font-weight: 700; border: 1px solid var(--line); } .tag.bad { color: #b3261e; border-color: currentColor; } .tag.warn { color: #9a6700; border-color: currentColor; } .tag.ok { color: var(--ok); }
-  .acts { display: flex; gap: 6px; flex-wrap: wrap; } .acts form { margin: 0; }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; } .acts form { margin: 0; }
   @media (max-width: 640px) {
     .t thead { display: none; } .t tr { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); } .t tr:last-child { border-bottom: 0; } .t td { border: 0; padding: 0; }
   }
@@ -176,133 +324,269 @@ $tags = ['absent' => '', 'disabled' => 'warn', 'ready' => 'ok', 'update' => 'war
   .report pre { margin: 6px 0; max-height: 260px; overflow: auto; font: .76rem/1.4 'IBM Plex Mono', monospace; background: var(--bg, transparent); border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; }
   .report pre.err { color: #b3261e; } .report summary { cursor: pointer; font-size: .86rem; }
   .head { display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+  /* Repli : chaque plugin est un <details>, le résumé reste visible, la situation des boutiques se déplie. */
+  details.ocard > summary { cursor: pointer; padding: 14px 16px; display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; list-style: none; border-radius: 10px; }
+  details.ocard > summary::-webkit-details-marker { display: none; }
+  details.ocard > summary::before { content: '▸'; font-size: .8rem; color: var(--muted); transition: transform .15s ease; }
+  details.ocard[open] > summary::before { transform: rotate(90deg); }
+  details.ocard[open] > summary { background: var(--panel-2); border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; }
+  .sum-name { font-weight: 600; font-size: 1.02rem; }
+  .sum-meta { color: var(--muted); font-size: .8rem; font-family: 'IBM Plex Mono', monospace; }
+  .sum-where { margin-left: auto; color: var(--muted); font-size: .8rem; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .ocard-body { padding: 16px; display: grid; gap: 12px; }
+  .toolbar { display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+  .catbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip { display: inline-flex; gap: 6px; align-items: center; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: .82rem; text-decoration: none; color: inherit; background: var(--panel); }
+  .chip span { font-family: 'IBM Plex Mono', monospace; font-size: .72rem; color: var(--muted); }
+  .chip:hover { border-color: var(--muted); }
+  .chip.active { background: var(--panel-2); border-color: var(--muted); font-weight: 600; }
+  .catadd { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; } .catadd .field { margin: 0; }
+  .catlist { display: flex; gap: 8px 14px; flex-wrap: wrap; align-items: center; }
+  .catlist form { margin: 0; }
 </style>
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <div class="brand"><h1>Plugins</h1><p>Modules ajoutés aux boutiques : un seul code pour toutes, activé boutique par boutique</p></div>
-    <span style="display:flex;gap:8px;flex-wrap:wrap;"><a class="btn" href="/portail/">← Portail des commerces</a><a class="btn" href="/portail/activite.php">Activité</a></span>
-  </header>
+<?php portail_page_start([
+    'title' => 'Plugins',
+    'eyebrow' => 'Boutiques',
+    'desc' => 'Modules ajoutés aux boutiques : un seul code pour toutes, activé boutique par boutique, rangé par catégorie.',
+    'actions' => '<a class="btn" href="/portail/menu.php">Réglage du menu</a>',
+]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
   <div class="owrap">
     <p class="hint">Le code d'un plugin arrive avec le déploiement (dossier <code>packs/</code>). Ses données vivent dans la base de chaque boutique.
       <strong>Désactiver</strong> retire son menu et ses pages, sans rien effacer. Quand une nouvelle version est déployée, le plugin reste en pause
-      dans les boutiques qui l'ont jusqu'à <strong>Mettre à jour</strong> : la base de la boutique est d'abord sauvegardée dans <code>data/backups/</code>.</p>
+      dans les boutiques qui l'ont jusqu'à <strong>Mettre à jour</strong> : la base de la boutique est d'abord sauvegardée dans <code>data/backups/</code>.
+      Chaque plugin est replié : cliquez son nom pour voir la situation de ses boutiques.</p>
 
     <?php if (!$catalog): ?>
-      <section class="ocard"><p class="hint">Aucun plugin dans <code>packs/</code>.</p></section>
+      <section class="ocard" style="padding:16px;"><p class="hint">Aucun plugin dans <code>packs/</code>.</p></section>
+    <?php else: ?>
+
+    <div class="toolbar">
+      <div class="catbar">
+        <?php
+          $chips = [['all', 'Tous', count($catalog)]];
+          foreach ($catData['categories'] as $c) $chips[] = ['cat:' . $c['id'], $c['label'], $countByCat[$c['id']] ?? 0];
+          if ($countNone > 0) $chips[] = ['none', 'Sans catégorie', $countNone];
+          foreach ($chips as [$key, $label, $count]):
+            $cat = str_starts_with($key, 'cat:') ? substr($key, 4) : $key;
+        ?>
+          <a class="chip<?= $filter === $cat ? ' active' : '' ?>" href="/portail/plugins.php?cat=<?= e(rawurlencode($cat)) ?>"><?= e($label) ?> <span><?= (int) $count ?></span></a>
+        <?php endforeach; ?>
+      </div>
+      <span class="acts">
+        <button type="button" class="btn small" data-fold="open">Tout déplier</button>
+        <button type="button" class="btn small" data-fold="close">Tout replier</button>
+        <a class="btn small" href="#categories">Gérer les catégories</a>
+      </span>
+    </div>
+
+    <details class="ocard" id="categories">
+      <summary><span class="sum-name">Catégories des plugins</span><span class="sum-meta"><?= count($catData['categories']) ?> catégorie(s)</span>
+        <span class="sum-where">ajouter, affecter, supprimer</span></summary>
+      <div class="ocard-body">
+        <p class="hint">Rangez les plugins par usage : « Vente » pour la boutique et le paiement, « Promo » pour les opérations commerciales,
+          « CRM » pour les contacts, « Actions commerciales » pour les campagnes. Une catégorie sans plugin peut être supprimée ;
+          la suppression ne touche jamais aux boutiques, seulement au classement.</p>
+        <form class="catadd" method="post" action="/portail/plugins.php">
+          <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+          <input type="hidden" name="action" value="add_category">
+          <label class="field" style="flex:1;min-width:220px;">Nouvelle catégorie
+            <input name="label" maxlength="40" placeholder="ex. Fidélité" required>
+          </label>
+          <button type="submit" class="btn small">Ajouter</button>
+        </form>
+        <div class="scroll">
+          <form method="post" action="/portail/plugins.php">
+            <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="action" value="save_categories">
+            <table class="t">
+              <thead><tr><th>Plugin</th><th>Catégorie</th></tr></thead>
+              <tbody>
+              <?php foreach ($catalog as $id => $m): ?>
+                <tr>
+                  <td><?= e($m['name']) ?> <span class="hint"><?= e($id) ?></span></td>
+                  <td>
+                    <select name="plugin_cat[<?= e($id) ?>]" style="min-width:200px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:inherit;">
+                      <option value="">Sans catégorie</option>
+                      <?php foreach ($catData['categories'] as $c): ?>
+                        <option value="<?= e($c['id']) ?>"<?= ($assign[$id] ?? '') === $c['id'] ? ' selected' : '' ?>><?= e($c['label']) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+            <p style="margin-top:10px;"><button type="submit" class="btn small btn-primary">Enregistrer les catégories</button></p>
+          </form>
+        </div>
+        <div class="catlist">
+          <?php foreach ($catData['categories'] as $c): ?>
+            <span class="chip"><?= e($c['label']) ?> <span><?= $countByCat[$c['id']] ?? 0 ?></span></span>
+            <form method="post" action="/portail/plugins.php" onsubmit="return confirm(<?= plugins_confirm_js('Supprimer la catégorie « ' . $c['label'] . ' » ? Les plugins concernés repasseront en « sans catégorie ».') ?>);">
+              <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+              <input type="hidden" name="action" value="delete_category">
+              <input type="hidden" name="cat_id" value="<?= e($c['id']) ?>">
+              <button type="submit" class="btn small">Supprimer</button>
+            </form>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </details>
+
+    <?php if (!$visible): ?>
+      <section class="ocard" style="padding:16px;"><p class="hint">Aucun plugin dans cette catégorie. <a href="/portail/plugins.php">Voir tous les plugins</a>.</p></section>
     <?php endif; ?>
 
-    <?php foreach ($catalog as $id => $m):
+    <?php foreach ($visible as $id => $m):
         $rows = [];
         foreach ($shops as $slug => $cfg) $rows[$slug] = plugins_shop_situation($slug, $m);
         $toUpdate = count(array_filter($rows, static fn (array $r): bool => $r['status'] === 'update'));
         $active = count(array_filter($rows, static fn (array $r): bool => in_array($r['status'], ['ready', 'update', 'newer'], true)));
+        $mCat = $assign[$id] ?? '';
     ?>
-      <section class="ocard" id="plugin-<?= e($id) ?>">
-        <div class="head">
-          <h2><?= e($m['name']) ?> <small><?= e($id) ?> · v<?= e($m['version']) ?> · <?= count($m['migrations']) ?> migration(s)</small></h2>
-          <?php if ($toUpdate): ?>
-            <form method="post" action="/portail/plugins.php">
-              <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
-              <input type="hidden" name="action" value="update_all">
-              <input type="hidden" name="plugin" value="<?= e($id) ?>">
-              <button type="submit" class="btn btn-primary">Mettre à jour les <?= $toUpdate ?> boutique(s) en retard</button>
-            </form>
-          <?php endif; ?>
-        </div>
-        <?php if ($m['description'] !== ''): ?><p class="hint"><?= e($m['description']) ?></p><?php endif; ?>
-        <?php if ($m['sync']):
-            $src = $m['sync']['source'];
-            $deSrc = plugins_de($src);
-            [$copiedAt, $copied] = plugins_sync_record($m);
-        ?>
-          <div class="sync">
-          <?php if (!$portailLocal): ?>
-            <p class="hint">Copie <?= e($deSrc) ?><?= $copiedAt !== '' ? ' du ' . e($copiedAt) : '' ?> · commit <code><?= e($copied ?: 'inconnu') ?></code>.
-              Elle se refait depuis le portail local, puis part avec le déploiement.</p>
-          <?php else:
-              [$code, $out, $err] = plugins_sync_run($m, ['--status']);
-              $st = $code === 0 ? json_decode($out, true) : null;
-              $last = $_SESSION['plugins_sync'][$id] ?? null;
-          ?>
-            <div class="head">
-              <p class="hint" style="margin:0">
-                <strong>Copie <?= e($deSrc) ?></strong>
-                <?php if (is_array($st)): ?>
-                  <span class="tag <?= $st['up_to_date'] ? 'ok' : 'warn' ?>"><?= $st['up_to_date'] ? 'À jour' : 'En retard' ?></span><br>
-                  Copié<?= $copiedAt !== '' ? ' le ' . e($copiedAt) : '' ?> : <code><?= e($st['copied_commit'] ?: 'inconnu') ?></code><br>
-                  <?= e($src) ?> aujourd'hui : <code><?= e($st['source_commit'] ?: 'inconnu') ?></code><?= $st['source_dirty'] ? ' <strong>+ modifications non commitées</strong>' . ($st['up_to_date'] ? ' (comprises dans la copie)' : '') : '' ?>
-                  <br><span style="font-family:'IBM Plex Mono',monospace;font-size:.78rem"><?= e($st['source']) ?></span>
-                <?php else: ?>
-                  <span class="tag bad">À revoir</span><br><?= e(trim($err ?: $out) ?: 'État inconnu.') ?>
-                  <br>Une retouche qui ne trouve plus son motif se corrige dans le script d'extraction du plugin ; rien n'est recopié d'ici là.
-                <?php endif; ?>
-              </p>
-              <?php if (is_array($st)): ?>
+      <details class="ocard" id="plugin-<?= e($id) ?>" data-plugin>
+        <summary>
+          <span class="sum-name"><?= e($m['name']) ?></span>
+          <?php if ($mCat !== ''): ?><span class="tag"><?= e($catLabel($mCat)) ?></span><?php endif; ?>
+          <span class="sum-meta"><?= e($id) ?> · v<?= e($m['version']) ?> · <?= count($m['migrations']) ?> migration(s)</span>
+          <?php if (isset(addon_defaults()[$id]) && (addon_info($id)['stage'] ?? 'live') === 'beta'): ?><span class="tag">En test</span><?php endif; ?>
+          <span class="sum-where">
+            <?= $active ?> boutique(s) active(s)<?= $toUpdate ? ' · ' . $toUpdate . ' à mettre à jour' : '' ?>
+            <?php if ($toUpdate): ?><span class="tag warn">mise à jour</span><?php endif; ?>
+          </span>
+        </summary>
+        <div class="ocard-body">
+          <div class="head">
+            <p class="hint" style="margin:0;"><?= $m['description'] !== '' ? e($m['description']) : 'Aucune description.' ?></p>
+            <div class="acts">
+              <?php if (isset(addon_defaults()[$id])): ?><a class="btn small" href="/portail/addons.php?scope=global&amp;plugin=<?= e(rawurlencode($id)) ?>">Tarifs et modalités</a><?php endif; ?>
+              <?php if ($toUpdate): ?>
                 <form method="post" action="/portail/plugins.php">
                   <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
-                  <input type="hidden" name="action" value="sync">
+                  <input type="hidden" name="action" value="update_all">
                   <input type="hidden" name="plugin" value="<?= e($id) ?>">
-                  <button type="submit" class="btn<?= $st['up_to_date'] ? '' : ' btn-primary' ?>">Recopier depuis <?= e($src) ?></button>
+                  <input type="hidden" name="cat" value="<?= e($filter) ?>">
+                  <button type="submit" class="btn small btn-primary">Mettre à jour les <?= $toUpdate ?> boutique(s) en retard</button>
                 </form>
               <?php endif; ?>
             </div>
-            <p class="hint">Recopie le code <?= e($deSrc) ?> dans ce dossier et réapplique les retouches de la plateforme ; si l'une ne trouve
-              plus son motif, rien n'est modifié. Les boutiques ne la reçoivent qu'au commit et au déploiement.</p>
-            <?php if ($last): ?>
-              <details class="report"<?= $last['ok'] ? '' : ' open' ?>>
-                <summary>Dernière recopie (<?= e($last['at']) ?>) : <?= $last['ok'] ? 'réussie' : '<strong>interrompue</strong>' ?> · <?= count($last['files']) ?> fichier(s) différent(s) du dernier commit</summary>
-                <?php if ($last['files']): ?><pre><?= e(implode("\n", $last['files'])) ?></pre><?php endif; ?>
-                <?php if (trim($last['err']) !== ''): ?><pre class="err"><?= e(trim($last['err'])) ?></pre><?php endif; ?>
-                <pre><?= e(trim($last['out'])) ?></pre>
-                <p class="hint">Relire : <code>git diff packs/<?= e($id) ?></code> · tester sur une boutique locale · puis commit et déploiement.</p>
-              </details>
-            <?php endif; ?>
-          <?php endif; ?>
           </div>
-        <?php endif; ?>
-        <p class="hint">Actif dans <?= $active ?> boutique(s) sur <?= count($shops) ?>.
-          Pages : <?= e(implode(', ', array_map(static fn (array $p): string => $p['label'] . ' (' . implode(', ', array_map(static fn (string $r): string => $r === 'admin' ? 'administrateur' : 'community manager', $p['roles'])) . ')', $m['pages'])) ?: 'aucune') ?>.</p>
-        <div class="scroll">
-          <table class="t">
-            <thead><tr><th>Boutique</th><th>Situation</th><th>Actions</th></tr></thead>
-            <tbody>
-            <?php foreach ($rows as $slug => $r): ?>
-              <tr>
-                <td><?= e((string) ($shops[$slug]['name'] ?? $slug)) ?> <span class="hint"><?= e($slug) ?></span></td>
-                <td><span class="tag <?= e($tags[$r['status']] ?? '') ?>"><?= e($r['status'] === 'nobase' ? 'Base pas encore créée' : plugin_status_label($r['status'], $r['row'], $m)) ?></span></td>
-                <td>
-                  <div class="acts">
-                  <?php
-                    $buttons = match ($r['status']) {
-                        'absent', 'disabled' => ['enable' => 'Activer'],
-                        'ready' => ['disable' => 'Désactiver'],
-                        'update' => ['update' => 'Mettre à jour', 'disable' => 'Désactiver'],
-                        'newer' => ['disable' => 'Désactiver'],
-                        default => [],
-                    };
-                    foreach ($buttons as $act => $text): ?>
-                    <form method="post" action="/portail/plugins.php">
-                      <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
-                      <input type="hidden" name="action" value="<?= e($act) ?>">
-                      <input type="hidden" name="plugin" value="<?= e($id) ?>">
-                      <input type="hidden" name="slug" value="<?= e($slug) ?>">
-                      <button type="submit" class="btn small<?= $act !== 'disable' ? ' btn-primary' : '' ?>"><?= e($text) ?></button>
-                    </form>
-                  <?php endforeach; ?>
-                  </div>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-            </tbody>
-          </table>
+          <?php if ($m['sync']):
+              $src = $m['sync']['source'];
+              $deSrc = plugins_de($src);
+              [$copiedAt, $copied] = plugins_sync_record($m);
+          ?>
+            <div class="sync">
+            <?php if (!$portailLocal): ?>
+              <p class="hint">Copie <?= e($deSrc) ?><?= $copiedAt !== '' ? ' du ' . e($copiedAt) : '' ?> · commit <code><?= e($copied ?: 'inconnu') ?></code>.
+                Elle se refait depuis le portail local, puis part avec le déploiement.</p>
+            <?php else:
+                [$code, $out, $err] = plugins_sync_run($m, ['--status']);
+                $st = $code === 0 ? json_decode($out, true) : null;
+                $last = $_SESSION['plugins_sync'][$id] ?? null;
+            ?>
+              <div class="head">
+                <p class="hint" style="margin:0">
+                  <strong>Copie <?= e($deSrc) ?></strong>
+                  <?php if (is_array($st)): ?>
+                    <span class="tag <?= $st['up_to_date'] ? 'ok' : 'warn' ?>"><?= $st['up_to_date'] ? 'À jour' : 'En retard' ?></span><br>
+                    Copié<?= $copiedAt !== '' ? ' le ' . e($copiedAt) : '' ?> : <code><?= e($st['copied_commit'] ?: 'inconnu') ?></code><br>
+                    <?= e($src) ?> aujourd'hui : <code><?= e($st['source_commit'] ?: 'inconnu') ?></code><?= $st['source_dirty'] ? ' <strong>+ modifications non commitées</strong>' . ($st['up_to_date'] ? ' (comprises dans la copie)' : '') : '' ?>
+                    <br><span style="font-family:'IBM Plex Mono',monospace;font-size:.78rem"><?= e($st['source']) ?></span>
+                  <?php else: ?>
+                    <span class="tag bad">À revoir</span><br><?= e(trim($err ?: $out) ?: 'État inconnu.') ?>
+                    <br>Une retouche qui ne trouve plus son motif se corrige dans le script d'extraction du plugin ; rien n'est recopié d'ici là.
+                  <?php endif; ?>
+                </p>
+                <?php if (is_array($st)): ?>
+                  <form method="post" action="/portail/plugins.php">
+                    <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="sync">
+                    <input type="hidden" name="plugin" value="<?= e($id) ?>">
+                    <input type="hidden" name="cat" value="<?= e($filter) ?>">
+                    <button type="submit" class="btn<?= $st['up_to_date'] ? '' : ' btn-primary' ?>">Recopier depuis <?= e($src) ?></button>
+                  </form>
+                <?php endif; ?>
+              </div>
+              <p class="hint">Recopie le code <?= e($deSrc) ?> dans ce dossier et réapplique les retouches de la plateforme ; si l'une ne trouve
+                plus son motif, rien n'est modifié. Les boutiques ne la reçoivent qu'au commit et au déploiement.</p>
+              <?php if ($last): ?>
+                <details class="report"<?= $last['ok'] ? '' : ' open' ?>>
+                  <summary>Dernière recopie (<?= e($last['at']) ?>) : <?= $last['ok'] ? 'réussie' : '<strong>interrompue</strong>' ?> · <?= count($last['files']) ?> fichier(s) différent(s) du dernier commit</summary>
+                  <?php if ($last['files']): ?><pre><?= e(implode("\n", $last['files'])) ?></pre><?php endif; ?>
+                  <?php if (trim($last['err']) !== ''): ?><pre class="err"><?= e(trim($last['err'])) ?></pre><?php endif; ?>
+                  <pre><?= e(trim($last['out'])) ?></pre>
+                  <p class="hint">Relire : <code>git diff packs/<?= e($id) ?></code> · tester sur une boutique locale · puis commit et déploiement.</p>
+                </details>
+              <?php endif; ?>
+            <?php endif; ?>
+            </div>
+          <?php endif; ?>
+          <p class="hint">Actif dans <?= $active ?> boutique(s) sur <?= count($shops) ?>.
+            Pages : <?= e(implode(', ', array_map(static fn (array $p): string => $p['label'] . ' (' . implode(', ', array_map(static fn (string $r): string => $r === 'admin' ? 'administrateur' : 'community manager', $p['roles'])) . ')', $m['pages'])) ?: 'aucune') ?>.</p>
+          <div class="scroll">
+            <table class="t">
+              <thead><tr><th>Boutique</th><th>Situation</th><th>Actions</th></tr></thead>
+              <tbody>
+              <?php foreach ($rows as $slug => $r): ?>
+                <tr>
+                  <td><?= e((string) ($shops[$slug]['name'] ?? $slug)) ?> <span class="hint"><?= e($slug) ?></span></td>
+                  <td><span class="tag <?= e($tags[$r['status']] ?? '') ?>"><?= e($r['status'] === 'nobase' ? 'Base pas encore créée' : plugin_status_label($r['status'], $r['row'], $m)) ?></span></td>
+                  <td>
+                    <div class="acts">
+                    <?php if (isset(addon_defaults()[$id])): ?><a class="btn small" href="/portail/addons.php?scope=shop&amp;shop=<?= e(rawurlencode($slug)) ?>&amp;plugin=<?= e(rawurlencode($id)) ?>">Modalités boutique</a><?php endif; ?>
+                    <?php
+                      $buttons = match ($r['status']) {
+                          'absent', 'disabled' => ['enable' => 'Activer'],
+                          'ready' => ['disable' => 'Désactiver'],
+                          'update' => ['update' => 'Mettre à jour', 'disable' => 'Désactiver'],
+                          'newer' => ['disable' => 'Désactiver'],
+                          default => [],
+                      };
+                      foreach ($buttons as $act => $text): ?>
+                      <form method="post" action="/portail/plugins.php">
+                        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="<?= e($act) ?>">
+                        <input type="hidden" name="plugin" value="<?= e($id) ?>">
+                        <input type="hidden" name="slug" value="<?= e($slug) ?>">
+                        <input type="hidden" name="cat" value="<?= e($filter) ?>">
+                        <button type="submit" class="btn small<?= $act !== 'disable' ? ' btn-primary' : '' ?>"><?= e($text) ?></button>
+                      </form>
+                    <?php endforeach; ?>
+                    </div>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </section>
+      </details>
     <?php endforeach; ?>
+    <?php endif; ?>
   </div>
 </div>
+<script>
+(function () {
+  function openHash() {
+    if (!location.hash) return;
+    var el = document.querySelector(location.hash);
+    if (el && el.tagName === 'DETAILS') el.open = true;
+  }
+  openHash();
+  window.addEventListener('hashchange', openHash);
+  document.querySelectorAll('[data-fold]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var open = b.dataset.fold === 'open';
+      document.querySelectorAll('details.ocard[data-plugin]').forEach(function (d) { d.open = open; });
+    });
+  });
+})();
+</script>
 </body>
 </html>

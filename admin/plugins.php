@@ -5,6 +5,7 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/plugins.php';
+require_once __DIR__ . '/../includes/addons.php';
 require_admin();
 
 $hasPortal = is_file(__DIR__ . '/../portail/index.php');
@@ -17,7 +18,7 @@ function admin_plugins_pdo(): PDO
     return $pdo;
 }
 
-if (!$hasPortal && $_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals(admin_csrf_token(), (string) ($_POST['csrf'] ?? ''))) {
         flash_set('Page expirée : rechargez-la et recommencez.', 'error');
         header('Location: /admin/plugins.php');
@@ -27,6 +28,8 @@ if (!$hasPortal && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $m = $catalog[(string) ($_POST['plugin'] ?? '')] ?? null;
     if (!$m || !in_array($action, ['enable', 'update', 'disable'], true)) {
         flash_set('Plugin introuvable.', 'error');
+    } elseif ($hasPortal && $action !== 'disable' && (($ai = addon_info($m['id'])) === null || $ai['access'] === 'unavailable')) {
+        flash_set('Ce plugin n’est pas proposé pour votre boutique.', 'error');
     } else {
         try {
             $pdo = admin_plugins_pdo();
@@ -85,30 +88,29 @@ try {
     <p class="eyebrow">Administration</p>
     <h1 style="font-size:1.8rem;margin:12px 0 8px;">Plugins</h1>
     <?php if ($flash): ?><p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin-bottom:20px;"><?= h($flash['message']) ?></p><?php endif; ?>
-    <?php if ($hasPortal): ?>
-      <p class="lede">Les plugins de cette boutique sont activés par la plateforme (portail → Plugins).</p>
-    <?php else: ?>
-      <p class="lede">Activez ici les plugins de cette boutique. Une mise à jour sauvegarde la base avant d'appliquer ses migrations ; la désactivation conserve les données.</p>
+    <p class="lede">Activez les modules de votre boutique. Les modules payants démarrent par leur propre page (essai, abonnement) ; les modules en test sont gratuits, en échange de vos retours. La désactivation conserve les données.</p>
       <?php if ($stateError): ?><p class="publish-status" data-kind="error"><?= h($stateError) ?></p><?php endif; ?>
       <div class="pl">
       <?php foreach ($catalog as $m):
         $row = $states[$m['id']] ?? null;
         $status = plugin_status($row, $m);
+        $ent = addon_info($m['id']) !== null ? addon_entitlement($m['id']) : null;
+        if ($hasPortal && (!$ent || $ent['access'] === 'unavailable') && $status !== 'ready' && $status !== 'update') continue;
       ?>
         <div class="pl-item">
-          <h2><?= h($m['name']) ?></h2>
+          <h2><?= h($m['name']) ?><?php if ($ent && $ent['stage'] === 'beta'): ?> <span class="pl-state warn">En test</span><?php endif; ?></h2>
           <?php if ($m['description'] !== ''): ?><p><?= h($m['description']) ?></p><?php endif; ?>
-          <p class="pl-state <?= $status === 'ready' ? 'ok' : ($status === 'update' || $status === 'newer' ? 'warn' : '') ?>"><?= h(plugin_status_label($status, $row, $m)) ?></p>
+          <?php if ($ent): ?><p class="pl-state"><?= h($ent['label']) ?><?php $pr = array_filter([$ent['monthly_label'], $ent['yearly_label'], $ent['once_label']]); if ($pr && !$ent['beta_tester'] && $ent['access'] !== 'included'): ?> · <?= h(implode(' ou ', $pr)) ?><?= $ent['trial_days'] > 0 && !$ent['trial_used'] ? ' · essai ' . (int) $ent['trial_days'] . ' j' : '' ?><?php endif; ?></p><?php endif; ?>
+          <p class="pl-state <?php /* état technique */ ?><?= $status === 'ready' ? 'ok' : ($status === 'update' || $status === 'newer' ? 'warn' : '') ?>"><?= h(plugin_status_label($status, $row, $m)) ?></p>
           <form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="plugin" value="<?= h($m['id']) ?>">
             <?php if ($status === 'absent' || $status === 'disabled'): ?><button class="btn btn-primary" name="action" value="enable">Activer</button>
-            <?php elseif ($status === 'update'): ?><button class="btn btn-primary" name="action" value="update">Mettre à jour</button> <button class="btn" name="action" value="disable" onclick="return confirm('Désactiver ce plugin ?')">Désactiver</button>
-            <?php elseif ($status === 'ready'): ?><button class="btn" name="action" value="disable" onclick="return confirm('Désactiver ce plugin ? Ses données sont conservées.')">Désactiver</button>
+            <?php elseif ($status === 'update'): ?><button class="btn btn-primary" name="action" value="update">Mettre à jour</button> <a class="btn" href="<?= h(plugin_page_url($m['id'], 'index')) ?>">Ouvrir</a> <button class="btn" name="action" value="disable" onclick="return confirm('Désactiver ce plugin ?')">Désactiver</button>
+            <?php elseif ($status === 'ready'): ?><a class="btn btn-primary" href="<?= h(plugin_page_url($m['id'], 'index')) ?>">Ouvrir</a> <button class="btn" name="action" value="disable" onclick="return confirm('Désactiver ce plugin ? Ses données sont conservées.')">Désactiver</button>
             <?php endif; ?>
           </form>
         </div>
       <?php endforeach; ?>
       </div>
-    <?php endif; ?>
   </div>
 </section>
 </main>

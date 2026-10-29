@@ -3,6 +3,7 @@
 //   GET g=<galerie> & s=<clé du commerce> & r=<réf. de l'article> & t=<jeton> (jeton produit par la page de la galerie, voir includes/promo.php)
 // L'adresse de destination vient du catalogue de la galerie (jamais de la requête) : pas de redirection libre.
 require_once __DIR__ . '/../includes/galleries.php';
+require_once __DIR__ . '/../includes/gallery-offers.php';
 require_once __DIR__ . '/../includes/promo.php';
 
 $g = strtolower((string) ($_GET['g'] ?? ''));
@@ -12,7 +13,7 @@ $gallery = gallery_slug_valid($g) ? gallery_load($g) : null;
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $origin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 $target = '';
-if ($gallery && $gallery['published']) {
+if ($gallery && go_is_live($gallery)) {
     foreach (gallery_catalogue($gallery, $origin)['products'] as $p) {
         if ($p['shop'] === $shop && $p['ref'] === $ref) { $target = $p['url']; break; }
     }

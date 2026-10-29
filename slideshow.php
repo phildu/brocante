@@ -79,16 +79,13 @@ foreach (slideshow_slides_list() as $s) {
             <?php if (!empty($p['photo'])): ?><img src="/<?= h($p['photo']) ?>" alt="<?= h($p['name']) ?>"><?php endif; ?>
           </div>
           <div class="slide-product-info">
-            <?php if (!empty($p['badge'])): ?><span class="slide-product-badge"><?= h($p['badge']) ?></span><?php endif; ?>
+            <?php if (!empty($p['badge']) && (shop_sales_enabled() || !has_promo_price($p))): ?><span class="slide-product-badge"><?= h($p['badge']) ?></span><?php endif; ?>
             <h2 class="slide-product-name"><?= h($p['name']) ?></h2>
             <?php if (!empty($p['description'])): ?><p class="slide-product-desc"><?= h($p['description']) ?></p><?php endif; ?>
-            <p class="slide-product-price">
-              <?php if (has_promo_price($p)): ?>
-                <span class="old"><?= h($p['price']) ?></span><?= h($p['promo_price']) ?>
-              <?php else: ?>
-                <?= h($p['price']) ?>
-              <?php endif; ?>
-            </p>
+            <?php if (shop_sales_enabled()): ?><p class="slide-product-price">
+              <?php if (has_promo_price($p)): ?><span class="old"><?= h($p['price']) ?></span><?= h($p['promo_price']) ?>
+              <?php else: ?><?= h($p['price']) ?><?php endif; ?>
+            </p><?php endif; ?>
           </div>
         </div>
       <?php endif; ?>

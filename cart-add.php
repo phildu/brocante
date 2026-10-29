@@ -2,6 +2,11 @@
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
 
+if (!shop_sales_enabled()) {
+    http_response_code(404);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /boutique.php');
     exit;
@@ -26,6 +31,12 @@ if ($product && is_fixed_price(effective_price($product)) && in_stock($product) 
     flash_set(product_held_message($product['name']), 'error');
 } elseif ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
     cart_add($ref, 1);
+    try {
+        require_once __DIR__ . '/includes/plugins.php';
+        plugin_fire('cart_add', ['ref' => $ref]);
+    } catch (Throwable $e) {
+        error_log('cart_add : ' . $e->getMessage());
+    }
     flash_set('« ' . $product['name'] . ' » ajouté au panier.', 'ok', $toCart ? null : ['label' => 'Commander', 'url' => '/cart.php']);
 }
 header('Location: ' . $redirect);

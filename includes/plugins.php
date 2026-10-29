@@ -261,7 +261,7 @@ function plugin_role_allowed(array $roles, string $role): bool
     return $role === 'admin' || in_array($role, $roles, true);
 }
 
-/** Entrées du menu d'administration des plugins actifs de la boutique pour ce rôle : clé « plugin:<id>:<page> » => [adresse, libellé, icône]. */
+/** Entrées du menu d'administration des plugins actifs de la boutique pour ce rôle : clé « plugin:<id>:<page> » => [adresse, libellé, icône, entrée remplacée]. */
 function plugin_nav_items(string $role): array
 {
     $items = [];
@@ -270,7 +270,7 @@ function plugin_nav_items(string $role): array
         if (!$m || !in_array(plugin_status($row, $m), ['ready', 'update', 'newer'], true)) continue;
         foreach ($m['pages'] as $page) {
             if (!$page['menu'] || !plugin_role_allowed($page['roles'], $role)) continue;
-            $items['plugin:' . $id . ':' . $page['id']] = [plugin_page_url($id, $page['id']), $page['label'], $page['icon']];
+            $items['plugin:' . $id . ':' . $page['id']] = [plugin_page_url($id, $page['id']), $page['label'], $page['icon'], $page['replaces']];
         }
     }
     return $items;
@@ -319,6 +319,102 @@ function plugin_page_url(string $id, string $page): string
 function plugin_api_url(string $id, string $route): string
 {
     return '/admin/plugin-api.php?' . http_build_query(['p' => $id, 'r' => $route]);
+}
+
+/**
+ * Événement de la boutique (« order_paid », « product_created »…) transmis aux plugins actifs et à jour : chacun peut le traiter dans
+ * packs/<id>/hooks/<événement>.php (variable $payload). Une erreur d'un plugin n'interrompt jamais la boutique.
+ */
+function plugin_fire(string $event, array $payload = []): void
+{
+    if (!preg_match('/^[a-z_]+$/', $event)) return;
+    if (!defined('PLUGIN_RUNTIME')) define('PLUGIN_RUNTIME', true);
+    try {
+        foreach (plugin_catalog() as $m) {
+            $file = $m['dir'] . '/hooks/' . $event . '.php';
+            if (!is_file($file) || plugin_shop_status($m['id']) !== 'ready') continue;
+            try {
+                (static function () use ($file, $payload, $m): void { include $file; })();
+            } catch (Throwable $e) {
+                error_log('Plugin ' . $m['id'] . ' (' . $event . ') : ' . $e->getMessage());
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('Plugins (' . $event . ') : ' . $e->getMessage());
+    }
+}
+
+/**
+ * Valeur filtrée par les plugins actifs et à jour (packs/<id>/hooks/<sujet>.php reçoit $value et $ctx et retourne la nouvelle valeur ;
+ * null ou une valeur d'un autre type = inchangée). Ex. « cart_discount » : un plugin ajoute une remise au panier.
+ */
+function plugin_filter(string $topic, mixed $value, array $ctx = []): mixed
+{
+    if (!preg_match('/^[a-z_]+$/', $topic)) return $value;
+    if (!defined('PLUGIN_RUNTIME')) define('PLUGIN_RUNTIME', true);
+    try {
+        foreach (plugin_catalog() as $m) {
+            $file = $m['dir'] . '/hooks/' . $topic . '.php';
+            if (!is_file($file) || plugin_shop_status($m['id']) !== 'ready') continue;
+            try {
+                $r = (static function () use ($file, $value, $ctx): mixed { return include $file; })();
+                if ($r !== null && $r !== 1 && gettype($r) === gettype($value)) $value = $r;
+            } catch (Throwable $e) {
+                error_log('Plugin ' . $m['id'] . ' (' . $topic . ') : ' . $e->getMessage());
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('Plugins (' . $topic . ') : ' . $e->getMessage());
+    }
+    return $value;
+}
+
+/** Données que les plugins actifs fournissent pour un sujet (packs/<id>/hooks/<sujet>.php retourne un tableau) : tableaux fusionnés, quantités additionnées. */
+function plugin_collect(string $topic): array
+{
+    if (!preg_match('/^[a-z_]+$/', $topic)) return [];
+    if (!defined('PLUGIN_RUNTIME')) define('PLUGIN_RUNTIME', true);
+    $out = [];
+    try {
+        foreach (plugin_catalog() as $m) {
+            $file = $m['dir'] . '/hooks/' . $topic . '.php';
+            if (!is_file($file) || plugin_shop_status($m['id']) !== 'ready') continue;
+            try {
+                $r = (static function () use ($file): mixed { return include $file; })();
+                if (is_array($r)) foreach ($r as $k => $v) $out[$k] = ($out[$k] ?? 0) + (int) $v;
+            } catch (Throwable $e) {
+                error_log('Plugin ' . $m['id'] . ' (' . $topic . ') : ' . $e->getMessage());
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('Plugins (' . $topic . ') : ' . $e->getMessage());
+    }
+    return $out;
+}
+
+/** Contenu que les plugins actifs et à jour affichent à un emplacement de la boutique (packs/<id>/front/<emplacement>.php). */
+function plugin_render(string $slot, array $vars = []): string
+{
+    if (!preg_match('/^[a-z_]+$/', $slot)) return '';
+    if (!defined('PLUGIN_RUNTIME')) define('PLUGIN_RUNTIME', true);
+    $html = '';
+    try {
+        foreach (plugin_catalog() as $m) {
+            $file = $m['dir'] . '/front/' . $slot . '.php';
+            if (!is_file($file) || plugin_shop_status($m['id']) !== 'ready') continue;
+            try {
+                ob_start();
+                (static function () use ($file, $m, $vars): void { extract($vars, EXTR_SKIP); include $file; })();
+                $html .= (string) ob_get_clean();
+            } catch (Throwable $e) {
+                if (ob_get_level() > 0) ob_end_clean();
+                error_log('Plugin ' . $m['id'] . ' (' . $slot . ') : ' . $e->getMessage());
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('Plugins (' . $slot . ') : ' . $e->getMessage());
+    }
+    return $html;
 }
 
 /** Adresse d'une ressource de packs/<id>/assets/ (avec sa date, pour ne jamais servir une version périmée). */

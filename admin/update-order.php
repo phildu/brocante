@@ -36,7 +36,7 @@ if ($action === 'fulfillment') {
         exit;
     }
     try {
-        $session = stripe_request('GET', '/checkout/sessions/' . urlencode($order['stripe_session_id']));
+        $session = stripe_request('GET', '/checkout/sessions/' . urlencode($order['stripe_session_id']), [], ($order['payment_via'] ?? '') === 'connect');
         $paid = ($session['payment_status'] ?? '') === 'paid';
         if ($paid && $order['status'] !== 'paid' && order_mark_paid($order, $session)) {
             flash_set('Paiement confirmé auprès de Stripe — commande mise à jour.');

@@ -37,6 +37,7 @@ function veo_ensure_schema(PDO $pdo): void
 /** Coût estimé en dollars d'une vidéo de $seconds secondes. */
 function veo_cost_usd(string $modelKey, int $seconds): float
 {
+    if (str_starts_with($modelKey, 'sf:')) return ai_pricing()['wan22']; // fournisseur vidéo ajouté, compatible SiliconFlow
     if ($modelKey === SF_MODEL_KEY) return ai_pricing()['wan22']; // un prix par vidéo
     if ($modelKey === MODAL_MODEL_KEY) return ai_pricing()['modal_video']; // un prix estimé par vidéo (crédit Modal)
     $model = VEO_MODELS[$modelKey] ?? VEO_MODELS['fast'];
@@ -47,17 +48,27 @@ function veo_cost_usd(string $modelKey, int $seconds): float
 function veo_cost_labels(): array
 {
     $out = [];
-    foreach (array_merge(array_keys(VEO_MODELS), [SF_MODEL_KEY, MODAL_MODEL_KEY]) as $key) {
+    foreach (veo_cost_keys() as $key) {
         foreach (VEO_SECONDS as $s) $out["$key-$s"] = ai_estimate_label(['usd' => veo_cost_usd($key, $s)]);
     }
     return $out;
+}
+
+/** Clés de modèles vidéo proposées : Veo, SiliconFlow, Modal et les fournisseurs vidéo ajoutés. */
+function veo_cost_keys(): array
+{
+    $keys = array_merge(array_keys(VEO_MODELS), [SF_MODEL_KEY, MODAL_MODEL_KEY]);
+    foreach (function_exists('ai_provider_rows') ? ai_provider_rows('video') : [] as $row) {
+        if ($row['driver'] === 'siliconflow' && !$row['builtin']) $keys[] = ai_provider_video_key($row);
+    }
+    return array_values(array_unique($keys));
 }
 
 /** Mêmes clés que veo_cost_labels(), en euros (nombre), pour que la page multiplie par le nombre de photos choisies. */
 function veo_cost_eur_map(): array
 {
     $out = [];
-    foreach (array_merge(array_keys(VEO_MODELS), [SF_MODEL_KEY, MODAL_MODEL_KEY]) as $key) {
+    foreach (veo_cost_keys() as $key) {
         foreach (VEO_SECONDS as $s) $out["$key-$s"] = ai_eur(veo_cost_usd($key, $s));
     }
     return $out;

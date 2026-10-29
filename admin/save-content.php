@@ -17,6 +17,7 @@ $fields = [
     'principle3_title', 'principle3_text',
     'contact_address', 'contact_hours', 'contact_delivery',
     'shipping_fee', 'pickup_label', 'shipping_label',
+    'pickup_only_below', 'pickup_only_message',
 ];
 
 $set = [];
@@ -25,6 +26,14 @@ foreach ($fields as $f) {
     $set[] = "$f = :$f";
     $params[$f] = trim((string) ($_POST[$f] ?? ''));
 }
+
+// Seuil du retrait seul : nombre >= 0 (« 10 », « 7,5 »), sinon valeur par défaut ; message vide : texte par défaut.
+$seuil = str_replace(',', '.', $params['pickup_only_below']);
+$params['pickup_only_below'] = (is_numeric($seuil) && (float) $seuil >= 0 && (float) $seuil < 100000)
+    ? rtrim(rtrim(number_format((float) $seuil, 2, '.', ''), '0'), '.')
+    : '10';
+if ($params['pickup_only_below'] === '') $params['pickup_only_below'] = '0';
+if ($params['pickup_only_message'] === '') $params['pickup_only_message'] = "Retrait à l'adresse du vendeur.";
 
 // Un fichier envoyé prime sur une sélection médiathèque (le JS vide déjà
 // l'input file quand on choisit dans la médiathèque, mais on reste défensif).
@@ -50,5 +59,6 @@ $stmt = db()->prepare($sql);
 $stmt->execute($params);
 
 flash_set('Contenus mis à jour.');
-header('Location: /admin/index.php');
+$backTab = in_array($_POST['tab'] ?? '', ['general', 'pages', 'paiement'], true) ? $_POST['tab'] : 'general';
+header('Location: /admin/index.php?s=' . $backTab);
 exit;

@@ -20,6 +20,7 @@
     try {
       const parsed = new URL(u);
       let path = parsed.pathname.replace(/\/+$/, '') || '';
+      path = path.replace(/\/boutique\.php(?:\/api(?:\/annonces)?)?$/i, '');
       if (/\/api\/annonces$/i.test(path)) {
         /* déjà bon */
       } else if (/\/api$/i.test(path)) {
@@ -189,7 +190,11 @@
       title.textContent = p.title;
       const desc = document.createElement('p');
       desc.className = 'desc';
-      desc.textContent = (p.description || '').slice(0, 280) + ((p.description || '').length > 280 ? '…' : '');
+      desc.textContent = p.description || '';
+      const note = document.createElement('p');
+      note.className = 'msg';
+      note.setAttribute('role', 'status');
+      note.textContent = 'Ouvrez d’abord le formulaire de dépôt, puis cliquez. Vous validez la publication vous-même.';
       const actions = document.createElement('div');
       actions.className = 'row';
       const btnLbc = document.createElement('button');
@@ -202,12 +207,142 @@
       btnVin.textContent = 'Remplir Vinted';
       btnVin.addEventListener('click', () => fillTab('vinted', p));
       actions.append(btnLbc, btnVin);
-      const note = document.createElement('p');
-      note.className = 'msg';
-      note.textContent = 'Ouvrez d’abord le formulaire de dépôt, puis cliquez. Vous validez la publication vous-même.';
+      const exportButton = document.createElement('button');
+      exportButton.type = 'button';
+      exportButton.className = 'ghost';
+      exportButton.textContent = 'Exporter les données JSON';
+      exportButton.addEventListener('click', () => exportProductJson(p, note, exportButton));
+      actions.appendChild(exportButton);
+      if (p.photos && p.photos.length) {
+        const download = document.createElement('button');
+        download.type = 'button';
+        download.className = 'ghost';
+        download.textContent = 'Télécharger les photos';
+        download.addEventListener('click', () => downloadPhotos(p, download, note));
+        actions.appendChild(download);
+      }
       detail.append(title, desc, actions, note);
     } catch (e) {
       detail.innerHTML = '<p class="msg">' + (e.message || 'Erreur') + '</p>';
+    }
+  }
+
+  function exportProductJson(product, status, button) {
+    let blobUrl = '';
+    button.disabled = true;
+    try {
+      const payload = {
+        exported_at: new Date().toISOString(),
+        product,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2) + '\n'], {
+        type: 'application/json;charset=utf-8',
+      });
+      blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = safeFolderName(product) + '.json';
+      link.click();
+      status.textContent = 'Export JSON téléchargé avec les données complètes de l’article et les URL des photos.';
+    } catch (error) {
+      status.textContent = 'Impossible de créer le fichier JSON : ' + (error.message || 'erreur inconnue');
+    } finally {
+      button.disabled = false;
+      if (blobUrl) setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    }
+  }
+
+  function safeFolderName(product) {
+    const name = (product.name || product.title || 'article')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48);
+    const ref = (product.ref || 'article').replace(/[^A-Za-z0-9_-]/g, '-');
+    return 'annonce-' + (name || 'article') + '-' + ref;
+  }
+
+  function photoExtension(blob, url) {
+    const extensions = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/avif': 'avif',
+    };
+    if (extensions[blob.type]) return extensions[blob.type];
+    try {
+      const match = new URL(url).pathname.match(/\.([a-z0-9]{1,5})$/i);
+      if (match) return match[1].toLowerCase();
+    } catch (_) {
+      // Use a safe default when the photo URL has no usable extension.
+    }
+    return 'jpg';
+  }
+
+  async function downloadPhotos(product, button, status) {
+    if (!window.showDirectoryPicker) {
+      status.textContent = 'La sélection d’un dossier nécessite une version récente de Chrome.';
+      return;
+    }
+
+    button.disabled = true;
+    status.textContent =
+      'Choisissez un dossier dédié (pas la racine du Bureau ou de Documents). Créez par exemple « Photos annonces », puis sélectionnez-le.';
+    try {
+      const desktop = await window.showDirectoryPicker({ mode: 'readwrite' });
+      const folder = await desktop.getDirectoryHandle(safeFolderName(product), { create: true });
+      let saved = 0;
+      const failures = [];
+
+      for (let i = 0; i < product.photos.length; i++) {
+        const photo = product.photos[i];
+        try {
+          if (!/^https?:\/\//i.test(photo.url || '')) throw new Error('URL de photo invalide');
+          const response = await fetch(photo.url);
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const blob = await response.blob();
+          const handle = await folder.getFileHandle(
+            'photo-' + String(i + 1).padStart(2, '0') + '.' + photoExtension(blob, photo.url),
+            { create: true }
+          );
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          saved++;
+        } catch (e) {
+          failures.push(
+            'photo ' +
+              (i + 1) +
+              ' : ' +
+              (e.name ? e.name + ' — ' : '') +
+              (e.message || 'échec du téléchargement')
+          );
+        }
+      }
+
+      const blockedByProtectedFolder = failures.some((failure) => failure.includes('SecurityError'));
+      status.textContent = failures.length
+        ? blockedByProtectedFolder && saved === 0
+          ? 'Chrome bloque l’écriture dans ce dossier protégé. Créez un dossier dédié dans le Bureau ou Documents, puis sélectionnez ce dossier (pas le dossier parent).'
+          : saved +
+            ' photo(s) téléchargée(s) ; échec(s) : ' +
+            failures.join(', ') +
+            (blockedByProtectedFolder
+              ? ' — choisissez un dossier dédié plutôt que la racine du Bureau ou de Documents.'
+              : '')
+        : saved + ' photo(s) téléchargée(s) dans le dossier « ' + safeFolderName(product) + ' ».';
+    } catch (e) {
+      status.textContent =
+        e.name === 'AbortError'
+          ? 'Sélection du dossier annulée.'
+          : e.name === 'SecurityError'
+            ? 'Chrome bloque l’écriture dans ce dossier protégé. Créez un dossier dédié dans le Bureau ou Documents, puis sélectionnez ce dossier (pas le dossier parent).'
+            : 'Impossible de créer le dossier ou d’écrire les photos : ' + (e.message || 'erreur inconnue');
+    } finally {
+      button.disabled = false;
     }
   }
 
@@ -235,19 +370,18 @@
       );
       return;
     }
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: 'am-fill', channel, product });
-      await api('/marquer', {
-        method: 'POST',
-        body: {
-          product_ref: product.ref,
-          channel,
-          status: 'draft',
-          note: 'Formulaire prérempli depuis l’extension',
-        },
-      });
-    } catch (e) {
-      alert(e.message || 'Impossible de remplir cette page. Rechargez l’onglet et réessayez.');
+    const fillRequest = chrome.runtime.sendMessage({
+      type: 'am-start-fill',
+      tabId: tab.id,
+      channel,
+      product,
+    });
+    const panelOpening = chrome.sidePanel
+      ? chrome.sidePanel.open({ tabId: tab.id }).catch(() => false)
+      : Promise.resolve(false);
+    const [response] = await Promise.all([fillRequest, panelOpening]);
+    if (!response || !response.ok) {
+      alert(response && response.error || 'Impossible de remplir cette page. Rechargez l’onglet et réessayez.');
     }
   }
 
@@ -255,10 +389,21 @@
     showSettings(settings.hidden);
   });
 
+  function missingConfigMessage(cfg) {
+    const urlEmpty = !($('shop-url').value || '').trim();
+    const tokenEmpty = !($('token').value || '').trim();
+    if (urlEmpty && tokenEmpty) return 'Collez l’adresse de la boutique et le jeton, puis Tester.';
+    if (urlEmpty) return 'Adresse de la boutique manquante.';
+    if (tokenEmpty) return 'Jeton manquant : collez-le dans le champ (pas seulement l’URL).';
+    if (!cfg.apiBase) return 'Adresse invalide.';
+    if (!cfg.token) return 'Jeton manquant.';
+    return 'Adresse et jeton requis.';
+  }
+
   $('btn-save').addEventListener('click', async () => {
     const cfg = readFormConfig();
     if (!cfg.apiBase || !cfg.token) {
-      $('settings-msg').textContent = 'Adresse et jeton requis.';
+      $('settings-msg').textContent = missingConfigMessage(cfg);
       return;
     }
     $('shop-url').value = cfg.apiBase;
@@ -271,7 +416,7 @@
   $('btn-ping').addEventListener('click', async () => {
     const cfg = readFormConfig();
     if (!cfg.apiBase || !cfg.token) {
-      $('settings-msg').textContent = 'Adresse et jeton requis.';
+      $('settings-msg').textContent = missingConfigMessage(cfg);
       lockSearch('Configurez la boutique dans Réglages.');
       return;
     }

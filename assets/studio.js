@@ -69,7 +69,7 @@
   }
 
   // ── Onglets ───────────────────────────────────────────────────────────────
-  var TABS = { single: 'tab-single', batch: 'tab-batch', pieces: 'tab-list' };
+  var TABS = { single: 'tab-single', batch: 'tab-batch', pos: 'tab-pos', pieces: 'tab-list' };
   var currentTab = 'single';
   function go(name) {
     if (!TABS[name]) name = 'single';

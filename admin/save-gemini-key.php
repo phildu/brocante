@@ -22,5 +22,5 @@ if ($key !== '') {
     flash_set('Aucune clé fournie — rien de changé.');
 }
 
-header('Location: /admin/index.php#gemini-settings');
+header('Location: /admin/social.php#gemini-settings');
 exit;

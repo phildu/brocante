@@ -1,0 +1,17 @@
+{
+  "id": "retrait-stand",
+  "name": "Retrait sur stand",
+  "version": "1.0.0",
+  "description": "Module payant (essai gratuit) : le client réserve une pièce en ligne (somme seulement bloquée sur sa carte), reçoit un billet QR, et paie au scan sur le stand. Paiement par le Stripe de la boutique ; blocage levé automatiquement à l'échéance.",
+  "table_prefix": "rt_",
+  "pages": [
+    { "id": "index", "label": "Retrait sur stand", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "pickups", "file": "api/pickups.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/retrait", "file": "api/public.php" }
+  ]
+}

@@ -2,7 +2,7 @@
 
 // Clés API PARTAGÉES pendant la période de test : une même clé (Gemini, fal.ai, SiliconFlow, Modal) sert à tous les commerces d'un même
 // déploiement qui n'ont pas la leur. Elles vivent dans .secrets/_partage/ (jamais envoyé par le script de déploiement), se gèrent
-// depuis le portail (portail/cles.php, réservé à l'exploitant : un commerçant ne peut pas les modifier) et s'effacent d'un seul
+// depuis le portail (portail/api.php?s=cles, réservé à l'exploitant : un commerçant ne peut pas les modifier) et s'effacent d'un seul
 // geste à la mise en production (« Supprimer toutes les clés partagées »). Une clé propre à un commerce (saisie dans ses réglages)
 // reste prioritaire. Les clés Stripe ne sont JAMAIS partagées : chaque commerce encaisse sur son propre compte.
 

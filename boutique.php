@@ -12,7 +12,7 @@ $sous = $nature !== '' ? $pair['sous_categorie'] : '';
 
 $products = get_products($cat, false, $q);
 $natureCounts = [];   // nature => [total, [sous-catégorie => total]]
-foreach (db()->query("SELECT nature, sous_categorie, COUNT(*) AS n FROM products WHERE is_hidden = 0 AND stock > 0 AND nature IS NOT NULL AND nature != '' GROUP BY nature, sous_categorie")->fetchAll() as $row) {
+foreach (db()->query("SELECT nature, sous_categorie, COUNT(*) AS n FROM products WHERE is_hidden = 0 AND (stock > 0 OR keep_when_sold = 1) AND nature IS NOT NULL AND nature != '' GROUP BY nature, sous_categorie")->fetchAll() as $row) {
     $natureCounts[$row['nature']][0] = ($natureCounts[$row['nature']][0] ?? 0) + (int) $row['n'];
     if ($row['sous_categorie']) $natureCounts[$row['nature']][1][$row['sous_categorie']] = (int) $row['n'];
 }
@@ -98,4 +98,5 @@ if ($view = shop_view('shop')) {
   </div>
 </section>
 
+<?= plugin_render('boutique_bottom') ?>
 <?php include __DIR__ . '/includes/footer.php'; ?>

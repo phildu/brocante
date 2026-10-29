@@ -45,7 +45,14 @@ ga_head('Plan des commerces');
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
     <style>
-      #plan { height: 64vh; min-height: 400px; border: 1px solid var(--line); border-radius: 10px; }
+      #planWrap { position: relative; overflow: hidden; height: 64vh; min-height: 400px; border: 1px solid var(--line); border-radius: 10px; background: #e9e5dd; }
+      #plan { width: 100%; height: 100%; }
+      #plan.rotated { position: absolute; left: 50%; top: 50%; border: 0; border-radius: 0; }
+      #planUi { position: absolute; inset: 0; z-index: 800; pointer-events: none; }
+      #planUi > .leaflet-control-container { pointer-events: none; }
+      #planUi .leaflet-control { pointer-events: auto; }
+      #plan.rotated .leaflet-tooltip.plan-label, #plan.rotated .plan-zone { rotate: calc(-1 * var(--bearing, 0deg)); }
+      #mapBar { display: grid; gap: 8px; min-width: 0; }
       #splitBox [hidden] { display: none !important; } #splitBox input[type=checkbox] { width: auto; flex: none; }
       .simscen th { text-align: left; font-weight: 600; white-space: nowrap; } .simscen td { padding: 4px; } .simscen input { width: 100%; max-width: 110px; min-width: 0; }
       .simwrap { max-height: 300px; overflow: auto; margin: 6px 0; } #aidTable tr.best td { background: rgba(47,107,79,.12); font-weight: 600; } #aidTable small { font-weight: 400; opacity: .75; }
@@ -64,12 +71,27 @@ ga_head('Plan des commerces');
       body.placing #plan { cursor: crosshair; }
       .plan-zone { display: inline-block; transform: translate(-50%, -100%); white-space: nowrap; font: 700 11px/1.3 system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase; color: #222; background: rgba(255,255,255,.88); border: 1px solid rgba(0,0,0,.3); border-radius: 4px; padding: 2px 7px; pointer-events: none; }
       .plan-zone small { font-weight: 500; opacity: .7; margin-right: 4px; }
-      /* Plein écran : la carte devient une modale, catalogue et numérotation passent dans une colonne latérale */
+      /* Plein écran : la carte occupe tout l'écran, les modules de gestion flottent en panneaux repliables */
       #fsLayout, #fsMain { display: grid; gap: 10px; min-width: 0; } #fsSide[hidden] { display: none; }
-      #planCard.fs { position: fixed; inset: 0; z-index: 9999; margin: 0; border-radius: 0; border: 0; overflow: auto; align-content: start; padding: 14px 18px; }
-      #planCard.fs #fsLayout { grid-template-columns: minmax(320px, 460px) 1fr; gap: 14px; align-items: start; }
-      #planCard.fs #fsSide { position: sticky; top: 0; max-height: calc(100vh - 70px); overflow: auto; min-width: 0; padding-right: 2px; }
-      #fsSide .gcard { min-width: 0; overflow-x: auto; }
+      #planCard.fs { position: fixed; inset: 0; z-index: 9999; margin: 0; border-radius: 0; border: 0; overflow: hidden; padding: 0; display: block; background: var(--bg); }
+      #planCard.fs #fsLayout { display: block; height: 100%; }
+      #planCard.fs #fsMain { position: absolute; inset: 0; display: block; }
+      #planCard.fs #planWrap { position: absolute; inset: 0; height: auto; min-height: 0; border: 0; border-radius: 0; }
+      #planCard.fs #fsTitleBar { position: absolute; top: 0; left: 0; right: 0; z-index: 1300; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; background: linear-gradient(rgba(18,18,18,.62), rgba(18,18,18,0)); pointer-events: none; }
+      #planCard.fs #fsTitleBar h2 { margin: 0; color: #fff; font-size: 1.05rem; text-shadow: 0 1px 3px rgba(0,0,0,.55); }
+      #planCard.fs #fsTitleBar .btn { pointer-events: auto; }
+      #planCard.fs #mapBar { position: absolute; top: 58px; left: 56px; right: 384px; z-index: 1200; width: auto; background: var(--panel); padding: 8px 10px; border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); }
+      #planCard.fs #fsSide { position: absolute; top: 58px; right: 12px; bottom: 12px; width: 360px; z-index: 1250; overflow: auto; display: grid; gap: 10px; align-content: start; }
+      #planCard.fs #fsSide > .gcard, #planCard.fs #fsSide > #saveBar { background: var(--panel); border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); padding: 10px 12px; margin: 0; }
+      #planCard.fs #fsSide .gcard { min-width: 0; overflow-x: auto; }
+      #planCard.fs #fsSide .gcard > h2 { margin: 0; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      #planCard.fs #fsSide .gcard > h2::after { content: '▾'; font-size: .75rem; opacity: .55; }
+      #planCard.fs #fsSide .gcard.collapsed > h2 { margin: 0; }
+      #planCard.fs #fsSide .gcard.collapsed > h2::after { content: '▸'; }
+      #planCard.fs #fsSide .gcard.collapsed > :not(h2) { display: none !important; }
+      #planCard.fs #saveBar { position: sticky; top: 0; z-index: 3; }
+      #planCard.fs #count { position: absolute; left: 12px; bottom: 12px; z-index: 1200; margin: 0; padding: 4px 12px; color: #fff; background: rgba(15,15,15,.62); border-radius: 999px; }
+      #planCard.fs #sel:not([hidden]) { position: absolute; left: 56px; bottom: 12px; width: min(660px, calc(100% - 440px)); max-height: 46vh; overflow: auto; z-index: 1210; padding: 12px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 34px rgba(0,0,0,.3); }
       /* le catalogue de surfaces passe en fiches empilées : plus rien ne déborde sur la carte */
       #fsSide table.t, #fsSide table.t tbody { display: block; width: 100%; } #fsSide table.t thead { display: none; }
       #fsSide #catBody tr { display: grid; grid-template-columns: 1fr 1fr 64px 1fr; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -77,9 +99,11 @@ ga_head('Plan des commerces');
       #fsSide #catBody td:nth-child(2)::before { content: 'Larg. (m)'; display: block; font-size: .7rem; opacity: .7; } #fsSide #catBody td:nth-child(3)::before { content: 'Prof. (m)'; display: block; font-size: .7rem; opacity: .7; }
       #fsSide #catBody td.num { text-align: right; }
       #fsSide .listplan table.t { display: table; } #fsSide .listplan table.t tbody { display: table-row-group; } #fsSide .listplan table.t thead { display: table-header-group; }
-      #planCard.fs #fsSide { display: grid; gap: 12px; align-content: start; } #planCard.fs #fsSide .gcard { box-shadow: none; }
-      #planCard.fs #plan { height: calc(100vh - 270px); min-height: 320px; }
-      @media (max-width: 800px) { #planCard.fs #fsLayout { grid-template-columns: 1fr; } #planCard.fs #plan { height: 60vh; } }
+      @media (max-width: 900px) {
+        #planCard.fs #mapBar { left: 8px; right: 8px; }
+        #planCard.fs #fsSide { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 44vh; }
+        #planCard.fs #sel:not([hidden]) { left: 8px; right: 8px; width: auto; bottom: calc(44vh + 16px); max-height: 30vh; }
+      }
     </style>
 
     <details class="help" open>
@@ -98,10 +122,11 @@ ga_head('Plan des commerces');
     </details>
 
     <section class="gcard" id="planCard">
-      <div class="row" style="justify-content:space-between;"><h2 style="margin:0;">Plan d'implantation</h2>
-        <span class="row"><button class="btn" type="button" id="fsOpen" title="Agrandir le plan en plein écran, avec le catalogue et la numérotation à côté">⛶ Plein écran</button>
+      <div class="row" id="fsTitleBar" style="justify-content:space-between;"><h2 style="margin:0;">Plan d'implantation</h2>
+        <span class="row"><button class="btn" type="button" id="fsOpen" title="Agrandir le plan en plein écran : la carte occupe tout l'écran, les modules de gestion s'ouvrent en panneaux repliables">⛶ Plein écran</button>
         <button class="btn btn-primary" type="button" id="fsClose" hidden>✕ Fermer le plein écran</button></span></div>
       <div id="fsLayout"><div id="fsSide" hidden></div><div id="fsMain">
+      <div id="mapBar">
       <div class="row">
         <input type="text" id="addr" placeholder="Rechercher une adresse, une rue, un lieu…" autocomplete="off"><button class="btn" type="button" id="addrGo">Centrer la carte</button>
         <span class="meta" id="addrMsg" role="status"></span>
@@ -112,7 +137,16 @@ ga_head('Plan des commerces');
         <label class="row" style="gap:6px;" title="N'affiche que votre dessin, sur une grille : utile pour un plan intérieur ou quand le fond gêne la lecture."><input type="checkbox" id="hideBase"> Masquer le fond de carte (plan seul)</label>
         <span class="meta" id="mode" role="status"></span>
       </div>
-      <div id="plan" aria-label="Carte du plan d'implantation"></div>
+      <div class="row">
+        <label class="row" style="gap:6px;" title="Fait pivoter la carte et le dessin autour du centre : pratique pour aligner une allée ou une rue à l'écran. Le bouton Nord rétablit l'orientation ; la rotation n'est pas enregistrée avec le plan.">
+          Rotation du fond
+          <input type="range" id="bearing" min="-180" max="180" step="1" value="0" style="flex:1 1 160px;min-width:120px;max-width:280px;">
+          <output id="bearingOut" for="bearing" style="min-width:44px;text-align:right;font-variant-numeric:tabular-nums;">0°</output>
+          <button class="btn mini" type="button" id="bearingReset">Nord</button>
+        </label>
+      </div>
+      </div>
+      <div id="planWrap"><div id="plan" aria-label="Carte du plan d'implantation"></div><div id="planUi"></div></div>
 
       <div class="plan-grid" id="sel" hidden>
         <label class="f">Nom affiché<input type="text" id="selLabel" maxlength="60" placeholder="Brocante de Paul, Entrée…"></label>
@@ -200,7 +234,7 @@ ga_head('Plan des commerces');
       </div>
 
       <p class="meta" id="count"></p>
-      <div class="row">
+      <div class="row" id="saveBar">
         <button class="btn btn-primary" type="submit" form="saveForm">Enregistrer le plan</button>
         <a class="btn" href="<?= e($publicUrl) ?>" target="_blank" rel="noopener">Voir sur la page publique ↗</a>
       </div>
@@ -268,6 +302,7 @@ ga_head('Plan des commerces');
       var data = <?= json_encode($payload, $flags) ?>;
       var saved = data.map || { center: null, zoom: 17, base: 'osm', items: [], catalog: [], places: {} };
       var $ = function (id) { return document.getElementById(id); };
+      var planEl = $('plan'), planWrap = $('planWrap');
       var map = L.map('plan', { zoomControl: true, maxZoom: 22 }).setView(saved.center || [46.6, 2.4], saved.center ? saved.zoom : 6);
       // Fonds IGN (Géoplateforme, sans clé) ; secours automatique si une tuile manque (lieu hors de France, service indisponible).
       var bases = {
@@ -284,6 +319,8 @@ ga_head('Plan des commerces');
       L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(map);
       map.pm.setLang('fr');
       map.pm.addControls({ position: 'topleft', drawMarker: true, drawRectangle: true, drawPolygon: true, drawPolyline: true, drawCircle: false, drawCircleMarker: false, drawText: false, cutPolygon: false, rotateMode: true, editMode: true, dragMode: true, removalMode: true });
+      // Les contrôles Leaflet (zoom, échelle, outils Geoman) sortent du cadre tourné : ils restent droits et cliquables.
+      $('planUi').appendChild(map.getContainer().querySelector('.leaflet-control-container'));
 
       // --- Fond de carte : plan, satellite ou aucun ---
       var baseKind = saved.base === 'sat' ? 'sat' : 'osm', hidden = saved.base === 'none';
@@ -297,6 +334,42 @@ ga_head('Plan des commerces');
       $('baseSel').addEventListener('change', function () { baseKind = this.value; applyBase(); });
       $('hideBase').addEventListener('change', function () { hidden = this.checked; applyBase(); });
       applyBase();
+
+      // --- Rotation du fond de carte ---
+      // La carte pivote autour de son centre ; pour qu'aucun coin ne reste vide, le cadre prend la taille de la diagonale.
+      // Les clics sont ramenés dans le repère de Leaflet (sinon Leaflet croit la carte droite et le curseur se décale).
+      var bearing = 0;
+      var baseMousePoint = map.mouseEventToContainerPoint.bind(map);
+      map.mouseEventToContainerPoint = function (e) {
+        if (!bearing) return baseMousePoint(e);
+        var r = planEl.getBoundingClientRect(), size = map.getSize();
+        var dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+        var a = -bearing * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+        return L.point(size.x / 2 + dx * c - dy * s, size.y / 2 + dx * s + dy * c);
+      };
+      function syncGeometry() {
+        if (!bearing) {
+          planEl.classList.remove('rotated'); planEl.style.width = planEl.style.height = ''; planEl.style.transform = ''; planEl.style.removeProperty('--bearing');
+        } else {
+          var d = Math.ceil(Math.sqrt(planWrap.clientWidth * planWrap.clientWidth + planWrap.clientHeight * planWrap.clientHeight));
+          planEl.classList.add('rotated'); planEl.style.width = planEl.style.height = d + 'px';
+          planEl.style.setProperty('--bearing', bearing + 'deg');
+          planEl.style.transform = 'translate(-50%, -50%) rotate(' + bearing + 'deg)';
+        }
+        setTimeout(function () { map.invalidateSize({ pan: false }); }, 30);
+      }
+      function setBearing(deg) {
+        deg = Math.round(deg) % 360; if (deg > 180) deg -= 360; if (deg < -180) deg += 360;
+        var rotated = planEl.classList.contains('rotated');
+        bearing = deg;
+        $('bearingOut').textContent = deg + '°';
+        if ($('bearing').value !== String(deg)) $('bearing').value = deg;
+        if (!deg) { if (rotated) syncGeometry(); }
+        else if (rotated) { planEl.style.setProperty('--bearing', deg + 'deg'); planEl.style.transform = 'translate(-50%, -50%) rotate(' + deg + 'deg)'; }
+        else syncGeometry();
+      }
+      $('bearing').addEventListener('input', function () { setBearing(parseInt(this.value, 10) || 0); });
+      $('bearingReset').addEventListener('click', function () { setBearing(0); });
 
       // --- Éléments du plan ---
       var group = L.featureGroup().addTo(map), selected = null, placing = null;

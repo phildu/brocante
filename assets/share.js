@@ -59,10 +59,9 @@
   }
 
   function select(tab) {
-    dialog.querySelectorAll('.share-tabs button').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.tab === tab)); });
-    dialog.querySelector('[data-panel="share"]').hidden = tab !== 'share';
-    dialog.querySelector('[data-panel="qr"]').hidden = tab !== 'qr';
-    if (tab === 'qr' && !dialog._qr) renderQr();
+    if (tab !== 'qr') return;
+    var box = dialog.querySelector('.share-qr');
+    if (box) box.scrollIntoView({ block: 'nearest' });
   }
 
   function build() {
@@ -71,25 +70,24 @@
     var close = el('button', 'share-close', '×'); close.type = 'button'; close.setAttribute('aria-label', 'Fermer');
     var h = el('h2', '', 'Partager'); h.id = 'share-title';
     dialog.appendChild(close); dialog.appendChild(h); dialog.appendChild(el('p', 'share-what'));
-    var tabs = el('div', 'share-tabs'); tabs.setAttribute('role', 'tablist');
-    [['share', 'Réseaux et lien'], ['qr', 'Code QR']].forEach(function (t) { var b = el('button', '', t[1]); b.type = 'button'; b.dataset.tab = t[0]; b.setAttribute('role', 'tab'); b.addEventListener('click', function () { select(t[0]); }); tabs.appendChild(b); });
-    dialog.appendChild(tabs);
 
-    var p1 = el('div'); p1.dataset.panel = 'share'; p1.appendChild(el('div', 'share-nets'));
+    var p1 = el('div', 'share-panel');
+    p1.appendChild(el('div', 'share-nets'));
     var cp = el('div', 'share-copy'); var inp = document.createElement('input'); inp.readOnly = true; inp.setAttribute('aria-label', 'Adresse de la page');
     var cb = el('button', '', 'Copier'); cb.type = 'button'; cb.addEventListener('click', function () { copy(current.url).then(function () { toast('Lien copié ✓'); cb.textContent = 'Copié ✓'; setTimeout(function () { cb.textContent = 'Copier'; }, 2000); }, function () { toast('Copie impossible : sélectionnez le lien.'); }); });
     cp.appendChild(inp); cp.appendChild(cb); p1.appendChild(cp);
     if (navigator.share) { var nb = el('button', 'share-native', 'Autres applications…'); nb.type = 'button'; nb.addEventListener('click', function () { nativeShare(); }); p1.appendChild(nb); }
     dialog.appendChild(p1);
 
-    var p2 = el('div'); p2.dataset.panel = 'qr'; p2.hidden = true;
-    var qr = el('div', 'share-qr'); qr.appendChild(el('div', 'share-qr-img'));
+    var qr = el('div', 'share-qr');
+    qr.appendChild(el('h3', 'share-qr-title', 'Code QR de cette page'));
+    qr.appendChild(el('div', 'share-qr-img'));
     qr.appendChild(el('p', 'share-qr-note', 'Scannez avec l\'appareil photo d\'un téléphone pour ouvrir la page.'));
     var act = el('div', 'share-qr-actions');
     [['Télécharger (PNG)', function () { png(dialog._qr).then(function (b) { download(fileName('png'), b); }); }, false],
      ['Télécharger (SVG)', function () { download(fileName('svg'), new Blob([dialog._qr.createSvgTag({ cellSize: 10, margin: 40 })], { type: 'image/svg+xml' })); }, true],
      ['Imprimer', printQr, true]].forEach(function (a) { var b = el('button', a[2] ? 'is-ghost' : '', a[0]); b.type = 'button'; b.addEventListener('click', function () { if (dialog._qr) a[1](); }); act.appendChild(b); });
-    qr.appendChild(act); p2.appendChild(qr); dialog.appendChild(p2);
+    qr.appendChild(act); dialog.appendChild(qr);
     dialog.appendChild(el('p', 'share-toast')); dialog.querySelector('.share-toast').setAttribute('role', 'status');
     overlay.appendChild(dialog); document.body.appendChild(overlay);
     close.addEventListener('click', closeDialog);
@@ -124,7 +122,8 @@
     });
     dialog.querySelector('.share-toast').textContent = '';
     lastFocus = btn; overlay.hidden = false; document.body.style.overflow = 'hidden';
-    select(tab); dialog.querySelector('.share-close').focus();
+    renderQr().then(function () { if (tab === 'qr') select('qr'); });
+    dialog.querySelector('.share-close').focus();
   }
 
   document.addEventListener('click', function (e) {

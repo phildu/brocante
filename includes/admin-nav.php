@@ -8,76 +8,32 @@
  *
  * Barre latérale repliable : « Réduire le menu » ne garde que les icônes
  * (choix mémorisé dans le navigateur) ; sur mobile, elle s'ouvre avec le
- * bouton menu de la barre du haut.
+ * bouton menu de la barre du haut. Les entrées sont rangées en catégories
+ * repliables : seule celle de la page courante est ouverte, pour ne pas
+ * présenter trente liens d'un coup. Les catégories et leur ordre sont communs
+ * à toutes les boutiques et se règlent dans le portail (portail/menu.php ;
+ * aperçu dans Réglages → Menu latéral, admin/menu.php).
  */
-$adminNavItems = [
-    'catalogue' => ['/admin/catalog.php', 'Catalogue', 'grid'],
-    'univers' => ['/admin/universes.php', 'Univers', 'folder'],
-    'prise' => ['/admin/quick-add.php', 'Nouvelle pièce (photo)', 'camera'],
-    'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
-    'promos' => ['/admin/promos.php', 'Mises en avant (promos)', 'banner'],
-    'offres' => ['/admin/offers.php', 'Offres de prix', 'receipt'],
-    'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
-    'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
-    'social' => ['/admin/social.php', 'Connexion sociale', 'user'],
-    'ia' => ['/admin/ai-usage.php', 'Consommation IA', 'receipt'],
-    'hero' => ['/admin/hero.php', 'Diaporama hero', 'image'],
-    'slideshow' => ['/admin/slideshow.php', 'Diaporama boutique', 'play'],
-    'banners' => ['/admin/banners.php', 'Bandeaux de page', 'banner'],
-    'media' => ['/admin/media.php', 'Médiathèque', 'folder'],
-    'shipping' => ['/admin/shipping.php', 'Frais de port', 'truck'],
-    'apparence' => ['/admin/appearance.php', 'Apparence', 'palette'],
-    'plugins' => ['/admin/plugins.php', 'Plugins', 'puzzle'],
-    'sync' => ['/admin/sync.php', 'Envoyer en préprod', 'cloud'],
-    'reglages' => ['/admin/index.php', 'Réglages du site', 'gear'],
-    'profil' => ['/admin/profile.php', 'Mon profil', 'user'],
-];
-// Page « Plugins » de la boutique : seulement sans portail (Petit Chalet) ; ailleurs, les plugins s'activent depuis le portail.
-if (is_file(__DIR__ . '/../portail/index.php')) unset($adminNavItems['plugins']);
-// Offres de prix à traiter, en regard du menu.
-try {
-    if ($pendingOffers = (int) db()->query("SELECT COUNT(*) FROM price_offers WHERE status = 'new'")->fetchColumn()) $adminNavItems['offres'][1] .= ' (' . $pendingOffers . ')';
-} catch (Throwable $e) {
-}
-// Chaque rôle ne voit que les pages qu'il peut ouvrir (voir admin_role_can_access()).
-$adminNavItems = array_filter($adminNavItems, static fn (array $item): bool => admin_role_can_access(admin_role(), $item[0]));
-// Pages des plugins activés pour cette boutique (includes/plugins.php), selon les rôles de leur manifeste, après la médiathèque.
-// Une page de plugin peut remplacer une entrée de la plateforme (« replaces ») : elle prend alors sa place dans le menu.
-require_once __DIR__ . '/plugins.php';
-if ($pluginNavItems = plugin_nav_items(admin_role())) {
-    $navAt = array_search('media', array_keys($adminNavItems), true);
-    $navAt = $navAt === false ? count($adminNavItems) : $navAt + 1;
-    $adminNavItems = array_slice($adminNavItems, 0, $navAt, true) + $pluginNavItems + array_slice($adminNavItems, $navAt, null, true);
-    $adminNavItems = array_diff_key($adminNavItems, array_flip(plugin_nav_replaced(admin_role())));
-}
-$adminNav = $adminNav ?? '';
+require_once __DIR__ . '/admin-menu.php';
 
-// Pictogrammes (traits 24×24, couleur du texte).
-$adminIcons = [
-    'user' => '<circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
-    'users' => '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16 14.2A5.5 5.5 0 0 1 21.5 20"/>',
-    'grid' => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
-    'upload' => '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
-    'receipt' => '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/>',
-    'image' => '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
-    'play' => '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="m10 8 5 3-5 3z"/><path d="M8 21h8"/>',
-    'banner' => '<rect x="3" y="4" width="18" height="7" rx="1"/><path d="M3 15h18M3 19h12"/>',
-    'folder' => '<path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
-    'truck' => '<path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
-    'palette' => '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.9 1.5-1.9-.3-1 .4-2.1 1.5-2.1H18a3 3 0 0 0 3-3c0-6-4-11-9-11z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/>',
-    'gear' => '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
-    'external' => '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
-    'logout' => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
-    'camera' => '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
-    'cloud' => '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1-.5 9.5z"/><path d="M12 16v-5M9.5 13.5 12 11l2.5 2.5"/>',
-    'collapse' => '<path d="m15 18-6-6 6-6"/>',
-    'menu' => '<path d="M4 6h16M4 12h16M4 18h16"/>',
-    'puzzle' => '<path d="M10 3h4v2.5a1.5 1.5 0 0 0 3 0V3h4v7h-2.5a1.5 1.5 0 0 0 0 3H21v8h-7v-2.5a1.5 1.5 0 0 0-3 0V21H3v-8h2.5a1.5 1.5 0 0 0 0-3H3V3z"/>',
-];
+// Entrées disponibles (pages de la plateforme et des plugins actifs) puis
+// application des catégories et de l'ordre enregistrés par le portail.
+$adminNavItems = admin_menu_items(admin_role());
+$adminNav = $adminNav ?? '';
+$adminNavLayout = admin_menu_layout($adminNavItems);
+$adminNavActiveGroup = '';
+foreach ($adminNavLayout as $groupRow) {
+    if (isset($groupRow['items'][$adminNav])) {
+        $adminNavActiveGroup = $groupRow['key'];
+        break;
+    }
+}
+
+// Pictogrammes (traits 24×24, couleur du texte) — définis avec le menu partagé
+// pour que le portail puisse aussi les proposer à la création d'un item.
+$adminIcons = admin_menu_icons();
 // Une icône inconnue (déclarée par un plugin) prend la pièce de puzzle.
-$adminIcon = static fn (string $name): string =>
-    '<svg class="admin-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-    . ($adminIcons[$name] ?? $adminIcons['puzzle']) . '</svg>';
+$adminIcon = static fn (string $name): string => admin_menu_icon_svg($name);
 ?>
 <script>
   // Appliqué avant l'affichage du reste de la page, pour éviter un saut de mise en page.
@@ -87,7 +43,7 @@ $adminIcon = static fn (string $name): string =>
 <?= plugin_admin_assets_html(admin_role()) ?>
 <header class="admin-topbar">
   <button type="button" class="admin-topbar-btn" id="admin-sidebar-open" aria-controls="admin-sidebar" aria-expanded="false" aria-label="Ouvrir le menu d'administration"><?= $adminIcon('menu') ?></button>
-  <a class="wordmark" href="/admin/catalog.php"><img src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo"></a>
+  <a class="wordmark" href="/admin/dashboard.php"><img src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo"></a>
 </header>
 <div class="admin-sidebar-overlay" id="admin-sidebar-overlay"></div>
 <aside class="admin-sidebar" id="admin-sidebar" aria-label="Administration">
@@ -99,15 +55,24 @@ $adminIcon = static fn (string $name): string =>
     <span class="admin-sidebar-tag">Espace boutique</span>
   </div>
   <nav class="admin-sidebar-nav" aria-label="Navigation administration">
-    <?php foreach ($adminNavItems as $key => [$href, $label, $icon]): ?>
-      <a href="<?= h($href) ?>" title="<?= h($label) ?>"<?= $adminNav === $key ? ' aria-current="page"' : '' ?>>
-        <?= $adminIcon($icon) ?><span class="admin-label"><?= h($label) ?></span>
-      </a>
+    <?php $firstGroup = true; foreach ($adminNavLayout as $groupRow): ?>
+      <?php if (!$groupRow['items']) continue; ?>
+      <?php $groupOpen = $groupRow['key'] === $adminNavActiveGroup || ($adminNavActiveGroup === '' && $firstGroup); $firstGroup = false; ?>
+      <details class="admin-nav-group"<?= $groupOpen ? ' open' : '' ?>>
+        <summary class="admin-nav-title"><span><?= h($groupRow['label']) ?></span></summary>
+        <div class="admin-nav-items">
+          <?php foreach ($groupRow['items'] as $key => [$href, $label, $icon]): ?>
+            <a href="<?= h($href) ?>" title="<?= h($label) ?>"<?= $adminNav === $key ? ' aria-current="page"' : '' ?>>
+              <?= $adminIcon($icon) ?><span class="admin-label"><?= h($label) ?></span>
+            </a>
+          <?php endforeach; ?>
+        </div>
+      </details>
     <?php endforeach; ?>
   </nav>
   <div class="admin-sidebar-foot">
     <?php $adminWho = admin_session(); ?>
-    <?php if ($adminWho && admin_role_can_access($adminWho['role'], '/admin/ai-usage.php')): $aiBalance = ai_balance(); ?>
+    <?php if ($adminWho && ai_shop_enabled() && admin_role_can_access($adminWho['role'], '/admin/ai-usage.php')): $aiBalance = ai_balance(); ?>
       <a class="admin-ai-chip" href="/admin/ai-usage.php" title="Coût estimé de l'IA : voir le détail"><?php $aiQuota = ai_quota_state(); ?><span class="admin-label"><?= $aiQuota ? ($aiQuota['blocked'] ? 'IA suspendue : quota épuisé' : 'IA restante : ' . h(ai_format_eur($aiQuota['available']))) : ($aiBalance ? 'Solde IA : ' . h(ai_format_eur($aiBalance['remaining'])) : 'IA ce mois : ' . h(ai_format_eur(ai_usage_spent(gmdate('Y-m-01 00:00:00'))))) ?></span></a>
     <?php endif; ?>
     <?php if ($adminWho): ?>
@@ -127,6 +92,18 @@ $adminIcon = static fn (string $name): string =>
   var overlay = document.getElementById('admin-sidebar-overlay');
   var openBtn = document.getElementById('admin-sidebar-open');
   var collapseBtn = document.getElementById('admin-sidebar-collapse');
+  // Replié (icônes seules), les titres de catégorie n'ont pas leur place : tous les groupes s'ouvrent ; on rétablit l'état au dépliage.
+  var navGroups = Array.prototype.slice.call(document.querySelectorAll('.admin-nav-group'));
+  var groupState = navGroups.map(function (g) { return g.open; });
+
+  function syncGroups(collapsed) {
+    if (collapsed) {
+      groupState = navGroups.map(function (g) { return g.open; });
+      navGroups.forEach(function (g) { g.open = true; });
+    } else {
+      navGroups.forEach(function (g, i) { g.open = groupState[i]; });
+    }
+  }
 
   function syncCollapse() {
     var collapsed = root.classList.contains('admin-sidebar-collapsed');
@@ -139,8 +116,10 @@ $adminIcon = static fn (string $name): string =>
     var collapsed = root.classList.toggle('admin-sidebar-collapsed');
     try { localStorage.setItem('adminSidebar', collapsed ? 'collapsed' : 'open'); } catch (e) {}
     syncCollapse();
+    syncGroups(collapsed);
   });
   syncCollapse();
+  syncGroups(root.classList.contains('admin-sidebar-collapsed'));
 
   // Mobile : panneau coulissant.
   function setOpen(open) {

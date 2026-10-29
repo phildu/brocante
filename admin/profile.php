@@ -91,5 +91,6 @@ document.querySelectorAll('[data-pw-toggle]').forEach(function (btn) {
   });
 });
 </script>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

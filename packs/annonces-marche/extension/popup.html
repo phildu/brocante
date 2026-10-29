@@ -12,14 +12,15 @@
     <button type="button" id="btn-settings" class="link" aria-expanded="false">Réglages</button>
   </header>
 
-  <section id="settings" class="panel" hidden>
+  <section id="settings" class="panel">
     <label>Adresse de la boutique
-      <input type="url" id="shop-url" placeholder="https://exemple.com/ma-boutique" autocomplete="off">
+      <input type="url" id="shop-url" placeholder="https://exemple.com/ma-boutique" autocomplete="off" spellcheck="false">
     </label>
-    <p class="hint">Collez l’adresse de la boutique (sans /api). L’extension ajoute /api/annonces toute seule.</p>
+    <p class="hint">Collez l’adresse de la boutique (sans /api), même si elle finit par /boutique.php. L’extension ajoute /api/annonces toute seule.</p>
     <label>Jeton
-      <input type="password" id="token" placeholder="am_…" autocomplete="off">
+      <input type="text" id="token" class="token" placeholder="Collez ici le jeton am_…" autocomplete="off" spellcheck="false" autocapitalize="off">
     </label>
+    <p class="hint">Le jeton s’affiche en clair pour vérifier le collage (créé une seule fois dans l’admin).</p>
     <div class="row">
       <button type="button" id="btn-save">Enregistrer</button>
       <button type="button" id="btn-ping" class="ghost">Tester</button>

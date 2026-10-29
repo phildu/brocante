@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/oauth.php';
+require_once __DIR__ . '/../includes/key-check.php';
 require_admin();
 
 $content = get_content();
@@ -17,7 +18,7 @@ $source = static fn (string $k): string => oauth_own_creds($k) ? 'own' : (oauth_
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Connexion sociale — <?= h($content['site_name']) ?></title>
+<title>API &amp; réseaux — <?= h($content['site_name']) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
@@ -42,7 +43,8 @@ $source = static fn (string $k): string => oauth_own_creds($k) ? 'own' : (oauth_
 <section class="tight">
   <div class="wrap">
     <p class="eyebrow">Réglages</p>
-    <h1 style="font-size:1.8rem;margin:12px 0 12px;">Connexion sociale</h1>
+    <h1 style="font-size:1.8rem;margin:12px 0 12px;">API &amp; réseaux</h1>
+    <h2 style="margin:0 0 4px;font-size:1.3rem;">Connexion sociale</h2>
     <p class="lede" style="max-width:720px;">Proposez « Continuer avec Google / Facebook / Microsoft / Apple » sur la page de connexion de l'administration et sur les comptes clients. Sans rien saisir, ce commerce peut utiliser les clés de la plateforme ; vous pouvez aussi enregistrer <strong>vos propres clés</strong> (votre application chez le fournisseur), qui sont alors prioritaires.</p>
 
     <?php if ($flash): ?>
@@ -97,8 +99,109 @@ $source = static fn (string $k): string => oauth_own_creds($k) ? 'own' : (oauth_
 
       <button type="submit" class="btn btn-primary">Enregistrer</button>
     </form>
+
+    <h2 style="margin:40px 0 4px;font-size:1.3rem;">Clés d'API et services IA</h2>
+    <p class="lede" style="max-width:720px;">Les clés des services externes utilisés par la boutique. Un champ laissé vide conserve la clé déjà enregistrée. La clé Stripe (paiement) se règle dans « Réglages → Paiement &amp; livraison ».</p>
+    <form method="post" action="/admin/key-check.php" style="margin:0 0 14px;"><input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>"><button type="submit" class="btn btn-primary" name="service" value="all">Tester toutes les clés</button></form>
+    <div class="admin-shell">
+      <form class="admin-block" method="post" action="/admin/save-gemini-key.php" id="gemini-settings">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>Réglages IA (Gemini)</h2>
+        <p class="hint">Clé depuis <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> — utilisée pour les générations de photos (angle, ambiance, netteté...) et les suggestions dans la médiathèque. Un champ laissé vide conserve la clé déjà enregistrée.</p>
+        <div class="field">
+          <label>Clé API Gemini</label>
+          <input type="password" name="gemini_key" autocomplete="off" placeholder="<?= GEMINI_API_KEY ? 'Déjà enregistrée — ' . h(substr(GEMINI_API_KEY, 0, 6)) . '…' . h(substr(GEMINI_API_KEY, -4)) : 'AIza...' ?>">
+        </div>
+        <p class="publish-status" data-kind="<?= GEMINI_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= GEMINI_API_KEY ? 'Clé Gemini configurée — les générations IA sont actives.' : 'Aucune clé enregistrée — les générations et suggestions IA sont désactivées.' ?>
+        </p>
+        <?php if (secret_is_shared('gemini.key')): ?>
+          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+        <?php endif; ?>
+        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
+              <?php if (GEMINI_API_KEY): ?>
+        <?= keycheck_status_html('gemini') ?>
+        <button type="submit" class="btn" style="margin-top:6px;" formaction="/admin/key-check.php" name="service" value="gemini" formnovalidate>Tester la clé</button>
+        <?php endif; ?>
+      </form>
+
+      <form class="admin-block" method="post" action="/admin/save-fal-key.php" id="fal-settings">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>Réglages IA (fal.ai — détourage)</h2>
+        <p class="hint">Clé depuis <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">fal.ai/dashboard/keys</a> — utilisée pour le détourage à vrai fond transparent dans la galerie photo, quand rembg local n'est pas disponible (hébergement mutualisé). Un champ laissé vide conserve la clé déjà enregistrée.</p>
+        <div class="field">
+          <label>Clé API fal.ai</label>
+          <input type="password" name="fal_key" autocomplete="off" placeholder="<?= FAL_API_KEY ? 'Déjà enregistrée — ' . h(substr(FAL_API_KEY, 0, 6)) . '…' . h(substr(FAL_API_KEY, -4)) : 'key_...' ?>">
+        </div>
+        <p class="publish-status" data-kind="<?= FAL_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= FAL_API_KEY ? 'Clé fal.ai configurée — le détourage à fond transparent est actif.' : 'Aucune clé enregistrée — le détourage utilisera un repli fond blanc (Gemini) si disponible, sinon sera désactivé.' ?>
+        </p>
+        <?php if (secret_is_shared('fal.key')): ?>
+          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+        <?php endif; ?>
+        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
+              <?php if (FAL_API_KEY): ?>
+        <?= keycheck_status_html('fal') ?>
+        <button type="submit" class="btn" style="margin-top:6px;" formaction="/admin/key-check.php" name="service" value="fal" formnovalidate>Tester la clé</button>
+        <?php endif; ?>
+      </form>
+
+      <form class="admin-block" method="post" action="/admin/save-modal-video.php" id="modal-video-settings">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>Réglages IA (Modal — vidéo IA Wan 2.2 et détourage BiRefNet)</h2>
+        <p class="hint">Service (vidéo IA Wan 2.2 dans le crédit gratuit Modal, et détourage haute précision à fond transparent) que vous déployez sur <a href="https://modal.com" target="_blank" rel="noopener">votre compte Modal</a> (30 $ de crédit gratuit par mois, facturation à la seconde de GPU) : <code>pip install modal</code>, <code>modal setup</code>, <code>modal secret create boutique-video-token AUTH_TOKEN=…</code> puis <code>modal deploy modal/ltx_video_app.py</code>. La dernière commande affiche l'adresse du service ; saisissez-la ici avec le même jeton. Un champ laissé vide conserve la valeur enregistrée.</p>
+        <div class="field">
+          <label>Adresse du service</label>
+          <input type="text" name="modal_url" autocomplete="off" placeholder="<?= MODAL_VIDEO_URL !== '' ? h(MODAL_VIDEO_URL) : 'https://votre-compte--boutique-ltx-video-web.modal.run' ?>">
+        </div>
+        <div class="field">
+          <label>Jeton (le même que dans « modal secret create »)</label>
+          <input type="password" name="modal_token" autocomplete="off" placeholder="<?= MODAL_VIDEO_TOKEN !== '' ? 'Déjà enregistré — ' . h(substr(MODAL_VIDEO_TOKEN, 0, 3)) . '…' . h(substr(MODAL_VIDEO_TOKEN, -3)) : 'jeton' ?>">
+        </div>
+        <p class="publish-status" data-kind="<?= modal_video_available() ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= modal_video_available() ? 'Service Modal configuré — Wan 2.2 (vidéo) et le détourage haute précision sont disponibles dans la galerie. La connexion est testée à chaque enregistrement.' : 'Non configuré — LTX-Video est désactivé (les autres vidéos restent disponibles).' ?>
+        </p>
+        <?php if (secret_is_shared('modal-video.json')): ?>
+          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+        <?php endif; ?>
+        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer et tester</button>
+        <?php if (modal_video_available()): ?>
+          <button type="submit" name="remove" value="1" class="btn" style="margin-top:6px;" onclick="return confirm('Retirer la configuration du service Modal ?');">Retirer</button>
+        <?php endif; ?>
+              <?php if (modal_video_available()): ?>
+        <?= keycheck_status_html('modal') ?>
+        <button type="submit" class="btn" style="margin-top:6px;" formaction="/admin/key-check.php" name="service" value="modal" formnovalidate>Tester la clé</button>
+        <?php endif; ?>
+      </form>
+
+      <form class="admin-block" method="post" action="/admin/save-siliconflow-key.php" id="siliconflow-settings">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>Réglages IA (SiliconFlow — vidéo IA économique)</h2>
+        <p class="hint">Clé depuis <a href="https://cloud.siliconflow.com/account/ak" target="_blank" rel="noopener">cloud.siliconflow.com</a> (rubrique clés API) — utilisée pour la « Vidéo IA — Wan 2.2 » de la galerie photo, une alternative bon marché à Google Veo (environ 0,29 $ par vidéo ; un petit crédit de départ est offert aux nouveaux comptes, à vérifier chez eux). Un champ laissé vide conserve la clé déjà enregistrée.</p>
+        <div class="field">
+          <label>Clé API SiliconFlow</label>
+          <input type="password" name="siliconflow_key" autocomplete="off" placeholder="<?= SILICONFLOW_API_KEY ? 'Déjà enregistrée — ' . h(substr(SILICONFLOW_API_KEY, 0, 4)) . '…' . h(substr(SILICONFLOW_API_KEY, -4)) : 'sk-...' ?>">
+        </div>
+        <p class="publish-status" data-kind="<?= SILICONFLOW_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= SILICONFLOW_API_KEY ? 'Clé SiliconFlow configurée — la vidéo IA Wan 2.2 est disponible dans la galerie.' : 'Aucune clé enregistrée — la vidéo IA Wan 2.2 est désactivée (Google Veo et la vidéo zoom/travelling restent disponibles).' ?>
+        </p>
+        <?php if (secret_is_shared('siliconflow.key')): ?>
+          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+        <?php endif; ?>
+        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
+        <?php if (SILICONFLOW_API_KEY): ?>
+          <button type="submit" name="remove" value="1" class="btn" style="margin-top:6px;" onclick="return confirm('Retirer la clé SiliconFlow de ce commerce ?');">Retirer la clé</button>
+        <?php endif; ?>
+              <?php if (SILICONFLOW_API_KEY): ?>
+        <?= keycheck_status_html('siliconflow') ?>
+        <button type="submit" class="btn" style="margin-top:6px;" formaction="/admin/key-check.php" name="service" value="siliconflow" formnovalidate>Tester la clé</button>
+        <?php endif; ?>
+      </form>
+
+    </div>
   </div>
 </section>
 </main>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

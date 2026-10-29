@@ -259,5 +259,6 @@ foreach (db()->query("SELECT product_ref, path FROM product_photos WHERE type = 
 })();
 </script>
 <?php endif; ?>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

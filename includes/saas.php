@@ -15,6 +15,7 @@ require_once __DIR__ . '/tenant.php';
 require_once __DIR__ . '/galleries.php';
 require_once __DIR__ . '/templates.php';
 require_once __DIR__ . '/tenant-factory.php';
+require_once __DIR__ . '/autofeed.php';
 require_once __DIR__ . '/oauth.php';
 
 const SAAS_RESERVED_SLUGS = ['galerie', 'annuaire', 'inscription', 'accueil', 'portail', 'admin', 'assets', 'uploads', 'includes', 'data', 'tenants',
@@ -187,13 +188,13 @@ function saas_requests(): array
 }
 
 /**
- * Une demande occupe-t-elle encore son adresse et son e-mail ? Non si refusée, ou si l'étape 1 (brouillon, paiement en attente) date de
- * plus de 24 h. Une demande PAYÉE ne s'expire jamais : de l'argent a été encaissé.
+ * Une demande occupe-t-elle encore son adresse de boutique ? Non si refusée ou annulée, ou si l'étape 1 (brouillon, paiement en attente)
+ * date de plus de 24 h. Une demande PAYÉE ne s'expire jamais : de l'argent a été encaissé.
  */
 function saas_request_active(array $r): bool
 {
     $status = (string) ($r['status'] ?? '');
-    if ($status === 'rejected') return false;
+    if (in_array($status, ['rejected', 'cancelled'], true)) return false;
     if ($status === 'awaiting_payment' || $status === 'draft') return time() - (int) ($r['created'] ?? 0) < 86400;
     return true;
 }
@@ -207,15 +208,27 @@ function saas_slug_taken(string $slug, string $exceptId = ''): bool
     return false;
 }
 
-function saas_email_taken(string $email, string $exceptId = ''): bool
+/** Prestations personnalisées proposées comme demandes de devis à la création d'une boutique. */
+function saas_service_quote_catalog(): array
 {
-    foreach (saas_requests() as $r) {
-        if (saas_request_active($r) && ($r['id'] ?? '') !== $exceptId && strcasecmp((string) ($r['email'] ?? ''), $email) === 0) return true;
+    return [
+        'design-personnalise' => ['name' => 'Design personnalisé', 'description' => 'Identité visuelle et mise en page adaptées à votre activité. Tarif indicatif communiqué après étude, sur devis.'],
+        'setup' => ['name' => 'Accompagnement au setup', 'description' => 'Aide à la configuration initiale de votre boutique et de ses réglages. Sur devis.'],
+        'formation-distance' => ['name' => 'Formation à distance', 'description' => 'Prise en main guidée de votre boutique en visioconférence. Sur devis.'],
+        'formation-presentiel' => ['name' => 'Formation en présentiel', 'description' => 'Formation personnalisée dans vos locaux ou à proximité. Déplacement et tarif sur devis.'],
+        'hotline' => ['name' => 'Hotline', 'description' => 'Assistance téléphonique selon vos besoins. Modalités et tarif sur devis.'],
+        'chatbot' => ['name' => 'Chatbot', 'description' => 'Étude d’un assistant conversationnel adapté à votre site. Modalités et tarif sur devis.'],
+    ];
+}
+
+function saas_service_quote_names(array $keys): array
+{
+    $catalog = saas_service_quote_catalog();
+    $names = [];
+    foreach ($keys as $key) {
+        if (is_string($key) && isset($catalog[$key])) $names[] = $catalog[$key]['name'];
     }
-    foreach (tenant_list() as $t) {
-        if (strcasecmp((string) ($t['admin_user'] ?? ''), $email) === 0) return true;
-    }
-    return false;
+    return array_values(array_unique($names));
 }
 
 /** Limite : 5 demandes par heure et par adresse IP (compteur dans un fichier, adresse IP hachée). */
@@ -241,32 +254,48 @@ function saas_free_cap_reached(): bool
     if ($cap <= 0) return false;
     $n = 0;
     foreach (saas_requests() as $r) {
-        if (($r['status'] ?? '') !== 'rejected' && time() - (int) ($r['created'] ?? 0) < 86400 && (saas_req_offer($r)['cents'] ?? 0) === 0) $n++;
+        if (!in_array(($r['status'] ?? ''), ['rejected', 'cancelled'], true) && time() - (int) ($r['created'] ?? 0) < 86400 && (saas_req_offer($r)['cents'] ?? 0) === 0) $n++;
     }
     return $n >= $cap;
 }
 
 /**
- * ÉTAPE 1 — formule et e-mail. Crée une demande « draft » avec un jeton secret (lien de reprise) : le paiement (formule payante) puis la
- * création de la boutique (nom, adresse, design, compte) viennent ensuite. Retourne ['ok' => true, 'request' => …] ou ['ok' => false, 'errors' => …].
+ * ÉTAPE 1 — formule. Crée une demande « draft » avec un jeton secret (lien de reprise) : Stripe recueille l'e-mail pour une formule payante,
+ * sinon il est demandé à l'étape de création de boutique. Retourne ['ok' => true, 'request' => …] ou ['ok' => false, 'errors' => …].
  */
 function saas_request_start(array $in): array
 {
     $err = [];
     $email = strtolower(trim((string) ($in['email'] ?? '')));
     $plan = (string) ($in['plan'] ?? '');
+    $mode = (string) ($in['site_mode'] ?? 'sales');
     // La galerie choisie détermine la grille de prix (une galerie inconnue ou non publiée est ignorée : tarifs par défaut).
     $gallery = strtolower(trim((string) ($in['galerie'] ?? '')));
     if ($gallery !== '' && !isset(saas_signup_galleries()[$gallery])) $gallery = '';
-    $offer = saas_offer_snapshot($gallery, $plan, (string) ($in['facturation'] ?? 'month'));
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 60) $err['email'] = 'Indiquez une adresse e-mail valide.';
-    elseif (saas_email_taken($email)) $err['email'] = 'Un compte ou une demande existe déjà avec cette adresse.';
+    if (!in_array($mode, ['sales', 'showcase'], true)) $mode = 'sales';
+    $offer = saas_offer_snapshot($gallery, $plan, (string) ($in['facturation'] ?? 'month'), $mode);
+    $quoteCatalog = saas_service_quote_catalog();
+    $quoteInput = $in['service_quotes'] ?? [];
+    $serviceQuotes = [];
+    if (!is_array($quoteInput)) {
+        $err['service_quotes'] = 'La sélection des prestations est invalide.';
+    } else {
+        foreach ($quoteInput as $service) {
+            if (!is_string($service) || !isset($quoteCatalog[$service])) {
+                $err['service_quotes'] = 'Une prestation sélectionnée n’est pas reconnue.';
+                break;
+            }
+            $serviceQuotes[] = $service;
+        }
+        $serviceQuotes = array_values(array_unique($serviceQuotes));
+    }
+    if ($email !== '' && (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254)) $err['email'] = 'Indiquez une adresse e-mail valide.';
     if (!$offer) $err['plan'] = 'Choisissez une formule.';
-    if (empty($in['terms'])) $err['terms'] = 'Acceptez les conditions pour continuer.';
     if ($err) return ['ok' => false, 'errors' => $err];
 
-    $req = ['id' => bin2hex(random_bytes(8)), 'token' => bin2hex(random_bytes(16)), 'created' => time(), 'status' => 'draft', 'email' => $email, 'plan' => $plan,
-        'offer' => $offer, 'shop_name' => '', 'slug' => '', 'first_name' => '', 'last_name' => '', 'phone' => '', 'about' => '', 'gallery' => $gallery, 'template' => SHOP_TEMPLATE_DEFAULT, 'payment' => []];
+    $req = ['id' => bin2hex(random_bytes(8)), 'token' => bin2hex(random_bytes(16)), 'created' => time(), 'status' => 'draft', 'email' => $email, 'plan' => $plan, 'site_mode' => $mode,
+        'offer' => $offer, 'shop_name' => '', 'slug' => '', 'first_name' => '', 'last_name' => '', 'phone' => '', 'about' => '', 'gallery' => $gallery, 'template' => SHOP_TEMPLATE_DEFAULT,
+        'service_quotes' => $serviceQuotes, 'payment' => []];
     if (!saas_request_save($req)) return ['ok' => false, 'errors' => ['form' => "Impossible d'enregistrer la demande pour le moment : réessayez dans quelques minutes."]];
     saas_event('signup_started', ['ref' => $req['id'], 'email' => $email, 'plan' => $plan, 'gallery' => $gallery, 'actor' => 'client', 'note' => saas_offer_note($offer)]);
     return ['ok' => true, 'request' => $req];
@@ -295,17 +324,22 @@ function saas_payment_url(array $req, string $origin): string
     }
 }
 
-/** Suite de l'étape 1 : paiement en ligne si la formule s'y prête, sinon étape 3 (avec la mention « paiement à régler » d'une formule payante). */
+/** Adresse du configurateur (étape 2) d'une demande : r + jeton secret. */
+function saas_configurateur_url(array $req, string $origin): string
+{
+    return $origin . '/inscription/configurateur.php?r=' . rawurlencode((string) ($req['id'] ?? '')) . '&k=' . rawurlencode((string) ($req['token'] ?? ''));
+}
+
+/** Adresse de l'étape design (étape 3) d'une demande : r + jeton secret. */
+function saas_design_url(array $req, string $origin): string
+{
+    return $origin . '/inscription/design.php?r=' . rawurlencode((string) ($req['id'] ?? '')) . '&k=' . rawurlencode((string) ($req['token'] ?? ''));
+}
+
+/** Suite de l'étape 1 : configurateur de boutique (préconfiguration : nom, activité, domaine). */
 function saas_after_start_url(array $req, string $origin): string
 {
-    $cents = saas_req_offer($req)['cents'];
-    if (saas_req_payable($req)) return saas_payment_url($req, $origin);
-    if ($cents === null || $cents > 0) {
-        $req['payment'] = ['state' => 'manual', 'note' => 'Paiement en ligne non configuré : à régler avec le client.'];
-        saas_request_save($req);
-        saas_event('payment_manual', ['ref' => $req['id'], 'email' => $req['email'], 'plan' => $req['plan'], 'note' => $req['payment']['note'], 'actor' => 'système']);
-    }
-    return saas_creation_url($req, $origin);
+    return saas_configurateur_url($req, $origin);
 }
 
 /** Adresse de la page de création (étape 3) d'une demande : r + jeton secret. */
@@ -322,23 +356,24 @@ function saas_request_by_link(string $id, string $token): ?array
 }
 
 /**
- * ÉTAPE 3 — détails de la boutique (après le paiement, ou tout de suite pour une formule gratuite). Valide et enregistre dans la demande
+ * ÉTAPE 3 — détails de la boutique et e-mail (après le paiement, ou tout de suite pour une formule gratuite). Valide et enregistre dans la demande
  * (le mot de passe seulement haché). Retourne ['ok' => true, 'request' => …] ou ['ok' => false, 'errors' => …].
  */
 function saas_request_complete(array $req, array $in): array
 {
     $err = [];
-    $shopName = mb_substr(trim((string) ($in['shop_name'] ?? '')), 0, 60);
+    $email = strtolower(trim((string) (!empty($req['email']) ? $req['email'] : ($in['email'] ?? ''))));
+    $shopName = mb_substr(trim((string) (!empty($in['shop_name']) ? $in['shop_name'] : (!empty($req['shop_name']) ? $req['shop_name'] : ($req['preferred_shop_name'] ?? '')))), 0, 60);
     $slug = strtolower(trim((string) ($in['slug'] ?? ''))) ?: ($shopName !== '' ? saas_slug($shopName) : '');
     $first = mb_substr(trim((string) ($in['first_name'] ?? '')), 0, 60);
     $last = mb_substr(trim((string) ($in['last_name'] ?? '')), 0, 60);
     $phone = mb_substr(trim((string) ($in['phone'] ?? '')), 0, 30);
     $password = (string) ($in['password'] ?? '');
-    $about = mb_substr(trim((string) ($in['about'] ?? '')), 0, 400);
+    $about = mb_substr(trim((string) ($in['about'] ?? $req['about'] ?? '')), 0, 400);
     $gallery = (string) ($req['gallery'] ?? '');   // choisie à l'étape 1 : c'est elle qui a déterminé le prix
-    $template = (string) ($in['template'] ?? SHOP_TEMPLATE_DEFAULT);
-
-    if (!shop_template_valid($template)) $err['template'] = 'Choisissez un modèle de design.';
+    $template = shop_template_valid($req['template'] ?? null) ? (string) $req['template'] : (shop_template_valid($in['template'] ?? null) ? (string) $in['template'] : SHOP_TEMPLATE_DEFAULT);
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254) $err['email'] = 'Indiquez une adresse e-mail valide.';
+    if (empty($req['terms_accepted']) && empty($in['terms'])) $err['terms'] = 'Acceptez les conditions pour continuer.';
     if ($shopName === '') $err['shop_name'] = 'Donnez un nom à votre boutique.';
     elseif (!preg_match('/^[a-z0-9][a-z0-9-]{2,39}$/', $slug)) $err['slug'] = 'Adresse : 3 à 40 caractères (lettres minuscules, chiffres, tirets).';
     elseif (saas_slug_taken($slug, (string) $req['id'])) $err['slug'] = 'Cette adresse est déjà prise : choisissez-en une autre.';
@@ -350,8 +385,8 @@ function saas_request_complete(array $req, array $in): array
     elseif (!$generated && $password !== (string) ($in['password2'] ?? '')) $err['password2'] = 'Les deux mots de passe ne sont pas identiques.';
     if ($err) return ['ok' => false, 'errors' => $err];
 
-    $req = array_merge($req, ['shop_name' => $shopName, 'slug' => $slug, 'first_name' => $first, 'last_name' => $last, 'phone' => $phone,
-        'password_hash' => password_hash($password, PASSWORD_DEFAULT), 'password_set' => !$generated, 'about' => $about, 'gallery' => $gallery, 'template' => $template, 'details_at' => time()]);
+    $req = array_merge($req, ['email' => $email, 'terms_accepted' => !empty($req['terms_accepted']) ? (int) $req['terms_accepted'] : time(), 'shop_name' => $shopName, 'slug' => $slug, 'first_name' => $first, 'last_name' => $last, 'phone' => $phone,
+        'password_hash' => password_hash($password, PASSWORD_DEFAULT), 'password_set' => !$generated, 'autofeed' => !empty($in['autofeed']), 'about' => $about, 'gallery' => $gallery, 'template' => $template, 'details_at' => time()]);
     return saas_request_save($req) ? ['ok' => true, 'request' => $req] : ['ok' => false, 'errors' => ['form' => "Impossible d'enregistrer pour le moment : réessayez dans quelques minutes."]];
 }
 
@@ -366,8 +401,8 @@ function saas_is_local_host(): bool
 
 /**
  * Crée la boutique d'une demande (modèle de design choisi, compte du commerçant avec le mot de passe haché de l'inscription),
- * l'ajoute à la galerie demandée, marque la demande « approved » et écrit au commerçant. Lève une exception si l'adresse est prise
- * ou si la création échoue. Retourne ['slug', 'login', 'shop_url', 'admin_url', 'gallery_name', 'mailed'].
+ * l'ajoute à une galerie uniquement si l'exploitant l'a explicitement sélectionnée via $galleryOverride, marque la demande « approved » et écrit au commerçant.
+ * Lève une exception si l'adresse est prise ou si la création échoue. Retourne notamment 'gallery' (galerie demandée) et 'gallery_name' (galerie effectivement rejointe).
  */
 function saas_generate_shop(array $req, string $origin, string $galleryOverride = ''): array
 {
@@ -376,9 +411,11 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
         throw new InvalidArgumentException("L'adresse « $slug » est déjà prise.");
     }
     $login = saas_admin_login($req);
+    $feed = !empty($req['autofeed']) ? autofeed_form_fields($req) : [];   // bandeau et articles d'exemple (facultatif)
     $tpl = shop_template_valid($req['template'] ?? null) ? (string) $req['template'] : SHOP_TEMPLATE_DEFAULT;
     create_tenant_from_form([
         'name' => $req['shop_name'], 'slug' => $slug, 'url' => saas_is_local_host() ? '' : $origin . '/' . $slug, 'template' => $tpl,
+        'sales_enabled' => ($req['site_mode'] ?? saas_req_offer($req)['mode'] ?? 'sales') !== 'showcase',
         'cat' => ['Nos articles'], 'cat_icon' => ['ic-vase'],
         'item_limit' => (int) (saas_req_offer($req)['max_items'] ?? 0),   // limite d'articles de l'offre choisie (0 = sans limite)
         'admin_user' => $login, 'admin_password' => bin2hex(random_bytes(12)), // remplacé juste après par le mot de passe choisi
@@ -393,16 +430,28 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
         'pr1' => 'Un envoi soigné', 'pr1t' => 'Vos achats sont emballés avec attention.',
         'pr2' => 'Un échange direct', 'pr2t' => 'Une question ? Écrivez-nous, nous répondons.',
         'delivery' => 'Retrait sur place ou envoi postal.',
-    ], null);
+    ] + $feed, null);
     if (!saas_set_admin_hash($slug, $login, (string) $req['password_hash'])) {
         throw new RuntimeException("La boutique est créée mais le compte du commerçant n'a pas pu être installé : utilisez « Nouvel accès » dans le portail.");
     }
     $galleryName = '';
-    $gallerySlug = strtolower(trim($galleryOverride !== '' ? $galleryOverride : (string) ($req['gallery'] ?? '')));
+    $gallerySlug = strtolower(trim($galleryOverride));
     if ($gallerySlug !== '' && ($g = gallery_load($gallerySlug))) {
-        $g['members'][] = ['type' => 'local', 'slug' => $slug, 'featured' => false];
-        gallery_save($g);
-        $galleryName = $g['name'];
+        $alreadyMember = false;
+        foreach ($g['members'] as $member) {
+            if (($member['type'] ?? '') === 'local' && ($member['slug'] ?? '') === $slug) {
+                $alreadyMember = true;
+                break;
+            }
+        }
+        if (!$alreadyMember) {
+            $g['members'][] = ['type' => 'local', 'slug' => $slug, 'featured' => false];
+        }
+        if (gallery_save($g)) {
+            $galleryName = $g['name'];
+        } else {
+            error_log('saas_generate_shop: impossible d’ajouter ' . $slug . ' à la galerie ' . $gallerySlug);
+        }
     }
     // IA gratuite de l'offre choisie : le quota mensuel de la boutique (sans quota dans l'offre, l'IA reste illimitée).
     $aiQuota = saas_req_offer($req)['ai_quota_eur'] ?? null;
@@ -418,7 +467,8 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
             ? 'Connexion : bouton « Continuer avec ' . (OAUTH_PROVIDERS[$req['social']['provider']]['label'] ?? 'votre compte') . " » sur la page de connexion.\n"
             : "Mot de passe : celui que vous avez choisi à l'inscription.\n")
         . "\nÀ très vite,\n" . $cfg['name'] . "\n");
-    return ['slug' => $slug, 'login' => $login, 'shop_url' => $shopUrl, 'admin_url' => $adminUrl, 'gallery_name' => $galleryName, 'gallery' => $gallerySlug, 'mailed' => $mailed];
+    return ['slug' => $slug, 'login' => $login, 'shop_url' => $shopUrl, 'admin_url' => $adminUrl, 'gallery_name' => $galleryName,
+        'gallery' => $gallerySlug !== '' ? $gallerySlug : strtolower(trim((string) ($req['gallery'] ?? ''))), 'mailed' => $mailed];
 }
 
 // ── Paiement des formules (Stripe) ──────────────────────────────────────────
@@ -480,6 +530,8 @@ function saas_stripe_request(string $method, string $path, array $params = []): 
     if ($method === 'POST') {
         $opts[CURLOPT_POST] = true;
         $opts[CURLOPT_POSTFIELDS] = http_build_query($params, '', '&');
+    } elseif ($method === 'DELETE') {
+        $opts[CURLOPT_CUSTOMREQUEST] = 'DELETE';
     } elseif ($params) {
         $opts[CURLOPT_URL] .= '?' . http_build_query($params, '', '&');
     }
@@ -518,8 +570,8 @@ function saas_stripe_checkout(array $req, string $origin): array
     $cfg = saas_config();
     $o = saas_req_offer($req);
     $yearly = $o['billing'] === 'year';
-    return saas_stripe_request('POST', '/checkout/sessions', [
-        'mode' => 'subscription', 'locale' => 'fr', 'customer_email' => $req['email'], 'client_reference_id' => $req['id'],
+    $params = [
+        'mode' => 'subscription', 'locale' => 'fr', 'client_reference_id' => $req['id'],
         'line_items' => [[
             'quantity' => 1,
             'price_data' => [
@@ -528,11 +580,13 @@ function saas_stripe_checkout(array $req, string $origin): array
                     'description' => 'Abonnement ' . ($yearly ? 'annuel' : 'mensuel') . ' à votre boutique en ligne' . ($o['max_items'] ? ' — jusqu\'à ' . $o['max_items'] . ' articles' : '')],
             ],
         ]],
-        'metadata' => ['request_id' => $req['id'], 'plan' => $o['key'], 'billing' => $o['billing'], 'gallery' => (string) ($o['gallery'] ?? '')],
-        'subscription_data' => ['metadata' => ['request_id' => $req['id']]],
+        'metadata' => ['request_id' => $req['id'], 'plan' => $o['key'], 'billing' => $o['billing'], 'gallery' => (string) ($o['gallery'] ?? ''), 'site_mode' => (string) ($o['mode'] ?? 'sales')],
+        'subscription_data' => ['metadata' => ['request_id' => $req['id'], 'site_mode' => (string) ($o['mode'] ?? 'sales')]],
         'success_url' => $origin . '/inscription/merci.php?r=' . $req['id'] . '&s={CHECKOUT_SESSION_ID}',
         'cancel_url' => $origin . '/inscription/?annule=' . $req['id'],
-    ]);
+    ];
+    if (filter_var((string) ($req['email'] ?? ''), FILTER_VALIDATE_EMAIL)) $params['customer_email'] = (string) $req['email'];
+    return saas_stripe_request('POST', '/checkout/sessions', $params);
 }
 
 /** Vérifie la signature d'un webhook Stripe (en-tête Stripe-Signature, tolérance 5 minutes). */
@@ -570,13 +624,18 @@ function saas_mark_paid(string $reqId, array $session, string $origin): array
         }
         if (in_array($req['status'] ?? '', ['paid', 'pending', 'approved'], true)) return ['state' => 'already', 'request' => $req];
         if (($session['payment_status'] ?? '') !== 'paid') return ['state' => 'unpaid', 'request' => $req];
+        $email = strtolower(trim((string) (($session['customer_details']['email'] ?? '') ?: ($session['customer_email'] ?? '') ?: ($req['email'] ?? ''))));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254) {
+            return ['state' => 'error', 'message' => "Le paiement est confirmé, mais Stripe n'a pas transmis d'adresse e-mail valide. Contactez l'assistance pour finaliser la boutique."];
+        }
 
+        $req['email'] = $email;
         $req['status'] = 'paid';
         $req['payment'] = array_merge($req['payment'] ?? [], [
             'state' => 'paid', 'paid_at' => time(), 'customer' => (string) ($session['customer'] ?? ''),
             'subscription' => (string) ($session['subscription'] ?? ''), 'amount' => (int) ($session['amount_total'] ?? 0),
         ]);
-        saas_request_save($req);
+        if (!saas_request_save($req)) return ['state' => 'error', 'message' => "Paiement confirmé, mais impossible d'enregistrer la demande. Réessayez ou contactez l'assistance."];
         saas_event('payment_confirmed', ['ref' => $req['id'], 'email' => $req['email'], 'plan' => $req['plan'], 'amount' => (int) ($session['amount_total'] ?? 0), 'actor' => 'stripe']);
         $cfg = saas_config();
         $planName = saas_req_offer($req)['name'];
@@ -627,6 +686,80 @@ function saas_mail(string $to, string $subject, string $body): bool
     return function_exists('mail') && @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers);
 }
 
+const SAAS_DOMAIN_FOLLOWUP_DELAY = 7 * 86400;
+const SAAS_DOMAIN_FOLLOWUP_MAX = 3;
+
+/** Envoie une relance manuelle de domaine après consentement, avec un délai de sept jours entre les messages. */
+function saas_domain_followup_remind(string $requestId): ?string
+{
+    if (!preg_match('/^[a-f0-9]{16}$/', $requestId)) return 'Identifiant de demande invalide.';
+    $lock = fopen(saas_requests_dir() . '/' . $requestId . '.domain-reminder.lock', 'c');
+    if ($lock === false) return 'Impossible de verrouiller la relance.';
+    try {
+        if (!flock($lock, LOCK_EX)) return 'Impossible de verrouiller la relance.';
+        $req = saas_request_load($requestId);
+        if (!$req) return 'Demande introuvable.';
+        $followup = (array) ($req['branding']['domain_followup'] ?? []);
+        if (($followup['status'] ?? '') !== 'pending' || empty($followup['consented_at'])) return 'Aucun accord de relance valide pour cette demande.';
+        if (in_array(($req['status'] ?? ''), ['cancelled', 'rejected'], true)) return 'Cette demande est fermée.';
+        $email = strtolower(trim((string) ($req['email'] ?? '')));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return 'Adresse e-mail invalide.';
+
+        $reminders = array_values(array_filter((array) ($followup['reminders'] ?? []), static fn ($at): bool => is_numeric($at)));
+        $last = $reminders ? max(array_map('intval', $reminders)) : (int) ($followup['requested_at'] ?? 0);
+        if (count($reminders) >= SAAS_DOMAIN_FOLLOWUP_MAX) return 'Le nombre maximal de relances a été atteint.';
+        if ($last <= 0 || time() - $last < SAAS_DOMAIN_FOLLOWUP_DELAY) return 'La prochaine relance sera possible après sept jours.';
+
+        $origin = saas_origin();
+        $status = (string) ($req['status'] ?? '');
+        if ($status === 'paid') {
+            $actionUrl = saas_creation_url($req, $origin);
+        } elseif ($status === 'approved') {
+            $actionUrl = $origin . '/inscription/identite.php?r=' . rawurlencode((string) $req['id']) . '&k=' . rawurlencode((string) $req['token']);
+        } else {
+            $actionUrl = $origin . '/inscription/';
+        }
+
+        $lines = [];
+        foreach ((array) ($followup['suggestions'] ?? []) as $suggestion) {
+            if (is_string($suggestion) && trim($suggestion) !== '') $lines[] = '- ' . trim($suggestion);
+        }
+        foreach ((array) ($followup['domains'] ?? []) as $domain) {
+            if (!is_array($domain) || empty($domain['available']) || empty($domain['domain'])) continue;
+            $price = isset($domain['price_cents']) ? ' — ' . saas_money((int) $domain['price_cents']) . ' TTC/an (tarif à revérifier)' : '';
+            $lines[] = '- ' . (string) $domain['domain'] . $price;
+        }
+        $options = $lines ? "\n\nLes idées et domaines enregistrés lors de votre inscription :\n" . implode("\n", array_slice($lines, 0, 20)) : '';
+        $stopUrl = $origin . '/inscription/relance-domaine.php?r=' . rawurlencode((string) $req['id']) . '&k=' . rawurlencode((string) $req['token']);
+        $body = "Bonjour,\n\nVous aviez choisi de réfléchir plus tard au nom de domaine de votre boutique."
+            . $options . "\n\nVous pouvez reprendre votre projet ici :\n$actionUrl\n\n"
+            . "Cette relance fait suite à votre accord. Pour ne plus recevoir de relance à ce sujet, ouvrez ce lien :\n$stopUrl\n";
+
+        $reminders[] = time();
+        $followup['reminders'] = $reminders;
+        $req['branding']['domain_followup'] = $followup;
+        if (!saas_request_save($req)) return "Impossible d'enregistrer l'envoi avant relance.";
+        if (!saas_mail($email, 'Reprendre le choix du nom de domaine — ' . saas_config()['name'], $body)) {
+            array_pop($reminders);
+            $followup['reminders'] = $reminders;
+            $req['branding']['domain_followup'] = $followup;
+            if (!saas_request_save($req)) error_log('saas_domain_followup_remind: impossible de restaurer le compteur après échec e-mail');
+            return "L'e-mail de relance n'a pas pu être envoyé.";
+        }
+        saas_event('domain_followup_reminded', [
+            'ref' => (string) $req['id'],
+            'email' => $email,
+            'plan' => (string) ($req['plan'] ?? ''),
+            'note' => 'Relance domaine ' . count($reminders) . '/' . SAAS_DOMAIN_FOLLOWUP_MAX,
+            'actor' => 'portail',
+        ]);
+        return null;
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
 // ── Mise en page commune des pages publiques ────────────────────────────────
 
 /** Début de page : <head>, en-tête et navigation. $active : accueil | galeries | annuaire | inscription. */
@@ -659,6 +792,7 @@ function saas_page_start(string $title, string $description, string $active = ''
   <a class="brand" href="/"><span class="mark" aria-hidden="true"><?= saas_e(mb_strtoupper(mb_substr($cfg['name'], 0, 1))) ?></span><?= saas_e($cfg['name']) ?></a>
   <nav aria-label="Navigation principale">
     <?php foreach ($nav as $k => [$href, $label]): ?><a href="<?= $href ?>"<?= $active === $k ? ' aria-current="page"' : '' ?>><?= $label ?></a><?php endforeach; ?>
+    <a href="/#connexion">Se connecter</a>
     <a class="cta" href="/inscription/"<?= $active === 'inscription' ? ' aria-current="page"' : '' ?>>Créer ma boutique</a>
   </nav>
 </div></header>
@@ -675,6 +809,7 @@ function saas_page_end(): void
   <div><strong><?= saas_e($cfg['name']) ?></strong><br><span><?= saas_e($cfg['tagline']) ?></span></div>
   <nav aria-label="Pied de page"><a href="/">Accueil</a><a href="/galerie/">Galeries</a><a href="/annuaire/">Annuaire</a><a href="/inscription/">Créer ma boutique</a><?php if ($cfg['contact'] !== ''): ?><a href="mailto:<?= saas_e($cfg['contact']) ?>">Contact</a><?php endif; ?></nav>
 </div></footer>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>
 <?php

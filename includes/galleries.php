@@ -13,6 +13,9 @@
 
 require_once __DIR__ . '/tenant.php';
 require_once __DIR__ . '/appearance.php';
+require_once __DIR__ . '/gallery-map.php';
+require_once __DIR__ . '/gallery-modules.php';
+require_once __DIR__ . '/gallery-event.php';
 
 const GALLERY_CACHE_TTL = 600;
 const GALLERY_SLUG_PATTERN = '/^[a-z0-9][a-z0-9-]{1,39}$/';
@@ -78,12 +81,45 @@ function gallery_normalize(string $slug, array $data): array
         'name' => mb_substr(trim((string) ($data['name'] ?? $slug)), 0, 80) ?: $slug,
         'tagline' => mb_substr(trim((string) ($data['tagline'] ?? '')), 0, 160),
         'description' => mb_substr(trim((string) ($data['description'] ?? '')), 0, 1200),
+        'presence_mode' => business_presence_mode($data['presence_mode'] ?? 'online'),
         'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', $accent) ? strtolower($accent) : '#b5502e',
         'published' => !empty($data['published']),
+        'paused' => !empty($data['paused']),
         'created' => (int) ($data['created'] ?? time()),
         'style' => gallery_style_normalize((array) ($data['style'] ?? [])),
         'members' => $members,
+        'admins' => gallery_admins_normalize((array) ($data['admins'] ?? [])),
+        'plan' => gallery_plan_normalize((array) ($data['plan'] ?? [])),
+        'type' => preg_match('/^[a-z0-9][a-z0-9-]{1,23}$/', (string) ($data['type'] ?? '')) ? (string) $data['type'] : 'marchande',
+        'modules' => gallery_modules_normalize((array) ($data['modules'] ?? [])),
+        'event' => gallery_event_normalize((array) ($data['event'] ?? [])),
+        'map' => gallery_map_normalize((array) ($data['map'] ?? []), array_map('gallery_member_key', $members)),
     ];
+}
+
+/** Offre souscrite par la galerie (voir includes/gallery-offers.php) ; null pour une galerie créée à la main (active, sans limite). */
+function gallery_plan_normalize(array $p): ?array
+{
+    if (empty($p['offer']) || !preg_match('/^[a-z0-9_-]{1,30}$/', (string) $p['offer'])) return null;
+    return ['offer' => (string) $p['offer'], 'status' => in_array($p['status'] ?? '', ['trial', 'active', 'expired', 'canceled'], true) ? (string) $p['status'] : 'trial',
+        'billing' => ($p['billing'] ?? '') === 'year' ? 'year' : 'month', 'max_members' => max(1, min(1000, (int) ($p['max_members'] ?? 1))),
+        'trial_until' => (int) ($p['trial_until'] ?? 0), 'started' => (int) ($p['started'] ?? 0), 'ended' => (int) ($p['ended'] ?? 0),
+        'stripe_subscription_id' => preg_match('/^[A-Za-z0-9_]{0,80}$/', (string) ($p['stripe_subscription_id'] ?? '')) ? (string) ($p['stripe_subscription_id'] ?? '') : '',
+        'stripe_customer_id' => preg_match('/^[A-Za-z0-9_]{0,80}$/', (string) ($p['stripe_customer_id'] ?? '')) ? (string) ($p['stripe_customer_id'] ?? '') : '',
+        'stripe_session_id' => preg_match('/^[A-Za-z0-9_]{0,120}$/', (string) ($p['stripe_session_id'] ?? '')) ? (string) ($p['stripe_session_id'] ?? '') : ''];
+}
+
+/** Comptes administrateurs de la galerie (voir includes/gallery-admin.php) : adresse, nom, mot de passe haché. */
+function gallery_admins_normalize(array $admins): array
+{
+    $out = [];
+    foreach ($admins as $a) {
+        $email = mb_strtolower(trim((string) ($a['email'] ?? '')));
+        if (!is_array($a) || !filter_var($email, FILTER_VALIDATE_EMAIL) || empty($a['hash']) || isset($out[$email])) continue;
+        $out[$email] = ['email' => $email, 'name' => mb_substr(trim((string) ($a['name'] ?? '')), 0, 80), 'hash' => (string) $a['hash'],
+            'must_change' => !empty($a['must_change']), 'created' => (int) ($a['created'] ?? 0), 'last_login' => (int) ($a['last_login'] ?? 0)];
+    }
+    return array_values($out);
 }
 
 // ── Apparence de la page publique ───────────────────────────────────────────
@@ -208,12 +244,127 @@ function gallery_save(array $gallery): bool
     return $ok;
 }
 
-function gallery_delete(string $slug): void
+function gallery_delete(string $slug): bool
 {
-    if (!gallery_slug_valid($slug)) return;
-    if ($g = gallery_load($slug)) foreach (['banner', 'logo'] as $f) gallery_image_delete($g['style'][$f]);
-    @unlink(galleries_dir() . '/' . $slug . '.json');
+    if (!gallery_slug_valid($slug)) return false;
+    $gallery = gallery_load($slug);
+    $file = galleries_dir() . '/' . $slug . '.json';
+    if (!$gallery || !is_file($file)) return false;
+    foreach (['banner', 'logo'] as $kind) {
+        $relative = (string) ($gallery['style'][$kind] ?? '');
+        if ($relative === '' || !preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*$#', $relative)) continue;
+        $image = dirname(__DIR__) . '/' . $relative;
+        if (is_file($image) && !@unlink($image)) return false;
+    }
+    if (!@unlink($file)) return false;
     gallery_cache_clear($slug);
+    return true;
+}
+
+/** Export JSON portable sans comptes administrateurs, abonnement Stripe ni données de réservation. */
+function gallery_export_payload(string $slug): ?array
+{
+    $gallery = gallery_load($slug);
+    if (!$gallery) return null;
+    $style = $gallery['style'];
+    $assets = [];
+    foreach (['banner', 'logo'] as $kind) {
+        $relative = (string) ($style[$kind] ?? '');
+        $style[$kind] = '';
+        if ($relative === '') continue;
+        if (!preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*$#', $relative)) {
+            throw new RuntimeException('Chemin d’image de galerie non valide.');
+        }
+        $content = @file_get_contents(dirname(__DIR__) . '/' . $relative);
+        if ($content === false || strlen($content) > 12 * 1024 * 1024) {
+            throw new RuntimeException('Impossible de lire une image de la galerie pour l’export.');
+        }
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->buffer($content);
+        if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+            throw new RuntimeException('Une image de la galerie a un format non pris en charge.');
+        }
+        $assets[$kind] = ['mime' => $mime, 'data' => base64_encode($content)];
+    }
+    unset($gallery['admins'], $gallery['plan'], $gallery['modules']);
+    $gallery['style'] = $style;
+    return ['format' => 'brocante-gallery', 'version' => 1, 'gallery' => $gallery, 'assets' => $assets];
+}
+
+/** Importe les images d’un export de galerie après validation et réencodage par gallery_image_store(). */
+function gallery_import_assets(array $assets, string $slug): array
+{
+    $paths = [];
+    try {
+        foreach (['banner' => 2000, 'logo' => 500] as $kind => $maxW) {
+            if (!isset($assets[$kind])) continue;
+            $asset = $assets[$kind];
+            if (!is_array($asset) || !is_string($asset['data'] ?? null) || strlen($asset['data']) > 18 * 1024 * 1024) {
+                throw new InvalidArgumentException('Données d’image invalides dans le fichier importé.');
+            }
+            $binary = base64_decode($asset['data'], true);
+            if ($binary === false || strlen($binary) > 12 * 1024 * 1024) {
+                throw new InvalidArgumentException('Image invalide ou trop volumineuse dans le fichier importé.');
+            }
+            $tmp = tempnam(sys_get_temp_dir(), 'gallery-import-');
+            if ($tmp === false || file_put_contents($tmp, $binary) === false) {
+                if (is_string($tmp)) @unlink($tmp);
+                throw new RuntimeException('Impossible de préparer une image importée.');
+            }
+            try {
+                $paths[$kind] = gallery_image_store([
+                    'error' => UPLOAD_ERR_OK,
+                    'tmp_name' => $tmp,
+                    'size' => strlen($binary),
+                ], $slug, $kind, $maxW);
+            } finally {
+                @unlink($tmp);
+            }
+        }
+        return $paths;
+    } catch (Throwable $e) {
+        foreach ($paths as $path) gallery_image_delete($path);
+        throw $e;
+    }
+}
+
+/** Enregistre une galerie importée sans restaurer les comptes d’administration ni la facturation source. */
+function gallery_import_payload(array $payload, string $slug, ?array $existing = null): array
+{
+    if (($payload['format'] ?? '') !== 'brocante-gallery' || ($payload['version'] ?? null) !== 1
+        || !is_array($payload['gallery'] ?? null) || !gallery_slug_valid($slug)) {
+        throw new InvalidArgumentException('Le fichier n’est pas un export de galerie Brocante pris en charge.');
+    }
+    if ($existing !== null && ($existing['slug'] ?? '') !== $slug) {
+        throw new InvalidArgumentException('La galerie cible ne correspond pas à la galerie à remplacer.');
+    }
+    $source = $payload['gallery'];
+    $style = (array) ($source['style'] ?? []);
+    $style['banner'] = '';
+    $style['logo'] = '';
+    $data = $source;
+    $data['slug'] = $slug;
+    $data['style'] = $style;
+    $data['admins'] = $existing['admins'] ?? [];
+    $data['plan'] = $existing['plan'] ?? null;
+    $data['created'] = $existing['created'] ?? time();
+    if ($existing === null) {
+        $data['published'] = false;
+        $data['paused'] = false;
+    }
+    $gallery = gallery_normalize($slug, $data);
+    $assetPaths = gallery_import_assets((array) ($payload['assets'] ?? []), $slug);
+    foreach ($assetPaths as $kind => $path) $gallery['style'][$kind] = $path;
+    if (!gallery_save($gallery)) {
+        foreach ($assetPaths as $path) gallery_image_delete($path);
+        throw new RuntimeException('Impossible d’enregistrer la galerie importée.');
+    }
+    if ($existing !== null) {
+        foreach (['banner', 'logo'] as $kind) {
+            $oldPath = (string) ($existing['style'][$kind] ?? '');
+            if ($oldPath !== '' && $oldPath !== ($gallery['style'][$kind] ?? '')) gallery_image_delete($oldPath);
+        }
+    }
+    return $gallery;
 }
 
 /** Jeton du lien d'aperçu d'une galerie non publiée (?apercu=…) : propre à l'installation, impossible à deviner. */
@@ -271,6 +422,24 @@ function gallery_origin(string $url): string
  *
  * @param string $shopUrl  adresse de la boutique (liens des pièces) ; @param string $assetOrigin  domaine qui sert assets/ et uploads/
  */
+/** Adresse de l'espace visiteur de la boutique si le plugin est activé, à jour et sous licence dans sa base ($pdo) ; sinon ''. */
+function catalogue_visitor_url(PDO $pdo, string $shopUrl): string
+{
+    try {
+        $p = $pdo->query("SELECT enabled, version, migration FROM plugins WHERE id = 'espace-visiteur'")->fetch(PDO::FETCH_ASSOC);
+        if (!$p || (int) $p['enabled'] !== 1) return '';
+        require_once __DIR__ . '/plugins.php';
+        $m = plugin_manifest('espace-visiteur');
+        if (!$m || plugin_status($p, $m) !== 'ready') return '';
+        $a = $pdo->query("SELECT status, trial_until FROM addon_access WHERE module = 'espace-visiteur'")->fetch(PDO::FETCH_ASSOC);
+        if (!$a) return '';
+        $ok = in_array($a['status'], ['active', 'complimentary'], true) || ($a['status'] === 'trial' && (int) $a['trial_until'] > time());
+        return $ok ? rtrim($shopUrl, '/') . '/visiteur.php' : '';
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
 function catalogue_export(PDO $pdo, array $config, string $shopUrl, string $assetOrigin): array
 {
     $setting = static function (string $name) use ($pdo) {
@@ -341,7 +510,9 @@ function catalogue_export(PDO $pdo, array $config, string $shopUrl, string $asse
             'url' => rtrim($shopUrl, '/') . '/',
             'logo' => $logo !== '' ? $assetOrigin . '/' . ltrim($logo, '/') : '',
             'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', $accent) ? strtolower($accent) : '',
+            'sales_enabled' => !array_key_exists('sales_enabled', $config) || !empty($config['sales_enabled']),
             'universes' => array_values(array_unique(array_values($labels))),
+            'visitor_url' => catalogue_visitor_url($pdo, $shopUrl),
         ],
         'products' => $products,
         'generated' => time(),
@@ -416,12 +587,12 @@ function gallery_safe_url(?string $url): string
 
 /**
  * Catalogue regroupé d'une galerie : ['shops' => [...], 'products' => [...], 'skipped' => [noms des membres injoignables], 'generated' => t].
- * Mis en cache 10 minutes (fichier) ; $refresh force la relecture.
+ * Mis en cache 10 minutes (fichier) ; $refresh force la relecture et $useCache=false sert aux aperçus temporaires non persistants.
  */
-function gallery_catalogue(array $gallery, string $requestOrigin, bool $refresh = false): array
+function gallery_catalogue(array $gallery, string $requestOrigin, bool $refresh = false, bool $useCache = true): array
 {
     $cache = gallery_cache_file($gallery['slug']);
-    if (!$refresh && is_file($cache) && time() - filemtime($cache) < GALLERY_CACHE_TTL) {
+    if ($useCache && !$refresh && is_file($cache) && time() - filemtime($cache) < GALLERY_CACHE_TTL) {
         $data = json_decode((string) file_get_contents($cache), true);
         if (is_array($data)) return $data;
     }
@@ -437,13 +608,16 @@ function gallery_catalogue(array $gallery, string $requestOrigin, bool $refresh 
             'key' => $key,
             'name' => ($shop['name'] ?? '') !== '' ? (string) $shop['name'] : ($m['name'] ?? $key),
             'tagline' => (string) ($shop['tagline'] ?? ''),
+            'sales_enabled' => !array_key_exists('sales_enabled', $shop) || !empty($shop['sales_enabled']),
             'url' => gallery_safe_url($shop['url'] ?? ($m['url'] ?? '')),
             'logo' => gallery_safe_url($shop['logo'] ?? ''),
+            'visitor_url' => gallery_safe_url($shop['visitor_url'] ?? ''),
             'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($shop['accent'] ?? '')) ? (string) $shop['accent'] : '',
             'featured' => !empty($m['featured']),
             'order' => $i,
             'count' => 0,
         ];
+        $salesEnabled = $shop['sales_enabled'];
         foreach ($cat['products'] as $p) {
             if (!is_array($p) || (string) ($p['name'] ?? '') === '' || gallery_safe_url($p['url'] ?? '') === '') continue;
             $products[] = [
@@ -452,16 +626,16 @@ function gallery_catalogue(array $gallery, string $requestOrigin, bool $refresh 
                 'name' => mb_substr((string) $p['name'], 0, 120),
                 'cat_label' => mb_substr((string) ($p['cat_label'] ?? 'Divers'), 0, 60) ?: 'Divers',
                 'photo' => gallery_safe_url($p['photo'] ?? ''),
-                'price' => mb_substr((string) ($p['price'] ?? ''), 0, 40),
-                'promo_price' => mb_substr((string) ($p['promo_price'] ?? ''), 0, 40),
-                'price_cents' => isset($p['price_cents']) && $p['price_cents'] !== null ? (int) $p['price_cents'] : null,
-                'badge' => mb_substr((string) ($p['badge'] ?? ''), 0, 30),
+                'price' => $salesEnabled ? mb_substr((string) ($p['price'] ?? ''), 0, 40) : '',
+                'promo_price' => $salesEnabled ? mb_substr((string) ($p['promo_price'] ?? ''), 0, 40) : '',
+                'price_cents' => $salesEnabled && isset($p['price_cents']) && $p['price_cents'] !== null ? (int) $p['price_cents'] : null,
+                'badge' => $salesEnabled || ($p['badge'] ?? '') !== 'Promo' ? mb_substr((string) ($p['badge'] ?? ''), 0, 30) : '',
                 'description' => mb_substr((string) ($p['description'] ?? ''), 0, 160),
                 'created_at' => (int) ($p['created_at'] ?? 0),
                 'url' => gallery_safe_url($p['url']),
-                'promo_visual' => gallery_safe_url($p['promo_visual'] ?? ''),
-                'promo_visual_mobile' => gallery_safe_url($p['promo_visual_mobile'] ?? ''),
-                'promo_cta' => mb_substr((string) ($p['promo_cta'] ?? ''), 0, 40),
+                'promo_visual' => $salesEnabled ? gallery_safe_url($p['promo_visual'] ?? '') : '',
+                'promo_visual_mobile' => $salesEnabled ? gallery_safe_url($p['promo_visual_mobile'] ?? '') : '',
+                'promo_cta' => $salesEnabled ? mb_substr((string) ($p['promo_cta'] ?? ''), 0, 40) : '',
             ];
             $shop['count']++;
         }
@@ -469,6 +643,31 @@ function gallery_catalogue(array $gallery, string $requestOrigin, bool $refresh 
     }
     $data = ['shops' => $shops, 'products' => $products, 'skipped' => $skipped, 'generated' => time()];
     $dir = dirname($cache);
-    if (is_dir($dir) || @mkdir($dir, 0755, true)) @file_put_contents($cache, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    if ($useCache && (is_dir($dir) || @mkdir($dir, 0755, true))) {
+        @file_put_contents($cache, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
     return $data;
+}
+
+/** Galeries commerciales publiées dont la boutique courante est membre : [['name' => …, 'url' => …], …]. */
+function shop_member_galleries(): array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = [];
+    $me = tenant_slug();
+    if ($me === '' || !is_dir(galleries_dir())) return $cache;
+    require_once __DIR__ . '/gallery-offers.php';
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $origin = $scheme . '://' . tenant_base_host();
+    foreach (gallery_list() as $slug => $g) {
+        if (empty($g['published']) || !go_is_live($g)) continue;
+        foreach ($g['members'] as $m) {
+            if ($m['type'] === 'local' && $m['slug'] === $me) {
+                $cache[] = ['name' => $g['name'], 'url' => $origin . '/galerie/' . $slug . '/'];
+                break;
+            }
+        }
+    }
+    return $cache;
 }

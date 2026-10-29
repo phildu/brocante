@@ -28,8 +28,8 @@ if (!$photoPath && !empty($_POST['use_cover']) && trim((string) ($_POST['cover_u
     $photoPath = product_photo_from_cover_url(trim((string) $_POST['cover_url']), 'product-' . $ref);
 }
 
-$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, colors, brand, distributor, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, badge, featured, sort_order)
-                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :colors, :brand, :distributor, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :badge, 0, :sort_order)');
+$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, colors, brand, distributor, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, new_price, badge, featured, sort_order)
+                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :colors, :brand, :distributor, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :new_price, :badge, 0, :sort_order)');
 $stmt->execute([
     'ref' => $ref,
     'name' => $name,
@@ -48,6 +48,7 @@ $stmt->execute([
     'sous_categorie' => $nature['sous_categorie'] ?: null,
     'barcode' => product_barcode_clean($_POST['barcode'] ?? '') ?: null,
     'price' => price_from_input($_POST['price'] ?? '', '0 €'),
+    'new_price' => price_from_input($_POST['new_price'] ?? '') ?: null,
     'badge' => trim((string) ($_POST['badge'] ?? '')) ?: 'Chiné',
     'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),
 ]);

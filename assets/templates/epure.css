@@ -1,0 +1,43 @@
+/* Modèle « Épure » — suisse et net. Sélecteurs préfixés « html » : plus prioritaires que assets/style.css, chargé après. */
+html header.site { border-bottom: 2px solid var(--ink); background: var(--bg); }
+html .site-bar { padding: 16px 0; }
+html .wordmark .mark { letter-spacing: -.04em; }
+html nav.primary a { font-family: var(--font-body); text-transform: uppercase; letter-spacing: .14em; font-size: .68rem; border-bottom: 2px solid transparent; padding-bottom: 4px; }
+html nav.primary a[aria-current="page"], html nav.primary a:hover { border-bottom-color: var(--accent); color: var(--ink); }
+html .eyebrow { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .18em; font-size: .64rem; color: var(--ink-soft); }
+html .hero h1 { font-weight: 700; letter-spacing: -.045em; line-height: .94; text-wrap: balance; }
+html .hero { padding: 92px 0 76px; }
+html .lede { font-size: 1.02rem; line-height: 1.65; max-width: 54ch; }
+html .btn { border-radius: 0; text-transform: uppercase; letter-spacing: .12em; font-size: .7rem; padding: 15px 28px; font-weight: 600; }
+html .btn-primary { background: var(--accent); border-color: var(--accent); }
+html .btn-ghost { border: 1px solid var(--ink); }
+html section { padding: 96px 0; }
+html .section-head { border-top: 2px solid var(--ink); padding-top: 16px; }
+html .section-head h2 { font-weight: 700; letter-spacing: -.035em; }
+html .shop-hero--plein h1 { text-transform: uppercase; letter-spacing: -.03em; }
+html .shop-hero--plein .shop-hero-veil { background: linear-gradient(180deg, rgba(0,0,0,.1), rgba(0,0,0,.62)); }
+html .shop-hero-caption-link, html .shop-hero-caption { border-bottom-width: 2px; }
+html .shop-hero-slide { border-radius: 0; }
+html .shop-hero-slide-tag { left: 0; right: auto; bottom: 0; background: var(--accent); color: var(--accent-ink); font-family: var(--font-body); font-weight: 700; letter-spacing: .1em; }
+html .shop-hero-arrow { border-radius: 0; border: 1px solid var(--ink); }
+html .shop-hero-figure img { border-radius: 0; }
+html .shop-hero-figure-tag { left: 0; right: auto; bottom: 0; border-radius: 0; font-family: var(--font-body); font-weight: 700; letter-spacing: .1em; }
+html .shop-hero-mosaic-item { border-radius: 0; }
+html .card { background: transparent; border: 0; border-top: 2px solid var(--ink); border-radius: 0; padding: 0 0 14px; gap: 10px; }
+html .card img, html .card-icon { border-radius: 0; }
+html .card h3 { font-weight: 600; letter-spacing: -.02em; }
+html .card p.desc { color: var(--ink-soft); }
+html .badge { border-radius: 0; border: 1px solid var(--ink); background: transparent; color: var(--ink); font-family: var(--font-mono); letter-spacing: .08em; }
+html .price { font-family: var(--font-mono); }
+html .card-cta { border-radius: 0; border: 1px solid var(--ink); text-transform: uppercase; letter-spacing: .1em; font-size: .66rem; }
+html .grid-products { gap: 48px 24px; }
+html .cat-grid { gap: 0; background: none; border: 0; border-top: 1px solid var(--line); }
+html .cat-tile { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; padding: 34px 22px; background: transparent; }
+html .cat-tile:last-child { border-right: 0; }
+html .cat-tile:hover { background: var(--accent); color: var(--accent-ink); }
+html .cat-tile:hover svg, html .cat-tile:hover .count { color: var(--accent-ink); }
+html .principle { border-top: 2px solid var(--ink); }
+html .principle .num { font-family: var(--font-mono); color: var(--accent); }
+html .story-photo img, html .follow-tile img { border-radius: 0; }
+html .shop-search input[type="search"], html .field-row input, html .field-row textarea { border: 1px solid var(--ink); border-radius: 0; background: transparent; }
+html .footer-grid { border-top: 2px solid var(--ink); padding-top: 40px; }

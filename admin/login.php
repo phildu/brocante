@@ -112,5 +112,6 @@ if (!admin_password_configured()) {
     </script>
   </div>
 </div>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

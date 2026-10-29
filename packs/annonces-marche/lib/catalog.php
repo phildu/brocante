@@ -2,6 +2,7 @@
 // Catalogue exposé à l'extension : produits en stock, visibles, avec photos absolues.
 
 require_once __DIR__ . '/settings.php';
+require_once __DIR__ . '/mappings.php';
 
 /** Mapping état boutique → libellés proches Leboncoin / Vinted (indicatif ; le commerçant peut corriger). */
 function am_condition_for_channel(?string $etatKey, string $channel): array
@@ -47,6 +48,7 @@ function am_listing_description(array $p): string
     $desc = trim((string) ($p['description'] ?? ''));
     if ($desc !== '') $parts[] = $desc;
     $bits = [];
+    if ((int) ($p['lot_qty'] ?? 1) > 1) $bits[] = 'Vendu en lot de ' . (int) $p['lot_qty'] . ' pièces (un seul prix pour l\'ensemble)';
     if (!empty($p['brand'])) $bits[] = 'Marque : ' . $p['brand'];
     if (!empty($p['materials'])) $bits[] = 'Matières : ' . $p['materials'];
     if (!empty($p['colors'])) $bits[] = 'Couleurs : ' . $p['colors'];
@@ -86,9 +88,39 @@ function am_product_photos(array $p): array
 }
 
 /** Fiche produit normalisée pour l'extension. */
+/**
+ * Où se trouve la marchandise de cette boutique (saisie dans le plan de la galerie dont elle est membre) : l'adresse que les plateformes
+ * demandent pour le bien. null si rien n'est renseigné (le bot garde alors l'adresse de son profil).
+ */
+function am_location(): ?array
+{
+    static $loc = false;
+    if ($loc !== false) return $loc;
+    $loc = null;
+    try {
+        require_once dirname(__DIR__, 3) . '/includes/galleries.php';
+        $pl = function_exists('gallery_member_place') ? gallery_member_place(tenant_slug()) : null;
+        if ($pl) $loc = ['address' => $pl['address'], 'street' => $pl['street'], 'postcode' => $pl['postcode'], 'city' => $pl['city'], 'stand' => $pl['stand'], 'note' => $pl['note']];
+    } catch (Throwable $e) {
+        error_log('Localisation de la marchandise : ' . $e->getMessage());
+    }
+    return $loc;
+}
+
 function am_product_payload(array $p): array
 {
     $price = am_price_euros($p);
+    $mapped = am_map_payload($p);
+    $condition = [
+        'leboncoin' => am_condition_for_channel($p['etat'] ?? null, 'leboncoin'),
+        'vinted' => am_condition_for_channel($p['etat'] ?? null, 'vinted'),
+    ];
+    foreach ($condition as $ch => $c) {   // la table de correspondance de la boutique prime sur l'indicatif codé en dur
+        if (!empty($mapped[$ch]['etat'])) $condition[$ch]['channel_label'] = $mapped[$ch]['etat'];
+    }
+    $natureLabels = function_exists('product_nature_labels')
+        ? product_nature_labels($p['nature'] ?? null, $p['sous_categorie'] ?? null)
+        : null;
     return [
         'ref' => (string) $p['ref'],
         'name' => (string) $p['name'],
@@ -97,6 +129,9 @@ function am_product_payload(array $p): array
         'price' => $price,
         'price_text' => (string) (function_exists('effective_price') ? effective_price($p) : ($p['price'] ?? '')),
         'category' => (string) ($p['cat'] ?? ''),
+        'category_label' => function_exists('category_label') ? category_label((string) ($p['cat'] ?? '')) : (string) ($p['cat'] ?? ''),
+        'nature_label' => (string) ($natureLabels[0] ?? ''),
+        'subcategory_label' => (string) ($natureLabels[1] ?? ''),
         'brand' => (string) ($p['brand'] ?? ''),
         'size_text' => (string) ($p['size_text'] ?? ''),
         'materials' => (string) ($p['materials'] ?? ''),
@@ -104,11 +139,11 @@ function am_product_payload(array $p): array
         'nature' => (string) ($p['nature'] ?? ''),
         'sous_categorie' => (string) ($p['sous_categorie'] ?? ''),
         'stock' => (int) ($p['stock'] ?? 0),
-        'condition' => [
-            'leboncoin' => am_condition_for_channel($p['etat'] ?? null, 'leboncoin'),
-            'vinted' => am_condition_for_channel($p['etat'] ?? null, 'vinted'),
-        ],
+        'lot_qty' => max(1, (int) ($p['lot_qty'] ?? 1)),
+        'condition' => $condition,
+        'mapped' => $mapped,
         'photos' => am_product_photos($p),
+        'location' => am_location(),
         'product_url' => function_exists('shop_abs_url') ? shop_abs_url('/produit.php?ref=' . rawurlencode((string) $p['ref'])) : '',
     ];
 }

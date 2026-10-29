@@ -1,11 +1,14 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/key-check.php';
 require_admin();
 
 $content = get_content();
 $mediaPhotos = get_media_items('photo');
 $flash = flash_get();
+$settingsTabs = ['general' => 'Général', 'pages' => 'Contenu des pages', 'paiement' => 'Paiement & livraison'];
+$tab = isset($settingsTabs[$_GET['s'] ?? '']) ? (string) $_GET['s'] : 'general';
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -31,16 +34,17 @@ $flash = flash_get();
   .media-pick-item img { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--surface-2); display: block; }
   .media-pick-item span { display: block; font-size: 0.68rem; padding: 4px 6px; color: var(--ink-soft); }
   .media-pick-item:hover { outline: 2px solid var(--accent); }
+  [data-panel][hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <?php include __DIR__ . '/../includes/icons.php'; ?>
-<?php $adminNav = 'reglages'; include __DIR__ . '/../includes/admin-nav.php'; ?>
+<?php $adminNav = 'reglages-' . $tab; include __DIR__ . '/../includes/admin-nav.php'; ?>
 <main>
 <section class="tight">
   <div class="wrap">
     <p class="eyebrow">Espace boutique</p>
-    <h1 style="font-size:2rem;margin:12px 0 20px;">Réglages du site</h1>
+    <h1 style="font-size:2rem;margin:12px 0 20px;">Réglages — <?= h($settingsTabs[$tab]) ?></h1>
 
     <a class="btn btn-primary" href="/slideshow.php" target="_blank" style="margin-bottom:24px;display:inline-flex;">Lancer le diaporama boutique</a>
 
@@ -51,6 +55,8 @@ $flash = flash_get();
     <div class="admin-shell">
 
       <form class="admin-block" method="post" action="/admin/save-content.php" enctype="multipart/form-data">
+        <input type="hidden" name="tab" value="<?= h($tab) ?>">
+        <div data-panel="general">
         <h2>Identité du site</h2>
         <p class="hint">Le nom de la boutique, affiché dans l'en-tête, le pied de page et les titres d'onglet.</p>
         <div class="field-row-2">
@@ -58,7 +64,11 @@ $flash = flash_get();
           <div class="field"><label>Signature</label><input type="text" name="site_tagline" value="<?= h($content['site_tagline']) ?>"></div>
         </div>
 
-        <h2 style="margin-top:36px;">Page d'accueil</h2>
+        <button type="submit" class="btn btn-primary" style="margin-top:18px;">Enregistrer les contenus</button>
+        </div>
+
+        <div data-panel="pages">
+        <h2>Page d'accueil</h2>
         <p class="hint">Le texte d'introduction et la photo mise en avant en haut du site.</p>
         <div class="field"><label>Eyebrow</label><input type="text" name="hero_eyebrow" value="<?= h($content['hero_eyebrow']) ?>"></div>
         <div class="field"><label>Titre</label><input type="text" name="hero_title" value="<?= h($content['hero_title']) ?>"></div>
@@ -79,6 +89,32 @@ $flash = flash_get();
           <input type="hidden" name="hero_photo_media" data-media-value="hero">
           <span data-hero-name style="font-size:0.8rem;color:var(--ink-soft);"></span>
         </div>
+        <?php require_once __DIR__ . '/../includes/autofeed.php'; ?>
+        <div class="admin-photo-row" style="margin-top:8px;flex-wrap:wrap;">
+          <input type="text" id="regen-hint" maxlength="200" placeholder="Précisez ce que vous voulez (facultatif)" style="flex:1;min-width:220px;">
+          <button type="button" class="btn-small" id="regen-hero" data-cost="<?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>">✨ Régénérer avec l’IA</button>
+          <span id="regen-status" role="status" style="font-size:0.8rem;color:var(--ink-soft);"></span>
+        </div>
+        <p class="hint" style="margin:4px 0 0;">Chaque nouvelle image est décomptée de votre crédit IA (≈ <?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>).</p>
+        <script>
+        (function () {
+          var btn = document.getElementById('regen-hero'), st = document.getElementById('regen-status');
+          btn.addEventListener('click', function () {
+            if (!confirm('Générer une nouvelle image ? Elle remplacera la photo actuelle et sera décomptée de votre crédit IA (≈ ' + btn.dataset.cost + ').')) return;
+            var fd = new FormData();
+            fd.append('ajax', '1'); fd.append('target', 'hero'); fd.append('hint', document.getElementById('regen-hint').value);
+            btn.disabled = true; st.textContent = 'Génération en cours…';
+            fetch('/admin/regenerate-image.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (d) {
+                st.textContent = d.message;
+                if (d.ok) document.querySelector('[data-preview="hero"]').innerHTML = '<img src="/' + d.path + '?' + Date.now() + '" alt="">';
+              })
+              .catch(function () { st.textContent = 'La génération a échoué, rien n’a été débité.'; })
+              .then(function () { btn.disabled = false; });
+          });
+        })();
+        </script>
 
         <h2 style="margin-top:36px;">Notre histoire</h2>
         <p class="hint">Le récit affiché sur la page d'accueil, et les trois points qui le suivent.</p>
@@ -117,18 +153,28 @@ $flash = flash_get();
         <div class="field"><label>Horaires</label><input type="text" name="contact_hours" value="<?= h($content['contact_hours']) ?>"></div>
         <div class="field"><label>Livraison</label><input type="text" name="contact_delivery" value="<?= h($content['contact_delivery']) ?>"></div>
 
-        <h2 style="margin-top:36px;">Frais de port</h2>
+        <button type="submit" class="btn btn-primary" style="margin-top:18px;">Enregistrer les contenus</button>
+        </div>
+
+        <div data-panel="paiement" id="shipping-settings">
+        <h2>Frais de port</h2>
         <p class="hint">Les deux modes de livraison proposés au client au moment du paiement Stripe.</p>
         <div class="field-row-3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
           <div class="field"><label>Libellé retrait (gratuit)</label><input type="text" name="pickup_label" value="<?= h($content['pickup_label']) ?>"></div>
           <div class="field"><label>Libellé envoi</label><input type="text" name="shipping_label" value="<?= h($content['shipping_label']) ?>"></div>
           <div class="field"><label>Tarif d'envoi</label><input type="text" name="shipping_fee" value="<?= h($content['shipping_fee']) ?>"></div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;">
+          <div class="field"><label>Pas de livraison sous (€)</label><input type="number" min="0" step="0.01" name="pickup_only_below" value="<?= h((string) ($content['pickup_only_below'] ?? '10')) ?>"></div>
+          <div class="field"><label>Message affiché à la place de la livraison</label><input type="text" name="pickup_only_message" value="<?= h((string) ($content['pickup_only_message'] ?? "Retrait à l'adresse du vendeur.")) ?>"></div>
+        </div>
+        <p class="hint">Les articles à 0 € (dons) et ceux dont le prix est inférieur à ce seuil ne sont proposés qu'en retrait. Si le panier contient au moins un article livrable, la livraison reste proposée. Mettez 0 pour ne l'appliquer qu'aux dons.</p>
 
-        <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer les contenus</button>
+        <button type="submit" class="btn btn-primary" style="margin-top:18px;">Enregistrer les contenus</button>
+        </div>
       </form>
 
-      <form class="admin-block" method="post" action="/admin/save-stripe-keys.php" id="stripe-settings">
+      <form class="admin-block" method="post" action="/admin/save-stripe-keys.php" id="stripe-settings" data-panel="paiement">
         <h2>Réglages Stripe</h2>
         <p class="hint">Clés de <a href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">dashboard.stripe.com/test/apikeys</a> (mode test : <code>sk_test_...</code> / <code>pk_test_...</code>). Un champ laissé vide conserve la clé déjà enregistrée.</p>
         <div class="field-row-2">
@@ -141,93 +187,29 @@ $flash = flash_get();
             <input type="text" name="stripe_publishable" autocomplete="off" placeholder="<?= STRIPE_PUBLISHABLE_KEY ? 'Déjà enregistrée — ' . h(substr(STRIPE_PUBLISHABLE_KEY, 0, 7)) . '…' . h(substr(STRIPE_PUBLISHABLE_KEY, -4)) : 'pk_test_...' ?>">
           </div>
         </div>
-        <p class="publish-status" data-kind="<?= stripe_configured() ? '' : 'error' ?>" style="margin-top:10px;">
-          <?= stripe_configured() ? 'Paiement Stripe configuré et actif.' : 'Aucune clé secrète valide enregistrée — le paiement est désactivé sur le site.' ?>
+        <p class="publish-status" data-kind="<?= shop_checkout_ready() ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= shop_checkout_ready() ? 'Paiement Stripe configuré et actif.' : 'Aucune clé secrète valide enregistrée — le paiement est désactivé sur le site.' ?>
         </p>
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer les clés</button>
-      </form>
-
-      <form class="admin-block" method="post" action="/admin/save-gemini-key.php" id="gemini-settings">
-        <h2>Réglages IA (Gemini)</h2>
-        <p class="hint">Clé depuis <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> — utilisée pour les générations de photos (angle, ambiance, netteté...) et les suggestions dans la médiathèque. Un champ laissé vide conserve la clé déjà enregistrée.</p>
-        <div class="field">
-          <label>Clé API Gemini</label>
-          <input type="password" name="gemini_key" autocomplete="off" placeholder="<?= GEMINI_API_KEY ? 'Déjà enregistrée — ' . h(substr(GEMINI_API_KEY, 0, 6)) . '…' . h(substr(GEMINI_API_KEY, -4)) : 'AIza...' ?>">
-        </div>
-        <p class="publish-status" data-kind="<?= GEMINI_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
-          <?= GEMINI_API_KEY ? 'Clé Gemini configurée — les générations IA sont actives.' : 'Aucune clé enregistrée — les générations et suggestions IA sont désactivées.' ?>
-        </p>
-        <?php if (secret_is_shared('gemini.key')): ?>
-          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
+      <?php if (STRIPE_SECRET_KEY !== ''): ?>
+        <?= keycheck_status_html('stripe') ?>
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <button type="submit" class="btn" style="margin-top:6px;" formaction="/admin/key-check.php" name="service" value="stripe" formnovalidate>Tester la clé Stripe</button>
         <?php endif; ?>
-        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
       </form>
 
-      <form class="admin-block" method="post" action="/admin/save-photo-visibility.php" id="photo-visibility-settings">
+      <form class="admin-block" method="post" action="/admin/save-photo-visibility.php" id="photo-visibility-settings" data-panel="general">
         <h2>Photos des pièces créées avec le Studio</h2>
         <p class="hint">Quand une pièce vient d'être traitée (détourage, mise en situation, recto/verso), sa fiche montre les <strong>images générées</strong> ; les photos du shooting restent dans la galerie, masquées (sauf les gros plans : étiquette, texture, détail). Décochez pour garder toutes les photos visibles. Chaque pièce se règle ensuite dans sa galerie.</p>
         <label class="featured-check"><input type="checkbox" name="hide_shooting_photos" value="1"<?= hide_shooting_photos_enabled() ? ' checked' : '' ?>> Masquer par défaut les photos du shooting une fois les images générées</label>
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer</button>
       </form>
 
-      <form class="admin-block" method="post" action="/admin/save-fal-key.php" id="fal-settings">
-        <h2>Réglages IA (fal.ai — détourage)</h2>
-        <p class="hint">Clé depuis <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">fal.ai/dashboard/keys</a> — utilisée pour le détourage à vrai fond transparent dans la galerie photo, quand rembg local n'est pas disponible (hébergement mutualisé). Un champ laissé vide conserve la clé déjà enregistrée.</p>
-        <div class="field">
-          <label>Clé API fal.ai</label>
-          <input type="password" name="fal_key" autocomplete="off" placeholder="<?= FAL_API_KEY ? 'Déjà enregistrée — ' . h(substr(FAL_API_KEY, 0, 6)) . '…' . h(substr(FAL_API_KEY, -4)) : 'key_...' ?>">
-        </div>
-        <p class="publish-status" data-kind="<?= FAL_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
-          <?= FAL_API_KEY ? 'Clé fal.ai configurée — le détourage à fond transparent est actif.' : 'Aucune clé enregistrée — le détourage utilisera un repli fond blanc (Gemini) si disponible, sinon sera désactivé.' ?>
-        </p>
-        <?php if (secret_is_shared('fal.key')): ?>
-          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
-        <?php endif; ?>
-        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
-      </form>
-
-      <form class="admin-block" method="post" action="/admin/save-modal-video.php" id="modal-video-settings">
-        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
-        <h2>Réglages IA (Modal — vidéo IA Wan 2.2 et détourage BiRefNet)</h2>
-        <p class="hint">Service (vidéo IA Wan 2.2 dans le crédit gratuit Modal, et détourage haute précision à fond transparent) que vous déployez sur <a href="https://modal.com" target="_blank" rel="noopener">votre compte Modal</a> (30 $ de crédit gratuit par mois, facturation à la seconde de GPU) : <code>pip install modal</code>, <code>modal setup</code>, <code>modal secret create boutique-video-token AUTH_TOKEN=…</code> puis <code>modal deploy modal/ltx_video_app.py</code>. La dernière commande affiche l'adresse du service ; saisissez-la ici avec le même jeton. Un champ laissé vide conserve la valeur enregistrée.</p>
-        <div class="field">
-          <label>Adresse du service</label>
-          <input type="text" name="modal_url" autocomplete="off" placeholder="<?= MODAL_VIDEO_URL !== '' ? h(MODAL_VIDEO_URL) : 'https://votre-compte--boutique-ltx-video-web.modal.run' ?>">
-        </div>
-        <div class="field">
-          <label>Jeton (le même que dans « modal secret create »)</label>
-          <input type="password" name="modal_token" autocomplete="off" placeholder="<?= MODAL_VIDEO_TOKEN !== '' ? 'Déjà enregistré — ' . h(substr(MODAL_VIDEO_TOKEN, 0, 3)) . '…' . h(substr(MODAL_VIDEO_TOKEN, -3)) : 'jeton' ?>">
-        </div>
-        <p class="publish-status" data-kind="<?= modal_video_available() ? '' : 'error' ?>" style="margin-top:10px;">
-          <?= modal_video_available() ? 'Service Modal configuré — Wan 2.2 (vidéo) et le détourage haute précision sont disponibles dans la galerie. La connexion est testée à chaque enregistrement.' : 'Non configuré — LTX-Video est désactivé (les autres vidéos restent disponibles).' ?>
-        </p>
-        <?php if (secret_is_shared('modal-video.json')): ?>
-          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
-        <?php endif; ?>
-        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer et tester</button>
-        <?php if (modal_video_available()): ?>
-          <button type="submit" name="remove" value="1" class="btn" style="margin-top:6px;" onclick="return confirm('Retirer la configuration du service Modal ?');">Retirer</button>
-        <?php endif; ?>
-      </form>
-
-      <form class="admin-block" method="post" action="/admin/save-siliconflow-key.php" id="siliconflow-settings">
-        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
-        <h2>Réglages IA (SiliconFlow — vidéo IA économique)</h2>
-        <p class="hint">Clé depuis <a href="https://cloud.siliconflow.com/account/ak" target="_blank" rel="noopener">cloud.siliconflow.com</a> (rubrique clés API) — utilisée pour la « Vidéo IA — Wan 2.2 » de la galerie photo, une alternative bon marché à Google Veo (environ 0,29 $ par vidéo ; un petit crédit de départ est offert aux nouveaux comptes, à vérifier chez eux). Un champ laissé vide conserve la clé déjà enregistrée.</p>
-        <div class="field">
-          <label>Clé API SiliconFlow</label>
-          <input type="password" name="siliconflow_key" autocomplete="off" placeholder="<?= SILICONFLOW_API_KEY ? 'Déjà enregistrée — ' . h(substr(SILICONFLOW_API_KEY, 0, 4)) . '…' . h(substr(SILICONFLOW_API_KEY, -4)) : 'sk-...' ?>">
-        </div>
-        <p class="publish-status" data-kind="<?= SILICONFLOW_API_KEY ? '' : 'error' ?>" style="margin-top:10px;">
-          <?= SILICONFLOW_API_KEY ? 'Clé SiliconFlow configurée — la vidéo IA Wan 2.2 est disponible dans la galerie.' : 'Aucune clé enregistrée — la vidéo IA Wan 2.2 est désactivée (Google Veo et la vidéo zoom/travelling restent disponibles).' ?>
-        </p>
-        <?php if (secret_is_shared('siliconflow.key')): ?>
-          <p class="hint" style="margin-top:6px;"><strong>Clé partagée (période de test) :</strong> ce commerce n'a pas la sienne, il utilise celle de l'exploitant. Saisissez la vôtre ci-dessus pour la remplacer ; la clé partagée sera supprimée à la mise en production.</p>
-        <?php endif; ?>
-        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
-        <?php if (SILICONFLOW_API_KEY): ?>
-          <button type="submit" name="remove" value="1" class="btn" style="margin-top:6px;" onclick="return confirm('Retirer la clé SiliconFlow de ce commerce ?');">Retirer la clé</button>
-        <?php endif; ?>
+      <form class="admin-block" method="post" action="/admin/save-pwa.php" id="pwa-settings" data-panel="general">
+        <h2>Boutique installable (web app)</h2>
+        <p class="hint">Les visiteurs sur téléphone se voient proposer, au bon moment (à partir de leur 2<sup>e</sup> page, jamais pendant le paiement), d'<strong>ajouter la boutique à leur écran d'accueil</strong> : un geste, plein écran, avec l'icône et le nom de votre boutique (le logo carré de « Apparence »). Un lien « Installer l'appli » reste en pied de page. Sans boutique d'applications ni téléchargement.</p>
+        <label class="featured-check"><input type="checkbox" name="pwa_prompt" value="1"<?= shop_setting('pwa_prompt', '1') !== '0' ? ' checked' : '' ?>> Proposer d'installer la boutique comme web app</label>
+        <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer</button>
       </form>
 
     </div>
@@ -258,6 +240,17 @@ $flash = flash_get();
 </div>
 
 <script>
+(function () {
+  // Anciennes adresses : les clés d'API et d'IA sont maintenant dans « API & réseaux ».
+  if (/^#(gemini|fal|modal-video|siliconflow)-settings$/.test(location.hash)) { location.replace('/admin/social.php' + location.hash); return; }
+  var current = <?= json_encode($tab) ?>;
+  var panels = document.querySelectorAll('[data-panel]');
+  panels.forEach(function (p) { p.hidden = p.dataset.panel !== current; });
+  var target = location.hash ? document.getElementById(location.hash.slice(1)) : null;
+  var owner = target && target.closest('[data-panel]');
+  if (owner && owner.dataset.panel !== current) { location.replace('/admin/index.php?s=' + owner.dataset.panel + location.hash); return; }
+  if (owner) target.scrollIntoView();
+})();
 (function () {
   var backdrop = document.getElementById('media-pick-backdrop');
   var currentTarget = null;
@@ -290,5 +283,6 @@ $flash = flash_get();
   });
 })();
 </script>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

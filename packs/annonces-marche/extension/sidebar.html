@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assistant annonces</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Assistant de dépôt</p>
+    <h1 id="title">Aucun article sélectionné</h1>
+    <p id="channel" class="muted">Choisissez un article dans la popup de l’extension.</p>
+  </header>
+  <main>
+    <p id="status" class="status" role="status">Les informations de l’article sélectionné apparaîtront ici.</p>
+    <dl id="fields" class="fields" hidden></dl>
+    <button id="retry" type="button" hidden>Préremplir à nouveau cette page</button>
+    <p class="hint">Vérifiez les champs, la catégorie et les photos sur le site, puis publiez vous-même.</p>
+  </main>
+  <script src="sidebar.js"></script>
+</body>
+</html>

@@ -25,15 +25,17 @@ $pageTitle = $product['name'];
 $ogType = 'product';
 $ogUrl = shop_abs_url('/produit.php?ref=' . urlencode($product['ref']));
 $ogImage = shop_cover($product, $gallery) ?: null;
-$ogDescription = trim(($product['price'] !== '' ? $product['price'] . ' — ' : '') . mb_substr(trim(preg_replace('/\s+/', ' ', (string) $product['description'])), 0, 200));
+$ogDescription = trim((shop_sales_enabled() && $product['price'] !== '' ? $product['price'] . ' — ' : '') . mb_substr(trim(preg_replace('/\s+/', ' ', (string) $product['description'])), 0, 200));
 include __DIR__ . '/includes/header.php';
 $shareBtn = share_button_html($ogUrl, $product['name'] . ' — ' . $siteName, $ogDescription, $ogImage ? share_media_url($ogImage) : '');
 
 // Prix et boutons d'achat, rendus deux fois : dans la fiche, et dans la barre collée en haut sur smartphone.
-$priceHtml = has_promo_price($product)
+$priceHtml = !shop_sales_enabled() ? '' : (has_promo_price($product)
     ? '<span class="price-old">' . h($product['price']) . '</span> <span class="price price-promo">' . h($product['promo_price']) . '</span>'
-    : '<span class="price">' . h($product['price']) . '</span>';
+   : '<span class="price">' . h($product['price']) . '</span>');
+if (shop_sales_enabled()) $priceHtml .= lot_tag_html($product);
 $buyHtml = static function () use ($product): string {
+   if (!shop_sales_enabled()) return '<a class="btn btn-primary" href="/index.php#contact">Nous contacter</a>';
     if (!in_stock($product)) {
         return '<span class="badge" style="border-color:var(--ink-soft);color:var(--ink-soft);">Vendue</span>';
     }
@@ -41,12 +43,15 @@ $buyHtml = static function () use ($product): string {
         return '<a class="btn btn-primary" href="/index.php#contact">Nous contacter</a>';
     }
     // « Ajouter au panier » reste sur la fiche ; « Commander » ajoute puis ouvre le panier (le dernier `redirect` envoyé l'emporte).
+    static $calls = 0;
+    $calls++;   // 1re fois : barre collée en haut sur smartphone ; 2e fois : la fiche, seule à recevoir les actions des plugins
+    $extra = $calls >= 2 ? plugin_render('produit_actions', ['product' => $product]) : '';
     return '<form method="post" action="/cart-add.php" class="buy-form">' . cart_csrf_field()
         . '<input type="hidden" name="ref" value="' . h($product['ref']) . '">'
         . '<input type="hidden" name="redirect" value="/produit.php?ref=' . h($product['ref']) . '">'
         . '<button class="btn btn-primary" type="submit">Ajouter au panier</button>'
         . '<button class="btn btn-ghost" type="submit" name="redirect" value="/cart.php">Commander</button>'
-        . '</form>';
+        . '</form>' . $extra;
 };
 
 // Modèle à mise en page propre (views/<modèle>/product.php) : mêmes données ($product, $gallery, $related, $priceHtml, $buyHtml).
@@ -133,7 +138,7 @@ if ($view = shop_view('product')) {
         </ul>
       <?php endif; ?>
 
-      <?= product_price_extras_html($product) ?>
+      <?php if (shop_sales_enabled()): ?><?= product_price_extras_html($product) ?><?php endif; ?>
       <div class="card-foot" style="margin-top:auto;">
         <span class="price-group"><?= $priceHtml ?></span>
         <?= $buyHtml() ?>

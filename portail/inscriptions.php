@@ -24,6 +24,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $req = saas_request_load((string) ($_POST['id'] ?? ''));
     if (!$req) {
         portail_flash('Demande introuvable.', 'error');
+    } elseif ($action === 'remind_domain') {
+        $error = saas_domain_followup_remind((string) $req['id']);
+        portail_flash($error ?? 'Relance de nom de domaine envoyée.', $error ? 'error' : 'ok');
     } elseif ($action === 'resend' && $req['status'] === 'paid') {
         $ok = saas_mail($req['email'], 'Créez votre boutique — ' . $cfg['name'],
             "Bonjour,\n\nVotre paiement est bien reçu. Il ne reste qu'à créer votre boutique (nom, design, mot de passe) :\n\n" . saas_creation_url($req, $origin) . "\n\n" . $cfg['name'] . "\n");
@@ -62,6 +65,11 @@ $pending = array_values(array_filter($requests, static fn ($r) => $r['status'] =
 $awaiting = array_values(array_filter($requests, static fn ($r) => $r['status'] === 'awaiting_payment'));
 $paidOpen = array_values(array_filter($requests, static fn ($r) => $r['status'] === 'paid'));
 $done = array_values(array_filter($requests, static fn ($r) => !in_array($r['status'], ['pending', 'awaiting_payment', 'paid', 'draft'], true)));
+$domainFollowups = array_values(array_filter($requests, static fn ($r) =>
+    ($r['branding']['domain_followup']['status'] ?? '') === 'pending'
+    && !empty($r['branding']['domain_followup']['consented_at'])
+    && !in_array(($r['status'] ?? ''), ['cancelled', 'rejected'], true)
+));
 $galleries = gallery_list();
 $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
 ?><!DOCTYPE html>
@@ -73,6 +81,7 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
 <title>Inscriptions — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=1">
 <style>
   .iwrap { display: grid; gap: 16px; max-width: 920px; margin: 0 auto; padding: 0 16px 48px; }
   .icard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
@@ -86,15 +95,48 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <div class="brand"><h1>Créations de boutiques</h1><p>Boutiques créées par les commerçants depuis la page publique « Créer ma boutique »</p></div>
-    <span style="display:flex;gap:8px;flex-wrap:wrap;"><a class="btn" href="<?= e($origin) ?>/inscription/" target="_blank" rel="noopener">Voir la page publique</a><a class="btn" href="/portail/">Portail des commerces</a></span>
-  </header>
+<?php portail_page_start([
+    'title' => 'Créations de boutiques',
+    'eyebrow' => 'Pilotage',
+    'desc' => 'Boutiques créées par les commerçants depuis la page publique « Créer ma boutique ».',
+    'actions' => '<a class="btn" href="' . e($origin) . '/inscription/" target="_blank" rel="noopener">Voir la page publique</a>',
+]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
   <div class="iwrap">
     <p class="meta" style="margin:0">Les boutiques se créent <strong>toutes seules</strong> : le client choisit sa formule, paie si elle est payante, puis crée sa boutique et arrive dessus, sans validation de votre part. Cette page liste les créations récentes et les paiements dont la boutique reste à créer.</p>
     <?php if ($pending): ?><h2 style="margin:0"><?= count($pending) ?> demande<?= count($pending) > 1 ? 's' : '' ?> à valider (anciennes demandes)</h2><?php endif; ?>
+
+    <?php if ($domainFollowups): ?>
+      <section class="icard">
+        <h2>Relances de nom de domaine</h2>
+        <p class="meta" style="margin:0">Les clients ci-dessous ont demandé à choisir leur domaine plus tard et ont accepté une relance. Relance manuelle après 7 jours, au plus 3 fois.</p>
+        <?php foreach ($domainFollowups as $r):
+            $followup = (array) $r['branding']['domain_followup'];
+            $reminders = array_values(array_filter((array) ($followup['reminders'] ?? []), 'is_numeric'));
+            $last = $reminders ? max(array_map('intval', $reminders)) : (int) ($followup['requested_at'] ?? 0);
+            $canRemind = count($reminders) < SAAS_DOMAIN_FOLLOWUP_MAX && time() - $last >= SAAS_DOMAIN_FOLLOWUP_DELAY;
+            $suggestions = array_values(array_filter((array) ($followup['suggestions'] ?? []), 'is_string'));
+            $domains = array_values(array_filter((array) ($followup['domains'] ?? []), static fn ($d) => is_array($d) && !empty($d['available'])));
+            $domainNames = array_map(static fn (array $d): string => (string) ($d['domain'] ?? ''), array_slice($domains, 0, 8));
+        ?>
+          <div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:10px">
+            <div>
+              <strong><?= e((string) ($r['preferred_shop_name'] ?? $r['shop_name'] ?? 'Boutique')) ?></strong>
+              <small class="meta"><?= e((string) ($r['email'] ?? '')) ?> · <?= e(saas_offer_badge($r)) ?> · <?= count($reminders) ?>/<?= SAAS_DOMAIN_FOLLOWUP_MAX ?> relances</small>
+              <?php if ($suggestions || $domains): ?><small class="meta">Idées : <?= e(implode(', ', array_slice($suggestions, 0, 6))) ?><?= $domainNames ? ' · Domaines : ' . e(implode(', ', $domainNames)) : '' ?></small><?php endif; ?>
+              <?php if (!$canRemind): ?><small class="meta"><?= count($reminders) >= SAAS_DOMAIN_FOLLOWUP_MAX ? 'Relances terminées.' : 'Prochaine relance possible le ' . e(date('d/m/Y', $last + SAAS_DOMAIN_FOLLOWUP_DELAY)) ?></small><?php endif; ?>
+            </div>
+            <form method="post">
+              <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+              <input type="hidden" name="id" value="<?= e((string) $r['id']) ?>">
+              <input type="hidden" name="action" value="remind_domain">
+              <button class="btn small" type="submit"<?= $canRemind ? '' : ' disabled' ?>>Relancer</button>
+            </form>
+          </div>
+        <?php endforeach; ?>
+      </section>
+    <?php endif; ?>
 
     <?php foreach ($pending as $r): ?>
       <section class="icard">
@@ -132,6 +174,7 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
         <section class="icard">
           <div><strong><?= e($r['shop_name'] !== '' ? $r['shop_name'] : '(nom pas encore choisi)') ?></strong> <span class="pill sent"><?= e(saas_offer_badge($r)) ?></span> <span class="pill done">Payée</span>
             <small class="meta"><?= e($r['email']) ?> · payée le <?= e($dt((int) ($r['payment']['paid_at'] ?? $r['created']))) ?></small></div>
+          <?php if ($serviceQuoteLabels = saas_service_quote_names((array) ($r['service_quotes'] ?? []))): ?><p class="meta">Prestations demandées : <?= e(implode(', ', $serviceQuoteLabels)) ?> — à chiffrer</p><?php endif; ?>
           <?php if (!empty($r['error'])): ?><p class="flash" data-kind="error" style="margin:0"><?= e($r['error']) ?></p><?php endif; ?>
           <div class="row">
             <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="id" value="<?= e($r['id']) ?>"><input type="hidden" name="action" value="resend"><button class="btn small" type="submit">Renvoyer le lien de création</button></form>
@@ -161,6 +204,8 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
               <?php if (($r['payment']['state'] ?? '') === 'canceled'): ?><span class="pill sent">Abonnement résilié</span><?php endif; ?>
               <small class="meta"><?= e($r['email']) ?> · <?= e(saas_offer_badge($r)) ?> · <?= e($dt((int) ($r['approved'] ?? $r['rejected'] ?? $r['created']))) ?></small>
               <?php if ($r['status'] === 'approved' && !empty($r['shop_url'])): ?> · <a href="<?= e($r['shop_url']) ?>" target="_blank" rel="noopener">ouvrir la boutique</a><?php endif; ?>
+              <?php $serviceQuoteLabels = saas_service_quote_names((array) ($r['service_quotes'] ?? [])); ?>
+              <?php if ($serviceQuoteLabels): ?><br><small class="meta">Prestations demandées : <?= e(implode(', ', $serviceQuoteLabels)) ?> — à chiffrer</small><?php endif; ?>
               <?php if ($r['status'] === 'rejected' && !empty($r['reason'])): ?><br><small class="meta">Motif : <?= e($r['reason']) ?></small><?php endif; ?></span>
             <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="id" value="<?= e($r['id']) ?>"><input type="hidden" name="action" value="forget"><button class="btn small" type="submit">Retirer de la liste</button></form>
           </div>

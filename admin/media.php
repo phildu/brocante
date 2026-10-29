@@ -4,6 +4,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_admin();
 
 $content = get_content();
+media_library_sync_visuals_once();
 $type = (string) ($_GET['type'] ?? '');
 $type = in_array($type, ['photo', 'video'], true) ? $type : null;
 $q = trim((string) ($_GET['q'] ?? ''));

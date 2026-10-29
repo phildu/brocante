@@ -177,6 +177,7 @@ function password_reset_page(string $title, string $bodyHtml): never
 <div class="login-wrap"><div class="login-box">
 <?= $bodyHtml ?>
 </div></div>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>
 <?php

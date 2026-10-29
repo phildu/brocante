@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Valeurs de départ : un exemple rempli (boulangerie), remplaçable par les boutons « Partir de ».
 $defaults = [
-    'name' => 'Boulangerie Martin', 'tagline' => 'Pains au levain & viennoiseries maison', 'url' => 'https://www.boulangerie-martin.fr',
+    'name' => 'Boulangerie Martin', 'tagline' => 'Pains au levain & viennoiseries maison', 'url' => 'https://www.boulangerie-martin.fr', 'presence_mode' => 'both',
     'admin_user' => 'admin', 'accent' => '#b0622b', 'accent2' => '#5b7a4a', 'bg' => '#faf5ec',
     'item1' => 'produit', 'item2' => 'produits', 'cat_title' => 'Du four à votre table',
     'cat' => ['Pains', 'Viennoiseries', 'Pâtisseries', 'Épicerie fine', '', ''],
@@ -53,6 +53,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
 <title>Nouveau commerce — Portail</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=1">
 <style>
   .new-layout { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 18px; align-items: start; }
   @media (max-width: 1050px) { .new-layout { grid-template-columns: 1fr; } }
@@ -114,17 +115,25 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
   .ai-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
   .ai-actions input { flex: 1 1 220px; }
   #ai-status[data-kind="error"] { color: #b3261e; }
+  .addr-wrap { position: relative; display: block; }
+  .addr-suggestions { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 40; display: block; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 8px 20px rgba(0,0,0,.12); max-height: 240px; overflow: auto; }
+  .addr-suggestions[hidden] { display: none; }
+  .addr-suggestion { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); padding: 8px 10px; font: inherit; cursor: pointer; }
+  .addr-suggestion:last-child { border-bottom: 0; }
+  .addr-suggestion strong { display: block; font-weight: 600; }
+  .addr-suggestion span { display: block; font-size: 0.8rem; opacity: 0.75; }
+  .addr-suggestion:hover, .addr-suggestion.is-active { background: var(--panel-2); }
 </style>
 </head>
 <body>
 <?php include __DIR__ . '/../includes/icons.php'; ?>
 <div class="app">
-  <header class="topbar">
-    <div class="brand">
-      <h1>Nouveau commerce</h1>
-      <p><a href="/portail/" style="color:inherit;">← Retour au portail</a></p>
-    </div>
-  </header>
+<?php portail_page_start([
+    'title' => 'Nouveau commerce',
+    'eyebrow' => 'Boutiques',
+    'desc' => 'Créer une boutique : adresse, identité, palette et aperçu en direct.',
+    'actions' => '<a class="btn" href="/portail/">Retour aux boutiques</a>',
+]); ?>
 
   <div class="new-layout">
   <form class="new-wrap form-col" method="post" enctype="multipart/form-data" id="builder">
@@ -165,6 +174,14 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
       <summary>Identité</summary>
       <div class="box-body">
         <label class="field">Nom du commerce<input name="name" id="f-name" required maxlength="60" value="<?= e($v('name')) ?>"></label>
+        <label class="field">Présence
+          <select name="presence_mode" id="f-presence">
+            <?php foreach (BUSINESS_PRESENCE_MODES as $key => $label): ?>
+              <option value="<?= e($key) ?>"<?= business_presence_mode(($f ?: $defaults)['presence_mode'] ?? 'both') === $key ? ' selected' : '' ?>><?= e($label) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <small>Cette mention pourra être modifiée dans l’administration.</small>
+        </label>
         <label class="field">Identifiant — adresse <?= e(portail_address_pattern()) ?> (facultatif)<input name="slug" id="f-slug" maxlength="40" pattern="[a-z0-9][a-z0-9_-]*" placeholder="calculé à partir du nom, ex. naty" value="<?= e($v('slug')) ?>"></label>
         <label class="field">Slogan<input name="tagline" id="f-tagline" maxlength="80" value="<?= e($v('tagline')) ?>"></label>
         <label class="field">Logo (PNG, JPG, WebP ou SVG — facultatif)<input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml"></label>
@@ -266,13 +283,27 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
     <details class="box">
       <summary>Contact et livraison</summary>
       <div class="box-body">
-        <label class="field">Adresse<input name="address" id="f-address" maxlength="160" value="<?= e($v('address')) ?>"></label>
+        <label class="field">Adresse<input name="address" id="f-address" maxlength="160" value="<?= e($v('address')) ?>" autocomplete="street-address" data-address-autocomplete></label>
         <label class="field">Horaires<input name="hours" id="f-hours" maxlength="160" value="<?= e($v('hours')) ?>"></label>
         <label class="field">Livraison<input name="delivery" id="f-delivery" maxlength="160" value="<?= e($v('delivery')) ?>"></label>
         <div class="two">
           <label class="field">Retrait<input name="pickup" id="f-pickup" maxlength="60" value="<?= e($v('pickup')) ?>"></label>
           <label class="field">Frais d'envoi<input name="fee" id="f-fee" maxlength="20" value="<?= e($v('fee')) ?>"></label>
         </div>
+      </div>
+    </details>
+
+    <details class="box">
+      <summary>Mentions légales <small>identité du vendeur</small></summary>
+      <div class="box-body">
+        <p class="hint">Ces informations préremplissent les pages légales de la boutique (mentions légales, CGV, confidentialité). Elles restent modifiables dans l'administration du commerce et dans le portail, page « Pages légales ». L'hébergeur (OVH) et le médiateur de la consommation s'y règlent aussi.</p>
+        <label class="field">Nom du vendeur (raison sociale ou nom)<input name="legal_company" maxlength="160" value="<?= e($v('legal_company')) ?>" placeholder="<?= e($v('name') ?: 'Nom du commerce') ?>"></label>
+        <div class="two">
+          <label class="field">SIRET / SIREN<input name="legal_siret" maxlength="40" value="<?= e($v('legal_siret')) ?>"></label>
+          <label class="field">Téléphone<input name="legal_phone" type="tel" maxlength="30" autocomplete="tel" value="<?= e($v('legal_phone')) ?>"></label>
+        </div>
+        <label class="field">E-mail de contact<input name="legal_email" type="email" maxlength="254" autocomplete="email" spellcheck="false" value="<?= e($v('legal_email')) ?>"></label>
+        <label class="field">Directeur de la publication<input name="legal_director" maxlength="120" value="<?= e($v('legal_director')) ?>"></label>
       </div>
     </details>
 
@@ -628,5 +659,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
   render();
 })();
 </script>
+<script src="/assets/pwd-toggle.js" defer></script>
+<script src="/assets/address-autocomplete.js?v=1" defer></script>
 </body>
 </html>

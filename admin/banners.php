@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/autofeed.php';
 require_admin();
 
 $content = get_content();
@@ -91,6 +92,20 @@ $flash = flash_get();
               <button type="button" class="btn-small" data-open-media-pick data-page-key="<?= h($key) ?>">Choisir dans la médiathèque</button>
             </form>
           </div>
+          <?php if (autofeed_api_key() !== ''): ?>
+          <details style="grid-column:1/-1;order:5;">
+            <summary style="cursor:pointer;font-weight:600;font-size:.88rem;">✨ Générer ce bandeau avec l'IA</summary>
+            <form method="post" action="/admin/regenerate-image.php" class="ai-banner-form" style="display:grid;gap:8px;margin-top:8px;max-width:720px;"
+              data-cost="<?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>">
+              <input type="hidden" name="target" value="banner"><input type="hidden" name="back" value="banners">
+              <input type="hidden" name="page_key" value="<?= h($key) ?>">
+              <label style="font-size:.82rem;color:var(--ink-soft);">Description de l'image (modifiable)
+                <textarea name="prompt" rows="3" maxlength="700" style="width:100%;box-sizing:border-box;"><?= h(autofeed_banner_prompt($key)) ?></textarea></label>
+              <div><button type="submit" class="btn-small">Générer le bandeau</button>
+                <span class="hint">Environ <?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>, décomptés de votre crédit IA. Remplace le bandeau actuel.</span></div>
+            </form>
+          </details>
+          <?php endif; ?>
           <div class="banner-actions">
             <?php if ($b && $b['path']): ?>
               <form method="post" action="/admin/banners-action.php" onsubmit="return confirm('Retirer ce bandeau ?');">
@@ -103,6 +118,41 @@ $flash = flash_get();
         </div>
       <?php endforeach; ?>
     </div>
+
+    <?php if (autofeed_api_key() !== ''): $sharedBanners = banner_library_list(); ?>
+    <details style="margin-top:28px;border:1px solid var(--line);background:var(--surface);padding:16px;">
+      <summary style="cursor:pointer;font-weight:600;">♻️ Réutiliser un bandeau déjà généré — médiathèque commune</summary>
+      <p class="hint" style="margin:10px 0 14px;">Chaque bandeau produit par l'IA est conservé ici, pour toutes les boutiques. « Appliquer » réutilise l'image telle quelle, sans crédit IA : elle reste disponible pour les autres. « Réserver » rend l'illustration exclusive à votre boutique pour <?= h(ai_format_eur(autofeed_regen_cost_eur())) ?> : elle disparaît alors de la médiathèque des autres. Le titre de la page reste en texte par-dessus l'image.</p>
+      <?php if ($sharedBanners): ?>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;">
+        <?php foreach (array_slice($sharedBanners, 0, 24) as $item): $mine = !empty($item['exclusive']) && (string) ($item['exclusive_by'] ?? '') === tenant_slug(); ?>
+        <form method="post" action="/admin/banners-action.php" style="margin:0;border:1px solid var(--line);background:var(--bg);padding:8px;display:grid;gap:8px;">
+          <input type="hidden" name="file" value="<?= h((string) $item['file']) ?>">
+          <img src="/uploads/banner-library/<?= h((string) $item['file']) ?>" alt="" loading="lazy" title="<?= h((string) ($item['prompt'] ?? '')) ?>" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;">
+          <?php if ($mine): ?><span class="hint" style="font-size:.72rem;">🔒 Réservée à votre boutique</span><?php endif; ?>
+          <label style="font-size:.76rem;color:var(--ink-soft);">Page
+            <select name="page_key" style="width:100%;">
+              <?php foreach ($targets as $k => $l): ?><option value="<?= h($k) ?>"<?= ($item['page'] ?? '') === $k ? ' selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
+            </select>
+          </label>
+          <label style="font-size:.76rem;color:var(--ink-soft);display:flex;gap:8px;align-items:center;">
+            Voile
+            <input type="range" name="overlay" min="0" max="100" step="5" value="60" style="flex:1;" oninput="this.nextElementSibling.textContent = this.value + ' %'">
+            <span>60 %</span>
+          </label>
+          <button type="submit" name="action" value="set_from_library" class="btn-small">Appliquer</button>
+          <?php if (!$mine): ?>
+          <button type="submit" name="action" value="reserve_from_library" class="btn-small"
+            onclick="return confirm('Réserver cette illustration à votre boutique ? <?= h(ai_format_eur(autofeed_regen_cost_eur())) ?> seront décomptés de votre crédit IA ; elle ne sera plus proposée aux autres boutiques.');">Réserver à ma boutique (<?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>)</button>
+          <?php endif; ?>
+        </form>
+        <?php endforeach; ?>
+      </div>
+      <?php else: ?>
+      <p class="hint">Aucun bandeau partagé pour l'instant : la première génération alimentera la médiathèque commune.</p>
+      <?php endif; ?>
+    </details>
+    <?php endif; ?>
   </div>
 </section>
 </main>
@@ -170,5 +220,13 @@ $flash = flash_get();
 
 <script src="/assets/admin-upload-check.js"></script>
 <script src="/assets/lightbox.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/lightbox.js') ?>" defer></script>
+<script>
+document.querySelectorAll('.ai-banner-form').forEach(function (f) {
+  f.addEventListener('submit', function (e) {
+    if (!confirm('Générer ce bandeau avec l\u2019IA ? Coût estimé : ' + f.dataset.cost + ' (décompté de votre crédit IA).')) { e.preventDefault(); return; }
+    var b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Génération en cours (~30 s)…';
+  });
+});
+</script>
 </body>
 </html>

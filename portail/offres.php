@@ -77,6 +77,7 @@ $origin = saas_origin();
 <title>Offres et annuaire — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=1">
 <style>
   .owrap { display: grid; gap: 16px; max-width: 920px; margin: 0 auto; padding: 0 16px 48px; }
   .ocard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
@@ -92,10 +93,12 @@ $origin = saas_origin();
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <div class="brand"><h1>Offres et annuaire</h1><p>La vitrine publique de la plateforme : accueil, formules et annuaire des commerces</p></div>
-    <span style="display:flex;gap:8px;flex-wrap:wrap;"><a class="btn" href="<?= e($origin) ?>/" target="_blank" rel="noopener">Voir l'accueil</a><a class="btn" href="/portail/">Portail des commerces</a></span>
-  </header>
+<?php portail_page_start([
+    'title' => 'Offres et annuaire',
+    'eyebrow' => 'Boutiques',
+    'desc' => 'La vitrine publique de la plateforme : accueil, formules et annuaire des commerces.',
+    'actions' => '<a class="btn" href="' . e($origin) . '/" target="_blank" rel="noopener">Voir l\'accueil</a>',
+]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
   <div class="owrap">
@@ -159,5 +162,6 @@ $origin = saas_origin();
     </section>
   </div>
 </div>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

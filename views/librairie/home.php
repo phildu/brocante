@@ -37,7 +37,7 @@ if (!$shelves && $products) $shelves[] = ['Le catalogue', 'À découvrir', array
           <p class="lb-cat"><?= h(category_label($spot['cat'])) ?></p>
           <h2><a href="/produit.php?ref=<?= urlencode($spot['ref']) ?>"><?= h($spot['name']) ?></a></h2>
           <p><?= h(shop_excerpt((string) $spot['description'], 300)) ?></p>
-          <p class="lb-price"><?= has_promo_price($spot) ? '<span class="price-old">' . h($spot['price']) . '</span> <span class="price price-promo">' . h($spot['promo_price']) . '</span>' : '<span class="price">' . h($spot['price']) . '</span>' ?></p>
+          <?php if (shop_sales_enabled()): ?><p class="lb-price"><?= has_promo_price($spot) ? '<span class="price-old">' . h($spot['price']) . '</span> <span class="price price-promo">' . h($spot['promo_price']) . '</span>' : '<span class="price">' . h($spot['price']) . '</span>' ?></p><?php endif; ?>
           <a class="btn btn-primary" href="/produit.php?ref=<?= urlencode($spot['ref']) ?>">Voir la fiche</a>
         </div>
       </article>

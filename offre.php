@@ -20,6 +20,7 @@ function offre_reply(bool $ok, string $message, string $ref = '', bool $ajax = t
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') offre_reply(false, 'Méthode non autorisée.', '', $ajax, 405);
+if (!shop_sales_enabled()) offre_reply(false, 'Les offres de prix ne sont pas disponibles pour cette boutique.', '', $ajax, 404);
 $ref = (string) ($_POST['ref'] ?? '');
 if (trim((string) ($_POST['website'] ?? '')) !== '') offre_reply(true, 'Merci, votre offre est envoyée.', $ref, $ajax);   // robot : réponse identique, rien d'enregistré
 

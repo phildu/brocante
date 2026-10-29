@@ -4,6 +4,12 @@
 require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas-events.php';
 require_once PORTAIL_ROOT . '/includes/galleries.php';
+require_once PORTAIL_ROOT . '/includes/gallery-admin.php';
+require_once PORTAIL_ROOT . '/includes/gallery-offers.php';
+
+// Mode restreint : administrateur d'une galerie (voir _bootstrap.php) — sa galerie seulement, ni création ni suppression, pas de gestion des comptes.
+$limited = defined('GA_LIMITED') ? GA_LIMITED : null;
+const GA_LIMITED_ACTIONS = ['save', 'style', 'style_reset', 'add_remote', 'remove_remote', 'refresh', 'pause', 'export'];
 
 $shops = tenant_list();
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -13,17 +19,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = (string) ($_POST['action'] ?? '');
     $slug = strtolower((string) ($_POST['slug'] ?? ''));
+    if ($limited) {
+        $slug = $limited;
+        if (!in_array($action, GA_LIMITED_ACTIONS, true)) { portail_flash("Cette action est réservée à l'exploitant.", 'error'); header('Location: /portail/galeries.php'); exit; }
+    }
     $back = '/portail/galeries.php' . ($slug !== '' && $action !== 'delete' && $action !== 'create' ? '?g=' . urlencode($slug) : '');
     $gallery = $slug !== '' ? gallery_load($slug) : null;
 
     switch ($action) {
+        case 'export':
+            if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            try {
+                $payload = gallery_export_payload($slug);
+                if (!$payload) { portail_flash('Galerie introuvable.', 'error'); break; }
+                $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+                header('Content-Type: application/json; charset=utf-8');
+                header('Content-Disposition: attachment; filename="galerie-' . $slug . '.json"');
+                header('Content-Length: ' . strlen($json));
+                echo $json;
+                exit;
+            } catch (RuntimeException | JsonException $e) {
+                error_log('gallery export ' . $slug . ': ' . $e->getMessage());
+                portail_flash('Export impossible : ' . $e->getMessage(), 'error');
+            }
+            break;
+
+        case 'import':
+            if ($limited) { portail_flash("L'import est réservé à l'exploitant.", 'error'); break; }
+            $upload = $_FILES['gallery_file'] ?? null;
+            if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                portail_flash('Choisissez un fichier JSON de galerie valide (taille maximale : 40 Mo).', 'error');
+                break;
+            }
+            if (($upload['size'] ?? 0) > 40 * 1024 * 1024 || !is_uploaded_file((string) ($upload['tmp_name'] ?? ''))) {
+                portail_flash('Fichier importé trop volumineux ou invalide (limite : 40 Mo).', 'error');
+                break;
+            }
+            $json = file_get_contents((string) $upload['tmp_name']);
+            if ($json === false) { portail_flash('Impossible de lire le fichier importé.', 'error'); break; }
+            try {
+                $payload = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+                if (!is_array($payload) || !is_array($payload['gallery'] ?? null)) {
+                    throw new InvalidArgumentException('Le fichier JSON ne contient pas les données attendues.');
+                }
+                $modeInput = $_POST['import_mode'] ?? 'new';
+                $targetInput = $_POST['target_slug'] ?? '';
+                if (!is_string($modeInput) || !is_string($targetInput)) {
+                    throw new InvalidArgumentException('Paramètres d’import invalides.');
+                }
+                $mode = $modeInput;
+                $targetSlug = strtolower(trim($targetInput));
+                if ($mode === 'replace') {
+                    if (!gallery_slug_valid($targetSlug) || !($existing = gallery_load($targetSlug))) {
+                        throw new InvalidArgumentException('Pour remplacer une galerie, indiquez un identifiant existant.');
+                    }
+                } elseif ($mode === 'new') {
+                    $targetSlug = $targetSlug !== '' ? $targetSlug : gallery_slugify((string) ($payload['gallery']['name'] ?? 'galerie'));
+                    if (!gallery_slug_valid($targetSlug) || in_array($targetSlug, ['index', 'admin', 'assets', 'portail', 'contact', 'clic', 'creer'], true)) {
+                        throw new InvalidArgumentException('Identifiant invalide : 2 à 40 caractères (lettres minuscules, chiffres, tirets).');
+                    }
+                    if (gallery_load($targetSlug)) throw new InvalidArgumentException('Cet identifiant existe déjà : choisissez « Remplacer » ou un nouvel identifiant.');
+                    $existing = null;
+                } else {
+                    throw new InvalidArgumentException('Choisissez de créer une galerie ou d’en remplacer une.');
+                }
+                $imported = gallery_import_payload($payload, $targetSlug, $existing);
+                $saasNote = 'Galerie « ' . $imported['name'] . ' » importée (' . ($existing ? 'remplacée' : 'créée') . ')';
+                portail_flash($saasNote . ($existing ? ' ; administrateurs et offre conservés.' : ' ; brouillon créé, sans comptes administrateurs ni offre importée.'), 'ok');
+                $back = '/portail/galeries.php?g=' . urlencode($targetSlug);
+            } catch (JsonException | InvalidArgumentException | RuntimeException $e) {
+                error_log('gallery import: ' . $e->getMessage());
+                portail_flash('Import impossible : ' . $e->getMessage(), 'error');
+            }
+            break;
+
         case 'create':
             $name = trim((string) ($_POST['name'] ?? ''));
             $slug = strtolower(trim((string) ($_POST['slug'] ?? ''))) ?: gallery_slugify($name);
             if ($name === '') { portail_flash('Donnez un nom à la galerie.', 'error'); break; }
             if (!gallery_slug_valid($slug)) { portail_flash('Identifiant non valide : 2 à 40 caractères (lettres minuscules, chiffres, tirets).', 'error'); break; }
-            if (gallery_load($slug) || in_array($slug, ['index', 'admin', 'assets', 'portail'], true)) { portail_flash('Une galerie « ' . $slug . ' » existe déjà : choisissez un autre identifiant.', 'error'); break; }
-            $ok = gallery_save(['slug' => $slug, 'name' => $name, 'tagline' => (string) ($_POST['tagline'] ?? ''), 'accent' => (string) ($_POST['accent'] ?? ''), 'published' => false, 'created' => time(), 'members' => []]);
+            if (gallery_load($slug) || in_array($slug, ['index', 'admin', 'assets', 'portail', 'contact', 'clic'], true)) { portail_flash('Une galerie « ' . $slug . ' » existe déjà : choisissez un autre identifiant.', 'error'); break; }
+            $ok = gallery_save(['slug' => $slug, 'name' => $name, 'tagline' => (string) ($_POST['tagline'] ?? ''), 'accent' => (string) ($_POST['accent'] ?? ''),
+                'presence_mode' => business_presence_mode($_POST['presence_mode'] ?? 'online'), 'published' => false,
+                'type' => (gt_types()[(string) ($_POST['type'] ?? '')] ?? gt_type(GT_DEFAULT))['key'], 'created' => time(), 'members' => []]);
             portail_flash($ok ? 'Galerie créée : ajoutez maintenant ses commerces.' : "Impossible d'écrire dans data/galeries (droits du dossier).", $ok ? 'ok' : 'error');
             $back = $ok ? '/portail/galeries.php?g=' . urlencode($slug) : '/portail/galeries.php';
             break;
@@ -45,10 +123,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $m['featured'] = in_array((string) $k, $remoteFeatured, true);
                 $members[] = $m;
             }
+            $limit = $limited ? go_member_limit($gallery) : null;     // plafond de l'offre : appliqué à l'administrateur, pas à l'exploitant
+            if ($limit !== null && count($local) + count($members) > $limit) {
+                portail_flash('Votre offre permet ' . $limit . ' commerce' . ($limit > 1 ? 's' : '') . ' au plus (vous en avez coché ' . (count($local) + count($members)) . ') : décochez-en ou passez à une offre supérieure.', 'error');
+                break;
+            }
             $gallery = array_merge($gallery, [
                 'name' => trim((string) ($_POST['name'] ?? '')) ?: $gallery['name'],
                 'tagline' => (string) ($_POST['tagline'] ?? ''),
                 'description' => (string) ($_POST['description'] ?? ''),
+                'presence_mode' => business_presence_mode($_POST['presence_mode'] ?? $gallery['presence_mode'], $gallery['presence_mode']),
                 'published' => !empty($_POST['published']),
                 'members' => array_merge($local, $members),
             ]);
@@ -100,6 +184,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         case 'add_remote':
             if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            $limit = $limited ? go_member_limit($gallery) : null;
+            if ($limit !== null && count($gallery['members']) >= $limit) { portail_flash('Votre offre permet ' . $limit . ' commerce' . ($limit > 1 ? 's' : '') . ' au plus : passez à une offre supérieure pour en ajouter.', 'error'); break; }
             $url = rtrim(trim((string) ($_POST['url'] ?? '')), '/');
             $name = trim((string) ($_POST['name'] ?? ''));
             if (!gallery_remote_url_valid($url)) { portail_flash("Adresse non valide : une adresse http(s) publique, par exemple https://brocante.arrimage.com", 'error'); break; }
@@ -119,12 +205,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             portail_flash('Commerce retiré de la galerie.');
             break;
 
+        case 'admin_add':
+        case 'admin_reset':
+            if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            $adminEmail = (string) ($_POST['email'] ?? '');
+            [$err, $tempPassword] = ga_admin_add($slug, $adminEmail, (string) ($_POST['name'] ?? ''));
+            if ($err) { portail_flash($err, 'error'); break; }
+            $mailed = ga_mail(mb_strtolower(trim($adminEmail)), "Votre accès d'administrateur — " . $gallery['name'],
+                "Bonjour,\n\nVous pouvez administrer la galerie « {$gallery['name']} » (présentation, commerces, tableau de bord, prospects).\n\nConnexion : $origin/galerie/admin.php\nIdentifiant : " . mb_strtolower(trim($adminEmail)) . "\nMot de passe provisoire : $tempPassword\n\nVous devrez le remplacer à votre première connexion.\n");
+            $_SESSION['ga_new_password'] = ['email' => mb_strtolower(trim($adminEmail)), 'password' => $tempPassword, 'mailed' => $mailed];
+            portail_flash($action === 'admin_add' ? 'Administrateur ajouté.' : 'Nouveau mot de passe généré.');
+            break;
+
+        case 'admin_remove':
+            if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            ga_admin_remove($slug, (string) ($_POST['email'] ?? ''));
+            portail_flash('Administrateur retiré.');
+            break;
+
         case 'refresh':
             if ($gallery) { gallery_cache_clear($slug); portail_flash('Catalogue actualisé : la galerie relit les commerces à la prochaine visite.'); }
             break;
 
+        case 'pause':
+            if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            $gallery['paused'] = empty($gallery['paused']);
+            $ok = gallery_save($gallery);
+            portail_flash($ok
+                ? ($gallery['paused'] ? 'Galerie mise en pause : elle n’est plus visible publiquement. Son offre n’est pas résiliée.' : 'Galerie réactivée.')
+                : 'Impossible d’enregistrer le statut de la galerie.', $ok ? 'ok' : 'error');
+            break;
+
         case 'delete':
-            if ($gallery && trim((string) ($_POST['confirm'] ?? '')) === $slug) { gallery_delete($slug); portail_flash('Galerie « ' . $gallery['name'] . ' » supprimée (les commerces ne sont pas touchés).'); }
+            if ($gallery && trim((string) ($_POST['confirm'] ?? '')) === $slug) {
+                $deleted = gallery_delete($slug);
+                portail_flash($deleted
+                    ? 'Galerie « ' . $gallery['name'] . ' » supprimée (les commerces ne sont pas touchés).'
+                    : 'Suppression incomplète : impossible de retirer le fichier de la galerie ou une de ses images.', $deleted ? 'ok' : 'error');
+            }
             else portail_flash("Pour confirmer, tapez l'identifiant de la galerie.", 'error');
             break;
     }
@@ -135,8 +253,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $flash = portail_flash();
 $galleries = gallery_list();
-$edit = isset($_GET['g']) ? gallery_load(strtolower((string) $_GET['g'])) : null;
-$confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
+$edit = $limited ? gallery_load($limited) : (isset($_GET['g']) ? gallery_load(strtolower((string) $_GET['g'])) : null);
+$confirmDelete = !$limited && $edit && ($_GET['supprimer'] ?? '') === '1';
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -146,6 +264,7 @@ $confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
 <title>Galeries commerciales — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=1">
 <style>
   .gwrap { display: grid; gap: 16px; max-width: 920px; margin: 0 auto; padding: 0 16px 48px; }
   .gcard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
@@ -178,16 +297,30 @@ $confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <div class="brand">
-      <h1>Galeries commerciales</h1>
-      <p>Regrouper plusieurs commerces sur une page commune : une rue, un village, un groupe d'amis…</p>
-    </div>
-    <span style="display:flex;gap:8px;flex-wrap:wrap;">
-      <?php if ($edit): ?><a class="btn" href="/portail/galeries.php">← Toutes les galeries</a><?php endif; ?>
-      <a class="btn" href="/portail/">Portail des commerces</a>
-    </span>
-  </header>
+<?php
+$gaNavHtml = '';
+if ($limited) {
+    ob_start();
+    include __DIR__ . '/_galerie-nav.php';
+    $gaNavHtml = ob_get_clean();
+}
+$gaActions = '';
+if (!$limited) {
+    if ($edit) {
+        $gaActions .= '<a class="btn" href="/portail/galerie-tableau.php?g=' . e($edit['slug']) . '">Tableau de bord</a>';
+        $gaActions .= '<a class="btn" href="/portail/galerie-prospects.php?g=' . e($edit['slug']) . '">Prospects</a>';
+    }
+    $gaActions .= '<a class="btn" href="/portail/offres-galerie.php">Types de galerie</a>';
+}
+portail_page_start([
+    'title' => 'Galeries commerciales',
+    'eyebrow' => 'Boutiques',
+    'desc' => "Regrouper plusieurs commerces sur une page commune : une rue, un village, un groupe d'amis…",
+    'nav_html' => $gaNavHtml,
+    'actions' => $gaActions,
+    'section' => $limited ? 'Galerie' : 'Boutiques',
+]);
+?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
   <div class="gwrap">
@@ -199,14 +332,32 @@ $confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
         <div class="gl">
           <div>
             <strong><?= e($g['name']) ?></strong>
-            <span class="pill <?= $g['published'] ? 'done' : 'sent' ?>"><?= $g['published'] ? 'Publiée' : 'Brouillon' ?></span><br>
-            <small class="meta"><?= count($g['members']) ?> commerce<?= count($g['members']) > 1 ? 's' : '' ?> · <code class="url"><?= e($url) ?></code></small>
+            <span class="pill <?= !empty($g['paused']) ? 'sent' : ($g['published'] ? 'done' : 'sent') ?>"><?= !empty($g['paused']) ? 'En pause' : ($g['published'] ? 'Publiée' : 'Brouillon') ?></span>             <span class="pill"><?= e(gt_of($g)['emoji'] . ' ' . gt_of($g)['name']) ?></span>
+            <span class="pill"><?= e(business_presence_label($g['presence_mode'])) ?></span><br>
+            <small class="meta"><?= count($g['members']) ?> <?= e(count($g['members']) > 1 ? gt_word($g, 'members') : gt_word($g, 'member')) ?> · <code class="url"><?= e($url) ?></code></small>
           </div>
-          <span class="row"><a class="btn small btn-primary" href="/portail/galeries.php?g=<?= e($g['slug']) ?>">Gérer</a>
-            <a class="btn small" href="<?= e($url . ($g['published'] ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener"><?= $g['published'] ? 'Voir' : 'Aperçu' ?></a></span>
+          <div class="row"><a class="btn small btn-primary" href="/portail/galeries.php?g=<?= e($g['slug']) ?>">Gérer</a>
+            <form method="post" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>"><button class="btn small" type="submit" name="action" value="export">Exporter JSON</button></form>
+            <a class="btn small" href="<?= e($url . ($g['published'] && empty($g['paused']) ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener"><?= $g['published'] && empty($g['paused']) ? 'Voir' : 'Aperçu' ?></a></div>
         </div>
       <?php endforeach; ?>
     </section>
+
+    <?php if (!$limited): ?>
+    <form class="gcard" method="post" enctype="multipart/form-data">
+      <h2>Importer une galerie</h2>
+      <p class="meta">Importez un export JSON Brocante (40 Mo maximum). Les images sont incluses ; les boutiques membres restent inchangées. Les comptes administrateurs et l’offre Stripe ne sont jamais importés. Une nouvelle galerie est créée en brouillon.</p>
+      <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="import">
+      <div class="row">
+        <label class="f">Fichier JSON<input type="file" name="gallery_file" accept="application/json,.json" required></label>
+        <label class="f">Action
+          <select name="import_mode" id="import-mode"><option value="new">Créer sous un nouvel identifiant</option><option value="replace">Remplacer une galerie existante</option></select>
+        </label>
+        <label class="f">Identifiant cible (facultatif pour une nouvelle galerie)<input type="text" name="target_slug" maxlength="40" pattern="[a-z0-9][a-z0-9\-]{1,39}" placeholder="par défaut : identifiant de l’export"></label>
+      </div>
+      <p><button class="btn btn-primary" type="submit" onclick="return confirm(document.getElementById('import-mode').value === 'replace' ? 'Remplacer la configuration de la galerie sélectionnée ? Ses administrateurs et son offre seront conservés.' : 'Créer cette galerie en brouillon ?')">Importer la galerie</button></p>
+    </form>
+    <?php endif; ?>
 
     <form class="gcard" method="post" autocomplete="off">
       <h2>Nouvelle galerie</h2>
@@ -218,18 +369,27 @@ $confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
       <div class="row">
         <label class="f">Slogan<input type="text" name="tagline" maxlength="160" placeholder="Les commerçants de la rue, réunis en ligne"></label>
         <label class="f" style="flex:none;min-width:0;">Couleur<input class="swatch-in" type="color" name="accent" value="#b5502e"></label>
+        <label class="f">Type<select name="type"><?php foreach (gt_types() as $tk => $tt): ?><option value="<?= e($tk) ?>"><?= e($tt['emoji'] . ' ' . $tt['name']) ?></option><?php endforeach; ?></select></label>
+        <label class="f">Présence<select name="presence_mode"><?php foreach (BUSINESS_PRESENCE_MODES as $key => $label): ?><option value="<?= e($key) ?>"<?= $key === 'online' ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
       </div>
       <p><button class="btn btn-primary" type="submit">Créer la galerie</button></p>
     </form>
 
   <?php else: $g = $edit; $url = $origin . '/galerie/' . $g['slug'] . '/'; $remoteIndex = []; foreach ($g['members'] as $i => $m) if ($m['type'] === 'remote') $remoteIndex[$i] = $m; ?>
+    <?php if ($limited && ($st = go_status($g)) !== 'manual'): $lim = go_member_limit($g); ?>
+      <p class="flash" data-kind="<?= in_array($st, ['expired', 'canceled'], true) ? 'error' : 'ok' ?>" role="status">Offre « <?= e(go_offer($g['plan']['offer'], gt_of($g)['key'])['name'] ?? $g['plan']['offer']) ?> » — <?= e(GO_PLAN_STATUS[$st] ?? $st) ?><?= $st === 'trial' ? ' jusqu\'au ' . e(date('d/m/Y', $g['plan']['trial_until'])) : '' ?> · <?= count($g['members']) ?>/<?= (int) $lim ?> commerces.
+        <?php if (in_array($st, ['expired', 'canceled'], true)): ?>Votre galerie n'est plus visible du public. <?php endif; ?><a href="/portail/galerie-offre.php">Voir mon offre</a></p>
+    <?php endif; ?>
     <section class="gcard">
-      <h2><?= e($g['name']) ?> <span class="pill <?= $g['published'] ? 'done' : 'sent' ?>"><?= $g['published'] ? 'Publiée' : 'Brouillon' ?></span></h2>
-      <p class="meta">Adresse publique : <a href="<?= e($url) ?><?= $g['published'] ? '' : '?apercu=' . e(gallery_preview_token($g)) ?>" target="_blank" rel="noopener"><code class="url"><?= e($url) ?></code></a>
-        <?= $g['published'] ? '' : ' — non publiée : seul ce lien d\'aperçu l\'ouvre.' ?></p>
+      <h2><?= e($g['name']) ?> <span class="pill <?= !empty($g['paused']) ? 'sent' : ($g['published'] ? 'done' : 'sent') ?>"><?= !empty($g['paused']) ? 'En pause' : ($g['published'] ? 'Publiée' : 'Brouillon') ?></span> <span class="pill"><?= e(business_presence_label($g['presence_mode'])) ?></span></h2>
+      <p class="meta">Adresse publique : <a href="<?= e($url) ?><?= $g['published'] && empty($g['paused']) ? '' : '?apercu=' . e(gallery_preview_token($g)) ?>" target="_blank" rel="noopener"><code class="url"><?= e($url) ?></code></a>
+        <?= !empty($g['paused']) ? ' — galerie en pause : seul ce lien d\'aperçu l\'ouvre.' : ($g['published'] ? '' : ' — non publiée : seul ce lien d\'aperçu l\'ouvre.') ?></p>
+      <p><a class="btn small" href="/portail/addons.php?scope=gallery&amp;gallery=<?= e(rawurlencode($g['slug'])) ?>">Gérer les plugins et tarifs des boutiques membres</a></p>
       <form method="post" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
         <button class="btn small" type="submit" name="action" value="refresh">Actualiser le catalogue maintenant</button>
-        <a class="btn small danger" href="/portail/galeries.php?g=<?= e($g['slug']) ?>&amp;supprimer=1">Supprimer la galerie</a>
+        <button class="btn small" type="submit" name="action" value="pause"><?= !empty($g['paused']) ? 'Réactiver la galerie' : 'Mettre en pause' ?></button>
+        <button class="btn small" type="submit" name="action" value="export">Exporter JSON</button>
+        <?php if (!$limited): ?><a class="btn small danger" href="/portail/galeries.php?g=<?= e($g['slug']) ?>&amp;supprimer=1">Supprimer la galerie</a><?php endif; ?>
         <span class="meta">Le catalogue est relu toutes les 10 minutes.</span></form>
       <?php if ($confirmDelete): ?>
         <form class="confirm danger-zone" method="post" autocomplete="off">
@@ -241,16 +401,41 @@ $confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
       <?php endif; ?>
     </section>
 
+    <?php if (!$limited): $newPw = $_SESSION['ga_new_password'] ?? null; unset($_SESSION['ga_new_password']); ?>
+    <section class="gcard">
+      <h2>Administrateurs de la galerie</h2>
+      <p class="meta">Ils se connectent sur <code class="url"><?= e($origin) ?>/galerie/admin.php</code> et gèrent cette galerie seulement : présentation, commerces membres, publication, tableau de bord et prospects.</p>
+      <?php if ($newPw): ?>
+        <p class="flash" data-kind="ok" role="status">Mot de passe provisoire de <strong><?= e($newPw['email']) ?></strong> : <code><?= e($newPw['password']) ?></code> — <?= $newPw['mailed'] ? "envoyé par e-mail ; il ne sera plus affiché." : "l'e-mail n'a pas pu partir : transmettez-le-lui vous-même, il ne sera plus affiché." ?></p>
+      <?php endif; ?>
+      <?php foreach ($g['admins'] as $a): ?>
+        <div class="member">
+          <span class="name"><strong><?= e($a['name'] !== '' ? $a['name'] : $a['email']) ?></strong> <small><?= e($a['email']) ?> · <?= $a['last_login'] ? 'connecté le ' . e(date('d/m/Y H:i', $a['last_login'])) : 'jamais connecté' ?><?= $a['must_change'] ? ' · mot de passe provisoire' : '' ?></small></span>
+          <form method="post" class="row" style="gap:6px;"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>"><input type="hidden" name="email" value="<?= e($a['email']) ?>"><input type="hidden" name="name" value="<?= e($a['name']) ?>">
+            <button class="btn small" type="submit" name="action" value="admin_reset" onclick="return confirm('Générer un nouveau mot de passe provisoire et l\'envoyer par e-mail ?')">Nouveau mot de passe</button>
+            <button class="btn small danger" type="submit" name="action" value="admin_remove" onclick="return confirm('Retirer cet administrateur ?')">Retirer</button></form>
+        </div>
+      <?php endforeach; ?>
+      <?php if (!$g['admins']): ?><p class="meta">Aucun administrateur pour le moment.</p><?php endif; ?>
+      <form method="post" class="row" autocomplete="off"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="admin_add"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
+        <label class="f">Adresse e-mail<input type="email" name="email" required maxlength="160" placeholder="responsable@exemple.fr"></label>
+        <label class="f">Nom (facultatif)<input type="text" name="name" maxlength="80"></label>
+        <button class="btn btn-primary" type="submit">Ajouter et envoyer l'accès</button>
+      </form>
+    </section>
+    <?php endif; ?>
+
     <form class="gcard" method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="save"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
       <h2>Présentation</h2>
       <div class="row">
         <label class="f">Nom<input type="text" name="name" required maxlength="80" value="<?= e($g['name']) ?>"></label>
+        <label class="f">Présence<select name="presence_mode"><?php foreach (BUSINESS_PRESENCE_MODES as $key => $label): ?><option value="<?= e($key) ?>"<?= $g['presence_mode'] === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
       </div>
       <label class="f">Slogan<input type="text" name="tagline" maxlength="160" value="<?= e($g['tagline']) ?>"></label>
       <label class="f">Présentation (facultative)<textarea name="description" maxlength="1200"><?= e($g['description']) ?></textarea></label>
 
-      <h2 style="margin-top:8px;">Commerces de ce serveur</h2>
+      <h2 style="margin-top:8px;"><?= e(ucfirst(gt_word($g, 'members'))) ?> de ce serveur</h2>
       <p class="meta">Cochez ceux qui font partie de la galerie ; ★ les met en avant dans l'annuaire. Seules les pièces visibles et en stock sont présentées.</p>
       <?php $inGallery = []; foreach ($g['members'] as $m) if ($m['type'] === 'local') $inGallery[$m['slug']] = $m; ?>
       <?php foreach ($shops as $slug => $shop): $on = isset($inGallery[$slug]); ?>
@@ -262,7 +447,7 @@ $confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
       <?php endforeach; ?>
 
       <?php if ($remoteIndex): ?>
-        <h2 style="margin-top:8px;">Commerces d'ailleurs</h2>
+        <h2 style="margin-top:8px;"><?= e(ucfirst(gt_word($g, 'members'))) ?> d'ailleurs</h2>
         <?php foreach ($remoteIndex as $i => $m): ?>
           <div class="member"><span class="name"><strong><?= e($m['name'] ?: $m['url']) ?></strong> <small><code class="url"><?= e($m['url']) ?></code></small></span>
             <label><input type="checkbox" name="remote_featured[]" value="<?= (int) $i ?>"<?= $m['featured'] ? ' checked' : '' ?>> ★ à la une</label>
@@ -288,7 +473,7 @@ $confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
     <form class="gcard" method="post" enctype="multipart/form-data" autocomplete="off" id="style-form">
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="style"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
       <h2>Apparence de la page publique</h2>
-      <p class="meta">Palette, bannière, logo, polices, cartes et textes de <a href="<?= e($url . ($g['published'] ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener">la page de la galerie</a>. L'aperçu ci-contre se met à jour pendant la saisie ; rien ne change en ligne avant « Enregistrer l'apparence ».</p>
+      <p class="meta">Palette, bannière, logo, polices, cartes et textes de <a href="<?= e($url . ($g['published'] && empty($g['paused']) ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener">la page de la galerie</a>. L'aperçu ci-contre se met à jour pendant la saisie ; rien ne change en ligne avant « Enregistrer l'apparence ».</p>
       <div class="style-layout">
         <div class="style-fields">
           <fieldset><legend>Palette</legend>
@@ -398,7 +583,7 @@ $confirmDelete = $edit && ($_GET['supprimer'] ?? '') === '1';
     </script>
 
     <form class="gcard" method="post" autocomplete="off">
-      <h2>Ajouter un commerce d'ailleurs</h2>
+      <h2>Ajouter un <?= e(gt_word($g, 'member')) ?> d'ailleurs</h2>
       <p class="meta">Un commerce hébergé sur un autre serveur (par exemple le Petit Chalet) : indiquez l'adresse de sa boutique. Elle doit servir son catalogue (<code>/catalogue.php</code>, fourni par la plateforme).</p>
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="add_remote"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
       <div class="row">

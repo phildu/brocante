@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/hero.php';
 
 $content = get_content();
 $products = get_products();
@@ -7,11 +8,10 @@ $featured = featured_products();
 $promo = promo_products();
 $heroSlides = hero_slides_list();
 
-// La pile de polaroïds du hero mélange des rôles fixes (accueil, promo du
-// moment, coup de cœur) et les photos d'ambiance curées en back office —
-// voir includes/footer.php pour la rotation d'affichage et le clic "ramener
-// au premier plan". Les 3 premières cartes de la liste occupent les 3
-// positions visibles (p1/p2/p3) ; les suivantes attendent leur tour.
+// Le hero mélange des rôles fixes (accueil, promo du moment, coup de cœur) et
+// les photos d'ambiance curées en back office. Selon le type actif (modèle ou
+// réglage Apparence), includes/hero.php en fait une pile de polaroïds, une
+// image plein écran, un scindé, un carrousel ou une mosaïque.
 $heroPromo = $promo[0] ?? null;
 $heroFeatured = null;
 foreach ($featured as $fp) {
@@ -51,59 +51,7 @@ if ($view = shop_view('home')) {
   <p class="welcome-splash-text">Bienvenue</p>
 </div>
 
-<section class="hero<?= $heroBanner ? ' has-page-banner' : '' ?>">
-  <?php if ($heroBanner): ?><?php render_page_banner('accueil'); ?><?php endif; ?>
-  <div class="wrap hero-grid">
-    <div>
-      <p class="eyebrow"><?= h($content['hero_eyebrow']) ?></p>
-      <h1><?= h($content['hero_title']) ?></h1>
-      <p class="lede"><?= h($content['hero_subtitle']) ?></p>
-      <div class="hero-ctas">
-        <a class="btn btn-primary" href="/boutique.php">Voir la boutique</a>
-        <a class="btn btn-ghost" href="#histoire">Notre histoire</a>
-        <?= share_page_button($content['site_name'] ?: tenant('name'), (string) $content['hero_subtitle']) ?>
-      </div>
-    </div>
-    <div class="hero-scene hero-polaroid-scene">
-      <?php foreach ($heroFrameItems as $fi => $item):
-        $posClass = ['p1', 'p2', 'p3'][$fi] ?? 'is-waiting';
-        $extraClass = $item['type'] === 'promo' ? ' polaroid-promo' : '';
-        $dwell = $item['type'] === 'promo' ? 7000 : 4200;
-      ?>
-        <div class="polaroid-frame<?= $extraClass ?> <?= $posClass ?>" data-dwell="<?= $dwell ?>">
-          <?php if ($item['type'] === 'welcome'): ?>
-            <div class="polaroid-welcome-inner">
-              <span class="welcome-macaron"><img src="/<?= h(logo_url('square')) ?>" alt="<?= h($content['site_name']) ?>"></span>
-              <p class="welcome-caption">Bienvenue</p>
-            </div>
-          <?php elseif ($item['type'] === 'promo'): $pr = $item['data']; ?>
-            <a href="/produit.php?ref=<?= urlencode($pr['ref']) ?>" class="hero-slide hero-slide-promo is-active">
-              <?php if (!empty($pr['photo'])): ?><img src="/<?= h($pr['photo']) ?>" alt="<?= h($pr['name']) ?>"><?php endif; ?>
-              <span class="hero-promo-tag">
-                <?php if (has_promo_price($pr)): ?>
-                  <span class="price-old"><?= h($pr['price']) ?></span> <?= h($pr['promo_price']) ?>
-                <?php else: ?>
-                  Promo
-                <?php endif; ?>
-                · <?= h($pr['name']) ?>
-              </span>
-            </a>
-          <?php elseif ($item['type'] === 'featured'): $fp = $item['data']; ?>
-            <a href="/produit.php?ref=<?= urlencode($fp['ref']) ?>" class="hero-slide is-active">
-              <?php if (!empty($fp['photo'])): ?><img src="/<?= h($fp['photo']) ?>" alt="<?= h($fp['name']) ?>"><?php endif; ?>
-              <span class="hero-featured-tag">Coup de cœur · <?= h($fp['name']) ?></span>
-            </a>
-          <?php else: $s = $item['data']; ?>
-            <div class="hero-slide is-active">
-              <img src="/<?= h($s['path']) ?>" alt="<?= h($s['caption']) ?>">
-              <?php if ($s['caption'] !== ''): ?><span class="hero-slide-caption"><?= h($s['caption']) ?></span><?php endif; ?>
-            </div>
-          <?php endif; ?>
-        </div>
-      <?php endforeach; ?>
-    </div>
-  </div>
-</section>
+<?= shop_hero_html(shop_hero_type(), $heroFrameItems, $content, (bool) $heroBanner) ?>
 
 <?= promo_section_html() ?>
 
@@ -237,4 +185,5 @@ if ($view = shop_view('home')) {
   </div>
 </section>
 
+<?= plugin_render('visiteur_link') ?>
 <?php include __DIR__ . '/includes/footer.php'; ?>

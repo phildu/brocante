@@ -1,7 +1,7 @@
 /* Tarifs : bascules mensuel / annuel et formules / tranches, en CSS pur (pages publiques et aperçu du portail). Variables --accent, --accent-ink, --line, --bg, --ink, --ink-soft de la page. */
 /* ---- Tarifs : bascules mensuel / annuel et formules / tranches (en CSS, sans script) ---- */
 .pricing-toggle { display: inline-flex; border: 1.5px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; margin: 0 10px 14px 0; background: var(--bg); }
-.pricing-toggle input { position: absolute; opacity: 0; }
+.pricing-toggle input, label.offer > input[type="radio"] { position: absolute; opacity: 0; width: 1px !important; height: 1px !important; }   /* masqués : sans largeur, ils élargissaient la page sur mobile */
 .pricing-toggle label { padding: 6px 16px; border-radius: 999px; cursor: pointer; font-weight: 600; font-size: .9rem; }
 .pricing-toggle label em { font-style: normal; font-size: .76rem; opacity: .85; }
 .pricing-toggle input:checked + label { background: var(--accent); color: var(--accent-ink); }
@@ -16,5 +16,6 @@
 .plan-ai, .offer .lim.ai { font-size: .84rem; color: var(--accent, #b5502e); margin: 0 0 6px; line-height: 1.35; }
 .plan-limit, .offer .lim { font-size: .86rem; font-weight: 600; color: var(--ink-soft); margin: 0 0 6px; }
 .picker .op { display: block; font-weight: 600; color: var(--ink); }
+.picker .op small { display: block; color: var(--ink-soft); font-size: .78rem; font-weight: 400; }
 .picker .op.py { display: none; }
 .picker:has(#pk-by:checked) .op.py { display: block; }

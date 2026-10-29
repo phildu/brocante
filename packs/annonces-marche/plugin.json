@@ -1,18 +1,20 @@
 {
   "id": "annonces-marche",
   "name": "Annonces places de marché",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "description": "Option payante : publier plus vite sur Leboncoin et Vinted depuis le catalogue de la boutique, via une extension Chrome (préremplissage assisté, validation humaine).",
   "table_prefix": "am_",
   "pages": [
     { "id": "index", "label": "Annonces LBC / Vinted", "icon": "cloud", "file": "pages/index.php", "roles": ["admin", "community_manager"] },
+    { "id": "mappings", "label": "Correspondances LBC / Vinted", "icon": "cloud", "file": "pages/mappings.php", "roles": ["admin", "community_manager"], "menu": false },
     { "id": "merci", "label": "Paiement", "icon": "cloud", "file": "pages/merci.php", "roles": ["admin"], "menu": false }
   ],
   "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
     { "id": "status", "file": "api/status.php", "methods": ["GET"], "roles": ["admin", "community_manager"] },
     { "id": "token", "file": "api/token.php", "methods": ["POST"], "roles": ["admin"] },
-    { "id": "subscribe", "file": "api/subscribe.php", "methods": ["POST"], "roles": ["admin"] },
-    { "id": "trial", "file": "api/trial.php", "methods": ["POST"], "roles": ["admin"] },
+    { "id": "selection", "file": "api/selection.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
+    { "id": "mappings", "file": "api/mappings.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
     { "id": "listings", "file": "api/listings.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
     { "id": "extension-zip", "file": "api/extension-zip.php", "methods": ["GET"], "roles": ["admin", "community_manager"] }
   ],

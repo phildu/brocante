@@ -11,7 +11,7 @@ $size = trim((string) ($product['size_text'] ?? ''));
 ?>
 <div class="buybar" id="buybar" aria-label="Achat rapide">
   <div class="wrap buybar-in">
-    <span class="buybar-price"><?= $priceHtml ?></span>
+    <?php if (shop_sales_enabled()): ?><span class="buybar-price"><?= $priceHtml ?></span><?php endif; ?>
     <span class="buybar-actions"><?= $buyHtml() ?></span>
   </div>
 </div>
@@ -37,8 +37,8 @@ $size = trim((string) ($product['size_text'] ?? ''));
     <div class="md-pdp-info">
       <p class="md-crumbs"><a href="/boutique.php">Boutique</a> / <a href="/boutique.php?cat=<?= urlencode($product['cat']) ?>"><?= h(category_label($product['cat'])) ?></a></p>
       <h1><?= h($product['name']) ?></h1>
-      <p class="md-pdp-price"><?= $priceHtml ?></p>
-      <?= product_price_extras_html($product) ?>
+      <?php if (shop_sales_enabled()): ?><p class="md-pdp-price"><?= $priceHtml ?></p><?php endif; ?>
+      <?php if (shop_sales_enabled()): ?><?= product_price_extras_html($product) ?><?php endif; ?>
       <?php if (trim((string) $product['badge']) !== ''): ?><p class="md-pdp-badge"><?= h($product['badge']) ?></p><?php endif; ?>
 
       <?php if ($size !== '' || $etat): ?>

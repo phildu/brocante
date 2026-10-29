@@ -43,5 +43,5 @@ if (!empty($_POST['remove'])) {
     }
 }
 
-header('Location: /admin/index.php#modal-video-settings');
+header('Location: /admin/social.php#modal-video-settings');
 exit;

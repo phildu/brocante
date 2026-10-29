@@ -11,6 +11,7 @@
 //   4. petit-chalet (comportement historique).
 
 const TENANT_DEFAULT = 'petit-chalet';
+require_once __DIR__ . '/business-presence.php';
 
 /**
  * Commerce désigné par le sous-domaine de l'hôte (« naty » pour
@@ -85,6 +86,22 @@ function tenant_resolve(): array
 function tenant_slug(): string
 {
     return tenant_resolve()['slug'];
+}
+
+/**
+ * Adresse publique du commerce actif, sans barre finale : le site_url du commerce, sauf si c'est une adresse de remplissage
+ * (vide, localhost, *.test, *.example.com — celle d'un commerce créé sans adresse) : on prend alors celle de la requête + le préfixe du
+ * commerce (https://brocs.arrimage.com/<identifiant>). Sert aux retours de paiement Stripe et aux images des produits.
+ */
+function tenant_site_url(): string
+{
+    $url = rtrim((string) tenant('site_url'), '/');
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    $placeholder = $host === '' || $host === 'localhost' || $host === '127.0.0.1' || str_ends_with($host, '.test') || str_ends_with($host, '.example.com');
+    $reqHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    if (!$placeholder || $reqHost === '' || !preg_match('/^[A-Za-z0-9.-]+(:\d+)?$/', $reqHost)) return $url;
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+    return ($https ? 'https' : 'http') . '://' . $reqHost . tenant_base_path();
 }
 
 /** Préfixe des adresses du commerce actif : '' ou '/<slug>' (jamais de barre finale). */
@@ -260,9 +277,11 @@ function tenant_defaults(string $slug): array
         'name' => 'Ma boutique',
         'tagline' => '',
         'site_url' => 'http://localhost:8000',
+        'presence_mode' => 'online',
         // Compte de l'administration (mot de passe en clair ou haché avec password_hash).
         'admin_user' => 'admin',
         'admin_password' => '',
+        'sales_enabled' => true,
         // Chemins relatifs à la racine du projet.
         'db_file' => "data/$slug.db",
         'secrets_dir' => ".secrets/$slug",
@@ -313,6 +332,11 @@ function tenant_text(string $key): string
     return (string) tenant('texts.' . $key, '');
 }
 
+function shop_sales_enabled(): bool
+{
+    return (bool) tenant('sales_enabled', true);
+}
+
 /**
  * Balises <head> propres au commerce : polices et couleurs. L'apparence
  * réglée dans l'administration (includes/appearance.php) prime sur les
@@ -330,11 +354,15 @@ function tenant_head_html(): string
     // Un aperçu prend aussi sa palette et ses polices.
     $tplPreview = function_exists('shop_template_preview') ? shop_template_preview() : '';
     $tplKey = function_exists('shop_template_active') ? shop_template_active() : (string) tenant('template', '');
-    if ($tplPreview !== '') $saved = ['colors' => SHOP_TEMPLATES[$tplPreview]['colors'], 'fonts' => SHOP_TEMPLATES[$tplPreview]['fonts']];
+    if ($tplPreview !== '') $saved = ['colors' => SHOP_TEMPLATES[$tplPreview]['colors'], 'fonts' => SHOP_TEMPLATES[$tplPreview]['fonts'], 'dark' => SHOP_TEMPLATES[$tplPreview]['dark'] ?? null];
     if ($saved) {
         $palette = appearance_derive($saved['colors'] ?? []);
         $lightColors = $palette['light'];
         $darkColors = $palette['dark'];
+        // Variante sombre dessinée avec le modèle (surfaces, filets et couleurs adaptés) plutôt que déduite.
+        if (!empty($saved['dark']) && is_array($saved['dark'])) $darkColors = appearance_derive($saved['dark'])['light'];
+    } elseif (empty($darkColors) && !empty(SHOP_TEMPLATES[$tplKey]['dark'])) {
+        $darkColors = appearance_derive(SHOP_TEMPLATES[$tplKey]['dark'])['light'];
     }
     $fonts = $saved['fonts'] ?? tenant('fonts', []);
     if (!empty($fonts['display']) || !empty($fonts['body'])) {

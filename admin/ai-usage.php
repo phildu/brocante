@@ -3,6 +3,12 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/saas.php';
 require_admin();
+// IA facultative : l'écran de consommation n'existe pas pour une boutique où l'IA est désactivée.
+if (!ai_shop_enabled()) {
+    flash_set("Les fonctions d'IA sont désactivées pour cette boutique.", 'error');
+    header('Location: /admin/dashboard.php');
+    exit;
+}
 
 $content = get_content();
 $flash = flash_get();

@@ -165,7 +165,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob .plugin_enabled \
   --exclude-glob '_*.md' \
   --exclude '^[^/]+\.md$' \
-  --exclude-glob '*.sql' \
+  --exclude '^[^/]+\.sql$' \
   --exclude-glob '*.bak' \
   --exclude-glob '*.db' \
   --exclude-glob '*.db.bak-*' \

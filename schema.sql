@@ -26,7 +26,20 @@ CREATE TABLE IF NOT EXISTS content (
   shipping_fee TEXT NOT NULL DEFAULT '6,90 €',
   pickup_label TEXT NOT NULL DEFAULT 'Retrait à l''atelier',
   shipping_label TEXT NOT NULL DEFAULT 'Envoi postal',
-  slideshow_orientation TEXT NOT NULL DEFAULT 'horizontal'
+  slideshow_orientation TEXT NOT NULL DEFAULT 'horizontal',
+  pickup_only_below TEXT NOT NULL DEFAULT '10', -- € : en dessous (dons à 0 € inclus), retrait seul ; 0 = seuls les dons
+  pickup_only_message TEXT NOT NULL DEFAULT 'Retrait à l''adresse du vendeur.'
+);
+
+CREATE TABLE IF NOT EXISTS cart_discounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,                 -- 'total' : total du panier ; 'qty' : nombre d'articles
+  threshold INTEGER NOT NULL,         -- centimes (total) ou nombre d'articles (qty) à atteindre
+  type TEXT NOT NULL,                 -- 'percent' ou 'fixed'
+  value INTEGER NOT NULL,             -- pourcentage (1-100) ou centimes
+  label TEXT NOT NULL DEFAULT '',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -66,6 +79,12 @@ CREATE TABLE IF NOT EXISTS products (
   is_hidden INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0,
   stock INTEGER NOT NULL DEFAULT 1,
+  channels TEXT, -- canaux de vente (clés séparées par des virgules : boutique, ecommerce, leboncoin, vinted…)
+  sold_channel TEXT, -- canal par lequel la pièce a été vendue
+  sold_at TEXT, -- date de la dernière vente (stock passé à 0)
+  restocked_at TEXT, -- date du dernier réassort
+  keep_when_sold INTEGER NOT NULL DEFAULT 0, -- 1 : la pièce reste au catalogue (badge « Vendue ») une fois vendue
+  lot_qty INTEGER NOT NULL DEFAULT 1, -- vente en lot : nombre de pièces vendues ensemble au prix affiché (1 = pièce seule)
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -54,7 +54,7 @@ $ticker = array_values(array_filter(array_map(static fn (int $i): string => trim
 </section>
 <?php endif; ?>
 
-<?php if ($promo): $pp = $promo[0]; $ppImg = shop_cover($pp); ?>
+<?php if ($promo && shop_sales_enabled()): $pp = $promo[0]; $ppImg = shop_cover($pp); ?>
 <section class="md-promo">
   <a class="md-promo-img" href="/produit.php?ref=<?= urlencode($pp['ref']) ?>"><?php if ($ppImg): ?><img src="/<?= h($ppImg) ?>" alt="<?= h($pp['name']) ?>" loading="lazy"><?php endif; ?></a>
   <div class="md-promo-copy">

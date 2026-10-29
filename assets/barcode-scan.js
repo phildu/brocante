@@ -220,6 +220,7 @@
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  window.barcodeScanCamera = openCamera;   // caméra plein écran : (onCode, onError, onClose) — utilisée par la caisse du Studio
   window.barcodeScanInit = start;
   // Pour le Studio (shooting) : une barre de scan autonome qui rend le résultat à la page au lieu de remplir un formulaire,
   // et les briques utiles à son viseur (lecture par la caméra, recherche).

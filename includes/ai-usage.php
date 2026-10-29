@@ -5,6 +5,10 @@
 // Les tarifs sont ceux des offres publiques à la date de cette version : modifiables dans la page, à vérifier chez
 // Google (ai.google.dev/pricing) et fal.ai. Le solde réel d'un compte n'est lisible par aucune API : ce qui est affiché
 // est une estimation, pas une facture.
+//
+// Les fournisseurs d'IA et l'interrupteur « IA proposée » vivent dans includes/ai-providers.php (réglés au portail).
+
+require_once __DIR__ . '/ai-providers.php';
 
 /** Tarifs par défaut : image = $ par image générée ; text_in / text_out = $ par million de tokens ; search = $ par requête avec recherche web ; cutout = $ par détourage fal.ai ; veo_* = $ par seconde de vidéo Veo 3.1 (Lite, Fast, Standard ; 720p) ; wan22 = $ par vidéo Wan 2.2 (SiliconFlow, durée fixée par le service) ; modal_video = $ estimé par vidéo Wan 2.2 5B sur Modal (≈ 22 s de GPU + chargement du modèle, prélevé sur le crédit Modal). */
 const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001, 'veo_lite' => 0.05, 'veo_fast' => 0.10, 'veo_std' => 0.40, 'wan22' => 0.29, 'modal_video' => 0.07, 'claude_in' => 5.00, 'claude_out' => 25.00];
@@ -73,6 +77,7 @@ function ai_usage_record(string $kind, float $costUsd, string $model = '', int $
     try {
         db()->prepare('INSERT INTO ai_usage (kind, model, tokens_in, tokens_out, cost_usd, script, ref) VALUES (?, ?, ?, ?, ?, ?, ?)')
             ->execute([$kind, $model, $tokensIn, $tokensOut, round($costUsd, 6), basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'cli')), ai_usage_context()]);
+        ai_check_low_balance_alert(str_starts_with($model, 'fal') ? 'fal' : 'gemini');
     } catch (Throwable $e) {
     }
 }
@@ -116,6 +121,11 @@ function ai_usage_log_search(array $usage, bool $grounded): void
 /** Vidéo IA terminée (Veo : facturé à la seconde ; Wan 2.2 : au prix d'une vidéo). */
 function ai_usage_log_video(string $modelKey, int $seconds): void
 {
+    if (str_starts_with($modelKey, 'sf:')) {
+        $provider = ai_provider_video_by_key($modelKey);
+        ai_usage_record('video', veo_cost_usd($modelKey, $seconds), $provider ? (($provider['model'] ?: $provider['label'])) : 'Wan 2.2');
+        return;
+    }
     if ($modelKey === SF_MODEL_KEY) {
         ai_usage_record('video', veo_cost_usd($modelKey, $seconds), SF_VIDEO_MODEL);
         return;
@@ -282,9 +292,12 @@ function ai_quota_state(): ?array
         'credit_left' => $creditLeft, 'available' => $available, 'blocked' => $available < 0.005, 'month' => $month];
 }
 
-/** Message à montrer quand les générations IA sont suspendues (quota du mois épuisé et plus de crédit), ou null si l'IA est disponible. */
+/** Message à montrer quand les générations IA sont suspendues (IA coupée par l'exploitant, ou quota du mois épuisé et plus de crédit), ou null si l'IA est disponible. */
 function ai_gate(): ?string
 {
+    if (!ai_shop_enabled()) {
+        return "Les fonctions d'IA sont désactivées pour cette boutique. Contactez l'exploitant de la plateforme pour les réactiver.";
+    }
     try {
         $s = ai_quota_state();
     } catch (Throwable $e) {
@@ -294,3 +307,201 @@ function ai_gate(): ?string
     return 'Le quota d\'IA gratuite de ce mois est épuisé (' . ai_format_eur($s['month_spent']) . ' consommés pour ' . ai_format_eur($s['quota']) . ' inclus)'
         . ($s['purchased'] > 0 ? ' et votre crédit racheté aussi' : '') . '. Rachetez du crédit IA depuis « Consommation IA », ou attendez le début du mois prochain.';
 }
+
+// ── Notifications et alertes de solde IA ─────────────────────────────────────
+
+/**
+ * Détermine le destinataire d'une alerte IA :
+ * Si la boutique utilise sa propre clé -> le commerçant (comptes administrateurs ou admin_email).
+ * Si la boutique utilise la clé partagée du portail -> l'administrateur du portail (contact SaaS ou compte portail).
+ *
+ * @return array{type: 'merchant'|'portal', emails: string[], is_shared: bool, label: string}
+ */
+function ai_alert_recipient(string $service = 'gemini'): array
+{
+    require_once __DIR__ . '/shared-secrets.php';
+    require_once __DIR__ . '/saas.php';
+
+    $keyFile = ($service === 'gemini') ? 'gemini.key' : $service . '.key';
+    
+    // Vérification si la boutique a sa propre clé dédiée dans son dossier secrets_dir
+    $slug = function_exists('tenant_slug') ? tenant_slug() : '';
+    $ownSecretsDir = defined('SECRETS_DIR') ? SECRETS_DIR : (function_exists('tenant') ? tenant_file(tenant(), 'secrets_dir') : '');
+    $hasOwnKey = ($ownSecretsDir !== '' && is_file($ownSecretsDir . '/' . $keyFile));
+
+    // Si pas de clé dédiée dans le dossier du commerce (ou si secret_is_shared indique partagé),
+    // c'est la clé de la plateforme / du portail qui est utilisée.
+    $defaultSlug = defined('TENANT_DEFAULT') ? TENANT_DEFAULT : 'petit-chalet';
+    $isShared = (!$hasOwnKey && $slug !== $defaultSlug) || secret_is_shared($keyFile);
+
+    if ($isShared) {
+        $portalConfig = saas_config();
+        $contact = trim((string) ($portalConfig['contact'] ?? ''));
+        if ($contact === '') {
+            $pAccount = dirname(__DIR__) . '/.secrets/portail.json';
+            if (is_file($pAccount)) {
+                $pData = json_decode((string) file_get_contents($pAccount), true);
+                if (!empty($pData['user']) && filter_var($pData['user'], FILTER_VALIDATE_EMAIL)) {
+                    $contact = $pData['user'];
+                }
+            }
+        }
+        $emails = $contact !== '' ? [$contact] : [];
+        if (empty($emails)) {
+            try {
+                $mainDb = dirname(__DIR__) . '/brocante.db';
+                if (!is_file($mainDb)) $mainDb = dirname(__DIR__) . '/data/brocante.db';
+                if (is_file($mainDb)) {
+                    $mpdo = new PDO('sqlite:' . $mainDb, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                    $fe = $mpdo->query("SELECT email FROM accounts WHERE role = 'admin' AND is_active = 1 LIMIT 1")->fetchColumn();
+                    if ($fe && filter_var($fe, FILTER_VALIDATE_EMAIL)) {
+                        $emails[] = (string) $fe;
+                    }
+                }
+            } catch (Throwable $e) {
+            }
+        }
+        return [
+            'type' => 'portal',
+            'emails' => array_values(array_unique(array_filter($emails))),
+            'is_shared' => true,
+            'label' => "Administrateur du portail (" . ($portalConfig['name'] ?? 'Plateforme') . ")"
+        ];
+    }
+
+    $emails = [];
+    if (function_exists('pricing_admin_emails')) {
+        $emails = pricing_admin_emails();
+    }
+    if (empty($emails)) {
+        $adminEmail = trim((string) tenant('admin_email', ''));
+        if ($adminEmail !== '' && filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
+            $emails[] = $adminEmail;
+        } else {
+            $adminUser = trim((string) tenant('admin_user', ''));
+            if ($adminUser !== '' && filter_var($adminUser, FILTER_VALIDATE_EMAIL)) {
+                $emails[] = $adminUser;
+            }
+        }
+    }
+    return [
+        'type' => 'merchant',
+        'emails' => array_values(array_unique(array_filter($emails))),
+        'is_shared' => false,
+        'label' => "Commerçant (" . (tenant('name') ?: 'Boutique') . ")"
+    ];
+}
+
+/**
+ * Envoie une notification d'alerte solde IA au commerçant ou à l'administrateur du portail.
+ * Évite les envois répétés (au maximum un e-mail par 24 h pour le même type d'alerte et service).
+ */
+function ai_send_balance_alert(string $alertType, string $subject, string $message, string $service = 'gemini'): bool
+{
+    $now = time();
+    $sentKey = 'ai_alert_sent_' . preg_replace('/[^a-z0-9_-]/i', '_', $alertType . '_' . $service);
+
+    try {
+        $stmt = db()->prepare("SELECT value FROM settings WHERE name = ?");
+        $stmt->execute([$sentKey]);
+        $lastSent = (int) $stmt->fetchColumn();
+        if ($lastSent > 0 && ($now - $lastSent) < 86400) {
+            return false; // Alerte déjà envoyée il y a moins de 24 h
+        }
+    } catch (Throwable $e) {
+    }
+
+    $recipient = ai_alert_recipient($service);
+    if (empty($recipient['emails'])) {
+        error_log("ai_send_balance_alert [$alertType]: aucun e-mail de contact configuré pour " . $recipient['label']);
+        return false;
+    }
+
+    $siteName = tenant('name') ?: 'Boutique';
+    $fullBody = $message . "\n\n---\nNotification automatique générée par la plateforme Brocs pour : $siteName\nDate : " . date('d/m/Y H:i:s') . "\n";
+
+    require_once __DIR__ . '/saas.php';
+    $sent = false;
+    foreach ($recipient['emails'] as $email) {
+        if (saas_mail($email, $subject, $fullBody)) {
+            $sent = true;
+        }
+    }
+
+    try {
+        db()->prepare("INSERT OR REPLACE INTO settings (name, value) VALUES (?, ?)")
+            ->execute([$sentKey, (string) $now]);
+    } catch (Throwable $e) {
+    }
+
+    return $sent;
+}
+
+/**
+ * Vérifie si le solde ou quota IA approche de la fin et déclenche une alerte préventive si nécessaire.
+ * Seuil par défaut : moins de 2,00 € restant (ou moins de 15% du quota total).
+ */
+function ai_check_low_balance_alert(string $service = 'gemini'): void
+{
+    try {
+        $quota = ai_quota_state();
+        if ($quota && isset($quota['available'])) {
+            $available = (float) $quota['available'];
+            $totalQuota = (float) ($quota['quota'] ?? 0) + (float) ($quota['purchased'] ?? 0);
+            $threshold = min(2.00, max(0.50, $totalQuota * 0.15));
+
+            if ($available > 0.005 && $available <= $threshold) {
+                $recipient = ai_alert_recipient($service);
+                $amtStr = ai_format_eur($available);
+                $shopName = tenant('name') ?: 'votre boutique';
+
+                if ($recipient['is_shared']) {
+                    $subject = "[Alerte Portefeuille IA] Solde partagé bientôt épuisé ($amtStr restant)";
+                    $msg = "Bonjour,\n\nLe solde de crédit/quota IA partagé de la plateforme arrive bientôt à épuisement.\nIl reste actuellement environ $amtStr pour l'ensemble des commerces utilisant la clé partagée.\n\nPensez à réapprovisionner les crédits avant interruption des services IA.";
+                } else {
+                    $subject = "[Alerte Crédit IA] Solde presque épuisé sur $shopName ($amtStr restant)";
+                    $msg = "Bonjour,\n\nLe solde de crédit IA disponible sur votre boutique « $shopName » est presque épuisé.\nIl vous reste actuellement environ $amtStr pour vos générations d'images, de textes et de fiches produits.\n\nVous pouvez recharger votre crédit IA directement depuis l'administration de votre boutique (rubrique Consommation IA) pour éviter toute interruption.";
+                }
+
+                ai_send_balance_alert('low_balance', $subject, $msg, $service);
+            }
+        } else {
+            $bal = ai_balance();
+            if ($bal && isset($bal['remaining'])) {
+                $rem = (float) $bal['remaining'];
+                $init = (float) $bal['amount'];
+                $threshold = min(2.00, max(0.50, $init * 0.15));
+                if ($rem > 0.005 && $rem <= $threshold) {
+                    $recipient = ai_alert_recipient($service);
+                    $amtStr = number_format($rem, 2, ',', ' ') . ' €';
+                    $shopName = tenant('name') ?: 'votre boutique';
+                    $subject = "[Alerte Budget IA] Solde bientôt épuisé ($amtStr restant)";
+                    $msg = "Bonjour,\n\nLe budget estimé pour l'IA sur $shopName arrive à épuisement (reste $amtStr sur les " . number_format($init, 2, ',', ' ') . " € déclarés).\n\nPensez à vérifier vos comptes ou réapprovisionner vos crédits.";
+                    ai_send_balance_alert('low_budget', $subject, $msg, $service);
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        error_log("ai_check_low_balance_alert: " . $e->getMessage());
+    }
+}
+
+/**
+ * Déclenche une alerte immédiate lors d'un épuisement avéré de crédits Google AI Studio (HTTP 402).
+ */
+function ai_trigger_depleted_alert(string $service = 'gemini', string $details = ''): void
+{
+    $recipient = ai_alert_recipient($service);
+    $shopName = tenant('name') ?: 'votre boutique';
+
+    if ($recipient['is_shared']) {
+        $subject = "[Urgent - Alerte IA] Crédits Google AI Studio épuisés sur la clé partagée du portail";
+        $msg = "Bonjour,\n\nLes crédits prépayés Google AI Studio associés à la clé partagée de la plateforme sont épuisés (erreur HTTP 402 / Prepayment credits depleted).\n\nConséquence : La génération d'images (bandeaux de page, photos produits) et de contenus par l'IA est actuellement BLOQUÉE pour tous les commerces utilisant la clé du portail (dont $shopName).\n\nPour réactiver les services, rechargez les crédits sur Google AI Studio :\nhttps://ai.studio/projects\n\nDétails de l'erreur API : " . ($details ?: 'HTTP 402 Resource Exhausted');
+    } else {
+        $subject = "[Urgent - Alerte IA] Vos crédits Google AI Studio sont épuisés ($shopName)";
+        $msg = "Bonjour,\n\nLes crédits prépayés Google AI Studio associés à votre clé d'API personnelle pour la boutique « $shopName » sont épuisés (erreur HTTP 402 / Prepayment credits depleted).\n\nConséquence : La génération de bandeaux, photos et descriptions par l'IA ne peut plus fonctionner pour le moment.\n\nPour débloquer la génération, veuillez recharger votre compte Google AI Studio :\nhttps://ai.studio/projects\n\nDétails de l'erreur API : " . ($details ?: 'HTTP 402 Resource Exhausted');
+    }
+
+    ai_send_balance_alert('depleted_402', $subject, $msg, $service);
+}
+

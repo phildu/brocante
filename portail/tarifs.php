@@ -8,6 +8,7 @@ const TARIF_ROWS = 3;   // lignes vides proposées en plus des offres existantes
 
 $galleries = gallery_list();
 $pricing = saas_pricing();
+$mode = (string) ($_REQUEST['mode'] ?? 'sales') === 'showcase' ? 'showcase' : 'sales';
 $scope = (string) ($_REQUEST['scope'] ?? 'default');
 if ($scope !== 'default' && !isset($galleries[$scope])) $scope = 'default';
 
@@ -36,9 +37,9 @@ function tarif_field(?int $cents): string
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = (string) ($_POST['action'] ?? '');
-    $default = $pricing['default'];
-    $own = $pricing['galleries'];
-    $back = '/portail/tarifs.php?scope=' . rawurlencode($scope);
+    $default = $mode === 'showcase' ? $pricing['showcase_default'] : $pricing['default'];
+    $own = $mode === 'showcase' ? $pricing['showcase_galleries'] : $pricing['galleries'];
+    $back = '/portail/tarifs.php?mode=' . rawurlencode($mode) . '&scope=' . rawurlencode($scope);
     if ($action === 'save') {
         $grid = ['discount_pct' => (int) ($_POST['discount_pct'] ?? 0), 'yearly' => !empty($_POST['yearly']), 'plans' => [], 'tiers' => []];
         foreach ((array) ($_POST['plan_name'] ?? []) as $i => $name) {
@@ -65,13 +66,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$norm['plans'] && !$norm['tiers']) { portail_flash('Ajoutez au moins une offre, ou décochez « tarifs propres » pour reprendre les tarifs par défaut.', 'error'); header('Location: ' . $back); exit; }
             $own[$scope] = $norm;
         }
-        $ok = saas_pricing_save($default, $own);
-        saas_event('config_changed', ['note' => 'Tarifs ' . ($scope === 'default' ? 'par défaut' : 'de la galerie ' . $scope) . ' enregistrés (' . count($norm['plans']) . ' formule(s), ' . count($norm['tiers']) . ' tranche(s))', 'actor' => 'exploitant']);
+        $showcaseDefault = $mode === 'showcase' ? $default : $pricing['showcase_default'];
+        $showcaseOwn = $mode === 'showcase' ? $own : $pricing['showcase_galleries'];
+        $salesDefault = $mode === 'sales' ? $default : $pricing['default'];
+        $salesOwn = $mode === 'sales' ? $own : $pricing['galleries'];
+        $ok = saas_pricing_save($salesDefault, $salesOwn, $showcaseDefault, $showcaseOwn);
+        saas_event('config_changed', ['note' => 'Tarifs ' . ($mode === 'showcase' ? 'vitrine ' : 'avec vente ') . ($scope === 'default' ? 'par défaut' : 'de la galerie ' . $scope) . ' enregistrés (' . count($norm['plans']) . ' formule(s), ' . count($norm['tiers']) . ' tranche(s))', 'actor' => 'exploitant']);
         portail_flash($ok ? 'Tarifs enregistrés.' : "Impossible d'écrire data/saas/tarifs.json (droits du dossier data).", $ok ? 'ok' : 'error');
     } elseif ($action === 'copy' && $scope !== 'default') {
         $from = (string) ($_POST['from'] ?? '');
         $src = $from === 'default' ? $default : ($own[$from] ?? null);
-        if ($src) { $own[$scope] = $src; saas_pricing_save($default, $own); saas_event('config_changed', ['note' => "Tarifs de la galerie $scope copiés depuis " . ($from === 'default' ? 'les tarifs par défaut' : "la galerie $from"), 'actor' => 'exploitant']); portail_flash('Tarifs copiés : ajustez-les puis enregistrez.'); }
+        if ($src) {
+            $own[$scope] = $src;
+            $showcaseDefault = $mode === 'showcase' ? $default : $pricing['showcase_default'];
+            $showcaseOwn = $mode === 'showcase' ? $own : $pricing['showcase_galleries'];
+            $salesDefault = $mode === 'sales' ? $default : $pricing['default'];
+            $salesOwn = $mode === 'sales' ? $own : $pricing['galleries'];
+            saas_pricing_save($salesDefault, $salesOwn, $showcaseDefault, $showcaseOwn);
+            saas_event('config_changed', ['note' => "Tarifs de la galerie $scope copiés depuis " . ($from === 'default' ? 'les tarifs par défaut' : "la galerie $from"), 'actor' => 'exploitant']);
+            portail_flash('Tarifs copiés : ajustez-les puis enregistrez.');
+        }
         else portail_flash('Source introuvable.', 'error');
     }
     header('Location: ' . $back);
@@ -79,8 +93,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $flash = portail_flash();
-$grid = $scope === 'default' ? $pricing['default'] : ($pricing['galleries'][$scope] ?? $pricing['default']);
-$hasOwn = $scope === 'default' || isset($pricing['galleries'][$scope]);
+$defaultGrid = $mode === 'showcase' ? $pricing['showcase_default'] : $pricing['default'];
+$ownGrids = $mode === 'showcase' ? $pricing['showcase_galleries'] : $pricing['galleries'];
+$grid = $scope === 'default' ? $defaultGrid : ($ownGrids[$scope] ?? $defaultGrid);
+$hasOwn = $scope === 'default' || isset($ownGrids[$scope]);
 $offers = saas_grid_offers($grid);
 $plans = $grid['plans'];
 $tiers = $grid['tiers'];
@@ -102,7 +118,7 @@ foreach (saas_requests() as $r) {
     if (in_array($r['status'] ?? '', ['paid', 'approved'], true) && ($o['cents'] ?? 0) > 0) $counts[$g][1] = ($counts[$g][1] ?? 0) + 1;
 }
 $origin = saas_origin();
-$signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' . rawurlencode($scope));
+$signup = $origin . '/inscription/?mode=' . rawurlencode($mode) . ($scope === 'default' ? '' : '&galerie=' . rawurlencode($scope));
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -112,6 +128,7 @@ $signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' .
 <title>Tarifs — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=1">
 <link rel="stylesheet" href="/assets/pricing.css">
 <style>
   .twrap { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; max-width: 1180px; margin: 0 auto; padding: 0 16px 56px; align-items: start; }
@@ -142,28 +159,34 @@ $signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' .
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <div class="brand"><h1>Tarifs</h1><p>Formules, prix mensuels et annuels, tranches par nombre d'articles — par défaut et pour chaque galerie commerciale</p></div>
-    <span style="display:flex;gap:8px;flex-wrap:wrap;"><a class="btn" href="/portail/">Portail des commerces</a><a class="btn" href="/portail/galeries.php">Galeries commerciales</a><a class="btn" href="/portail/activite.php">Activité</a></span>
-  </header>
+<?php portail_page_start([
+    'title' => 'Tarifs',
+    'eyebrow' => 'Revenus',
+    'desc' => 'Formules mensuelles et annuelles, par mode de boutique et galerie commerciale.',
+    'actions' => '<a class="btn" href="/portail/galeries.php">Galeries commerciales</a><a class="btn" href="/portail/activite.php">Activité</a>',
+]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
   <div class="twrap">
     <nav class="scopes" aria-label="Tarifs à régler">
+      <h3>Type de boutique</h3>
+      <a href="/portail/tarifs.php?mode=sales&scope=<?= e(rawurlencode($scope)) ?>"<?= $mode === 'sales' ? ' aria-current="page"' : '' ?>>Avec vente<small>Panier et paiement en ligne</small></a>
+      <a href="/portail/tarifs.php?mode=showcase&scope=<?= e(rawurlencode($scope)) ?>"<?= $mode === 'showcase' ? ' aria-current="page"' : '' ?>>Vitrine<small>Présentation sans prix ni panier</small></a>
       <h3>Plateforme</h3>
-      <a href="/portail/tarifs.php?scope=default"<?= $scope === 'default' ? ' aria-current="page"' : '' ?>>Tarifs par défaut<small>Accueil et inscription sans galerie · <?= (int) ($counts['default'][0] ?? 0) ?> inscription<?= ($counts['default'][0] ?? 0) > 1 ? 's' : '' ?></small></a>
+      <a href="/portail/tarifs.php?mode=<?= e($mode) ?>&amp;scope=default"<?= $scope === 'default' ? ' aria-current="page"' : '' ?>>Tarifs par défaut<small>Inscription sans galerie · <?= (int) ($counts['default'][0] ?? 0) ?> inscription<?= ($counts['default'][0] ?? 0) > 1 ? 's' : '' ?></small></a>
       <h3>Galeries commerciales</h3>
-      <?php foreach ($galleries as $slug => $g): $own = isset($pricing['galleries'][$slug]); ?>
-        <a href="/portail/tarifs.php?scope=<?= e(rawurlencode($slug)) ?>"<?= $scope === $slug ? ' aria-current="page"' : '' ?>><?= e($g['name']) ?>
-          <small><?= $own ? 'Tarifs propres : ' . e(saas_grid_from_text($pricing['galleries'][$slug])) : 'Tarifs par défaut' ?><?= !$g['published'] ? ' · non publiée' : '' ?> · <?= (int) ($counts[$slug][0] ?? 0) ?> inscr.</small></a>
+      <?php foreach ($galleries as $slug => $g): $own = isset($ownGrids[$slug]); ?>
+        <a href="/portail/tarifs.php?mode=<?= e($mode) ?>&amp;scope=<?= e(rawurlencode($slug)) ?>"<?= $scope === $slug ? ' aria-current="page"' : '' ?>><?= e($g['name']) ?>
+          <small><?= $own ? 'Tarifs propres : ' . e(saas_grid_from_text($ownGrids[$slug])) : 'Tarifs par défaut' ?><?= !empty($g['paused']) ? ' · en pause' : (!$g['published'] ? ' · non publiée' : '') ?> · <?= (int) ($counts[$slug][0] ?? 0) ?> inscr.</small></a>
       <?php endforeach; ?>
       <?php if (!$galleries): ?><p class="hint" style="padding:6px 10px">Aucune galerie : créez-en dans « Galeries commerciales ».</p><?php endif; ?>
     </nav>
 
     <main>
       <form class="ocard" method="post" autocomplete="off">
-        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="save"><input type="hidden" name="scope" value="<?= e($scope) ?>">
-        <h2><?= $scope === 'default' ? 'Tarifs par défaut' : 'Tarifs de la galerie « ' . e($galleries[$scope]['name']) . ' »' ?></h2>
+        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="save"><input type="hidden" name="scope" value="<?= e($scope) ?>"><input type="hidden" name="mode" value="<?= e($mode) ?>">
+        <h2><?= $mode === 'showcase' ? 'Tarifs boutique vitrine' : 'Tarifs boutique avec vente' ?><?= $scope === 'default' ? ' par défaut' : ' — galerie « ' . e($galleries[$scope]['name']) . ' »' ?></h2>
+        <?php if ($mode === 'showcase'): ?><p class="hint">Ces formules sont réservées aux sites vitrines : aucun prix produit, panier ou paiement en ligne. Les tarifs de la gamme avec vente restent séparés.</p><?php endif; ?>
         <?php if ($scope !== 'default'): ?>
           <label class="row" style="gap:8px"><input type="checkbox" name="own" value="1" style="width:auto"<?= $hasOwn ? ' checked' : '' ?>> <strong>Cette galerie a ses propres tarifs</strong>
             <span class="hint">Décoché : elle applique les tarifs par défaut (ci-dessous, à titre d'information).</span></label>
@@ -208,16 +231,16 @@ $signup = $origin . '/inscription/' . ($scope === 'default' ? '' : '?galerie=' .
           </tbody>
         </table></div>
         <p class="hint">Sans aucune tranche, seules les formules sont proposées. Avec des formules <em>et</em> des tranches, le client choisit entre les deux d'un clic.
-          <?php if (!$grid['tiers']): ?><a href="/portail/tarifs.php?scope=<?= e(rawurlencode($scope)) ?>&amp;preset=tranches">Pré-remplir avec des tranches types</a> (20, 100, 500 articles et illimité : prix d'exemple à ajuster).<?php endif; ?>
+          <?php if (!$grid['tiers']): ?><a href="/portail/tarifs.php?mode=<?= e($mode) ?>&amp;scope=<?= e(rawurlencode($scope)) ?>&amp;preset=tranches">Pré-remplir avec des tranches types</a> (20, 100, 500 articles et illimité : prix d'exemple à ajuster).<?php endif; ?>
           La limite d'articles de l'offre choisie est <strong>appliquée</strong> à la boutique : au-delà, le commerçant ne peut plus ajouter d'article (il doit changer de tranche).</p>
         <p><button class="btn btn-primary" type="submit">Enregistrer ces tarifs</button></p>
       </form>
 
       <?php if ($scope !== 'default'): ?>
-        <form class="ocard" method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="copy"><input type="hidden" name="scope" value="<?= e($scope) ?>">
+        <form class="ocard" method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="copy"><input type="hidden" name="scope" value="<?= e($scope) ?>"><input type="hidden" name="mode" value="<?= e($mode) ?>">
           <h2>Partir d'une autre grille</h2>
           <div class="row"><select name="from"><option value="default">Tarifs par défaut</option>
-            <?php foreach ($pricing['galleries'] as $slug => $_g): if ($slug === $scope) continue; ?><option value="<?= e($slug) ?>">Galerie « <?= e($galleries[$slug]['name'] ?? $slug) ?> »</option><?php endforeach; ?></select>
+            <?php foreach ($ownGrids as $slug => $_g): if ($slug === $scope) continue; ?><option value="<?= e($slug) ?>">Galerie « <?= e($galleries[$slug]['name'] ?? $slug) ?> »</option><?php endforeach; ?></select>
             <button class="btn" type="submit">Copier ici</button><span class="hint">Remplace les tarifs propres de cette galerie par une copie : ajustez-les ensuite.</span></div>
         </form>
       <?php endif; ?>

@@ -78,6 +78,7 @@ $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/admin/quick-a
 </script>
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>
 <script src="/assets/price-field.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/price-field.js') ?>"></script>
+<script src="/assets/condition-pricing.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/condition-pricing.js') ?>"></script>
 <script src="/assets/product-ai.js"></script>
 <script src="/assets/nature-select.js"></script>
 <script src="/assets/price-research.js"></script>

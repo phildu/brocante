@@ -22,7 +22,7 @@ $fc = get_content();
         <?php if (trim((string) ($fc['contact_address'] ?? '')) !== ''): ?><li><?= h($fc['contact_address']) ?></li><?php endif; ?>
         <?php if (trim((string) ($fc['contact_hours'] ?? '')) !== ''): ?><li><?= h($fc['contact_hours']) ?></li><?php endif; ?>
         <?php if (trim((string) ($fc['contact_delivery'] ?? '')) !== ''): ?><li><?= h($fc['contact_delivery']) ?></li><?php endif; ?>
-        <li><a href="/cart.php">Mon panier</a></li>
+        <?php if (shop_sales_enabled()): ?><li><a href="/cart.php">Mon panier</a></li><?php endif; ?>
       </ul>
     </div>
     <div>

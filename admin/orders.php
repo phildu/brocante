@@ -34,7 +34,7 @@ $flash = flash_get();
     <p class="eyebrow">Espace boutique</p>
     <h1 style="font-size:2rem;margin:12px 0 30px;">Commandes (<?= count($orders) ?>)</h1>
 
-    <?php if (!stripe_configured()): ?>
+    <?php if (!shop_checkout_ready()): ?>
       <p class="publish-status" data-kind="error" style="margin-bottom:24px;">Clé Stripe absente — aucune commande ne pourra être encaissée tant que config.php n'est pas complété.</p>
     <?php endif; ?>
 
@@ -51,6 +51,8 @@ $flash = flash_get();
             <div class="product-admin-row" style="grid-template-columns:1fr auto;">
               <div>
                 <p class="ref"><?= h(date('d/m/Y H:i', strtotime($o['created_at']))) ?> — <?= h($o['email'] ?: 'e-mail non fourni') ?></p>
+                <?php if (!empty($o['ship_name'])): ?><p style="margin:2px 0 0;font-size:0.85rem;">🎁 Livrer à : <strong><?= h($o['ship_name']) ?></strong><?= !empty($o['ship_phone']) ? ' — <a href="tel:' . h($o['ship_phone']) . '">' . h(function_exists('customer_phone_display') ? customer_phone_display((string) $o['ship_phone']) : $o['ship_phone']) . '</a>' : '' ?> <span style="color:var(--ink-soft);">(différent du client)</span></p><?php endif; ?>
+                <?php if (!empty($o['phone'])): ?><p style="margin:2px 0 0;font-size:0.85rem;">📞 <a href="tel:<?= h($o['phone']) ?>"><?= h(function_exists('customer_phone_display') ? customer_phone_display((string) $o['phone']) : $o['phone']) ?></a><?= !empty($o['terms_at']) ? ' <span style="color:var(--ink-soft);">· conditions acceptées le ' . h(date('d/m/Y H:i', strtotime($o['terms_at']))) . '</span>' : '' ?></p><?php endif; ?>
                 <p style="margin:6px 0;">
                   <?php foreach (json_decode($o['items'], true) ?: [] as $item): ?>
                     <?= h($item['qty']) ?> × <?= h($item['name']) ?><br>
@@ -81,7 +83,7 @@ $flash = flash_get();
                     <input type="text" name="tracking_number" value="<?= h($o['tracking_number']) ?>" placeholder="N° de suivi (optionnel)">
                     <button type="submit" class="btn-small">Mettre à jour</button>
                   </form>
-                <?php elseif (stripe_configured()): ?>
+                <?php elseif (shop_checkout_ready()): ?>
                   <form method="post" action="/admin/update-order.php" class="order-fulfillment">
                     <input type="hidden" name="action" value="refresh_stripe">
                     <input type="hidden" name="id" value="<?= (int) $o['id'] ?>">

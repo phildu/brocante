@@ -15,8 +15,18 @@
       if (F.fillPrice(p.price)) done.push('prix');
       const cond = (p.condition && p.condition.vinted && p.condition.vinted.channel_label) || '';
       if (cond && F.fillText(['état', 'etat', 'condition', 'status'], cond)) done.push('état');
-      if (p.brand && F.fillText(['marque', 'brand'], p.brand)) done.push('marque');
+      if (p.brand && F.fillText(['marque', 'brand', 'brand name'], p.brand)) done.push('marque');
       if (p.size_text && F.fillText(['taille', 'size'], p.size_text)) done.push('taille');
+      if (p.colors && F.fillText(['couleur', 'couleurs', 'color', 'colors'], p.colors)) done.push('couleur');
+      if (p.materials && F.fillText(['matière', 'matières', 'material', 'materials'], p.materials)) done.push('matière');
+
+      const categoryValue = p.subcategory_label || p.nature_label || p.category_label || '';
+      const categoryHint = [p.nature_label, p.subcategory_label].filter(Boolean).join(' › ') || p.category_label || '';
+      const categoryFilled = categoryValue && F.fillText(
+        ['catégorie', 'categorie', 'category', 'item category'],
+        categoryValue
+      );
+      if (categoryFilled) done.push('catégorie');
 
       const photos = (p.photos || []).map((x) => x.url).filter(Boolean);
       const photoRes = await F.tryAttachPhotos(photos);
@@ -26,6 +36,7 @@
 
       F.toast(
         (done.length ? 'Champs remplis : ' + done.join(', ') : 'Aucun champ reconnu sur cette page') +
+          (!categoryFilled && categoryHint ? ' · catégorie à choisir : ' + categoryHint : '') +
           photoMsg +
           '. Vérifiez catégorie / livraison et publiez vous-même.'
       );

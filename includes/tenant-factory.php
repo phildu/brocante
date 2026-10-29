@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/tenant.php';
 require_once __DIR__ . '/seed.php';
+require_once __DIR__ . '/legal.php';
 
 if (!defined('PORTAIL_ROOT')) {
     define('PORTAIL_ROOT', dirname(__DIR__));
@@ -124,9 +125,11 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
         'name' => $name,
         'tagline' => trim((string) ($f['tagline'] ?? '')),
         'site_url' => trim((string) ($f['url'] ?? '')) ?: "https://$slug.example.com",
+        'presence_mode' => business_presence_mode($f['presence_mode'] ?? 'online'),
         // Limite d'articles de l'offre de la boutique (absente = sans limite) ; appliquée par l'administration (voir shop_item_limit()).
         'item_limit' => max(0, (int) ($f['item_limit'] ?? 0)),
         'admin_user' => $adminUser,
+        'sales_enabled' => !array_key_exists('sales_enabled', $f) || !empty($f['sales_enabled']),
         // Haché : le mot de passe n'est lisible nulle part. Pour le changer,
         // remplacer cette valeur par le nouveau mot de passe, en clair.
         'admin_password' => password_hash(trim((string) $f['admin_password']), PASSWORD_DEFAULT),
@@ -176,6 +179,7 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
             'price' => trim((string) ($f['p_price'][$i] ?? '')),
             'badge' => trim((string) ($f['p_badge'][$i] ?? '')),
             'icon' => $cat['icon'],
+            'photo' => trim((string) ($f['p_photo'][$i] ?? '')) ?: null,
         ];
     }
     $principles = [];
@@ -188,7 +192,7 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
             'eyebrow' => trim((string) ($f['hero_eyebrow'] ?? '')),
             'title' => trim((string) ($f['hero_title'] ?? '')),
             'subtitle' => trim((string) ($f['hero_sub'] ?? '')),
-            'photo' => '',
+            'photo' => trim((string) ($f['hero_photo'] ?? '')),
         ],
         'story' => [
             'eyebrow' => 'Notre histoire',
@@ -212,12 +216,32 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
         'products' => $products,
     ];
 
+    // Identité légale saisie à la création (facultative) : reprise par les pages
+    // légales de la boutique, et modifiable ensuite dans le portail.
+    $legal = [];
+    foreach (['company' => 'legal_company', 'siret' => 'legal_siret', 'email' => 'legal_email', 'phone' => 'legal_phone', 'director' => 'legal_director'] as $field => $input) {
+        $value = legal_clean_field($field, (string) ($f[$input] ?? ''));
+        if ($value === '') continue;
+        if ($field === 'email' && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            throw new InvalidArgumentException("E-mail de contact invalide.");
+        }
+        $legal[$field] = $value;
+    }
+    $address = legal_clean_field('address', (string) ($f['address'] ?? ''));
+    if ($address !== '') $legal['address'] = $address;
+
     $dir = PORTAIL_ROOT . "/tenants/$slug";
     mkdir($dir, 0775, true);
     file_put_contents("$dir/tenant.php", "<?php\n\n// Configuration du commerce : " . str_replace(["\n", '?>'], ' ', $name)
         . " (créée depuis le portail local).\n\nreturn " . php_export($config) . ";\n");
     file_put_contents("$dir/seed-data.json", json_encode($seed, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n");
 
-    seed_tenant(tenant_load($slug));
+    $shop = tenant_load($slug);
+    seed_tenant($shop);
+    if ($legal) {
+        $pdo = new PDO('sqlite:' . tenant_file($shop, 'db_file'), null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        legal_save_identity($pdo, $legal);
+        $pdo = null;
+    }
     return $slug;
 }

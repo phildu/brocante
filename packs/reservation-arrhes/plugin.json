@@ -1,0 +1,17 @@
+{
+  "id": "reservation-arrhes",
+  "name": "Réservation (arrhes ou acompte)",
+  "version": "1.0.0",
+  "description": "Module payant (essai gratuit) : un client bloque une pièce quelques jours (7 maximum) en versant des arrhes ou un acompte en ligne ; la pièce est retenue puis libérée automatiquement à l'échéance. Paiement par le Stripe de la boutique.",
+  "table_prefix": "ra_",
+  "pages": [
+    { "id": "index", "label": "Réservations", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "reservations", "file": "api/reservations.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/reserver", "file": "api/public.php" }
+  ]
+}

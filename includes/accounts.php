@@ -19,17 +19,13 @@ const ACCOUNT_ROLES = [
 /** Rôles qui se connectent à l'administration (les autres sont des contacts, sans accès). */
 const ACCOUNT_STAFF_ROLES = ['admin', 'community_manager'];
 
-const ACCOUNT_SOURCES = ['manuel' => 'Ajouté à la main', 'commande' => 'Commande', 'newsletter' => 'Newsletter', 'connexion' => 'Connexion sociale'];
+const ACCOUNT_SOURCES = ['manuel' => 'Ajouté à la main', 'commande' => 'Commande', 'newsletter' => 'Newsletter', 'connexion' => 'Connexion sociale', 'import' => 'Import (fichier ou CRM)', 'inscription' => 'Inscription client'];
 
 const ACCOUNT_PASSWORD_MIN = 8;
 
 /** Crée la table si elle manque (bases créées avant cette fonction, ou nouvelle base). */
 function accounts_ensure_schema(PDO $pdo): void
 {
-    $exists = $pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'accounts'")->fetchColumn();
-    if ($exists) {
-        return;
-    }
     $pdo->exec("CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       role TEXT NOT NULL DEFAULT 'prospect',
@@ -41,12 +37,83 @@ function accounts_ensure_schema(PDO $pdo): void
       is_active INTEGER NOT NULL DEFAULT 1,
       source TEXT NOT NULL DEFAULT 'manuel',
       notes TEXT NOT NULL DEFAULT '',
+      custom_fields TEXT NOT NULL DEFAULT '{}',
       last_login_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )");
+    $columns = array_column($pdo->query('PRAGMA table_info(accounts)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+    if (!in_array('custom_fields', $columns, true)) $pdo->exec("ALTER TABLE accounts ADD COLUMN custom_fields TEXT NOT NULL DEFAULT '{}'");
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email COLLATE NOCASE)');
     $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username COLLATE NOCASE) WHERE username IS NOT NULL');
+}
+
+/** Lit les champs personnalisés des contacts sans faire confiance au JSON stocké. */
+function account_custom_fields_decode(mixed $value): array
+{
+    if (is_string($value)) {
+        try { $value = json_decode($value, true, 32, JSON_THROW_ON_ERROR); }
+        catch (JsonException) { return []; }
+    }
+    if (!is_array($value)) return [];
+    $out = [];
+    foreach ($value as $key => $field) {
+        if (!is_string($key) || !preg_match('/^[a-z][a-z0-9_]{0,39}$/', $key) || !is_array($field)) continue;
+        $rawLabel = $field['label'] ?? '';
+        $rawText = $field['value'] ?? '';
+        if (!is_scalar($rawLabel) || !is_scalar($rawText)) continue;
+        $label = mb_substr(trim((string) $rawLabel), 0, 60);
+        $text = mb_substr(trim((string) $rawText), 0, 500);
+        if ($label !== '' && $text !== '') $out[$key] = ['label' => $label, 'value' => $text];
+    }
+    return array_slice($out, 0, 30, true);
+}
+
+/** Normalise une liste « intitulé => valeur » ou les champs édités d'une fiche. */
+function account_custom_fields_normalize(array $fields, array $existing = []): array
+{
+    $out = $existing;
+    foreach ($fields as $keyOrLabel => $field) {
+        if (is_array($field)) {
+            $rawLabel = $field['label'] ?? '';
+            $rawValue = $field['value'] ?? '';
+            if (!is_scalar($rawLabel) || !is_scalar($rawValue)) continue;
+            $label = trim((string) $rawLabel);
+            $value = trim((string) $rawValue);
+            $key = is_string($keyOrLabel) && preg_match('/^[a-z][a-z0-9_]{0,39}$/', $keyOrLabel)
+                ? $keyOrLabel : '';
+        } else {
+            $label = trim((string) $keyOrLabel);
+            $value = trim((string) $field);
+            $key = '';
+        }
+        if ($label === '') continue;
+        $label = mb_substr($label, 0, 60);
+        if ($key === '') {
+            $base = mb_strtolower($label);
+            $base = strtr($base, ['à' => 'a', 'â' => 'a', 'ä' => 'a', 'ç' => 'c', 'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e',
+                'á' => 'a', 'ã' => 'a', 'å' => 'a', 'í' => 'i', 'ì' => 'i', 'î' => 'i', 'ï' => 'i', 'ó' => 'o', 'ò' => 'o',
+                'ô' => 'o', 'ö' => 'o', 'õ' => 'o', 'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u', 'œ' => 'oe', 'æ' => 'ae', 'ñ' => 'n']);
+            $key = trim((string) preg_replace('/[^a-z0-9]+/', '_', $base), '_');
+            $key = substr($key !== '' ? $key : 'champ', 0, 40);
+            $suffix = 2;
+            while (isset($out[$key]) && $out[$key]['label'] !== $label) {
+                $tail = '_' . $suffix++;
+                $key = substr($key, 0, 40 - strlen($tail)) . $tail;
+            }
+        }
+        if ($value === '') {
+            if (isset($out[$key])) unset($out[$key]);
+            continue;
+        }
+        $out[$key] = ['label' => $label, 'value' => mb_substr($value, 0, 500)];
+    }
+    return array_slice($out, 0, 30, true);
+}
+
+function account_custom_fields_json(array $fields): string
+{
+    return json_encode(account_custom_fields_decode($fields), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 }
 
 function account_is_staff(string $role): bool
@@ -86,7 +153,7 @@ function admin_role_can_access(string $role, string $script): bool
 /** Première page d'administration ouverte à ce rôle (page d'arrivée après connexion). */
 function admin_home_for_role(string $role): string
 {
-    return $role === 'community_manager' ? '/admin/media.php' : '/admin/catalog.php';
+    return $role === 'community_manager' ? '/admin/media.php' : '/admin/dashboard.php';
 }
 
 // ── Lecture ────────────────────────────────────────────────────────────────
@@ -225,6 +292,10 @@ function account_normalize(array $in, ?array $existing = null): array
         'username' => account_is_staff($role) && $username !== '' ? $username : null,
         'phone' => mb_substr(trim((string) ($in['phone'] ?? '')), 0, 30),
         'notes' => mb_substr(trim((string) ($in['notes'] ?? '')), 0, 600),
+        'custom_fields' => account_custom_fields_normalize(
+            (array) ($in['custom_fields'] ?? []),
+            account_custom_fields_decode($existing['custom_fields'] ?? [])
+        ),
     ];
 }
 
@@ -238,9 +309,9 @@ function account_create(array $in, string $password = '', string $source = 'manu
         account_validate_password($password);
         $hash = password_hash($password, PASSWORD_DEFAULT);
     }
-    $stmt = db()->prepare('INSERT INTO accounts (role, name, email, username, phone, password_hash, source, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt = db()->prepare('INSERT INTO accounts (role, name, email, username, phone, password_hash, source, notes, custom_fields) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([$data['role'], $data['name'], $data['email'], $data['username'], $data['phone'], $hash,
-        isset(ACCOUNT_SOURCES[$source]) ? $source : 'manuel', $data['notes']]);
+        isset(ACCOUNT_SOURCES[$source]) ? $source : 'manuel', $data['notes'], account_custom_fields_json($data['custom_fields'])]);
     return (int) db()->lastInsertId();
 }
 
@@ -277,8 +348,9 @@ function account_update(int $id, array $in, string $password, ?int $actingId): v
     } else {
         $hash = null; // un contact n'a pas d'accès
     }
-    $stmt = db()->prepare('UPDATE accounts SET role = ?, name = ?, email = ?, username = ?, phone = ?, password_hash = ?, is_active = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-    $stmt->execute([$data['role'], $data['name'], $data['email'], $data['username'], $data['phone'], $hash, $isActive, $data['notes'], $id]);
+    $stmt = db()->prepare('UPDATE accounts SET role = ?, name = ?, email = ?, username = ?, phone = ?, password_hash = ?, is_active = ?, notes = ?, custom_fields = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    $stmt->execute([$data['role'], $data['name'], $data['email'], $data['username'], $data['phone'], $hash, $isActive, $data['notes'],
+        account_custom_fields_json($data['custom_fields']), $id]);
 }
 
 /**
@@ -360,7 +432,7 @@ function account_touch_login(int $id): void
  * null si l'adresse est invalide. Ne lève jamais d'exception : l'enregistrement
  * d'un contact ne doit pas faire échouer une commande ou une inscription.
  */
-function account_upsert_contact(string $email, string $name, string $role, string $source): ?int
+function account_upsert_contact(string $email, string $name, string $role, string $source, string $phone = ''): ?int
 {
     try {
         $email = mb_strtolower(trim($email));
@@ -370,13 +442,14 @@ function account_upsert_contact(string $email, string $name, string $role, strin
         $name = mb_substr(trim($name), 0, 80);
         $existing = account_find_by_email($email);
         if (!$existing) {
-            return account_create(['role' => $role, 'email' => $email, 'name' => $name], '', $source);
+            return account_create(['role' => $role, 'email' => $email, 'name' => $name, 'phone' => $phone], '', $source);
         }
         $newRole = ($existing['role'] === 'prospect' && $role === 'client') ? 'client' : $existing['role'];
         $newName = $existing['name'] !== '' ? $existing['name'] : $name;
-        if ($newRole !== $existing['role'] || $newName !== $existing['name']) {
-            db()->prepare('UPDATE accounts SET role = ?, name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-                ->execute([$newRole, $newName, $existing['id']]);
+        $newPhone = $existing['phone'] !== '' ? $existing['phone'] : mb_substr(trim($phone), 0, 30);
+        if ($newRole !== $existing['role'] || $newName !== $existing['name'] || $newPhone !== $existing['phone']) {
+            db()->prepare('UPDATE accounts SET role = ?, name = ?, phone = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+                ->execute([$newRole, $newName, $newPhone, $existing['id']]);
         }
         return (int) $existing['id'];
     } catch (Throwable $e) {

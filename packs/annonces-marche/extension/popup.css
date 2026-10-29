@@ -27,13 +27,18 @@ header {
 .link { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; }
 .panel { padding: 12px; display: grid; gap: 8px; }
 label { display: grid; gap: 4px; font-weight: 600; }
-input[type="url"], input[type="password"], input[type="search"] {
+input[type="url"], input[type="text"], input[type="password"], input[type="search"] {
   width: 100%;
   padding: 7px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   font: inherit;
   background: #fff;
+}
+input.token {
+  font-family: ui-monospace, "IBM Plex Mono", Menlo, monospace;
+  font-size: 11px;
+  word-break: break-all;
 }
 .row { display: flex; gap: 6px; }
 .row input { flex: 1; }
@@ -78,7 +83,10 @@ button:disabled { opacity: 0.45; cursor: default; }
   gap: 8px;
 }
 .detail h2 { margin: 0; font-size: 14px; }
+.detail .desc { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .detail .meta { color: var(--soft); font-size: 12px; }
 .detail .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.detail .row { flex-wrap: wrap; }
+.detail .row button { flex: 1 1 auto; }
 .photos { display: flex; gap: 4px; overflow-x: auto; }
 .photos img { width: 56px; height: 56px; object-fit: cover; border-radius: 4px; }

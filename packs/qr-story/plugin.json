@@ -1,0 +1,18 @@
+{
+  "id": "qr-story",
+  "name": "QR Code Story & certificat",
+  "version": "1.0.0",
+  "description": "Module payant (essai gratuit) : page « histoire de la pièce » accessible par QR Code collé sur l'objet, étiquettes QR imprimables et certificat d'authenticité à imprimer ou enregistrer en PDF.",
+  "table_prefix": "qs_",
+  "pages": [
+    { "id": "index", "label": "QR Story & certificats", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "stories", "file": "api/stories.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
+    { "id": "print", "file": "api/print.php", "methods": ["GET"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/story", "file": "api/public.php" }
+  ]
+}

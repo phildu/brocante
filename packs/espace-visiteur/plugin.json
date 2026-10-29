@@ -1,0 +1,17 @@
+{
+  "id": "espace-visiteur",
+  "name": "Espace visiteur & fidélité",
+  "version": "1.0.0",
+  "description": "Module payant (essai gratuit) : une web app pour les visiteurs (fidélité avec points et récompenses, alertes chineur, réservations et billets, scan des QR codes) et sa gestion dans l'administration (points par euro, paliers, membres, ajustements). Les rubriques des autres modules n'apparaissent que si ces modules sont actifs.",
+  "table_prefix": "ev_",
+  "pages": [
+    { "id": "index", "label": "Espace visiteur", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "fidelite", "file": "api/fidelite.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/visiteur", "file": "api/public.php" }
+  ]
+}

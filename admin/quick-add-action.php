@@ -377,11 +377,12 @@ switch ($action) {
         $pair = product_nature_resolve($_POST['nature'] ?? '', $_POST['sous_categorie'] ?? '');
         $validCats = array_column(category_list(), 'key');
         $cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : $product['cat'];
-        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, badge = ?, description = ?, materials = ?, colors = ?, brand = ?, distributor = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, is_hidden = ?, barcode = ? WHERE ref = ?')
+        db()->prepare('UPDATE products SET name = ?, cat = ?, price = ?, new_price = ?, badge = ?, description = ?, materials = ?, colors = ?, brand = ?, distributor = ?, etat = ?, nature = ?, sous_categorie = ?, size_text = ?, weight_grams = ?, is_hidden = ?, barcode = ? WHERE ref = ?')
             ->execute([
                 trim((string) ($_POST['name'] ?? '')) ?: $product['name'],
                 $cat,
                 price_from_input($_POST['price'] ?? '', (string) $product['price']),
+                price_from_input($_POST['new_price'] ?? '', (string) ($product['new_price'] ?? '')),
                 trim((string) ($_POST['badge'] ?? '')),
                 trim((string) ($_POST['description'] ?? '')) ?: $product['description'],
                 trim((string) ($_POST['materials'] ?? $product['materials'])),

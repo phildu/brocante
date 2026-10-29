@@ -21,15 +21,15 @@ $over = $activeNav === 'accueil';
         <a href="/index.php#histoire">Histoire</a>
         <a href="/index.php#contact">Contact</a>
         <?php if ($accountLink): ?><a href="/compte.php">Mon compte</a><?php endif; ?>
-        <a href="/cart.php">Panier<?= $cartCount ? ' (' . (int) $cartCount . ')' : '' ?></a>
-        <a href="<?= is_admin_logged_in() ? '/admin/catalog.php' : '/admin/login.php' ?>"><?= is_admin_logged_in() ? 'Administration' : 'Connexion' ?></a>
+        <?php if (shop_sales_enabled()): ?><a href="/cart.php">Panier<?= $cartCount ? ' (' . (int) $cartCount . ')' : '' ?></a><?php endif; ?>
+        <a href="<?= is_admin_logged_in() ? '/admin/dashboard.php' : '/admin/login.php' ?>"><?= is_admin_logged_in() ? 'Administration' : 'Connexion' ?></a>
       </span>
     </nav>
     <a class="md-logo" href="/index.php" aria-label="<?= h($siteName) ?> — accueil"><?= h($siteName) ?></a>
     <div class="md-tools">
       <a href="/boutique.php#recherche" class="md-tool-search">Rechercher</a>
       <?php if ($accountLink): ?><a href="/compte.php"<?= $activeNav === 'compte' ? ' aria-current="page"' : '' ?>>Compte</a><?php endif; ?>
-      <?= cart_nav_link((int) $cartCount) ?>
+      <?php if (shop_sales_enabled()): ?><?= cart_nav_link((int) $cartCount) ?><?php endif; ?>
     </div>
   </div>
 </header>

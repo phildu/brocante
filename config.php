@@ -46,7 +46,7 @@ if (is_file(__DIR__ . '/config.local.php')) {
     // URL réelle du site (utilisée pour les retours Stripe) : variable
     // d'environnement SITE_URL, sinon site_url du tenant.php — vérifier que ce
     // sous-domaine existe bien côté OVH/DNS avant le premier déploiement.
-    define('SITE_URL', getenv('SITE_URL') ?: (string) tenant('site_url'));
+    define('SITE_URL', getenv('SITE_URL') ?: tenant_site_url());
 
     // Clé API Gemini — lue depuis un fichier local, jamais commitée/déployée en clair.
     $geminiKeyFile = secret_path('gemini.key');
@@ -90,6 +90,12 @@ function db(): PDO
         // Comptes (équipe, clients, prospects) : table créée si la base date d'avant.
         require_once __DIR__ . '/includes/accounts.php';
         accounts_ensure_schema($pdo);
+        // Catégories et ordre de la barre latérale d'administration (admin/menu.php).
+        require_once __DIR__ . '/includes/admin-menu.php';
+        admin_menu_ensure_schema($pdo);
+        // Comptes clients (e-mail + mot de passe) : jetons des liens et limites d'essais.
+        require_once __DIR__ . '/includes/customers.php';
+        customers_ensure_schema($pdo);
         // Prise de vue depuis un téléphone proche (codes QR) : tables créées si besoin.
         require_once __DIR__ . '/includes/capture.php';
         capture_ensure_schema($pdo);
@@ -114,6 +120,31 @@ function db(): PDO
         // Application smartphone Studio : suivi des pièces créées.
         require_once __DIR__ . '/includes/studio.php';
         studio_ensure_schema($pdo);
+        // Règle « retrait seul » : seuil (en €) sous lequel un article n'est pas livré + message affiché (voir pickup_only_threshold_cents()).
+        $contentColumns = $pdo->query('PRAGMA table_info(content)')->fetchAll(PDO::FETCH_COLUMN, 1);
+        if ($contentColumns && !in_array('pickup_only_below', $contentColumns, true)) {
+            $pdo->exec("ALTER TABLE content ADD COLUMN pickup_only_below TEXT NOT NULL DEFAULT '10'");
+            $pdo->exec("ALTER TABLE content ADD COLUMN pickup_only_message TEXT NOT NULL DEFAULT 'Retrait à l''adresse du vendeur.'");
+        }
+        // Remises du panier : paliers par total ou par nombre d'articles (voir cart_discount_for()).
+        $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS cart_discounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,                 -- 'total' : total du panier ; 'qty' : nombre d'articles
+  threshold INTEGER NOT NULL,         -- centimes (total) ou nombre d'articles (qty) à atteindre
+  type TEXT NOT NULL,                 -- 'percent' ou 'fixed'
+  value INTEGER NOT NULL,             -- pourcentage (1-100) ou centimes
+  label TEXT NOT NULL DEFAULT '',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+SQL);
+        // Commandes payées par la plateforme (Stripe Connect, voir includes/connect.php) : mode de paiement et commission prélevée.
+        $orderColumns = $pdo->query('PRAGMA table_info(orders)')->fetchAll(PDO::FETCH_COLUMN, 1);
+        // Coordonnées recueillies au panier : téléphone, acceptation des conditions (date et version des textes), demande de création de compte.
+        foreach (['payment_via' => 'TEXT', 'connect_fee_cents' => 'INTEGER', 'connect_gallery_cents' => 'INTEGER', 'phone' => 'TEXT', 'terms_at' => 'TEXT', 'terms_version' => 'TEXT', 'create_account' => 'INTEGER NOT NULL DEFAULT 0', 'ship_name' => 'TEXT', 'ship_phone' => 'TEXT', 'declared_address' => 'TEXT'] as $extraColumn => $extraType) {
+            if ($orderColumns && !in_array($extraColumn, $orderColumns, true)) $pdo->exec('ALTER TABLE orders ADD COLUMN ' . $extraColumn . ' ' . $extraType);
+        }
         // Bases créées avant l'ajout du champ « Matières » des fiches.
         $productColumns = $pdo->query('PRAGMA table_info(products)')->fetchAll(PDO::FETCH_COLUMN, 1);
         if ($productColumns && !in_array('materials', $productColumns, true)) {
@@ -121,7 +152,10 @@ function db(): PDO
         }
         // Gestion du prix de vente : prix de vente minimum (interne), fourchette estimée, prix négociable, prix du neuf et son lien (includes/pricing-extras.php).
         foreach (['price_floor' => 'TEXT', 'est_min' => 'REAL', 'est_max' => 'REAL', 'est_show' => 'INTEGER NOT NULL DEFAULT 0', 'negotiable' => 'INTEGER NOT NULL DEFAULT 0',
-                  'new_url' => 'TEXT', 'new_price' => 'TEXT', 'new_show' => 'INTEGER NOT NULL DEFAULT 0'] as $extraColumn => $extraType) {
+                  'new_url' => 'TEXT', 'new_price' => 'TEXT', 'new_show' => 'INTEGER NOT NULL DEFAULT 0',
+                  'lot_qty' => 'INTEGER NOT NULL DEFAULT 1',
+                  'channels' => 'TEXT', 'sold_channel' => 'TEXT', 'sold_at' => 'TEXT', 'restocked_at' => 'TEXT',
+                  'keep_when_sold' => 'INTEGER NOT NULL DEFAULT 0'] as $extraColumn => $extraType) {
             if ($productColumns && !in_array($extraColumn, $productColumns, true)) {
                 $pdo->exec('ALTER TABLE products ADD COLUMN ' . $extraColumn . ' ' . $extraType);
             }

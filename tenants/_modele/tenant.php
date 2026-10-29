@@ -9,6 +9,7 @@ return [
     'name' => 'Mon Commerce',
     'tagline' => 'Votre slogan',
     'site_url' => 'https://mon-commerce.example.com',
+    'presence_mode' => 'online',
     // Compte de l'administration (ou variables d'environnement ADMIN_USER /
     // ADMIN_PASSWORD). Mot de passe vide = administration fermée.
     'admin_user' => 'admin',

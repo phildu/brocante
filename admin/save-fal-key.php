@@ -22,5 +22,5 @@ if ($key !== '') {
     flash_set('Aucune clé fournie — rien de changé.');
 }
 
-header('Location: /admin/index.php#fal-settings');
+header('Location: /admin/social.php#fal-settings');
 exit;

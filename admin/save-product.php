@@ -45,7 +45,7 @@ if ($promoPrice !== '' && (price_to_cents($promoPrice) ?? 0) >= (price_to_cents(
     $promoPrice = '';
 }
 
-$set = 'name = :name, cat = :cat, description = :description, materials = :materials, colors = :colors, brand = :brand, distributor = :distributor, etat = :etat, nature = :nature, sous_categorie = :sous_categorie, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock';
+$set = 'name = :name, cat = :cat, description = :description, materials = :materials, colors = :colors, brand = :brand, distributor = :distributor, etat = :etat, nature = :nature, sous_categorie = :sous_categorie, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock, lot_qty = :lot_qty, channels = :channels';
 $params = [
     'name' => trim((string) ($_POST['name'] ?? $product['name'])),
     'cat' => $cat,
@@ -66,6 +66,8 @@ $params = [
     'featured' => $featuredRequested ? 1 : 0,
     'is_hidden' => !empty($_POST['is_hidden']) ? 1 : 0,
     'stock' => isset($_POST['stock']) ? max(0, (int) $_POST['stock']) : $product['stock'],
+    'channels' => isset($_POST['channels_form']) ? (implode(',', product_channel_keys(implode(',', (array) ($_POST['channels'] ?? []))))) : ($product['channels'] ?? null),
+    'lot_qty' => isset($_POST['lot_qty']) ? max(1, min(999, (int) $_POST['lot_qty'])) : max(1, (int) ($product['lot_qty'] ?? 1)),
     'ref' => $ref,
 ];
 // Gestion du prix de vente (formulaire du catalogue : « price_fields » signale que les cases à cocher sont à lire, décochées comprises).
@@ -98,6 +100,25 @@ if ($photoPath) {
 $stmt = db()->prepare("UPDATE products SET $set WHERE ref = :ref");
 $stmt->execute($params);
 
+// Canal « Leboncoin » coché / décoché : la pièce entre dans / sort de la sélection d'export (liste des articles à publier du bot).
+if (isset($_POST['channels_form'])) {
+    $wasLbc = in_array('leboncoin', product_channels_of($product), true);
+    $isLbc = in_array('leboncoin', product_channels_of($params), true);
+    if ($wasLbc !== $isLbc) {
+        try {
+            if (db()->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'am_export_selection'")->fetchColumn()) {
+                if ($isLbc) {
+                    db()->prepare('INSERT INTO am_export_selection (product_ref) VALUES (?) ON CONFLICT(product_ref) DO NOTHING')->execute([$ref]);
+                } else {
+                    db()->prepare('DELETE FROM am_export_selection WHERE product_ref = ?')->execute([$ref]);
+                }
+            }
+        } catch (Throwable $e) {
+            // sélection indisponible (plugin absent) : le canal reste enregistré sur la fiche
+        }
+    }
+}
+
 flash_set('Pièce « ' . $params['name'] . ' » mise à jour.' . $promoNote, $promoNote !== '' ? 'error' : 'ok');
-header('Location: /admin/catalog.php#produit-' . urlencode($ref));
+header('Location: /admin/catalog.php' . (empty($_POST['close']) ? '#produit-' . urlencode($ref) : ''));
 exit;

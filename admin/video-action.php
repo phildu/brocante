@@ -22,6 +22,7 @@ function video_reply(array $data, int $status = 200): never
 /** Fournisseur d'une vidéo IA d'après la clé de modèle : google (Veo), siliconflow (Wan 2.2) ou modal (Wan 2.2 5B). */
 function video_provider(string $modelKey): string
 {
+    if (str_starts_with($modelKey, 'sf:')) return 'siliconflow'; // fournisseur vidéo ajouté dans le portail
     return match ($modelKey) { SF_MODEL_KEY => 'siliconflow', MODAL_MODEL_KEY => 'modal', MODAL_CUTOUT_KEY => 'modal-cutout', default => 'google' };
 }
 
@@ -66,7 +67,7 @@ switch ($action) {
         if ($provider !== 'google') $seconds = 0; // durée fixée par le service
         $prompt = $provider === 'modal' ? build_wan_prompt($effect, $keywords) : build_veo_prompt($effect, $keywords);
         $started = match ($provider) {
-            'siliconflow' => sf_video_start($srcAbs, $prompt, $aspect),
+            'siliconflow' => sf_video_start($srcAbs, $prompt, $aspect, ai_provider_video_by_key($modelKey)),
             'modal' => modal_video_start($srcAbs, $prompt, $aspect),
             default => veo_start($srcAbs, $prompt, $aspect, $modelKey, $seconds),
         };
@@ -113,7 +114,7 @@ switch ($action) {
 
         $provider = video_provider($job['model']);
         $poll = match ($provider) {
-            'siliconflow' => sf_video_poll($job['operation']),
+            'siliconflow' => sf_video_poll($job['operation'], ai_provider_video_by_key($job['model'])),
             'modal' => modal_video_poll($job['operation']),
             'modal-cutout' => modal_cutout_poll($job['operation']),
             default => veo_poll($job['operation']),

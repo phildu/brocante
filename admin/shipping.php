@@ -59,6 +59,7 @@ $flash = flash_get();
       $carrierNames = array_column($carriers, 'name');
       $hasChronopost = in_array('Chronopost', $carrierNames, true);
       $hasColissimo = in_array('Colissimo', $carrierNames, true);
+      $hasMondialRelay = in_array('Mondial Relay', $carrierNames, true);
       $colissimoId = null;
       $colissimoHasIntl = false;
       foreach ($carriers as $c) {
@@ -72,7 +73,7 @@ $flash = flash_get();
           $colissimoHasIntl = (int) $stmt->fetchColumn() > 0;
       }
     ?>
-    <?php if (!$hasChronopost || !$hasColissimo || ($hasColissimo && !$colissimoHasIntl)): ?>
+    <?php if (!$hasChronopost || !$hasColissimo || !$hasMondialRelay || ($hasColissimo && !$colissimoHasIntl)): ?>
       <div class="admin-block" style="margin-top:20px;">
         <?php if (!$carriers): ?>
           <p class="empty-state" style="margin:0 0 14px;">Aucun transporteur configuré pour l'instant.</p>
@@ -88,6 +89,12 @@ $flash = flash_get();
             <form method="post" action="/admin/shipping-action.php" style="display:inline;">
               <input type="hidden" name="action" value="seed_colissimo">
               <button type="submit" class="btn btn-primary">Charger un exemple Colissimo (22 paliers, 3 zones)</button>
+            </form>
+          <?php endif; ?>
+          <?php if (!$hasMondialRelay): ?>
+            <form method="post" action="/admin/shipping-action.php" style="display:inline;">
+              <input type="hidden" name="action" value="seed_mondial_relay">
+              <button type="submit" class="btn btn-primary">Charger un exemple Mondial Relay (10 paliers Point Relais, France)</button>
             </form>
           <?php endif; ?>
           <?php if ($hasColissimo && !$colissimoHasIntl): ?>

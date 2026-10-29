@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/autofeed.php';
 require_admin();
 
 $content = get_content();
@@ -69,6 +70,13 @@ $colorFields = [
   .apx-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .apx-contrast { font-size: 0.8rem; font-family: var(--font-mono); color: var(--ink-soft); }
   .apx-contrast[data-kind="warn"] { color: #b3261e; }
+  .apx-heroes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .apx-hero { display: flex; gap: 9px; align-items: flex-start; padding: 10px 11px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; font-size: .82rem; line-height: 1.3; }
+  .apx-hero:has(input:checked) { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .apx-hero input { margin-top: 2px; accent-color: var(--accent); }
+  .apx-hero-glyph { font-size: 1.2rem; line-height: 1; color: var(--accent); }
+  .apx-hero strong { display: block; font-size: .84rem; }
+  .apx-hero small { display: block; color: var(--ink-soft); font-size: .75rem; margin-top: 2px; }
 
   .apx-logo-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px; align-items: start; }
   @media (max-width: 760px) { .apx-logo-grid { grid-template-columns: 1fr 1fr; } .apx-logo-horizontal { grid-column: 1 / -1; } }
@@ -120,7 +128,7 @@ $colorFields = [
   <div class="wrap">
     <p class="eyebrow">Identité visuelle</p>
     <h1 style="font-size:1.8rem;margin:12px 0 12px;">Apparence</h1>
-    <p class="hint">Choisissez une palette toute prête ou vos propres couleurs, puis les polices des titres et des textes. L'aperçu se met à jour en direct ; rien ne change sur le site avant « Enregistrer ». Les nuances intermédiaires (fonds de cartes, filets, thème sombre) sont calculées automatiquement.</p>
+    <p class="hint">Choisissez une palette toute prête ou vos propres couleurs, les polices, le thème clair/sombre et le hero de l'accueil. L'aperçu se met à jour en direct ; rien ne change sur le site avant « Enregistrer ». Les nuances intermédiaires (fonds de cartes, filets) sont calculées automatiquement à partir de vos quatre couleurs.</p>
 
     <?php if ($flash): ?>
       <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin:16px 0;"><?= h($flash['message']) ?></p>
@@ -138,6 +146,7 @@ $colorFields = [
             <strong><?= h($t['label']) ?><?= $key === $activeTemplate ? ' <small>(actuel)</small>' : '' ?></strong>
             <small><?= h($t['tagline']) ?></small>
             <?php if (!empty($t['sector'])): ?><small class="tplx-sector"><?= h($t['sector']) ?></small><?php endif; ?>
+            <?php $tplHero = shop_template_hero($key); if ($tplHero !== ''): ?><small class="tplx-sector">Hero : <?= h(SHOP_HEROES[$tplHero]['label']) ?></small><?php endif; ?>
             <a class="tplx-preview" href="/index.php?modele=<?= h($key) ?>" target="_blank" rel="noopener">Aperçu ↗</a>
           </label>
         <?php endforeach; ?>
@@ -168,6 +177,67 @@ $colorFields = [
       <div class="apx-actions"><button class="btn btn-primary" type="submit">Enregistrer les logos</button></div>
     </form>
 
+    <?php if (autofeed_api_key() !== ''): ?>
+    <section class="apx-block" id="logos-ia" style="margin-top:14px;">
+      <h2>✨ Générer les logos avec l'IA</h2>
+      <p class="hint" style="margin:0 0 10px;">L’IA dessine un seul symbole graphique, sans texte, aux couleurs de votre palette. Le nom de la boutique est ensuite écrit à part pour composer les trois déclinaisons (horizontale, verticale, carrée) sur fond transparent : elles partagent donc le même symbole, réservé à cette boutique. Coût estimé : <?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>, décompté de votre crédit IA ; « Revenir au logo d'origine » permet d'annuler une déclinaison.</p>
+      <form method="post" action="/admin/regenerate-image.php" id="logo-ai-form" style="display:grid;gap:10px;max-width:720px;" data-cost="<?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>"
+        data-direction="<?= h(autofeed_logo_direction()) ?>">
+        <input type="hidden" name="target" value="logo"><input type="hidden" name="back" value="logos">
+        <label>Description du symbole <textarea name="prompt" id="logo-ai-prompt" rows="4" maxlength="400" style="width:100%;box-sizing:border-box;"></textarea></label>
+        <div><button class="btn btn-primary" type="submit">Générer le symbole et les 3 logos</button></div>
+      </form>
+
+      <hr style="border:0;border-top:1px solid rgba(0,0,0,.12);margin:18px 0;">
+      <h3 style="margin:0 0 4px;">♻️ Symboles déjà générés</h3>
+      <p class="hint" style="margin:0 0 10px;">Chaque symbole généré est conservé ici, commun à toutes les boutiques. Cliquez sur un symbole pour composer les trois déclinaisons de cette boutique avec son nom : aucun crédit IA n’est décompté. Un logo ne peut servir qu’à une seule boutique : le symbole disparaît de la liste dès qu’il est utilisé.</p>
+      <?php $library = logo_library_list(); ?>
+      <?php if ($library): ?>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;max-width:720px;">
+        <?php foreach (array_slice($library, 0, 24) as $item): ?>
+        <form method="post" action="/admin/regenerate-image.php" style="margin:0;">
+          <input type="hidden" name="target" value="logo_from_library">
+          <input type="hidden" name="symbol" value="<?= h((string) $item['file']) ?>">
+          <input type="hidden" name="back" value="logos">
+          <button type="submit" title="Composer les 3 logos avec ce symbole — sans crédit IA" style="padding:0;border:1px solid rgba(0,0,0,.12);border-radius:10px;background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0 0/16px 16px;cursor:pointer;">
+            <img src="/uploads/logo-library/<?= h((string) $item['file']) ?>" alt="Symbole proposé" width="80" height="80" style="display:block;object-fit:contain;">
+          </button>
+        </form>
+        <?php endforeach; ?>
+      </div>
+      <?php else: ?>
+      <p class="hint">Aucun symbole pour l’instant : la première génération alimentera la médiathèque.</p>
+      <?php endif; ?>
+
+      <hr style="border:0;border-top:1px solid rgba(0,0,0,.12);margin:18px 0;">
+      <h3 style="margin:0 0 4px;">✨ Améliorer le logo actuel</h3>
+      <p class="hint" style="margin:0 0 10px;">Repart du logo enregistré pour la déclinaison, le recadre pour remplir la zone, retire la baseline s’il y en a une et rend le fond transparent, aux couleurs de votre palette. Même coût qu’une génération. Un logo SVG doit d’abord être importé en PNG ou JPG.</p>
+      <form method="post" action="/admin/regenerate-image.php" id="logo-improve-form" style="display:grid;gap:10px;max-width:720px;" data-cost="<?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>">
+        <input type="hidden" name="target" value="logo_improve"><input type="hidden" name="back" value="logos">
+        <label>Déclinaison <select name="variant" id="logo-improve-variant">
+          <?php foreach (LOGO_VARIANTS as $v => [$t]): ?><option value="<?= h($v) ?>"><?= h($t) ?></option><?php endforeach; ?>
+        </select></label>
+        <label>Consigne (facultatif) <textarea name="prompt" rows="3" maxlength="300" style="width:100%;box-sizing:border-box;" placeholder="Ex. simplifier les traits, épaissir les lettres, agrandir le symbole…"></textarea></label>
+        <div><button class="btn btn-primary" type="submit">Améliorer le logo</button></div>
+      </form>
+    </section>
+    <script>
+    (function () {
+      var f = document.getElementById('logo-ai-form'), p = document.getElementById('logo-ai-prompt');
+      p.value = f.dataset.direction;
+      f.addEventListener('submit', function (e) {
+        if (!confirm('Générer un symbole avec l\u2019IA et composer les 3 logos ? Coût estimé : ' + f.dataset.cost + ' (décompté de votre crédit IA).')) { e.preventDefault(); return; }
+        var b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Génération du symbole en cours (~30 s)…';
+      });
+      var fi = document.getElementById('logo-improve-form');
+      if (fi) fi.addEventListener('submit', function (e) {
+        if (!confirm('Améliorer ce logo avec l\u2019IA ? Coût estimé : ' + fi.dataset.cost + ' (décompté de votre crédit IA).')) { e.preventDefault(); return; }
+        var b = fi.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Amélioration en cours (~30 s)…';
+      });
+    })();
+    </script>
+    <?php endif; ?>
+
     <div class="apx-grid">
       <form class="apx-form" method="post" action="/admin/appearance-action.php" id="apx-form">
         <input type="hidden" name="action" value="save">
@@ -192,6 +262,14 @@ $colorFields = [
             <?php endforeach; ?>
           </div>
           <p class="apx-contrast" id="apx-contrast" role="status"></p>
+          <label>Thème du site
+            <select name="theme" id="f-theme">
+              <?php foreach (APPEARANCE_THEMES as $themeKey => $themeLabel): ?>
+                <option value="<?= h($themeKey) ?>"<?= $current['theme'] === $themeKey ? ' selected' : '' ?>><?= h($themeLabel) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <p class="hint" style="margin:0;">« Sombre » utilise la variante dessinée du modèle quand elle existe, sinon des nuances calculées à partir de votre palette. « Automatique » suit le réglage clair/sombre de l'appareil du visiteur.</p>
         </div>
 
         <div class="apx-block apx-font">
@@ -212,6 +290,30 @@ $colorFields = [
             </select>
           </label>
           <p class="apx-sample body" id="s-body">Chaque pièce est choisie avec soin, décrite honnêtement et emballée pour voyager sans encombre.</p>
+        </div>
+
+        <div class="apx-block">
+          <h2>Hero de la page d'accueil</h2>
+          <?php if (shop_template_layout($activeTemplate) === 'classic'): $tplHeroKey = shop_template_hero($activeTemplate) ?: 'polaroid'; $glyphs = ['polaroid' => '▤', 'plein' => '▭', 'scinde' => '◧', 'carrousel' => '⇆', 'mosaique' => '▦']; ?>
+            <p class="hint" style="margin:0;">Le modèle propose un hero par défaut ; choisissez-en un autre pour cette boutique sans changer le reste du design. Les photos, promos et coups de cœur restent les mêmes.</p>
+            <div class="apx-heroes">
+              <label class="apx-hero">
+                <input type="radio" name="hero" value=""<?= $current['hero'] === '' ? ' checked' : '' ?>>
+                <span class="apx-hero-glyph" aria-hidden="true"><?= h($glyphs[$tplHeroKey] ?? '▤') ?></span>
+                <span><strong>Hero du modèle · <?= h(SHOP_HEROES[$tplHeroKey]['label']) ?></strong><small><?= h(SHOP_HEROES[$tplHeroKey]['tagline']) ?></small></span>
+              </label>
+              <?php foreach (SHOP_HEROES as $heroKey => $hero): ?>
+                <label class="apx-hero">
+                  <input type="radio" name="hero" value="<?= h($heroKey) ?>"<?= $current['hero'] === $heroKey ? ' checked' : '' ?>>
+                  <span class="apx-hero-glyph" aria-hidden="true"><?= h($glyphs[$heroKey] ?? '▤') ?></span>
+                  <span><strong><?= h($hero['label']) ?></strong><small><?= h($hero['tagline']) ?></small></span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          <?php else: ?>
+            <p class="hint" style="margin:0;">Le modèle « <?= h(SHOP_TEMPLATES[$activeTemplate]['label']) ?> » a son propre hero, dessiné avec sa mise en page et sa navigation. Il reste inchangé ; choisissez un modèle classique pour utiliser les variantes de hero.</p>
+            <input type="hidden" name="hero" value="">
+          <?php endif; ?>
         </div>
 
         <div class="apx-actions">
@@ -270,7 +372,10 @@ $colorFields = [
 (function () {
   var FONTS = <?= json_encode($fontCatalog, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   var preview = document.getElementById('apx-preview');
-  var mode = 'light';
+  var mode = <?= json_encode($current['theme'] === 'dark' ? 'dark' : 'light') ?>;
+  document.querySelectorAll('.apx-mode button').forEach(function (b) {
+    b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  });
   var keys = ['bg', 'ink', 'accent', 'accent-2'];
 
   function rgb(h) { return [1, 3, 5].map(function (i) { return parseInt(h.substr(i, 2), 16); }); }

@@ -78,26 +78,61 @@ function saas_pricing_from_legacy(): array
     return ['discount_pct' => 0, 'yearly' => false, 'plans' => $plans ?: array_map(static fn ($p) => ['key' => $p['key'], 'name' => $p['name'], 'monthly' => gallery_price_cents($p['price']), 'featured' => $p['featured'], 'features' => $p['features']], saas_default_plans()), 'tiers' => []];
 }
 
-/** Tous les tarifs : ['default' => grille, 'galleries' => [identifiant => grille propre]]. */
+/** Grille vitrine par défaut, distincte des tarifs des boutiques avec vente. */
+function saas_showcase_pricing_default(): array
+{
+    $sales = saas_pricing_from_legacy();
+    $saved = is_file(saas_pricing_file()) ? json_decode((string) file_get_contents(saas_pricing_file()), true) : null;
+    if (is_array($saved) && isset($saved['default'])) $sales = saas_grid_normalize((array) $saved['default']);
+    return saas_grid_normalize([
+        'yearly' => $sales['yearly'],
+        'discount_pct' => $sales['discount_pct'],
+        'plans' => [
+            ['key' => 'vitrine-gratuite', 'name' => 'Vitrine gratuite', 'monthly' => 0, 'features' => []],
+            ['key' => 'vitrine-10', 'name' => 'Vitrine 10 €', 'monthly' => 1000, 'features' => []],
+            ['key' => 'vitrine-30', 'name' => 'Vitrine 30 €', 'monthly' => 3000, 'features' => []],
+        ],
+        'tiers' => [],
+    ]);
+}
+
+/** Tous les tarifs : grilles distinctes pour ventes et vitrines, par défaut et par galerie. */
 function saas_pricing(): array
 {
     static $cache = null;
     if ($cache !== null) return $cache;
     $file = saas_pricing_file();
     $saved = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
-    if (!is_array($saved)) return $cache = ['default' => saas_grid_normalize(saas_pricing_from_legacy()), 'galleries' => [], 'saved' => false];
+    if (!is_array($saved)) return $cache = [
+        'default' => saas_grid_normalize(saas_pricing_from_legacy()), 'galleries' => [],
+        'showcase_default' => saas_showcase_pricing_default(), 'showcase_galleries' => [], 'saved' => false,
+    ];
     $galleries = [];
     foreach ((array) ($saved['galleries'] ?? []) as $slug => $g) {
         if (is_array($g) && preg_match('/^[a-z0-9][a-z0-9-]*$/', (string) $slug)) $galleries[(string) $slug] = saas_grid_normalize($g);
     }
-    return $cache = ['default' => saas_grid_normalize((array) ($saved['default'] ?? [])), 'galleries' => $galleries, 'saved' => true];
+    $showcaseGalleries = [];
+    foreach ((array) ($saved['showcase_galleries'] ?? []) as $slug => $g) {
+        if (is_array($g) && preg_match('/^[a-z0-9][a-z0-9-]*$/', (string) $slug)) $showcaseGalleries[(string) $slug] = saas_grid_normalize($g);
+    }
+    return $cache = [
+        'default' => saas_grid_normalize((array) ($saved['default'] ?? [])), 'galleries' => $galleries,
+        'showcase_default' => saas_grid_normalize((array) ($saved['showcase_default'] ?? saas_showcase_pricing_default())),
+        'showcase_galleries' => $showcaseGalleries, 'saved' => true,
+    ];
 }
 
-function saas_pricing_save(array $default, array $galleries): bool
+function saas_pricing_save(array $default, array $galleries, ?array $showcaseDefault = null, ?array $showcaseGalleries = null): bool
 {
     $dir = dirname(saas_pricing_file());
     if (!is_dir($dir) && !@mkdir($dir, 0755, true)) return false;
-    $data = ['default' => saas_grid_normalize($default), 'galleries' => array_map('saas_grid_normalize', $galleries)];
+    $pricing = saas_pricing();
+    $data = [
+        'default' => saas_grid_normalize($default),
+        'galleries' => array_map('saas_grid_normalize', $galleries),
+        'showcase_default' => saas_grid_normalize($showcaseDefault ?? $pricing['showcase_default']),
+        'showcase_galleries' => array_map('saas_grid_normalize', $showcaseGalleries ?? $pricing['showcase_galleries']),
+    ];
     $ok = @file_put_contents(saas_pricing_file(), json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)) !== false;
     @unlink(saas_data_dir() . '/saas/cache.json');
     return $ok;
@@ -115,11 +150,20 @@ function saas_pricing_legacy_plans(): array
 }
 
 /** Grille applicable à une galerie ('' ou galerie sans grille propre : la grille par défaut). 'own' : la galerie a ses propres tarifs. */
-function saas_grid(string $gallery = ''): array
+function saas_grid(string $gallery = '', string $mode = 'sales'): array
 {
     $p = saas_pricing();
-    $g = $gallery !== '' && isset($p['galleries'][$gallery]) ? $p['galleries'][$gallery] + ['own' => true] : $p['default'] + ['own' => false];
+    if ($mode === 'showcase') {
+        $g = $gallery !== '' && isset($p['showcase_galleries'][$gallery])
+            ? $p['showcase_galleries'][$gallery] + ['own' => true]
+            : $p['showcase_default'] + ['own' => false];
+    } else {
+        $g = $gallery !== '' && isset($p['galleries'][$gallery])
+            ? $p['galleries'][$gallery] + ['own' => true]
+            : $p['default'] + ['own' => false];
+    }
     $g['gallery'] = $gallery;
+    $g['mode'] = $mode === 'showcase' ? 'showcase' : 'sales';
     return $g;
 }
 
@@ -128,7 +172,16 @@ function saas_grid_offers(array $grid): array
 {
     $out = [];
     foreach (array_merge($grid['plans'], $grid['tiers']) as $o) {
-        $o['yearly_eff'] = !$grid['yearly'] || $o['monthly'] === null ? null : ($o['yearly'] ?? (int) round($o['monthly'] * 12 * (100 - $grid['discount_pct']) / 100));
+        $o['yearly_eff'] = null;
+        if ($grid['yearly'] && $o['monthly'] !== null) {
+            if ($o['yearly'] !== null) {
+                $o['yearly_eff'] = $o['yearly'];
+            } else {
+                $calculated = (int) round($o['monthly'] * 12 * (100 - $grid['discount_pct']) / 100);
+                // Les prix annuels calculés sont arrondis à la dizaine d'euros inférieure.
+                $o['yearly_eff'] = intdiv($calculated, 1000) * 1000;
+            }
+        }
         $out[] = $o;
     }
     return $out;
@@ -165,6 +218,14 @@ function saas_offer_saving(array $offer): string
     return abs($months - round($months)) < 0.08 && round($months) >= 1 ? round($months) . ' mois offert' . (round($months) > 1 ? 's' : '') : '−' . $pct . ' %';
 }
 
+/** Économie réelle sur douze mois, en centimes, entre le paiement mensuel et annuel. */
+function saas_offer_saving_cents(array $offer): int
+{
+    $monthly = $offer['monthly'] ?? null;
+    $yearly = $offer['yearly_eff'] ?? null;
+    return is_numeric($monthly) && is_numeric($yearly) ? max(0, (int) $monthly * 12 - (int) $yearly) : 0;
+}
+
 /** Libellé de limite d'une offre : « Jusqu'à 50 articles », « Articles illimités », ou '' (formule sans limite déclarée). */
 function saas_offer_limit_label(array $offer): string
 {
@@ -175,7 +236,7 @@ function saas_offer_limit_label(array $offer): string
 /** Offre figée d'une demande : request['offer'], ou (anciennes demandes) reconstituée d'après la formule d'alors. Clés : key, name, model, billing, cents, max_items, gallery. */
 function saas_req_offer(array $req): array
 {
-    if (!empty($req['offer']) && is_array($req['offer'])) return $req['offer'] + ['billing' => 'month', 'max_items' => null, 'gallery' => '', 'model' => 'plan'];
+    if (!empty($req['offer']) && is_array($req['offer'])) return $req['offer'] + ['billing' => 'month', 'max_items' => null, 'gallery' => '', 'model' => 'plan', 'mode' => (string) ($req['site_mode'] ?? 'sales')];
     $plan = array_column(saas_config()['plans'], null, 'key')[$req['plan'] ?? ''] ?? null;
     return ['key' => (string) ($req['plan'] ?? ''), 'name' => $plan['name'] ?? (string) ($req['plan'] ?? '—'), 'model' => 'plan', 'billing' => 'month',
         'cents' => $plan ? saas_plan_cents($plan) : 0, 'max_items' => null, 'gallery' => (string) ($req['gallery'] ?? '')];
@@ -191,20 +252,24 @@ function saas_offer_monthly_equivalent(array $o): int
  * Choisit l'offre d'un client : la fige pour la demande. $gallery : galerie choisie ('' = aucune), $key : clé de l'offre, $billing : month|year.
  * Retourne l'offre figée, ou null si la clé ne fait pas partie de la grille.
  */
-function saas_offer_snapshot(string $gallery, string $key, string $billing): ?array
+function saas_offer_snapshot(string $gallery, string $key, string $billing, string $mode = 'sales'): ?array
 {
-    $offer = saas_offer($gallery, $key);
+    if (!in_array($mode, ['sales', 'showcase'], true)) return null;
+    $offer = null;
+    foreach (saas_grid_offers(saas_grid($gallery, $mode)) as $candidate) {
+        if ($candidate['key'] === $key) { $offer = $candidate; break; }
+    }
     if (!$offer) return null;
     if ($billing !== 'year' || saas_offer_cents($offer, 'year') === null) $billing = 'month';
     return ['key' => $offer['key'], 'name' => $offer['name'], 'model' => $offer['model'], 'billing' => $billing, 'cents' => saas_offer_cents($offer, $billing),
-        'max_items' => $offer['max_items'], 'ai_quota_eur' => $offer['ai_quota_eur'] ?? null, 'gallery' => $gallery];
+        'max_items' => $offer['max_items'], 'ai_quota_eur' => $offer['ai_quota_eur'] ?? null, 'gallery' => $gallery, 'mode' => $mode];
 }
 
 /** Galeries publiées (identifiant => nom) où l'on peut s'inscrire. */
 function saas_signup_galleries(): array
 {
     $out = [];
-    foreach (gallery_list() as $slug => $g) if ($g['published']) $out[$slug] = $g['name'];
+    foreach (gallery_list() as $slug => $g) if ($g['published'] && empty($g['paused'])) $out[$slug] = $g['name'];
     return $out;
 }
 
@@ -241,7 +306,8 @@ function saas_pricing_html(array $grid, string $id, callable $ctaUrl): string
     foreach ($offers as $o) {
         $monthly = saas_price_text($o['monthly'], 'month');
         $yearly = $o['yearly_eff'] !== null ? saas_price_text($o['yearly_eff'], 'year') : null;
-        $saving = saas_offer_saving($o);
+        $saving = saas_offer_saving_cents($o);
+        $yearlyMonthly = $o['yearly_eff'] !== null ? (int) round($o['yearly_eff'] / 12) : 0;
         $limit = saas_offer_limit_label($o);
         $html .= '<article class="plan plan-' . $e($o['model']) . ($o['featured'] ? ' is-featured' : '') . '">'
             . ($o['featured'] ? '<span class="tag">La plus choisie</span>' : '')
@@ -249,7 +315,7 @@ function saas_pricing_html(array $grid, string $id, callable $ctaUrl): string
             . ($limit !== '' && $o['model'] === 'plan' ? '<p class="plan-limit">' . $e($limit) . '</p>' : '')
             . (($aiLine = saas_ai_offer_line($o['ai_quota_eur'] ?? null)) !== '' ? '<p class="plan-ai">' . $e($aiLine) . '</p>' : '')
             . '<p class="price pm">' . ($o['monthly'] === null ? 'Sur devis' : ($o['monthly'] === 0 ? 'Gratuit' : $e(saas_money($o['monthly'])) . ' <small>/ mois</small>')) . '</p>'
-            . ($yearly !== null ? '<p class="price py">' . ($o['yearly_eff'] === 0 ? 'Gratuit' : $e(saas_money($o['yearly_eff'])) . ' <small>/ an</small>') . ($saving !== '' ? ' <span class="save">' . $e($saving) . '</span>' : '') . '</p>' : '')
+            . ($yearly !== null ? '<p class="price py">' . ($o['yearly_eff'] === 0 ? 'Gratuit' : $e(saas_money($o['yearly_eff'])) . ' <small>/ an</small>') . ($o['yearly_eff'] > 0 ? ' <small>soit ' . $e(saas_money($yearlyMonthly)) . ' / mois</small>' : '') . ($saving > 0 ? ' <span class="save">Économie de ' . $e(saas_money($saving)) . ' / an</span>' : '') . '</p>' : '')
             . ($o['features'] ? '<ul>' . implode('', array_map(static fn ($f) => '<li>' . saas_e($f) . '</li>', $o['features'])) . '</ul>' : '')
             . '<a class="btn pm' . ($o['featured'] ? '' : ' ghost') . '" href="' . $e($ctaUrl($o, 'month')) . '">Choisir</a>'
             . ($yearly !== null ? '<a class="btn py' . ($o['featured'] ? '' : ' ghost') . '" href="' . $e($ctaUrl($o, 'year')) . '">Choisir (annuel)</a>' : '')
@@ -282,11 +348,12 @@ function saas_offer_picker_html(array $grid, string $selected, string $billing):
     $html .= '<div class="plan-pick tall">';
     foreach ($offers as $o) {
         $limit = saas_offer_limit_label($o);
-        $saving = saas_offer_saving($o);
-        $html .= '<label class="offer offer-' . $e($o['model']) . '"><input type="radio" name="plan" value="' . $e($o['key']) . '"' . ($o['key'] === $selected ? ' checked' : '') . '>'
+        $saving = saas_offer_saving_cents($o);
+        $yearlyMonthly = $o['yearly_eff'] !== null ? saas_money((int) round($o['yearly_eff'] / 12)) : '';
+        $html .= '<label class="offer offer-' . $e($o['model']) . '"><input type="radio" name="plan" value="' . $e($o['key']) . '" required' . ($o['key'] === $selected ? ' checked' : '') . '>'
             . '<strong>' . $e($o['name']) . '</strong>'
             . '<span class="op pm">' . $e(saas_price_text($o['monthly'], 'month')) . '</span>'
-            . ($o['yearly_eff'] !== null ? '<span class="op py">' . $e(saas_price_text($o['yearly_eff'], 'year')) . ($saving !== '' ? ' <b class="save">' . $e($saving) . '</b>' : '') . '</span>' : ($grid['yearly'] ? '<span class="op py">' . $e(saas_price_text($o['monthly'], 'month')) . '</span>' : ''))
+            . ($o['yearly_eff'] !== null ? '<span class="op py">' . $e(saas_money((int) $o['yearly_eff'])) . ' / an <small>soit ' . $e($yearlyMonthly) . ' / mois</small>' . ($saving > 0 ? ' <b class="save">Économie de ' . $e(saas_money($saving)) . ' / an</b>' : '') . '</span>' : ($grid['yearly'] ? '<span class="op py">' . $e(saas_price_text($o['monthly'], 'month')) . '</span>' : ''))
             . ($limit !== '' ? '<span class="lim">' . $e($limit) . '</span>' : '')
             . (($aiLine = saas_ai_offer_line($o['ai_quota_eur'] ?? null)) !== '' ? '<span class="lim ai">' . $e($aiLine) . '</span>' : '');
         foreach (array_slice($o['features'], 0, 3) as $f) $html .= '<span>✓ ' . $e($f) . '</span>';
@@ -304,5 +371,6 @@ function saas_offer_picker_html(array $grid, string $selected, string $billing):
 function saas_offer_badge(array $req): string
 {
     $o = saas_req_offer($req);
-    return $o['name'] . ($o['billing'] === 'year' ? ' · annuel' : '') . (($o['gallery'] ?? '') !== '' ? ' · galerie ' . $o['gallery'] : '');
+    return (($o['mode'] ?? 'sales') === 'showcase' ? 'Vitrine · ' : 'Avec vente · ') . $o['name']
+        . ($o['billing'] === 'year' ? ' · annuel' : '') . (($o['gallery'] ?? '') !== '' ? ' · galerie ' . $o['gallery'] : '');
 }

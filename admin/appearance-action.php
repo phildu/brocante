@@ -13,7 +13,9 @@ switch ($_POST['action'] ?? '') {
         appearance_save(
             (array) ($_POST['colors'] ?? []),
             (string) ($_POST['font_display'] ?? ''),
-            (string) ($_POST['font_body'] ?? '')
+            (string) ($_POST['font_body'] ?? ''),
+            isset($_POST['theme']) ? (string) $_POST['theme'] : null,
+            array_key_exists('hero', $_POST) ? (string) $_POST['hero'] : null
         );
         flash_set('Apparence enregistrée : elle s\'applique maintenant à tout le site.');
         break;
@@ -36,11 +38,13 @@ switch ($_POST['action'] ?? '') {
     case 'logos':
         $logos = logos_saved();
         $changed = [];
+        $siteName = trim((string) (get_content()['site_name'] ?? ''));
         try {
             foreach (LOGO_VARIANTS as $variant => [$title]) {
                 $file = $_FILES['logo_' . $variant] ?? null;
                 if ($file && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
                     $logos[$variant] = logo_store_upload($variant, $file);
+                    media_library_register($logos[$variant], 'Logo ' . mb_strtolower($title) . ($siteName !== '' ? ' — ' . $siteName : ''), 'Logo', 'logo');
                     $changed[] = mb_strtolower($title);
                 } elseif (!empty($_POST['reset_' . $variant])) {
                     unset($logos[$variant]);

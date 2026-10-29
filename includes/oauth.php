@@ -208,6 +208,9 @@ function oauth_own_creds(string $key): ?array
     return ['mode' => 'own', 'fields' => $s['providers'][$key], 'redirect' => oauth_return_base() . '/oauth/callback.php', 'sign' => $s['signing_key']];
 }
 
+/** Contextes qui n'utilisent que les clés de la plateforme : création de boutique, et les galeries (administrateur, création, visiteur). */
+const OAUTH_PLATFORM_CTX = ['signup', 'gadmin', 'gcreate', 'gvisitor'];
+
 /**
  * Clés d'un fournisseur pour un contexte. L'inscription (signup) n'utilise que la plateforme. L'administration et les comptes clients d'une
  * boutique respectent ses réglages (usage coupé, fournisseur coupé) puis préfèrent ses clés propres à celles de la plateforme.
@@ -215,10 +218,30 @@ function oauth_own_creds(string $key): ?array
 function oauth_creds(string $key, string $ctx): ?array
 {
     if (!isset(OAUTH_PROVIDERS[$key])) return null;
-    if ($ctx === 'signup') return oauth_platform_creds($key);
+    if (in_array($ctx, OAUTH_PLATFORM_CTX, true)) return oauth_platform_creds($key);
     $s = oauth_shop_config();
     if (!($ctx === 'admin' ? $s['admin'] : $s['customer']) || in_array($key, $s['off'], true)) return null;
     return oauth_own_creds($key) ?? oauth_platform_creds($key);
+}
+
+/** Retour d'un contexte de galerie (gadmin, gcreate, gvisitor) sur sa page d'origine, avec un message. La session est déjà démarrée. */
+function oauth_g_fail(string $ctx, string $message): never
+{
+    if ($ctx === 'gvisitor') {
+        $_SESSION['gv_error'] = $message;
+        $slug = strtolower((string) ($_SESSION['oauth_gvisitor']['g'] ?? $_POST['g'] ?? ''));
+        unset($_SESSION['oauth_gvisitor']);
+        header('Location: /galerie/visiteur.php?g=' . rawurlencode(preg_match('/^[a-z0-9][a-z0-9-]*$/', $slug) ? $slug : ''), true, 303);
+    } elseif ($ctx === 'gcreate') {
+        $_SESSION['ga_oauth_error'] = $message;
+        $type = (string) ($_SESSION['oauth_gcreate']['type'] ?? $_POST['type'] ?? '');
+        unset($_SESSION['oauth_gcreate'], $_SESSION['oauth_gcreate_email']);
+        header('Location: /galerie/creer.php' . (preg_match('/^[a-z0-9_-]{1,30}$/', $type) ? '?type=' . rawurlencode($type) : ''), true, 303);
+    } else {
+        $_SESSION['ga_oauth_error'] = $message;
+        header('Location: /galerie/admin.php', true, 303);
+    }
+    exit;
 }
 
 /** Fournisseurs disponibles pour un contexte : clé → libellé. */
@@ -467,11 +490,13 @@ const OAUTH_ICONS = [
 /**
  * Boutons des fournisseurs actifs. $ctx : signup | admin | customer. Les boutons sont des boutons de formulaire : placés dans le
  * formulaire d'inscription, ils emportent ses champs (formule, case des conditions, jeton) ; sinon (ctx admin / customer) le HTML
- * produit son propre formulaire. $extra : champs cachés ajoutés (ex. next). Retourne '' si aucun fournisseur n'est actif.
+ * produit son propre formulaire. $extra : champs cachés ajoutés (ex. next). $onlyProviders limite éventuellement les fournisseurs affichés.
+ * Retourne '' si aucun fournisseur actif ne correspond.
  */
-function oauth_buttons_html(string $ctx, array $extra = [], bool $ownForm = true): string
+function oauth_buttons_html(string $ctx, array $extra = [], bool $ownForm = true, array $onlyProviders = []): string
 {
     $providers = oauth_enabled_providers($ctx);
+    if ($onlyProviders) $providers = array_intersect_key($providers, array_flip($onlyProviders));
     if (!$providers) return '';
     $esc = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     $btns = '';

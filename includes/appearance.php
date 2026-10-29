@@ -44,7 +44,7 @@ const APPEARANCE_FONTS = [
     ],
 ];
 
-/** Palettes toutes prêtes : [fond, texte, principale, secondaire]. */
+/** Palettes toutes prêtes, toutes sur fond clair : [fond, texte, principale, secondaire]. */
 const APPEARANCE_PALETTES = [
     'brocante' => ['Brocante', '#f4eee1', '#2e2418', '#b5502e', '#46647a'],
     'foret' => ['Forêt', '#f3f1ea', '#1f2a22', '#2f6b4f', '#8a5a2b'],
@@ -53,7 +53,30 @@ const APPEARANCE_PALETTES = [
     'poudre' => ['Rose poudré', '#faf1ee', '#3a2327', '#b24a62', '#5f7a6b'],
     'fournil' => ['Fournil', '#faf5ec', '#2b2118', '#b0622b', '#5b7a4a'],
     'nuit' => ['Encre', '#f6f4ee', '#121417', '#7a3cb4', '#d08a1e'],
+    'olive' => ['Olive', '#f5f4e8', '#2c2f24', '#6b7f3a', '#a1552f'],
+    'lavande' => ['Lavande', '#f6f3fa', '#2f2740', '#6c5b9e', '#b07d55'],
+    'citron' => ['Citron vert', '#f8f7e9', '#2a2d1f', '#8a9a2e', '#d0712c'],
+    'brique' => ['Brique & lin', '#f8efe9', '#33231d', '#a34a2a', '#5d6f56'],
+    'menthe' => ['Menthe', '#eef7f2', '#1e3029', '#2f7d63', '#c07a3d'],
+    'sable' => ['Sable', '#f7f1e5', '#2b2620', '#8a6a3b', '#3f6a6a'],
+    'bleuet' => ['Bleuet', '#eff3f9', '#1e2a3a', '#3a6ea8', '#c25b3a'],
+    'prune' => ['Prune', '#f7f1f4', '#322430', '#7d3d5c', '#4a6b5a'],
 ];
+
+/** Thème clair/sombre : « auto » suit le réglage de l'appareil. */
+const APPEARANCE_THEMES = ['auto' => 'Automatique (appareil)', 'light' => 'Clair', 'dark' => 'Sombre'];
+
+function appearance_theme_valid(?string $key): bool
+{
+    return $key !== null && isset(APPEARANCE_THEMES[$key]);
+}
+
+function appearance_theme(): string
+{
+    $saved = appearance_saved();
+    $theme = (string) ($saved['theme'] ?? 'auto');
+    return appearance_theme_valid($theme) ? $theme : 'auto';
+}
 
 function appearance_color(string $value, string $fallback): string
 {
@@ -176,8 +199,9 @@ function appearance_saved(): ?array
     return $saved;
 }
 
-function appearance_save(array $colors, string $display, string $body): void
+function appearance_save(array $colors, string $display, string $body, ?string $theme = null, ?string $hero = null): void
 {
+    $saved = appearance_saved();
     $data = [
         'colors' => [
             'bg' => appearance_color($colors['bg'] ?? '', APPEARANCE_BASE['bg']),
@@ -191,7 +215,17 @@ function appearance_save(array $colors, string $display, string $body): void
         ],
     ];
     // Le modèle de mise en page choisi (Apparence → Modèle) survit à un changement de palette ou de polices.
-    if (!empty(appearance_saved()['template'])) $data['template'] = appearance_saved()['template'];
+    $template = (string) ($saved['template'] ?? '');
+    if (shop_template_valid($template)) {
+        $data['template'] = $template;
+        // Une palette personnalisée n'a pas de variante sombre dessinée : elle est recalculée automatiquement.
+        if (!empty(SHOP_TEMPLATES[$template]['dark']) && $data['colors'] === SHOP_TEMPLATES[$template]['colors']) {
+            $data['dark'] = SHOP_TEMPLATES[$template]['dark'];
+        }
+    }
+    $data['theme'] = appearance_theme_valid($theme) ? $theme : (string) ($saved['theme'] ?? 'auto');
+    $hero = $hero !== null ? $hero : (string) ($saved['hero'] ?? '');
+    if ($hero === '' || shop_hero_valid($hero)) $data['hero'] = $hero;
     appearance_table();
     db()->prepare("INSERT INTO settings (name, value) VALUES ('appearance', ?)
                    ON CONFLICT(name) DO UPDATE SET value = excluded.value")
@@ -208,7 +242,9 @@ function appearance_save_template(string $key, bool $withStyle): void
     $cur = appearance_current();
     $colors = $withStyle ? SHOP_TEMPLATES[$key]['colors'] : $cur['colors'];
     $fonts = $withStyle ? SHOP_TEMPLATES[$key]['fonts'] : $cur['fonts'];
-    $data = ['colors' => $colors, 'fonts' => $fonts, 'template' => $key];
+    $data = ['colors' => $colors, 'fonts' => $fonts, 'template' => $key, 'theme' => $cur['theme']];
+    if ($withStyle && !empty(SHOP_TEMPLATES[$key]['dark'])) $data['dark'] = SHOP_TEMPLATES[$key]['dark'];
+    $data['hero'] = shop_template_hero($key);
     appearance_table();
     db()->prepare("INSERT INTO settings (name, value) VALUES ('appearance', ?)
                    ON CONFLICT(name) DO UPDATE SET value = excluded.value")
@@ -234,12 +270,18 @@ function appearance_current(): array
     foreach (APPEARANCE_BASE as $key => $base) {
         $colors[$key] = appearance_color((string) ($saved['colors'][$key] ?? $tenantColors[$key] ?? ''), $base);
     }
+    $theme = (string) ($saved['theme'] ?? 'auto');
+    $hero = (string) ($saved['hero'] ?? '');
     return [
         'colors' => $colors,
         'fonts' => [
             'display' => $saved['fonts']['display'] ?? $tenantFonts['display'] ?? APPEARANCE_BASE_FONTS['display'],
             'body' => $saved['fonts']['body'] ?? $tenantFonts['body'] ?? APPEARANCE_BASE_FONTS['body'],
         ],
+        'theme' => appearance_theme_valid($theme) ? $theme : 'auto',
+        'hero' => shop_hero_valid($hero) ? $hero : '',
+        'template' => shop_template_valid((string) ($saved['template'] ?? '')) ? (string) $saved['template'] : '',
+        'dark' => is_array($saved['dark'] ?? null) ? $saved['dark'] : null,
         'custom' => $saved !== null,
     ];
 }
@@ -346,4 +388,315 @@ function logos_save(array $logos): void
     db()->prepare("INSERT INTO settings (name, value) VALUES ('logos', ?)
                    ON CONFLICT(name) DO UPDATE SET value = excluded.value")
         ->execute([json_encode($clean, JSON_UNESCAPED_SLASHES)]);
+}
+
+/** Convertit une image générée en PNG à fond transparent (le blanc est détouré). -> octets PNG. */
+function logo_transparent_png_bytes(string $bytes, int $maxDim = 1024): ?string
+{
+    $src = @imagecreatefromstring($bytes);
+    if (!$src) return null;
+    $w = imagesx($src);
+    $h = imagesy($src);
+    $scale = min(1, $maxDim / max($w, $h));
+    $nw = max(1, (int) round($w * $scale));
+    $nh = max(1, (int) round($h * $scale));
+    $img = imagecreatetruecolor($nw, $nh);
+    imagealphablending($img, false);
+    imagesavealpha($img, true);
+    imagecopyresampled($img, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+
+    // Le modèle est prié de poser le visuel sur un blanc pur : ce blanc (et lui
+    // seul) devient transparent. Les teintes claires mais colorées de la palette
+    // sont conservées grâce au test de saturation.
+    for ($y = 0; $y < $nh; $y++) {
+        for ($x = 0; $x < $nw; $x++) {
+            $c = imagecolorat($img, $x, $y);
+            $r = ($c >> 16) & 255;
+            $g = ($c >> 8) & 255;
+            $b = $c & 255;
+            $fromWhite = max(255 - $r, 255 - $g, 255 - $b);
+            if ($fromWhite >= 36) continue;
+            if (max($r, $g, $b) - min($r, $g, $b) >= 16) continue;
+            $alpha = $fromWhite <= 12 ? 127 : (int) round(127 * (1 - ($fromWhite - 12) / 24));
+            imagesetpixel($img, $x, $y, imagecolorallocatealpha($img, $r, $g, $b, $alpha));
+        }
+    }
+
+    ob_start();
+    $ok = imagepng($img, null, 9);
+    $png = (string) ob_get_clean();
+    return $ok && $png !== '' ? $png : null;
+}
+
+/** Enregistre une image générée en PNG transparent : le fond blanc devient transparent. -> chemin. */
+function logo_save_transparent_png(string $bytes, string $variant, int $maxDim = 1000): ?string
+{
+    if (!isset(LOGO_VARIANTS[$variant])) return null;
+    $png = logo_transparent_png_bytes($bytes, $maxDim);
+    if ($png === null) return null;
+    $dir = dirname(__DIR__) . '/uploads';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $name = 'uploads/logo-' . tenant_slug() . '-' . $variant . '-' . bin2hex(random_bytes(4)) . '.png';
+    return @file_put_contents(dirname(__DIR__) . '/' . $name, $png, LOCK_EX) !== false ? $name : null;
+}
+
+/** Consigne de palette pour les logos générés : couleurs du site, fond blanc à détourer. */
+function logo_palette_prompt(): string
+{
+    $c = appearance_current()['colors'];
+    return 'Palette imposée, celle du site : couleur principale ' . $c['accent'] . ', secondaire ' . $c['accent-2'] . ', texte ' . $c['ink'] . '. '
+        . 'Fond blanc pur (#ffffff), sans damier, sans ombre, sans cadre : il sera rendu transparent. '
+        . 'Use only the site palette (accent ' . $c['accent'] . ', secondary ' . $c['accent-2'] . ', text ' . $c['ink'] . ') on a pure white background '
+        . '(#ffffff), with no checkerboard, no shadow and no frame — the background will be made transparent.';
+}
+
+/* ---------- médiathèque partagée des symboles (tous les sites) ---------- */
+
+const LOGO_LIBRARY_MAX = 120;
+
+function logo_library_dir(): string
+{
+    return dirname(__DIR__) . '/uploads/logo-library';
+}
+
+function logo_library_index_file(): string
+{
+    return dirname(__DIR__) . '/data/logo-library.json';
+}
+
+/**
+ * Symboles de la médiathèque, du plus récent au plus ancien. Par défaut, seuls
+ * les symboles encore libres : un logo ne peut servir qu'à une seule boutique.
+ * $includeUsed pour relire tout l'index (écriture de l'index, plafond).
+ */
+function logo_library_list(bool $includeUsed = false): array
+{
+    $file = logo_library_index_file();
+    $data = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+    if (!is_array($data)) return [];
+    return array_values(array_filter($data, static fn ($item): bool => is_array($item)
+        && preg_match('/^symbol-[a-f0-9]{8}\.png$/', (string) ($item['file'] ?? ''))
+        && ($includeUsed || empty($item['used']))
+        && is_file(logo_library_dir() . '/' . $item['file'])));
+}
+
+/** Chemin absolu d'un symbole de la médiathèque (null si nom invalide ou fichier absent). */
+function logo_library_abs(string $file): ?string
+{
+    if (!preg_match('/^symbol-[a-f0-9]{8}\.png$/', $file)) return null;
+    $abs = logo_library_dir() . '/' . $file;
+    return is_file($abs) ? $abs : null;
+}
+
+/**
+ * Réserve un symbole pour la boutique courante : un logo ne peut être utilisé
+ * qu'une seule fois. -> false si le symbole est déjà pris ou introuvable.
+ */
+function logo_library_claim(string $file): bool
+{
+    $list = logo_library_list(true);
+    $claimed = false;
+    foreach ($list as &$item) {
+        if ((string) ($item['file'] ?? '') !== $file) continue;
+        if (!empty($item['used'])) break;
+        $item['used'] = true;
+        $item['used_by'] = tenant_slug();
+        $item['used_at'] = gmdate('c');
+        $claimed = true;
+        break;
+    }
+    unset($item);
+    if (!$claimed) return false;
+    @file_put_contents(logo_library_index_file(), json_encode($list, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    return true;
+}
+
+/** Range un symbole (PNG transparent) dans la médiathèque commune. -> nom de fichier. */
+function logo_library_store(string $pngBytes, string $prompt): ?string
+{
+    $dir = logo_library_dir();
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) return null;
+    $file = 'symbol-' . bin2hex(random_bytes(4)) . '.png';
+    if (@file_put_contents($dir . '/' . $file, $pngBytes, LOCK_EX) === false) return null;
+
+    $list = logo_library_list(true);
+    array_unshift($list, ['file' => $file, 'prompt' => mb_substr($prompt, 0, 500), 'site' => tenant_slug(), 'at' => gmdate('c')]);
+    while (count($list) > LOGO_LIBRARY_MAX) {
+        $old = array_pop($list);
+        if ($old) @unlink($dir . '/' . (string) ($old['file'] ?? ''));
+    }
+    $indexDir = dirname(__DIR__) . '/data';
+    if (!is_dir($indexDir)) @mkdir($indexDir, 0775, true);
+    @file_put_contents(logo_library_index_file(), json_encode($list, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    return $file;
+}
+
+/* ---------- composition symbole + nom ---------- */
+
+/** Police qui écrit le nom à part du symbole. */
+function logo_font_path(): string
+{
+    return dirname(__DIR__) . '/assets/fonts/Poppins-SemiBold.ttf';
+}
+
+/** Largeur et hauteur d'une ligne de texte. -> [largeur, hauteur] */
+function logo_text_size(int $size, string $text, string $font): array
+{
+    $bb = imagettfbbox($size, 0, $font, $text);
+    return [abs($bb[2] - $bb[0]), abs($bb[1] - $bb[7])];
+}
+
+/**
+ * Compose un logo à partir du symbole (graphique seul) et du nom de la
+ * boutique écrit en typographie : les trois déclinaisons partagent ainsi le
+ * même symbole, et le nom reste modifiable sans régénérer l'image.
+ * -> chemin du PNG transparent.
+ */
+function logo_compose_symbol(string $symbolAbs, string $variant): string
+{
+    if (!isset(LOGO_VARIANTS[$variant])) throw new RuntimeException('Déclinaison de logo inconnue.');
+    $bytes = @file_get_contents($symbolAbs);
+    $src = $bytes !== false ? @imagecreatefromstring($bytes) : null;
+    if (!$src) throw new RuntimeException('Symbole illisible.');
+    $cropped = @imagecropauto($src, IMG_CROP_TRANSPARENT);
+    if ($cropped !== false) $src = $cropped;
+
+    [$W, $H] = ['horizontal' => [1600, 400], 'vertical' => [900, 1200], 'square' => [1000, 1000]][$variant];
+    $img = imagecreatetruecolor($W, $H);
+    imagealphablending($img, false);
+    imagesavealpha($img, true);
+    imagefill($img, 0, 0, imagecolorallocatealpha($img, 0, 0, 0, 127));
+
+    $ink = sscanf(appearance_current()['colors']['ink'], '#%02x%02x%02x');
+    $inkColor = imagecolorallocate($img, (int) $ink[0], (int) $ink[1], (int) $ink[2]);
+    $font = logo_font_path();
+    $name = trim((string) (get_content()['site_name'] ?? '')) ?: (string) tenant('name');
+    $withText = $variant !== 'square' && $name !== '' && function_exists('imagettftext') && is_file($font);
+    $sw = imagesx($src);
+    $sh = imagesy($src);
+
+    if ($variant === 'square') {
+        $k = min(($W - 100) / $sw, ($H - 100) / $sh);
+        $dw = max(1, (int) round($sw * $k));
+        $dh = max(1, (int) round($sh * $k));
+        imagecopyresampled($img, $src, (int) (($W - $dw) / 2), (int) (($H - $dh) / 2), 0, 0, $dw, $dh, $sw, $sh);
+    } elseif ($variant === 'horizontal') {
+        $k = min(($H - 80) / $sh, (int) ($W * 0.42) / $sw);
+        $dw = max(1, (int) round($sw * $k));
+        $dh = max(1, (int) round($sh * $k));
+        $sx = 40;
+        imagecopyresampled($img, $src, $sx, (int) (($H - $dh) / 2), 0, 0, $dw, $dh, $sw, $sh);
+        if ($withText) {
+            $avail = $W - $sx - $dw - 56 - 40;
+            $size = 130;
+            while ($size > 36 && logo_text_size($size, $name, $font)[0] > $avail) $size -= 4;
+            $bb = imagettfbbox($size, 0, $font, $name);
+            $th = abs($bb[1] - $bb[7]);
+            imagealphablending($img, true);
+            imagettftext($img, $size, 0, (int) ($sx + $dw + 56 - $bb[0]), (int) (($H - $th) / 2 - $bb[7]), $inkColor, $font, $name);
+        }
+    } else {
+        $k = min(560 / $sw, 560 / $sh);
+        $dw = max(1, (int) round($sw * $k));
+        $dh = max(1, (int) round($sh * $k));
+        $sy = 90;
+        $sx = (int) (($W - $dw) / 2);
+        imagecopyresampled($img, $src, $sx, $sy, 0, 0, $dw, $dh, $sw, $sh);
+        if ($withText) {
+            $avail = $W - 120;
+            $size = 92;
+            $lines = [$name];
+            if (logo_text_size($size, $name, $font)[0] > $avail) {
+                $words = preg_split('/\s+/u', $name) ?: [$name];
+                if (count($words) > 1) {
+                    $best = null;
+                    for ($i = 1; $i < count($words); $i++) {
+                        $a = implode(' ', array_slice($words, 0, $i));
+                        $b = implode(' ', array_slice($words, $i));
+                        $m = max(logo_text_size($size, $a, $font)[0], logo_text_size($size, $b, $font)[0]);
+                        if ($best === null || $m < $best[0]) $best = [$m, $a, $b];
+                    }
+                    $lines = [$best[1], $best[2]];
+                }
+                while ($size > 36 && max(logo_text_size($size, $lines[0], $font)[0], logo_text_size($size, (string) ($lines[1] ?? ''), $font)[0]) > $avail) $size -= 4;
+            }
+            $lineH = (int) round($size * 1.2);
+            $blockH = $lineH * count($lines);
+            $areaTop = $sy + $dh + 40;
+            $top = (int) ($areaTop + max(0, (($H - 70) - $areaTop - $blockH) / 2));
+            imagealphablending($img, true);
+            foreach ($lines as $i => $line) {
+                $bb = imagettfbbox($size, 0, $font, $line);
+                $lw = abs($bb[2] - $bb[0]);
+                $lh = abs($bb[1] - $bb[7]);
+                $x = (int) (($W - $lw) / 2 - $bb[0]);
+                $y = (int) ($top + $i * $lineH + ($lineH - $lh) / 2 - $bb[7]);
+                imagettftext($img, $size, 0, $x, $y, $inkColor, $font, $line);
+            }
+        }
+    }
+
+    $dir = dirname(__DIR__) . '/uploads';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $file = 'uploads/logo-' . tenant_slug() . '-' . $variant . '-' . bin2hex(random_bytes(4)) . '.png';
+    if (!imagepng($img, dirname(__DIR__) . '/' . $file, 9)) throw new RuntimeException('Impossible d’enregistrer le logo composé.');
+    return $file;
+}
+
+/** Compose et enregistre les trois déclinaisons à partir d'un symbole. -> ['paths', 'failed'] */
+function logo_compose_all(string $symbolAbs): array
+{
+    $paths = [];
+    $failed = [];
+    $logos = logos_saved();
+    foreach (array_keys(LOGO_VARIANTS) as $variant) {
+        try {
+            $path = logo_compose_symbol($symbolAbs, $variant);
+            $logos[$variant] = $path;
+            $paths[$variant] = $path;
+        } catch (Throwable $e) {
+            $failed[] = LOGO_VARIANTS[$variant][0];
+        }
+    }
+    if ($paths) logos_save($logos);
+    return ['paths' => $paths, 'failed' => $failed];
+}
+
+/** Améliore le logo enregistré d'une déclinaison (image → image) et le remplace. -> chemin. */
+function logo_improve_with_ai(string $variant, string $prompt): string
+{
+    if (!isset(LOGO_VARIANTS[$variant])) throw new RuntimeException('Déclinaison de logo inconnue.');
+    if (GEMINI_API_KEY === '') throw new RuntimeException('La clé Gemini n’est pas configurée.');
+    if ($gate = ai_gate()) throw new RuntimeException($gate);
+
+    $src = logo_url($variant);
+    $abs = dirname(__DIR__) . '/' . ltrim($src, '/');
+    if ($src === '' || !is_file($abs)) {
+        throw new RuntimeException('Aucun logo à améliorer pour cette déclinaison : importez un fichier ou générez un logo.');
+    }
+    if (str_ends_with(strtolower($abs), '.svg')) {
+        throw new RuntimeException('Ce logo est un SVG : l’amélioration IA demande une image PNG ou JPG. Importez une version PNG, ou générez un nouveau logo.');
+    }
+
+    $instruction = trim(strip_tags($prompt));
+    $bytes = gemini_generate_image($abs, 'Améliore ce logo de boutique sans changer son identité : garde la même composition et le même symbole. '
+        . 'Supprime tout slogan, baseline ou ligne de texte secondaire : ne garde que le nom de la boutique, exactement tel qu’écrit. '
+        . 'Recadre pour que le logo remplisse le cadre : symbole et nom occupent au moins 80 % de la zone, avec une petite marge régulière de 4 à 6 % seulement, sans grande zone blanche. '
+        . 'Rends-le plus net, plus équilibré et plus lisible, avec des aplats propres. '
+        . logo_palette_prompt() . ' '
+        . ($instruction !== '' ? 'Consigne du commerçant : ' . mb_substr($instruction, 0, 300) . '. ' : '')
+        . 'Style vectoriel plat, centré. Pas de maquette, pas de photo, pas de filigrane. '
+        . 'Flat vector-style logo filling the frame with only a small even margin; render only the shop name as text, with no slogan or tagline.',
+        1,
+        ['horizontal' => '16:9', 'vertical' => '3:4', 'square' => '1:1'][$variant]);
+    if ($bytes === null) {
+        throw new RuntimeException('L’amélioration a échoué (clé refusée, crédit épuisé ou quota) : rien n’a été débité. Vérifiez la clé Gemini dans les réglages.');
+    }
+
+    $path = logo_save_transparent_png($bytes, $variant);
+    if ($path === null) throw new RuntimeException('Impossible d’enregistrer le logo amélioré.');
+    $logos = logos_saved();
+    $logos[$variant] = $path;
+    logos_save($logos);
+    return $path;
 }

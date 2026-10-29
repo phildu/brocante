@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/accounts.php';
+require_once __DIR__ . '/connect.php';
 require_once __DIR__ . '/capture.php';
 require_once __DIR__ . '/studio.php';
 require_once __DIR__ . '/prompts.php';
@@ -10,6 +11,8 @@ require_once __DIR__ . '/comparables.php';
 require_once __DIR__ . '/ai-usage.php';
 require_once __DIR__ . '/price-research.php';
 require_once __DIR__ . '/pricing-extras.php';
+require_once __DIR__ . '/condition-pricing.php';
+require_once __DIR__ . '/business-presence.php';
 require_once __DIR__ . '/ai-usage.php';
 require_once __DIR__ . '/password-reset.php';
 require_once __DIR__ . '/veo.php';
@@ -68,7 +71,7 @@ function get_products(?string $cat = null, bool $includeHidden = false, string $
     $where = [];
     $params = [];
     if ($cat && $cat !== 'tous') { $where[] = 'cat = ?'; $params[] = $cat; }
-    if (!$includeHidden) { $where[] = 'is_hidden = 0'; $where[] = 'stock > 0'; }
+    if (!$includeHidden) { $where[] = 'is_hidden = 0'; $where[] = '(stock > 0 OR keep_when_sold = 1)'; }
     if ($search !== '') {
         $where[] = '(name LIKE ? OR description LIKE ? OR brand LIKE ? OR distributor LIKE ? OR colors LIKE ?)';
         $like = '%' . $search . '%';
@@ -90,6 +93,54 @@ function get_product(string $ref): ?array
 function in_stock(array $p): bool
 {
     return (int) ($p['stock'] ?? 0) > 0;
+}
+
+/** Canaux de vente d'une pièce (clé => libellé). */
+function product_channels(): array
+{
+    return [
+        'boutique' => 'Boutique physique', 'ecommerce' => 'Site e-commerce', 'leboncoin' => 'Leboncoin', 'vinted' => 'Vinted',
+        'facebook' => 'Facebook Marketplace', 'marche' => 'Marché / brocante', 'autre' => 'Autre',
+    ];
+}
+
+/** Clés de canaux valides d'une liste « a,b,c ». */
+function product_channel_keys(?string $csv): array
+{
+    $valid = array_keys(product_channels());
+    return array_values(array_unique(array_filter(array_map('trim', explode(',', (string) $csv)), static fn ($k) => in_array($k, $valid, true))));
+}
+
+/** Canaux d'une pièce : « Boutique physique » par défaut tant que rien n'a été enregistré (NULL) ; '' = tout décoché volontairement. */
+function product_channels_of(array $p): array
+{
+    return ($p['channels'] ?? null) === null ? ['boutique'] : product_channel_keys($p['channels']);
+}
+
+/** Libellés lisibles des canaux d'une pièce (« Boutique physique, Leboncoin »), ou '' si aucun. */
+function product_channel_labels(?string $csv): string
+{
+    $all = product_channels();
+    return implode(', ', array_map(static fn ($k) => $all[$k], product_channel_keys($csv)));
+}
+
+/** La pièce reste au catalogue public une fois vendue (badge « Vendue »). */
+function product_keeps_when_sold(array $p): bool
+{
+    return !empty($p['keep_when_sold']);
+}
+
+/** Vente en lot : nombre de pièces vendues ensemble au prix affiché (1 = pièce seule). */
+function product_lot_qty(array $p): int
+{
+    return max(1, (int) ($p['lot_qty'] ?? 1));
+}
+
+/** Pastille « Lot de N pièces » à côté du prix ('' pour une pièce seule). */
+function lot_tag_html(array $p): string
+{
+    $n = product_lot_qty($p);
+    return $n > 1 ? ' <span class="lot-tag">Lot de ' . $n . ' pièces</span>' : '';
 }
 
 /**
@@ -122,6 +173,7 @@ function order_mark_paid(array $order, array $session): bool
         trim(($shippingAddr['postal_code'] ?? '') . ' ' . ($shippingAddr['city'] ?? '')),
         $shippingAddr['country'] ?? null,
     ])) : null;
+    if ($addressText === null || $addressText === '') $addressText = ($order['declared_address'] ?? '') !== '' ? (string) $order['declared_address'] : null;   // adresse saisie au panier, si Stripe n'en renvoie pas
     $upd = db()->prepare("UPDATE orders SET status = 'paid', email = ?, amount_total = ?, shipping_cents = ?, shipping_address = ? WHERE id = ? AND status <> 'paid'");
     $upd->execute([
         $session['customer_details']['email'] ?? null,
@@ -137,8 +189,16 @@ function order_mark_paid(array $order, array $session): bool
         (string) ($session['customer_details']['email'] ?? ''),
         (string) ($session['customer_details']['name'] ?? $session['shipping_details']['name'] ?? ''),
         'client',
-        'commande'
+        'commande',
+        (string) ($order['phone'] ?? $session['customer_details']['phone'] ?? '')    // téléphone saisi au panier (sinon celui de Stripe)
     );
+    // Les plugins actifs réagissent au paiement (ex. reçu d'achat) sans jamais bloquer la commande.
+    try {
+        require_once __DIR__ . '/plugins.php';
+        plugin_fire('order_paid', ['order_id' => (int) $order['id']]);
+    } catch (Throwable $e) {
+        error_log('order_paid : ' . $e->getMessage());
+    }
     return true;
 }
 
@@ -172,6 +232,13 @@ function cart_held_by_others(): array
             $held[$ref] = ($held[$ref] ?? 0) + (int) ($item['qty'] ?? 0);
         }
     }
+    // Pièces retenues par les plugins (ex. réservations avec arrhes).
+    try {
+        require_once __DIR__ . '/plugins.php';
+        foreach (plugin_collect('held_refs') as $ref => $qty) $held[(string) $ref] = ($held[(string) $ref] ?? 0) + (int) $qty;
+    } catch (Throwable $e) {
+        error_log('held_refs : ' . $e->getMessage());
+    }
     return $held;
 }
 
@@ -185,7 +252,7 @@ function product_free_qty(array $p, ?array $held = null): int
 /** Message affiché quand une pièce est en cours de paiement par un autre client. */
 function product_held_message(string $name): string
 {
-    return '« ' . $name . " » est en cours de paiement par un autre client. Si ce paiement n'aboutit pas, la pièce sera de nouveau disponible d'ici une demi-heure.";
+    return '« ' . $name . " » est réservée ou en cours de paiement par un autre client. Si cela n'aboutit pas, la pièce sera de nouveau disponible.";
 }
 
 /**
@@ -196,11 +263,12 @@ function checkout_expire_own_sessions(): void
 {
     $own = checkout_own_orders();
     if (!$own) return;
-    $stmt = db()->prepare("SELECT stripe_session_id FROM orders WHERE id IN (" . implode(',', array_fill(0, count($own), '?')) . ") AND status = 'pending'");
+    $stmt = db()->prepare("SELECT stripe_session_id, payment_via FROM orders WHERE id IN (" . implode(',', array_fill(0, count($own), '?')) . ") AND status = 'pending'");
     $stmt->execute($own);
-    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $sessionId) {
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $o) {
+        $sessionId = $o['stripe_session_id'];
         try {
-            stripe_request('POST', '/checkout/sessions/' . urlencode($sessionId) . '/expire');
+            stripe_request('POST', '/checkout/sessions/' . urlencode($sessionId) . '/expire', [], ($o['payment_via'] ?? '') === 'connect');
         } catch (Throwable $e) {
             // Déjà payée ou déjà expirée : rien à faire.
         }
@@ -223,7 +291,7 @@ function orders_settle_pending_for(array $refs): void
         $items = json_decode((string) $order['items'], true) ?: [];
         if (!array_intersect($refs, array_map('strval', array_column($items, 'ref')))) continue;
         try {
-            $session = stripe_request('GET', '/checkout/sessions/' . urlencode($order['stripe_session_id']));
+            $session = stripe_request('GET', '/checkout/sessions/' . urlencode($order['stripe_session_id']), [], ($order['payment_via'] ?? '') === 'connect');
             if (($session['payment_status'] ?? '') === 'paid') order_mark_paid($order, $session);
         } catch (Throwable $e) {
             error_log('Vérification Stripe de la commande ' . $order['id'] . ' impossible : ' . $e->getMessage());
@@ -388,6 +456,7 @@ function render_page_banner(string $pageKey): void
 /** Lien « Panier » de la barre du haut : icône de caddie, libellé et pastille du nombre d'articles. */
 function cart_nav_link(int $count, string $class = ''): string
 {
+    if (!shop_sales_enabled()) return '';
     $svg = '<svg class="cart-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.2a1.6 1.6 0 0 0 1.6 1.3h8.4a1.6 1.6 0 0 0 1.6-1.2L21 8H6"/></svg>';
     return '<a href="/cart.php" class="nav-cart' . ($class !== '' ? ' ' . h($class) : '') . '"' . ($count > 0 ? ' aria-label="Panier, ' . $count . ' article' . ($count > 1 ? 's' : '') . '"' : '') . '>'
         . $svg . '<span class="cart-label">Panier</span>' . ($count > 0 ? '<b class="cart-count">' . $count . '</b>' : '') . '</a>';
@@ -594,7 +663,9 @@ function product_card_html(array $p, int $i = 0): string
     $tones = ['accent', 'sage', 'blue', ''];
     $tone = $tones[$i % 4];
 
-    if (is_fixed_price(effective_price($p))) {
+    if (!shop_sales_enabled()) {
+        $action = '<a class="card-cta" href="/index.php#contact">Nous contacter</a>';
+    } elseif (is_fixed_price(effective_price($p))) {
         $action = '
           <form method="post" action="/cart-add.php" style="display:contents;">
             ' . cart_csrf_field() . '
@@ -614,9 +685,10 @@ function product_card_html(array $p, int $i = 0): string
         ? ' data-quick-gallery="' . h(json_encode(array_map(fn($g) => ['src' => $g['src'], 'type' => $g['type']], array_values(array_filter($gallery, fn($g) => $g['only'] !== 'mobile')) ?: $gallery))) . '" data-quick-name="' . h($p['name']) . '"'
         : '';
 
-    $priceHtml = has_promo_price($p)
+    $priceHtml = !shop_sales_enabled() ? '' : (has_promo_price($p)
         ? '<span class="price-old">' . h($p['price']) . '</span> <span class="price price-promo">' . h($p['promo_price']) . '</span>'
-        : '<span class="price">' . h($p['price']) . '</span>';
+        : '<span class="price">' . h($p['price']) . '</span>');
+    if (shop_sales_enabled()) $priceHtml .= lot_tag_html($p);
 
     // Modèle à mise en page propre : sa vue « card » produit la carte (variables : $p, $i, $href, $gallery, $priceHtml, $action).
     if ($view = shop_view('card')) {
@@ -887,7 +959,15 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
  */
 function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3, ?string $aspectRatio = null, array $extraAbsPaths = []): ?string
 {
-    if (!GEMINI_API_KEY || ai_gate() !== null) return null;   // quota d'IA épuisé : voir ai_gate()
+    if (ai_gate() !== null) return null;   // IA désactivée pour la boutique, ou quota épuisé : voir ai_gate()
+    // Fournisseur d'image choisi dans le portail : un service compatible OpenAI prend le relais du modèle Gemini.
+    $provider = ai_provider_active('image');
+    if ($provider && ($provider['driver'] ?? 'gemini') !== 'gemini') {
+        return ai_provider_image($provider, $srcAbsPath, $prompt, $aspectRatio, $extraAbsPaths);
+    }
+    if (!GEMINI_API_KEY) return null;
+    $imageModel = $provider && trim((string) ($provider['model'] ?? '')) !== '' ? (string) $provider['model'] : 'gemini-2.5-flash-image';
+    $geminiBase = $provider && trim((string) ($provider['base_url'] ?? '')) !== '' ? rtrim((string) $provider['base_url'], '/') : 'https://generativelanguage.googleapis.com/v1beta';
 
     $imgData = @file_get_contents($srcAbsPath);
     if ($imgData === false) return null;
@@ -910,7 +990,7 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
         $payload['generationConfig'] = ['imageConfig' => ['aspectRatio' => $aspectRatio]];
     }
 
-    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=' . GEMINI_API_KEY;
+    $url = $geminiBase . '/models/' . $imageModel . ':generateContent?key=' . GEMINI_API_KEY;
 
     for ($attempt = 0; $attempt <= $retries; $attempt++) {
         $ch = curl_init($url);
@@ -924,6 +1004,12 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
         ]);
         $body = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))) {
+            error_log("gemini_generate_image: HTTP 402 prepayment depleted");
+            if (function_exists('ai_trigger_depleted_alert')) ai_trigger_depleted_alert('gemini', 'HTTP 402 Prepayment depleted');
+            return null;
+        }
 
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
@@ -1493,19 +1579,33 @@ function responsive_image_html(string $src, ?string $srcMobile, string $alt, str
     return '<picture><source media="(max-width: 780px)" srcset="/' . h($srcMobile) . '">' . $img . '</picture>';
 }
 
+/** Modèle Gemini texte/vision : les clés récentes n'ont plus accès à gemini-2.5-flash. */
+function gemini_text_model(): string
+{
+    return defined('GEMINI_TEXT_MODEL') && GEMINI_TEXT_MODEL !== '' ? GEMINI_TEXT_MODEL : 'gemini-3.8-flash';
+}
+
 /**
  * Calls Gemini (vision → texte) pour décrire une image : renvoie le texte
  * brut de la réponse, ou null en cas d'échec. Même style de retry que
  * gemini_generate_image() mais sur le modèle texte (bien plus rapide, une
  * requête synchrone reste raisonnable côté admin).
- */
-/**
+ *
  * @param string[] $extraAbsPaths Autres photos du même objet (autres angles),
  *  envoyées à la suite de la première dans la même requête.
  */
 function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1, array $extraAbsPaths = []): ?string
 {
-    if (!GEMINI_API_KEY || ai_gate() !== null) return null;
+    if (ai_gate() !== null) return null;
+    // Fournisseur de texte choisi dans le portail : un service compatible OpenAI ou Claude prend le relais de Gemini.
+    $provider = ai_provider_active('text');
+    if ($provider && in_array($provider['driver'], ['openai', 'anthropic'], true)) {
+        $paths = array_merge($srcAbsPath !== '' ? [$srcAbsPath] : [], $extraAbsPaths);
+        return ai_provider_text($provider, $prompt, $paths, 90);
+    }
+    if (!GEMINI_API_KEY) return null;
+    $textModel = $provider && trim((string) ($provider['model'] ?? '')) !== '' ? (string) $provider['model'] : gemini_text_model();
+    $geminiBase = $provider && trim((string) ($provider['base_url'] ?? '')) !== '' ? rtrim((string) $provider['base_url'], '/') : 'https://generativelanguage.googleapis.com/v1beta';
 
     $parts = [['text' => $prompt]];
     // $srcAbsPath vide : consigne en texte seul (pas d'image).
@@ -1525,7 +1625,7 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
         ]],
     ];
 
-    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . GEMINI_API_KEY;
+    $url = $geminiBase . '/models/' . $textModel . ':generateContent?key=' . GEMINI_API_KEY;
 
     for ($attempt = 0; $attempt <= $retries; $attempt++) {
         $ch = curl_init($url);
@@ -1538,6 +1638,12 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
         ]);
         $body = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))) {
+            error_log("gemini_generate_image: HTTP 402 prepayment depleted");
+            if (function_exists('ai_trigger_depleted_alert')) ai_trigger_depleted_alert('gemini', 'HTTP 402 Prepayment depleted');
+            return null;
+        }
 
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
@@ -1734,7 +1840,7 @@ const BATCH_IMPORT_AI_CHUNK_SIZE = 10;
  */
 function gemini_group_photos_chunk(array $absPaths): ?array
 {
-    if (!GEMINI_API_KEY || !$absPaths) return [];
+    if (ai_gate() !== null || !GEMINI_API_KEY || !$absPaths) return [];
 
     $parts = [
         ['text' => "Voici " . count($absPaths) . " photos numérotées de 1 à " . count($absPaths) . ", dans l'ordre où elles apparaissent ci-dessous. "
@@ -1757,7 +1863,7 @@ function gemini_group_photos_chunk(array $absPaths): ?array
     }
 
     $payload = ['contents' => [['parts' => $parts]]];
-    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . GEMINI_API_KEY;
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . gemini_text_model() . ':generateContent?key=' . GEMINI_API_KEY;
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -2590,6 +2696,12 @@ function fal_remove_background(string $srcAbsPath, int $retries = 1): ?string
         $body = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
+        if ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))) {
+            error_log("gemini_generate_image: HTTP 402 prepayment depleted");
+            if (function_exists('ai_trigger_depleted_alert')) ai_trigger_depleted_alert('gemini', 'HTTP 402 Prepayment depleted');
+            return null;
+        }
+
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
             $imageUrl = $data['image']['url'] ?? null;
@@ -2914,6 +3026,71 @@ function add_media_item(string $type, string $path, string $label, string $sourc
     $stmt = db()->prepare('INSERT INTO media_library (type, path, label, source, tags, origin_ref, origin_name) VALUES (?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([$type, $path, $label, $source, $tags, $originRef, $originName]);
     return (int) db()->lastInsertId();
+}
+
+/** Ajoute un visuel à la médiathèque s'il n'y figure pas déjà (même chemin). -> true si ajouté. */
+function media_library_register(string $path, string $label, string $source = '', string $tags = '', string $type = 'photo'): bool
+{
+    if ($path === '') return false;
+    $stmt = db()->prepare('SELECT 1 FROM media_library WHERE path = ? LIMIT 1');
+    $stmt->execute([$path]);
+    if ($stmt->fetchColumn()) return false;
+    add_media_item($type, $path, $label, $source, $tags);
+    return true;
+}
+
+/**
+ * Range les visuels déjà en place (logos, bandeaux, slides du hero) dans la
+ * médiathèque. Les visuels générés ensuite s'y ajoutent directement ; cette
+ * reprise ne tourne qu'une fois par boutique pour qu'une ressource retirée à
+ * la main ne réapparaisse pas au chargement suivant.
+ */
+function media_library_sync_visuals(): int
+{
+    $added = 0;
+    $siteName = trim((string) (get_content()['site_name'] ?? ''));
+
+    if (function_exists('logos_saved')) {
+        foreach (logos_saved() as $variant => $path) {
+            $path = (string) $path;
+            if (!str_starts_with($path, 'uploads/')) continue;
+            $title = defined('LOGO_VARIANTS') ? (string) (LOGO_VARIANTS[$variant][0] ?? $variant) : $variant;
+            $label = 'Logo ' . mb_strtolower($title) . ($siteName !== '' ? ' — ' . $siteName : '');
+            if (media_library_register($path, $label, 'Logo', 'logo')) $added++;
+        }
+    }
+
+    foreach (hero_slides_list() as $slide) {
+        $caption = trim((string) ($slide['caption'] ?? ''));
+        $label = $caption !== '' ? $caption : "Slide page d'accueil";
+        if (media_library_register((string) $slide['path'], $label, 'Diaporama accueil', 'diaporama, accueil')) $added++;
+    }
+
+    $targets = page_banner_targets();
+    foreach (get_page_banners() as $pageKey => $banner) {
+        $path = (string) ($banner['path'] ?? '');
+        if ($path === '') continue;
+        $type = preg_match('/\.(mp4|mov|webm|m4v)$/i', $path) ? 'video' : 'photo';
+        $label = 'Bandeau — ' . ($targets[$pageKey] ?? $pageKey);
+        if (media_library_register($path, $label, 'Bandeau', 'bandeau', $type)) $added++;
+    }
+
+    return $added;
+}
+
+/** Lance la reprise media_library_sync_visuals() une seule fois par boutique. */
+function media_library_sync_visuals_once(): void
+{
+    try {
+        $stmt = db()->prepare("SELECT 1 FROM settings WHERE name = 'media_visuals_synced'");
+        $stmt->execute();
+        if ($stmt->fetchColumn()) return;
+        media_library_sync_visuals();
+        db()->prepare("INSERT OR REPLACE INTO settings (name, value) VALUES ('media_visuals_synced', ?)")
+            ->execute([gmdate('c')]);
+    } catch (Throwable $e) {
+        // La médiathèque reste utilisable même si la reprise échoue.
+    }
 }
 
 /**
@@ -3298,6 +3475,134 @@ function cart_total_cents(): int
     return array_sum(array_column(cart_lines(), 'total_cents'));
 }
 
+/* ---------- Remises du panier (paliers par total ou par nombre d'articles) ---------- */
+
+/** Paliers de remise (administration → Remises du panier). */
+function cart_discounts_list(bool $activeOnly = true): array
+{
+    try {
+        return db()->query('SELECT * FROM cart_discounts' . ($activeOnly ? ' WHERE is_active = 1' : '') . ' ORDER BY kind, threshold, id')->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Nombre d'articles du panier (somme des quantités). */
+function cart_total_qty(array $lines): int
+{
+    return (int) array_sum(array_map(static fn (array $l): int => (int) $l['qty'], $lines));
+}
+
+function cart_tier_reached(array $tier, int $subtotalCents, int $qty): bool
+{
+    return $tier['kind'] === 'qty' ? $qty >= (int) $tier['threshold'] : $subtotalCents >= (int) $tier['threshold'];
+}
+
+/** Montant (centimes) retiré par un palier : jamais plus que le sous-total. */
+function cart_discount_amount(array $tier, int $subtotalCents): int
+{
+    $value = (int) $tier['value'];
+    $cents = $tier['type'] === 'percent' ? intdiv($subtotalCents * max(0, min(100, $value)) + 50, 100) : $value;
+    return max(0, min($cents, $subtotalCents));
+}
+
+/** Remise applicable au panier : une seule, la plus avantageuse. -> ['cents' => int, 'tier' => ?array] */
+function cart_discount_for(int $subtotalCents, int $qty, ?array $tiers = null): array
+{
+    $best = ['cents' => 0, 'tier' => null];
+    foreach ($tiers ?? cart_discounts_list() as $tier) {
+        if (!cart_tier_reached($tier, $subtotalCents, $qty)) continue;
+        $cents = cart_discount_amount($tier, $subtotalCents);
+        if ($cents > $best['cents']) $best = ['cents' => $cents, 'tier' => $tier];
+    }
+    if (!empty($_SESSION['reward_code'])) {   // récompense de fidélité choisie par le client (plugin « Espace visiteur ») : s'ajoute à la remise du palier
+        try {
+            require_once __DIR__ . '/plugins.php';
+            $best = plugin_filter('cart_discount', $best, ['subtotal' => $subtotalCents, 'qty' => $qty, 'code' => (string) $_SESSION['reward_code']]);
+        } catch (Throwable $e) {
+            error_log('cart_discount : ' . $e->getMessage());
+        }
+    }
+    return $best;
+}
+
+function cart_discount_effect(array $tier): string
+{
+    return $tier['type'] === 'percent' ? '−' . (int) $tier['value'] . ' %' : '−' . format_cents((int) $tier['value']);
+}
+
+/** « −10 % dès 100,00 € d'achats », « −5,00 € dès 3 articles ». */
+function cart_discount_describe(array $tier): string
+{
+    $n = (int) $tier['threshold'];
+    $cond = $tier['kind'] === 'qty' ? 'dès ' . $n . ' article' . ($n > 1 ? 's' : '') : "dès " . format_cents($n) . " d'achats";
+    return cart_discount_effect($tier) . ' ' . $cond;
+}
+
+/** Nom court de la remise (palier nommé, sinon sa description) : affiché au client et sur la page de paiement Stripe. */
+function cart_discount_label(array $tier): string
+{
+    $label = trim((string) ($tier['label'] ?? ''));
+    return $label !== '' ? $label : cart_discount_describe($tier);
+}
+
+/** Phrase d'encouragement vers le palier le plus proche qui améliorerait la remise déjà obtenue ($currentCents), ou null. */
+function cart_discount_hint(int $subtotalCents, int $qty, ?array $tiers = null, int $currentCents = 0): ?string
+{
+    $best = null;
+    foreach ($tiers ?? cart_discounts_list() as $tier) {
+        if (cart_tier_reached($tier, $subtotalCents, $qty)) continue;
+        // inutile de viser un palier moins avantageux que la remise déjà acquise
+        $atTier = $tier['kind'] === 'total' ? max($subtotalCents, (int) $tier['threshold']) : $subtotalCents;
+        if (cart_discount_amount($tier, $atTier) <= $currentCents) continue;
+        $threshold = max(1, (int) $tier['threshold']);
+        $gap = $tier['kind'] === 'qty' ? $threshold - $qty : $threshold - $subtotalCents;
+        $ratio = $gap / $threshold;
+        if ($best === null || $ratio < $best[0]) $best = [$ratio, $tier, $gap];
+    }
+    if (!$best) return null;
+    [, $tier, $gap] = $best;
+    $effect = cart_discount_effect($tier);
+    return $tier['kind'] === 'qty'
+        ? 'Ajoutez ' . $gap . ' article' . ($gap > 1 ? 's' : '') . ' de plus pour obtenir ' . $effect
+        : "Ajoutez encore " . format_cents($gap) . " d'achats pour obtenir " . $effect;
+}
+
+/* ---------- Retrait seul (dons et petits prix) ---------- */
+
+/** Seuil (en centimes) sous lequel un article n'est pas livré, réglé dans l'administration (0 = seuls les dons à 0 € sont concernés). */
+function pickup_only_threshold_cents(?array $content = null): int
+{
+    $content = $content ?? get_content();
+    return price_to_cents(trim((string) ($content['pickup_only_below'] ?? '10'))) ?? 0;
+}
+
+/** Message affiché à la place des modes de livraison. */
+function pickup_only_message(?array $content = null): string
+{
+    $content = $content ?? get_content();
+    $message = trim((string) ($content['pickup_only_message'] ?? ''));
+    return $message !== '' ? $message : "Retrait à l'adresse du vendeur.";
+}
+
+/** Une ligne du panier peut-elle être livrée ? Non pour un don (0 €) ni sous le seuil. */
+function cart_line_deliverable(array $line, int $thresholdCents): bool
+{
+    $unit = (int) $line['unit_cents'];
+    return $unit > 0 && ($thresholdCents === 0 || $unit >= $thresholdCents);
+}
+
+/** Panier en retrait seul : aucune ligne ne peut être livrée (un seul article livrable suffit à proposer la livraison). */
+function cart_pickup_only(array $lines, ?array $content = null): bool
+{
+    if (!$lines) return false;
+    $threshold = pickup_only_threshold_cents($content);
+    foreach ($lines as $line) {
+        if (cart_line_deliverable($line, $threshold)) return false;
+    }
+    return true;
+}
+
 /* ---------- Transporteurs & tarifs de livraison ---------- */
 
 function shipping_carriers_list(bool $activeOnly = false): array
@@ -3458,12 +3763,15 @@ function matching_shipping_rates(int $weightG, string $zone = 'metropole'): arra
  * $params peut contenir des tableaux imbriqués (line_items, etc.), encodés
  * comme Stripe l'attend (clé[index][champ]=valeur).
  */
-function stripe_request(string $method, string $path, array $params = []): array
+function stripe_request(string $method, string $path, array $params = [], bool $platform = false): array
 {
-    $ch = curl_init('https://api.stripe.com/v1' . $path);
+    // $platform : paiement géré par la plateforme (Stripe Connect, voir includes/connect.php) ; sinon les clés propres de la boutique.
+    $conn = $platform ? connect_platform() : null;
+    if ($platform && $conn === null) throw new RuntimeException("Stripe n'est pas configuré pour la plateforme.");
+    $ch = curl_init(($conn['base'] ?? 'https://api.stripe.com/v1') . $path);
     $opts = [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_USERPWD => STRIPE_SECRET_KEY . ':',
+        CURLOPT_USERPWD => ($conn['key'] ?? STRIPE_SECRET_KEY) . ':',
         CURLOPT_TIMEOUT => 20,
     ];
     if ($method === 'POST') {
@@ -3486,6 +3794,12 @@ function stripe_request(string $method, string $path, array $params = []): array
         throw new RuntimeException($msg);
     }
     return $data;
+}
+
+/** Le paiement en ligne de la boutique peut-il fonctionner ? Clés propres, ou compte relié à la plateforme (Stripe Connect, voir includes/connect.php). */
+function shop_checkout_ready(): bool
+{
+    return stripe_configured() || connect_shop() !== null;
 }
 
 function stripe_configured(): bool

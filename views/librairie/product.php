@@ -21,7 +21,7 @@ $details['Référence'] = 'N°' . h($product['ref']);
 ?>
 <div class="buybar" id="buybar" aria-label="Achat rapide">
   <div class="wrap buybar-in">
-    <span class="buybar-price"><?= $priceHtml ?></span>
+    <?php if (shop_sales_enabled()): ?><span class="buybar-price"><?= $priceHtml ?></span><?php endif; ?>
     <span class="buybar-actions"><?= $buyHtml() ?></span>
   </div>
 </div>
@@ -70,8 +70,8 @@ $details['Référence'] = 'N°' . h($product['ref']);
       </div>
 
       <aside class="lb-buybox" aria-label="Acheter">
-        <p class="lb-buy-price"><?= $priceHtml ?></p>
-        <?= product_price_extras_html($product) ?>
+        <?php if (shop_sales_enabled()): ?><p class="lb-buy-price"><?= $priceHtml ?></p><?php endif; ?>
+        <?php if (shop_sales_enabled()): ?><?= product_price_extras_html($product) ?><?php endif; ?>
         <p class="lb-stock <?= in_stock($product) ? 'is-in' : 'is-out' ?>"><?= in_stock($product) ? 'Disponible — pièce unique' : 'Vendue' ?></p>
         <div class="lb-buy-actions"><?= $buyHtml() ?></div>
         <div class="lb-share"><?= $shareBtn ?></div>

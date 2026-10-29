@@ -114,7 +114,11 @@
       dlg.addEventListener('cancel', function (e) { e.preventDefault(); finish(null); });
       dlg.showModal();
 
-      var ready = opts.objects ? Promise.resolve({ objects: opts.objects, ai: true }) : detect(blob);
+      // objects: null → détection IA ; [] → pas de détection (l'appelant sait
+      // que l'IA est indisponible) ; sinon, cadres déjà connus.
+      var ready = opts.objects && opts.objects.length ? Promise.resolve({ objects: opts.objects, ai: true })
+        : opts.objects ? Promise.resolve({ objects: [], ai: false })
+        : detect(blob);
       ready.then(function (r) {
         if (done) return;
         if (r.objects.length) {

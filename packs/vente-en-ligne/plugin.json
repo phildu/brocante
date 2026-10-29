@@ -1,0 +1,19 @@
+{
+  "id": "vente-en-ligne",
+  "name": "Vente en ligne",
+  "version": "1.0.0",
+  "description": "Tout ce qui fait vendre la boutique au même endroit : commandes payées en ligne, suivi des envois, frais de port et transporteurs, remises du panier, clients et notes (CRM), offres de prix et réglages du paiement Stripe. Reprend les écrans de gestion de la boutique et ajoute un journal de suivi par commande.",
+  "table_prefix": "vel_",
+  "pages": [
+    { "id": "commandes", "label": "Commandes", "icon": "receipt", "file": "pages/commandes.php", "roles": ["admin"], "replaces": "commandes" },
+    { "id": "suivi", "label": "Suivi des envois", "icon": "truck", "file": "pages/suivi.php", "roles": ["admin"] },
+    { "id": "livraison", "label": "Frais de port", "icon": "truck", "file": "pages/livraison.php", "roles": ["admin"], "replaces": "shipping" },
+    { "id": "remises", "label": "Remises du panier", "icon": "receipt", "file": "pages/remises.php", "roles": ["admin"], "replaces": "remises" },
+    { "id": "clients", "label": "Clients (CRM)", "icon": "users", "file": "pages/clients.php", "roles": ["admin"] },
+    { "id": "offres", "label": "Offres de prix", "icon": "receipt", "file": "pages/offres.php", "roles": ["admin"], "replaces": "offres" },
+    { "id": "paiement", "label": "Paiement & livraison", "icon": "gear", "file": "pages/paiement.php", "roles": ["admin"], "replaces": "reglages-paiement" }
+  ],
+  "api": [
+    { "id": "action", "file": "api/action.php", "methods": ["POST"], "roles": ["admin"] }
+  ]
+}

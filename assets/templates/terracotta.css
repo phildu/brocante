@@ -1,0 +1,37 @@
+/* Modèle « Terracotta » — solaire et artisanal. Sélecteurs préfixés « html » : plus prioritaires que assets/style.css, chargé après. */
+html body { background-image: radial-gradient(circle at 85% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 40%); }
+html header.site { border-bottom: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); background: color-mix(in srgb, var(--bg) 94%, transparent); }
+html .site-bar { padding: 20px 0; }
+html nav.primary a { border-bottom: 0; }
+html nav.primary a[aria-current="page"], html nav.primary a:hover { color: var(--accent); }
+html .eyebrow { font-family: var(--font-body); text-transform: uppercase; letter-spacing: .2em; font-size: .68rem; color: var(--accent); }
+html .hero h1 { font-weight: 400; line-height: 1.02; letter-spacing: -.01em; }
+html .hero { padding: 78px 0 66px; }
+html .btn { border-radius: 999px; padding: 14px 28px; }
+html .btn-primary { box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--accent) 70%, transparent); }
+html .btn-ghost { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--accent); }
+html section { padding: 84px 0; }
+html .section-head h2 { font-weight: 400; }
+html .shop-hero-figure img { border-radius: 320px 320px 22px 22px; }
+html .shop-hero-figure-tag { border-radius: 999px; left: 24px; right: auto; bottom: 24px; background: var(--accent); }
+html .shop-hero-slide { border-radius: 22px; }
+html .shop-hero-mosaic-item { border-radius: 22px; }
+html .shop-hero-mosaic-item.m1 { border-radius: 260px 260px 22px 22px; }
+html .shop-hero-arrow { border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); color: var(--accent); }
+html .shop-hero-dots button[aria-current="true"] { background: var(--accent); }
+html .card { background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--line)); border-radius: 20px; padding: 16px; box-shadow: 0 18px 40px -30px color-mix(in srgb, var(--ink) 60%, transparent); }
+html .card img, html .card-icon { border-radius: 14px; }
+html .card h3 { font-weight: 400; }
+html .badge { border-radius: 999px; border: 0; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); font-family: var(--font-body); }
+html .price { font-family: var(--font-body); font-weight: 600; }
+html .card-cta { border-radius: 999px; border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--accent); }
+html .cat-grid { gap: 14px; background: none; border: 0; }
+html .cat-tile { border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line)); border-radius: 22px; padding: 32px 22px; background: var(--bg); }
+html .cat-tile:hover { background: var(--surface); }
+html .principle { border-top: 0; background: var(--surface); border-radius: 18px; padding: 22px; }
+html .principle .num { color: var(--accent); }
+html .story-photo img, html .follow-tile img { border-radius: 22px; }
+html .story-photo { border: 0; }
+html .shop-search input[type="search"], html .field-row input { border-radius: 999px; }
+html .field-row textarea { border-radius: 18px; }
+html .footer-grid { border-top: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); padding-top: 42px; }

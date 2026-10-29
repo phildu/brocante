@@ -1,6 +1,7 @@
 <?php
 // Réglages du pack Annonces places de marché (clé / valeur dans am_settings).
 // Utilisable hors PLUGIN_RUNTIME (webhook Stripe).
+require_once dirname(__DIR__, 3) . '/includes/addons.php';
 
 /** Prix mensuel par défaut de l'option (centimes), si la plateforme n'en a pas fixé un. */
 const AM_DEFAULT_MONTHLY_CENTS = 990;
@@ -49,18 +50,42 @@ function am_setting_set(string $key, string $value): void
 /** Prix mensuel (centimes) : data/saas/addons.json, sinon défaut du pack. */
 function am_monthly_cents(): int
 {
-    $file = dirname(__DIR__, 3) . '/data/saas/addons.json';
-    $d = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
-    $cents = is_array($d) ? (int) ($d['annonces-marche']['monthly_cents'] ?? 0) : 0;
+    $shop = function_exists('tenant_slug') ? tenant_slug() : '';
+    $info = addon_info('annonces-marche', $shop);
+    $cents = (int) ($info['monthly_cents'] ?? 0);
     return $cents > 0 ? min(99900, $cents) : AM_DEFAULT_MONTHLY_CENTS;
 }
 
 function am_addon_name(): string
 {
-    $file = dirname(__DIR__, 3) . '/data/saas/addons.json';
-    $d = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
-    $name = is_array($d) ? trim((string) ($d['annonces-marche']['name'] ?? '')) : '';
+    $shop = function_exists('tenant_slug') ? tenant_slug() : '';
+    $info = addon_info('annonces-marche', $shop);
+    $name = trim((string) ($info['name'] ?? ''));
     return $name !== '' ? $name : 'Annonces Leboncoin & Vinted';
+}
+
+/** Reprend une ancienne souscription avant le premier affichage du panneau commun. */
+function am_sync_legacy_entitlement(): void
+{
+    if (am_setting('legacy_billing_migrated') === '1') return;
+    $status = am_setting('subscription_status', 'inactive');
+    $trialUntil = (int) am_setting('trial_until', '0');
+    if ($status === 'trial' && $trialUntil <= time()) return;
+    if (!in_array($status, ['active', 'complimentary', 'trial'], true)) return;
+
+    $billingMode = $status === 'trial' ? '' : ($status === 'active' ? 'monthly' : '');
+    addon_save('annonces-marche', [
+        'status' => $status,
+        'billing_mode' => $billingMode,
+        'trial_until' => $trialUntil,
+        'trial_used' => am_setting('trial_used') === '1' ? 1 : 0,
+        'stripe_subscription_id' => am_setting('stripe_subscription_id'),
+        'stripe_customer_id' => am_setting('stripe_customer_id'),
+        'stripe_session_id' => am_setting('stripe_session_id'),
+        'subscribed_at' => am_setting('subscribed_at'),
+        'canceled_at' => am_setting('canceled_at'),
+    ]);
+    am_setting_set('legacy_billing_migrated', '1');
 }
 
 /**
@@ -69,42 +94,18 @@ function am_addon_name(): string
  */
 function am_is_entitled(): bool
 {
-    $status = am_setting('subscription_status', 'inactive');
-    if ($status === 'active' || $status === 'complimentary') return true;
-    if ($status === 'trial') {
-        $until = (int) am_setting('trial_until', '0');
-        return $until > time();
-    }
-    return false;
+    am_sync_legacy_entitlement();
+    return addon_is_entitled('annonces-marche');
 }
 
 /** État lisible pour l'administration. */
 function am_entitlement(): array
 {
-    $status = am_setting('subscription_status', 'inactive');
-    $until = (int) am_setting('trial_until', '0');
-    if ($status === 'trial' && $until > 0 && $until <= time()) {
-        $status = 'expired';
-    }
-    $labels = [
-        'inactive' => 'Non souscrite',
-        'active' => 'Abonnée',
-        'complimentary' => 'Accès offert',
-        'trial' => 'Essai gratuit',
-        'canceled' => 'Résiliée',
-        'expired' => 'Essai terminé',
-    ];
-    return [
-        'status' => $status,
-        'label' => $labels[$status] ?? $status,
-        'entitled' => am_is_entitled(),
-        'trial_until' => $status === 'trial' && $until > time() ? gmdate('Y-m-d', $until) : null,
-        'stripe_subscription_id' => am_setting('stripe_subscription_id'),
-        'monthly_cents' => am_monthly_cents(),
-        'monthly_label' => number_format(am_monthly_cents() / 100, 2, ',', ' ') . ' € / mois',
-        'addon_name' => am_addon_name(),
+    am_sync_legacy_entitlement();
+    $entitlement = addon_entitlement('annonces-marche');
+    return array_replace($entitlement, [
+        'addon_name' => $entitlement['name'],
         'has_token' => am_setting('token_hash') !== '',
         'token_prefix' => am_setting('token_prefix'),
-        'trial_used' => am_setting('trial_used') === '1',
-    ];
+    ]);
 }

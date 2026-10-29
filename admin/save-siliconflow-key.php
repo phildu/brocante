@@ -29,5 +29,5 @@ if (!empty($_POST['remove'])) {
     flash_set('Aucune clé fournie — rien de changé.');
 }
 
-header('Location: /admin/index.php#siliconflow-settings');
+header('Location: /admin/social.php#siliconflow-settings');
 exit;

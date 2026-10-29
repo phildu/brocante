@@ -1,0 +1,17 @@
+{
+  "id": "alerte-chineur",
+  "name": "Alerte chineur",
+  "version": "1.0.0",
+  "description": "Module payant (essai gratuit) : les visiteurs enregistrent leurs critères (mots-clés, prix maximum) et reçoivent un e-mail dès qu'une pièce correspondante est mise en ligne. Inscription confirmée par e-mail, désinscription en un clic.",
+  "table_prefix": "ac_",
+  "pages": [
+    { "id": "index", "label": "Alerte chineur", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "alerts", "file": "api/alerts.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/chineur", "file": "api/public.php" }
+  ]
+}

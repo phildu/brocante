@@ -177,6 +177,7 @@ function promo_visual_files_delete(?array $visual): void
  */
 function promo_section_html(string $title = 'À saisir en ce moment', string $class = ''): string
 {
+    if (!shop_sales_enabled()) return '';
     $items = promo_visuals_live(4);
     if (!$items) return '';
     $shop = tenant_slug();

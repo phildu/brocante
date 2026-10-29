@@ -17,8 +17,8 @@ $accountLink = oauth_enabled_providers('customer') || customer_session();
     </form>
     <div class="lb-tools">
       <?php if ($accountLink): ?><a href="/compte.php"<?= $activeNav === 'compte' ? ' aria-current="page"' : '' ?>>Mon compte</a><?php endif; ?>
-      <?= cart_nav_link((int) $cartCount, 'lb-cart') ?>
-      <?php if (is_admin_logged_in()): ?><a href="/admin/catalog.php">Administration</a><?php else: ?><a href="/admin/login.php">Connexion</a><?php endif; ?>
+      <?php if (shop_sales_enabled()): ?><?= cart_nav_link((int) $cartCount, 'lb-cart') ?><?php endif; ?>
+      <?php if (is_admin_logged_in()): ?><a href="/admin/dashboard.php">Administration</a><?php else: ?><a href="/admin/login.php">Connexion</a><?php endif; ?>
     </div>
     <button type="button" class="burger-btn" id="burger-btn" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="primary-nav">
       <span></span><span></span><span></span>
@@ -34,8 +34,8 @@ $accountLink = oauth_enabled_providers('customer') || customer_session();
     <a href="/index.php#contact" class="lb-rest">Contact</a>
     <span class="lb-mobile-only">
       <?php if ($accountLink): ?><a href="/compte.php">Mon compte</a><?php endif; ?>
-      <a href="/cart.php">Panier<?= $cartCount ? ' (' . (int) $cartCount . ')' : '' ?></a>
-      <a href="<?= is_admin_logged_in() ? '/admin/catalog.php' : '/admin/login.php' ?>"><?= is_admin_logged_in() ? 'Administration' : 'Connexion' ?></a>
+      <?php if (shop_sales_enabled()): ?><a href="/cart.php">Panier<?= $cartCount ? ' (' . (int) $cartCount . ')' : '' ?></a><?php endif; ?>
+      <a href="<?= is_admin_logged_in() ? '/admin/dashboard.php' : '/admin/login.php' ?>"><?= is_admin_logged_in() ? 'Administration' : 'Connexion' ?></a>
     </span>
   </nav>
 </header>

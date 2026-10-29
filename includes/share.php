@@ -19,6 +19,10 @@ function share_origin(): string
 /** Adresse absolue d'une page de la boutique ($path : « /produit.php?ref=12 »), avec le préfixe d'un commerce servi sous /<identifiant>/. */
 function shop_abs_url(string $path = '/'): string
 {
+    // Les routes des plugins (/api/…) se servent aussi sous /<commerce>/api/… : sans ce préfixe, un commerce hébergé avec le portail
+    // (brocs.arrimage.com/<identifiant>) enverrait ses liens (reçus, billets, retours de paiement, alertes) vers une autre boutique.
+    $base = function_exists('tenant_base_path') ? tenant_base_path() : '';
+    if ($base !== '' && str_starts_with($path, '/api/')) $path = $base . $path;
     return share_origin() . app_prefix($path);
 }
 
@@ -32,9 +36,9 @@ function share_media_url(string $path): string
  * Bouton « Partager » + petit bouton « QR code » (la fenêtre s'ouvre sur le bon onglet). Sur téléphone, « Partager » ouvre le menu de partage
  * du système quand il existe. $image : photo pour Pinterest. $class : classes ajoutées (ex. 'share-link' pour un simple lien).
  */
-function share_button_html(string $url, string $title, string $text = '', string $image = '', string $class = '', bool $qr = true): string
+function share_button_html(string $url, string $title, string $text = '', string $image = '', string $class = '', bool $qr = true, bool $dialog = false): string
 {
-    $attrs = ' data-share-url="' . share_h($url) . '" data-share-title="' . share_h($title) . '" data-share-text="' . share_h($text) . '"' . ($image !== '' ? ' data-share-image="' . share_h($image) . '"' : '');
+    $attrs = ' data-share-url="' . share_h($url) . '" data-share-title="' . share_h($title) . '" data-share-text="' . share_h($text) . '"' . ($image !== '' ? ' data-share-image="' . share_h($image) . '"' : '') . ($dialog ? ' data-share-dialog' : '');
     $icon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.3M8.3 13.2l7.4 4.3"/></svg>';
     $qrIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h3M20 17v4"/></svg>';
     return '<span class="share-group ' . share_h($class) . '"><button type="button" class="share-btn" data-share-open="share"' . $attrs . '>' . $icon . '<span>Partager</span></button>'

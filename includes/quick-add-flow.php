@@ -5,7 +5,9 @@
  * Attend $angles, $aiReady et $qaOpts (action, again, list, list_label, title).
  * Le script est assets/quick-add.js ; la barre d'action est ensuite placée par la page hôte.
  */
-?><div class="qa" data-action="<?= h($qaOpts['action']) ?>" data-again="<?= h($qaOpts['again']) ?>" data-list="<?= h($qaOpts['list']) ?>" data-ai="<?= $aiReady ? '1' : '0' ?>"<?= !empty($qaOpts['later']) ? ' data-later="1"' : '' ?>>
+$conditionRatesJson = json_encode(product_condition_price_rates(), JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_TAG | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
+?>
+<div class="qa" data-action="<?= h($qaOpts['action']) ?>" data-again="<?= h($qaOpts['again']) ?>" data-list="<?= h($qaOpts['list']) ?>" data-ai="<?= $aiReady ? '1' : '0' ?>" data-condition-rates="<?= h($conditionRatesJson) ?>"<?= !empty($qaOpts['later']) ? ' data-later="1"' : '' ?>>
   <?php if (!empty($qaOpts['title'])): ?>
   <div>
     <p class="eyebrow" style="margin:0;">Catalogue</p>
@@ -114,6 +116,7 @@
       <label class="qa-field">Prix affiché (€) <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button><input type="number" id="f-price" data-ai-input="price" data-price min="0" step="0.01" inputmode="decimal" placeholder="25"></label>
       <label class="qa-field">Poids (g) <button type="button" class="ai-btn" data-ai-field="weight" title="Estimer le poids (à vérifier avec une balance)">↻ IA</button><input type="number" id="f-weight" data-ai-input="weight_grams" min="0" step="10" inputmode="numeric" placeholder="500"></label>
     </div>
+    <label class="qa-field">Prix du neuf (€) <input type="number" id="f-new-price" data-price min="0" step="0.01" inputmode="decimal" placeholder="si connu"></label>
     <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button> <button type="button" class="ai-btn" id="f-measure" title="Mesurer la pièce sur une photo, avec un repère de taille connue">📏 Mesurer</button><input type="text" id="f-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>
     <label class="qa-field">Catégorie <button type="button" class="ai-btn" data-ai-field="category" title="Choisir la catégorie d'après la pièce">↻ IA</button>
       <select id="f-cat" data-ai-input="cat">

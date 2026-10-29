@@ -18,7 +18,7 @@ $editing = isset($_GET['edit']) ? account_find((int) $_GET['edit']) : null;
 $old = $_SESSION['accounts_old'] ?? null; // saisie conservée après une erreur de création
 unset($_SESSION['accounts_old']);
 $showAdd = isset($_GET['add']) || $old !== null;
-$newDefaults = ['role' => $role ?? 'prospect', 'name' => '', 'email' => '', 'username' => '', 'phone' => '', 'notes' => ''];
+$newDefaults = ['role' => $role ?? 'prospect', 'name' => '', 'email' => '', 'username' => '', 'phone' => '', 'notes' => '', 'custom_fields' => []];
 $new = $old ? array_merge($newDefaults, $old) : $newDefaults;
 
 $mainUser = (string) tenant('admin_user');
@@ -55,6 +55,11 @@ $renderFields = static function (array $a, string $prefix) {
       </div>
     </div>
     <div class="field"><label for="<?= $prefix ?>-notes">Notes</label><textarea name="notes" id="<?= $prefix ?>-notes" maxlength="600" rows="2"><?= h($a['notes']) ?></textarea></div>
+    <?php foreach (account_custom_fields_decode($a['custom_fields'] ?? []) as $key => $field): ?>
+      <div class="field"><label for="<?= $prefix ?>-custom-<?= h($key) ?>"><?= h($field['label']) ?></label>
+        <input type="hidden" name="custom_fields[<?= h($key) ?>][label]" value="<?= h($field['label']) ?>">
+        <input type="text" name="custom_fields[<?= h($key) ?>][value]" id="<?= $prefix ?>-custom-<?= h($key) ?>" maxlength="500" value="<?= h($field['value']) ?>"></div>
+    <?php endforeach; ?>
     <?php
 };
 ?><!DOCTYPE html>
@@ -150,6 +155,7 @@ $renderFields = static function (array $a, string $prefix) {
       <?php if ($nonStaffExport): ?>
         <a class="btn-small" href="/admin/accounts-action.php?export=1<?= in_array($role, ['client', 'prospect'], true) ? '&amp;role=' . h($role) : '' ?>">Exporter les contacts (CSV)</a>
       <?php endif; ?>
+      <a class="btn-small" href="/admin/contacts-import.php" title="Fichier CSV, carnet vCard ou CRM (HubSpot, Brevo, Mailchimp, Pipedrive)">Importer des contacts</a>
       <a class="btn btn-primary" href="/admin/accounts.php?add=1<?= $role ? '&amp;role=' . h($role) : '' ?>#ajout">Ajouter un compte</a>
     </div>
 
@@ -201,6 +207,9 @@ $renderFields = static function (array $a, string $prefix) {
               <td>
                 <div class="acc-name"><?= h($a['name'] !== '' ? $a['name'] : $a['email']) ?><?= $isSelf ? ' <span class="acc-meta">(vous)</span>' : '' ?></div>
                 <div class="acc-meta"><?= $a['name'] !== '' ? h($a['email']) : '' ?><?= $a['phone'] !== '' ? ' · ' . h($a['phone']) : '' ?><?= $a['username'] ? ' · identifiant ' . h($a['username']) : '' ?></div>
+                <?php foreach (account_custom_fields_decode($a['custom_fields'] ?? []) as $field): ?>
+                  <div class="acc-meta"><?= h($field['label']) ?>: <?= h($field['value']) ?></div>
+                <?php endforeach; ?>
                 <?php if ($a['notes'] !== ''): ?><div class="acc-meta" title="<?= h($a['notes']) ?>">📝 <?= h(mb_strimwidth($a['notes'], 0, 80, '…')) ?></div><?php endif; ?>
               </td>
               <td><span class="acc-badge" data-role="<?= h($a['role']) ?>"><?= h(account_role_label($a['role'])) ?></span><?= $a['is_active'] ? '' : '<div class="acc-meta">Désactivé</div>' ?></td>
@@ -272,5 +281,6 @@ $renderFields = static function (array $a, string $prefix) {
   });
 })();
 </script>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

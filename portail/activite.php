@@ -87,6 +87,7 @@ $sevColor = ['ok' => 'ok', 'warn' => 'warn', 'bad' => 'bad', 'info' => 'info'];
 <title>Activité — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=1">
 <style>
   .owrap { display: grid; gap: 16px; max-width: 1180px; margin: 0 auto; padding: 0 16px 56px; }
   .ocard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
@@ -120,12 +121,12 @@ $sevColor = ['ok' => 'ok', 'warn' => 'warn', 'bad' => 'bad', 'info' => 'info'];
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-    <div class="brand"><h1>Activité</h1><p>Suivi de la plateforme : inscriptions, paiements, boutiques créées et supprimées, ventes</p></div>
-    <span style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn" href="/portail/">Portail des commerces</a><a class="btn" href="/portail/inscriptions.php">Inscriptions</a><a class="btn" href="/portail/nouveau.php">Nouveau commerce</a>
-    </span>
-  </header>
+<?php portail_page_start([
+    'title' => 'Activité',
+    'eyebrow' => 'Pilotage',
+    'desc' => 'Suivi de la plateforme : inscriptions, paiements, boutiques créées et supprimées, ventes.',
+    'actions' => '<a class="btn" href="/portail/inscriptions.php">Inscriptions</a><a class="btn btn-primary" href="/portail/nouveau.php">Nouveau commerce</a>',
+]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
   <div class="owrap">

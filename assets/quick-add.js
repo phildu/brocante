@@ -169,8 +169,21 @@
   $('qa-multi-pick').addEventListener('click', function () { if (multi.slot != null) pickFor(multi.slot, multi.objects); });
   $('qa-multi-no').addEventListener('click', function () { $('qa-multi').hidden = true; });
 
+  // Photothèque du téléphone : un bouton par emplacement (sans « capture », le téléphone propose sa photothèque).
+  function addLibrary(s, i) {
+    s.querySelectorAll('[data-lib]').forEach(function (n) { n.remove(); });   // copies d'un emplacement déjà équipé
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*'; inp.hidden = true; inp.setAttribute('data-lib', '1');
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'qa-shot-lib'; btn.setAttribute('data-lib', '1'); btn.setAttribute('aria-label', 'Choisir dans la photothèque');
+    btn.innerHTML = '<span aria-hidden="true">🖼</span><span class="txt"> Photothèque</span>';
+    btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); inp.click(); });
+    inp.addEventListener('change', function () { if (this.files[0]) setPhoto(i, this.files[0]); this.value = ''; });
+    s.appendChild(btn); s.appendChild(inp);
+  }
   function bindSlot(s) {
     var i = +s.dataset.index;
+    addLibrary(s, i);
     s.querySelector('input[type=file]').addEventListener('change', function () {
       if (this.files[0]) setPhoto(i, this.files[0]);
       this.value = '';
@@ -453,6 +466,7 @@
       $('f-brand').value = sheet.brand || '';
       $('f-distributor').value = sheet.distributor || '';
       $('f-etat').value = sheet.etat || '';
+      $('f-etat').dispatchEvent(new Event('change', { bubbles: true }));
       $('f-size').value = sheet.size_text || '';
       if (sheet.weight_grams) $('f-weight').value = sheet.weight_grams;
       $('f-nature').value = sheet.nature || '';
@@ -477,6 +491,7 @@
     fd.append('ref', ref);
     fd.append('name', $('f-name').value);
     fd.append('price', $('f-price').value);
+    fd.append('new_price', $('f-new-price').value);
     fd.append('weight_grams', $('f-weight').value || '0');
     fd.append('cat', $('f-cat').value);
     fd.append('description', $('f-desc').value);

@@ -2,6 +2,11 @@
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
 
+if (!shop_sales_enabled()) {
+    header('Location: /boutique.php', true, 302);
+    exit;
+}
+
 $sessionId = (string) ($_GET['session_id'] ?? '');
 $order = null;
 $error = null;
@@ -10,12 +15,11 @@ if ($sessionId === '') {
     $error = "Aucune commande à afficher.";
 } else {
     try {
-        $session = stripe_request('GET', '/checkout/sessions/' . urlencode($sessionId));
-        $paid = ($session['payment_status'] ?? '') === 'paid';
-
         $stmt = db()->prepare('SELECT * FROM orders WHERE stripe_session_id = ?');
         $stmt->execute([$sessionId]);
         $order = $stmt->fetch();
+        $session = stripe_request('GET', '/checkout/sessions/' . urlencode($sessionId), [], ($order['payment_via'] ?? '') === 'connect');
+        $paid = ($session['payment_status'] ?? '') === 'paid';
 
         if ($paid && $order && $order['status'] !== 'paid') {
             if (order_mark_paid($order, $session)) cart_clear();

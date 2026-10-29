@@ -116,6 +116,36 @@ switch ($action) {
         break;
     }
 
+    case 'seed_mondial_relay': {
+        $existing = db()->query("SELECT id FROM shipping_carriers WHERE name = 'Mondial Relay' LIMIT 1")->fetchColumn();
+        if ($existing) {
+            flash_set('Mondial Relay est déjà configuré — supprimez-le d\'abord pour recharger les tarifs exemple.', 'error');
+            break;
+        }
+        $carrierId = add_shipping_carrier('Mondial Relay');
+
+        // Livraison en Point Relais® en France métropolitaine, tarifs INDICATIFS : à remplacer par ceux de votre contrat ou de la grille
+        // Mondial Relay en vigueur. Colis de 30 kg maximum (dimensions limitées).
+        $pointRelais = [
+            ['Mondial Relay Point Relais — jusqu\'à 500 g', 0, 500, 450],
+            ['Mondial Relay Point Relais — 500 g à 1 kg', 500, 1000, 490],
+            ['Mondial Relay Point Relais — 1 à 2 kg', 1000, 2000, 590],
+            ['Mondial Relay Point Relais — 2 à 3 kg', 2000, 3000, 690],
+            ['Mondial Relay Point Relais — 3 à 5 kg', 3000, 5000, 850],
+            ['Mondial Relay Point Relais — 5 à 7 kg', 5000, 7000, 1050],
+            ['Mondial Relay Point Relais — 7 à 10 kg', 7000, 10000, 1250],
+            ['Mondial Relay Point Relais — 10 à 15 kg', 10000, 15000, 1590],
+            ['Mondial Relay Point Relais — 15 à 20 kg', 15000, 20000, 1890],
+            ['Mondial Relay Point Relais — 20 à 30 kg', 20000, 30000, 2490],
+        ];
+        foreach ($pointRelais as [$service, $min, $max, $cents]) {
+            add_shipping_rate($carrierId, $service, $min, $max, $cents, '3 à 5 jours ouvrés', 'metropole');
+        }
+
+        flash_set('Tarifs exemple Mondial Relay chargés (Point Relais, France métropolitaine) — indicatifs, à ajuster selon votre contrat. Le choix du point relais par le client n\'est pas géré : prévenez-le de l\'adresse à indiquer.');
+        break;
+    }
+
     case 'seed_colissimo': {
         $existing = db()->query("SELECT id FROM shipping_carriers WHERE name = 'Colissimo' LIMIT 1")->fetchColumn();
         if ($existing) {

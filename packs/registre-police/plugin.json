@@ -1,0 +1,15 @@
+{
+  "id": "registre-police",
+  "name": "Registre de police",
+  "version": "1.0.0",
+  "description": "Module payant (essai gratuit) : livre de police numérique des objets d'occasion (entrées, identité du vendeur, sorties), journal des modifications infalsifiable, export imprimable et CSV.",
+  "table_prefix": "pr_",
+  "pages": [
+    { "id": "index", "label": "Registre de police", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "entries", "file": "api/entries.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "export", "file": "api/export.php", "methods": ["GET"], "roles": ["admin"] }
+  ]
+}

@@ -142,7 +142,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
         <button type="button" class="btn btn-ghost" data-share-open="share"<?= $shareAttrs ?>>Partager l'application</button>
         <button type="button" class="btn btn-ghost" data-share-open="qr"<?= $shareAttrs ?>>Code QR de l'application</button>
         <?php if (!$studioReachable): ?><p class="qa-note">Adresse locale : un téléphone ne peut pas l'ouvrir. En ligne, le lien fonctionne.</p><?php endif; ?>
-        <a class="btn btn-ghost" href="/admin/catalog.php">Administration</a>
+        <a class="btn btn-ghost" href="/admin/dashboard.php">Administration</a>
         <form method="post"><input type="hidden" name="action" value="logout"><button class="btn btn-ghost" type="submit">Se déconnecter</button></form>
       </div>
     </details>
@@ -239,6 +239,11 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
       </div>
     </section>
 
+    <!-- Caisse : lecture de QR code, retrait d'un achat en ligne, vente directe en boutique -->
+    <section class="st-tab" id="tab-pos" data-tab="pos" hidden>
+      <div class="pos" id="pos"></div>
+    </section>
+
     <!-- Mes pièces -->
     <section class="st-tab" id="tab-list" data-tab="pieces" hidden>
       <div class="sl">
@@ -302,10 +307,12 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
   <nav class="st-tabs" aria-label="Sections">
     <button type="button" data-go="single" aria-current="page"><?= $ico('<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>') ?><span>Une pièce</span></button>
     <button type="button" data-go="batch"><?= $ico('<rect x="3" y="7" width="13" height="13" rx="1"/><path d="M8 7V4h13v13h-3"/>') ?><span>En lot</span></button>
+    <button type="button" data-go="pos"><?= $ico('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M7 15h3"/>') ?><span>Caisse</span></button>
     <button type="button" data-go="pieces"><?= $ico('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>') ?><span>Mes pièces</span><i class="st-count" id="st-count" hidden></i></button>
   </nav>
 
   <script src="/assets/price-field.js?v=<?= (int) @filemtime(__DIR__ . '/assets/price-field.js') ?>"></script>
+  <script src="/assets/condition-pricing.js?v=<?= (int) @filemtime(__DIR__ . '/assets/condition-pricing.js') ?>"></script>
   <script src="/assets/product-ai.js"></script>
   <script src="/assets/nature-select.js"></script>
   <script src="/assets/price-research.js"></script>
@@ -315,8 +322,11 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
   <script src="/assets/measure-tool.js?v=<?= (int) @filemtime(__DIR__ . '/assets/measure-tool.js') ?>"></script>
   <script src="/assets/object-picker.js?v=<?= (int) @filemtime(__DIR__ . '/assets/object-picker.js') ?>"></script>
   <script src="/assets/quick-add.js?v=<?= (int) @filemtime(__DIR__ . '/assets/quick-add.js') ?>"></script>
+  <script src="/assets/vendor/qrcode-generator.js"></script>
+  <script src="/assets/pos.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pos.js') ?>" data-action="/admin/pos-action.php"></script>
   <script src="/assets/studio.js?v=<?= (int) @filemtime(__DIR__ . '/assets/studio.js') ?>" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/assets/share.js') ?>" defer></script>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>
