@@ -2,6 +2,10 @@
 // Page publique d'une galerie commerciale : /galerie/<identifiant>/ (réécrit vers ce fichier, voir .htaccess et router.php).
 // Sans identifiant : la liste des galeries publiées. Les données viennent de includes/galleries.php (catalogue regroupé, mis en cache).
 require_once __DIR__ . '/../includes/galleries.php';
+require_once __DIR__ . '/../includes/gallery-admin.php';
+require_once __DIR__ . '/../includes/gallery-offers.php';
+require_once __DIR__ . '/../includes/gallery-loyalty.php';
+require_once __DIR__ . '/../includes/gallery-booking.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/promo.php';
 
@@ -24,15 +28,37 @@ if ($canSignup) require_once __DIR__ . '/../includes/saas.php';
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $origin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 $slug = strtolower((string) ($_GET['g'] ?? ''));
+$testRequest = null;
 
 // ── Liste des galeries ──
 if ($slug === '') {
-    $galleries = array_filter(gallery_list(), static fn (array $g): bool => $g['published']);
+    $galleries = array_filter(gallery_list(), static fn (array $g): bool => go_is_live($g));
     $pageTitle = 'Galeries commerciales';
     $accent = '#b5502e';
     $gallery = null;
 } else {
     $gallery = gallery_load($slug);
+    if ($gallery) $gallery['published'] = go_is_live($gallery);   // essai terminé ou abonnement résilié : comme non publiée (l'aperçu de l'administrateur reste possible)
+    $testRequest = null;
+    $testShop = (string) ($_GET['test_shop'] ?? '');
+    if ($gallery && $canSignup && preg_match('/^[a-z0-9][a-z0-9_-]*$/', $testShop)) {
+        $candidate = saas_request_by_link((string) ($_GET['r'] ?? ''), (string) ($_GET['k'] ?? ''));
+        if ($candidate && ($candidate['status'] ?? '') === 'approved'
+            && (string) ($candidate['slug'] ?? '') === $testShop
+            && (string) ($candidate['gallery'] ?? '') === $slug
+            && is_dir(dirname(__DIR__) . '/tenants/' . $testShop)) {
+            $testRequest = $candidate;
+            $isMember = false;
+            foreach ($gallery['members'] as $member) {
+                if (($member['type'] ?? '') === 'local' && ($member['slug'] ?? '') === $testShop) {
+                    $isMember = true;
+                    break;
+                }
+            }
+            if (!$isMember) $gallery['members'][] = ['type' => 'local', 'slug' => $testShop, 'featured' => false];
+            header('X-Robots-Tag: noindex, nofollow, noarchive');
+        }
+    }
     $preview = $gallery && hash_equals(gallery_preview_token($gallery), (string) ($_GET['apercu'] ?? ''));
     if (!$gallery || (!$gallery['published'] && !$preview)) {
         http_response_code(404);
@@ -43,6 +69,8 @@ if ($slug === '') {
     } else {
         $pageTitle = $gallery['name'];
         $accent = $gallery['accent'];
+        $vocab = gt_of($gallery)['vocab'];            // dénominations du type de galerie (commerces, marchands, exposants…)
+        if ($gallery['published'] && !$preview && !$testRequest) ga_track_view($slug);   // fréquentation de la page (sans cookie), vue par l'administrateur de la galerie
     }
 }
 $ink = gal_ink_on($accent);
@@ -60,7 +88,7 @@ $page = 1;
 $perPage = $st['per_page'];
 $universes = [];
 if ($gallery) {
-    $data = gallery_catalogue($gallery, $origin);
+    $data = gallery_catalogue($gallery, $origin, $testRequest !== null, $testRequest === null);
     $shops = $data['shops'];
     uasort($shops, static fn (array $a, array $b): int => [$b['featured'], $a['order']] <=> [$a['featured'], $b['order']]);
     $q = trim((string) ($_GET['q'] ?? ''));
@@ -124,7 +152,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= e($pageTitle) ?><?= $gallery ? ' — galerie commerciale' : '' ?></title>
+<title><?= e($pageTitle) ?><?= $gallery ? ' — ' . e($vocab['gallery'] ?? 'galerie commerciale') : '' ?></title>
 <meta name="description" content="<?= e($metaDescription) ?>">
 <meta property="og:title" content="<?= e($pageTitle) ?>">
 <meta property="og:description" content="<?= e($metaDescription) ?>">
@@ -132,6 +160,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 <link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.css') ?>">
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>
 <?php if (!empty($notFound) || ($gallery && !$gallery['published'])): ?><meta name="robots" content="noindex, nofollow"><?php endif; ?>
+<?php if ($testRequest): ?><meta name="robots" content="noindex, nofollow, noarchive"><meta name="referrer" content="no-referrer"><?php endif; ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -229,6 +258,10 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   .hero-share { margin: 18px 0 0; } .hero .share-btn { color: inherit; border-color: color-mix(in srgb, currentColor 55%, transparent); } .hero .share-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); border-color: currentColor; }
   .hero.a-center .hero-share { display: flex; justify-content: center; }
   .share-dialog { --bg: var(--surface, #fff); }
+  .hero-app { margin: 14px 0 0; } .hero.a-center .hero-app { display: flex; justify-content: center; }
+  .app-btn { display: inline-block; cursor: pointer; list-style: none; color: inherit; font-weight: 600; text-decoration: none; padding: 10px 16px; border: 1px solid color-mix(in srgb, currentColor 55%, transparent); border-radius: 10px; } .app-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+  .app-pick { display: inline-block; text-align: left; } .app-pick summary::-webkit-details-marker { display: none; }
+  .app-pick ul { list-style: none; margin: 8px 0 0; padding: 6px; background: var(--bg, #fff); color: var(--ink, #222); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.25); } .app-pick li a { display: block; padding: 8px 12px; color: inherit; text-decoration: none; border-radius: 6px; font-weight: 600; } .app-pick li a:hover { background: rgba(0,0,0,.07); }
   .hero-cta { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin: 24px 0 0; }
   .btn-cta { font: inherit; font-weight: 700; font-size: 1.02rem; border-radius: 12px; padding: 14px 24px; background: var(--hero-ink, var(--accent-ink)); color: var(--hero-bg, var(--accent)); text-decoration: none; display: inline-block; box-shadow: 0 8px 22px -10px rgba(0,0,0,.45); }
   .btn-cta:hover { transform: translateY(-1px); box-shadow: 0 12px 26px -10px rgba(0,0,0,.5); }
@@ -249,7 +282,9 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   }
   @media (max-width: 980px) { form.filters { grid-template-columns: 1fr 1fr; } form.filters .wide { grid-column: 1 / -1; } }
   @media (max-width: 520px) { .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; } .card .body { padding: 10px; } form.filters { grid-template-columns: 1fr 1fr; } }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  .gl-login { position: absolute; top: 12px; right: 16px; z-index: 20; margin: 0; }
+  .gl-login a { display: inline-block; padding: 7px 14px; border-radius: 999px; background: rgba(255,255,255,.92); color: #222; font-weight: 600; font-size: .88rem; text-decoration: none; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
   <?= $theme ? $theme['css'] : '' ?>
   <?php if ($theme): ?>body { font-family: var(--body); } h1, h2, .gcard h3, .avatar, .stats strong, .card .none { font-family: var(--display); }<?php endif; ?>
 </style>
@@ -262,7 +297,8 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <p class="eyebrow">Des commerçants réunis</p>
     <h1>Galeries commerciales</h1>
     <p class="tagline">Une rue, un village, un groupe d'amis : leurs boutiques réunies au même endroit.</p>
-    <p class="hero-share"><?= share_button_html($origin . '/galerie/', 'Galeries commerciales', "Des commerçants réunis au même endroit.") ?></p>
+    <p class="hero-share"><?= share_button_html($origin . '/galerie/', 'Galeries commerciales', "Des commerçants réunis au même endroit.") ?>
+      <a class="alt" href="/galerie/admin.php" rel="nofollow" style="margin-left:14px;">Se connecter</a></p>
     <?php if ($canSignup): ?>
       <p class="hero-cta"><a class="btn-cta" href="/inscription/">Créer ma boutique</a>
         <span class="from"><?= e(saas_grid_from_text(saas_grid(''))) ?> · sans engagement</span><a class="alt" href="/#formules">Voir les tarifs</a></p>
@@ -291,20 +327,30 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   </section></main>
 
 <?php else: ?>
+  <p class="gl-login"><a href="/galerie/admin.php" rel="nofollow">Se connecter</a></p>
   <header class="hero<?= $st['banner'] !== '' ? ' has-banner' : '' ?> h-<?= e($st['hero_height']) ?> a-<?= e($st['hero_align']) ?>">
     <?php if ($st['banner'] !== ''): ?><div class="hero-media" style="background-image:url('/<?= e($st['banner']) ?>');background-position:center <?= e($st['banner_pos']) ?>"></div><div class="hero-shade" style="background:rgba(0,0,0,<?= round($st['banner_overlay'] / 100, 2) ?>)"></div><?php endif; ?>
     <div class="wrap">
     <?php if ($st['logo'] !== ''): ?><img class="hero-logo" src="/<?= e($st['logo']) ?>" alt="<?= e($gallery['name']) ?>"><?php endif; ?>
-    <p class="eyebrow">Galerie commerciale<?= $gallery['published'] ? '' : ' · aperçu non publié' ?></p>
+    <p class="eyebrow"><?= e(ucfirst($vocab['gallery'] ?? 'galerie commerciale')) ?> · <?= e(business_presence_label($gallery['presence_mode'])) ?><?= $gallery['published'] ? '' : ' · aperçu non publié' ?></p>
     <h1><?= e($gallery['name']) ?></h1>
     <?php if ($gallery['tagline'] !== ''): ?><p class="tagline"><?= e($gallery['tagline']) ?></p><?php endif; ?>
     <?php if ($gallery['description'] !== ''): ?><p class="intro"><?= nl2br(e($gallery['description'])) ?></p><?php endif; ?>
     <?php if ($st['show_stats']): ?><ul class="stats">
-      <li><strong><?= count($shops) ?></strong>commerce<?= count($shops) > 1 ? 's' : '' ?></li>
+      <li><strong><?= count($shops) ?></strong><?= e(count($shops) > 1 ? ($vocab['members'] ?? 'commerces') : ($vocab['member'] ?? 'commerce')) ?></li>
       <li><strong><?= count($data['products']) ?></strong>pièce<?= count($data['products']) > 1 ? 's' : '' ?> en ligne</li>
       <li><strong><?= count($universes) ?></strong>univers</li>
     </ul><?php endif; ?>
     <?php if ($gallery['published']): ?><p class="hero-share"><?= share_button_html($origin . '/galerie/' . $gallery['slug'] . '/', $gallery['name'], $gallery['tagline'] ?: 'Les pièces de ' . count($shops) . ' commerces réunies au même endroit.', $st['banner'] !== '' ? $origin . '/' . $st['banner'] : '') ?></p><?php endif; ?>
+    <?php if (gl_open($gallery)): ?>
+      <div class="hero-app"><a class="app-btn" href="/galerie/visiteur.php?g=<?= e($gallery['slug']) ?>">📱 Application visiteurs · <?= e(gl_settings($gallery)['program_name']) ?>, points et récompenses</a></div>
+    <?php elseif ($vApps = array_values(array_filter($shops, static fn ($s) => ($s['visitor_url'] ?? '') !== ''))): ?>
+      <div class="hero-app">
+        <?php if (count($vApps) === 1): ?><a class="app-btn" href="<?= e($vApps[0]['visitor_url']) ?>" target="_blank" rel="noopener">📱 Application visiteurs · fidélité, alertes, billets</a>
+        <?php else: ?><details class="app-pick"><summary class="app-btn">📱 Application visiteurs · fidélité, alertes, billets</summary>
+          <ul><?php foreach ($vApps as $vs): ?><li><a href="<?= e($vs['visitor_url']) ?>" target="_blank" rel="noopener"><?= e($vs['name']) ?> ↗</a></li><?php endforeach; ?></ul></details><?php endif; ?>
+      </div>
+    <?php endif; ?>
     <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
       <p class="hero-cta"><a class="btn-cta" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><?= e($st['cta_label'] !== '' ? $st['cta_label'] : 'Créer ma boutique dans cette galerie') ?></a>
         <span class="from"><?= e(saas_grid_from_text(saas_grid($gallery['slug']))) ?> · sans engagement</span><a class="alt" href="#cta-boutique">En savoir plus</a></p>
@@ -312,14 +358,15 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   </div></header>
 
   <main id="contenu" class="wrap">
+    <?php if ($testRequest): ?><p class="note" role="status">Aperçu privé : la boutique « <?= e($testRequest['shop_name']) ?> » est affichée temporairement. Cet aperçu ne l’ajoute pas à la galerie.</p><?php endif; ?>
     <?php if ($data['skipped']): ?>
-      <p class="note">Certains commerces ne répondent pas pour le moment (<?= e(implode(', ', $data['skipped'])) ?>) : leurs pièces reviendront dès que possible.</p>
+      <p class="note">Certains <?= e($vocab['members'] ?? 'commerces') ?> ne répondent pas pour le moment (<?= e(implode(', ', $data['skipped'])) ?>) : leurs pièces reviendront dès que possible.</p>
     <?php endif; ?>
 
     <?php if ($shops): ?>
     <section aria-labelledby="h-commerces">
-      <h2 id="h-commerces"><?= e($st['shops_title'] !== '' ? $st['shops_title'] : 'Les commerces') ?></h2>
-      <p class="lede"><?= e($st['shops_lede'] !== '' ? $st['shops_lede'] : 'Chaque commerce a sa boutique, son panier et son paiement : une pièce se règle chez son commerçant.') ?></p>
+      <h2 id="h-commerces"><?= e($st['shops_title'] !== '' ? $st['shops_title'] : ($vocab['members_title'] ?? 'Les commerces')) ?></h2>
+      <p class="lede"><?= e($st['shops_lede'] !== '' ? $st['shops_lede'] : ($vocab['members_lede'] ?? 'Chaque commerce a sa boutique, son panier et son paiement : une pièce se règle chez son commerçant.')) ?></p>
       <div class="shops">
         <?php foreach ($shops as $key => $s): $initial = mb_strtoupper(mb_substr(preg_replace('/^[^\p{L}\p{N}]+/u', '', $s['name']), 0, 1)); ?>
           <div class="shop<?= $shopFilter === $key ? ' is-on' : '' ?>">
@@ -335,16 +382,302 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
             </a>
             <div class="shop-links">
               <?php if ($s['url'] !== ''): ?><a class="visit" href="<?= e($s['url']) ?>" target="_blank" rel="noopener">Visiter la boutique ↗</a><?php endif; ?>
+              <?php if (($s['visitor_url'] ?? '') !== ''): ?><a href="<?= e($s['visitor_url']) ?>" target="_blank" rel="noopener" title="Points de fidélité, alertes, réservations et billets de ce commerce">Espace visiteur ↗</a><?php endif; ?>
               <a href="<?= e(gal_url(['commerce' => $shopFilter === $key ? null : $key])) ?>#pieces"><?= $shopFilter === $key ? 'Toutes les pièces' : 'Ses pièces' ?></a>
             </div>
           </div>
         <?php endforeach; ?>
         <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
-          <a class="shop join" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><span>＋ Votre boutique ici<br><small style="font-weight:400;color:var(--ink-soft)">Rejoindre <?= e($gallery['name']) ?></small></span></a>
+          <a class="shop join" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><span>＋ <?= e($vocab['join_cta'] ?? 'Votre boutique ici') ?><br><small style="font-weight:400;color:var(--ink-soft)">Rejoindre <?= e($gallery['name']) ?></small></span></a>
         <?php endif; ?>
       </div>
     </section>
 
+    <?php endif; /* fin de la liste des commerces : le plan s'affiche aussi sans commerce (vide-grenier, marché) */ ?>
+
+    <?php
+      // Événement (module organisateur) : les places numérotées ev1…evN sont calculées, jamais stockées une à une.
+      $orgOn = function_exists('gm_enabled') && gm_enabled($gallery, 'organisateur');
+      $galleryEvent = gallery_event($gallery);
+      $galleryBooking = gb_booking($gallery);
+      $evPlaces = [];
+      $evStates = [];
+      if ($orgOn && $galleryEvent && !empty($galleryEvent['published'])) $evPlaces = ge_places($galleryEvent);
+      if ($evPlaces && $galleryBooking['source'] === 'event') $evStates = gb_states($gallery);
+      $hasEventSection = $orgOn && $galleryEvent && !empty($galleryEvent['published']);
+    ?>
+    <?php if ($hasEventSection): ?>
+    <section id="evenement" aria-labelledby="h-evenement">
+      <h2 id="h-evenement"><?= e($galleryEvent['title'] !== '' ? $galleryEvent['title'] : 'L\'événement') ?></h2>
+      <p class="lede">
+        <?php if ($d = ge_date_text($galleryEvent)): ?><strong><?= e(ucfirst($d)) ?></strong><?php endif; ?>
+        <?php if ($p = ge_place_text($galleryEvent)): ?><?= $d ? ' · ' : '' ?><?= e($p) ?><?php endif; ?>
+        <?php if ($h = ge_hours_text($galleryEvent)): ?><?= ($d || $p) ? ' · ' : '' ?><?= e($h) ?><?php endif; ?>
+      </p>
+      <?php if ($galleryEvent['notes'] !== ''): ?><p class="lede"><?= nl2br(e($galleryEvent['notes'])) ?></p><?php endif; ?>
+      <?php
+        $evPrice = ge_place_price($galleryEvent);
+        $evPricePro = ge_place_price($galleryEvent, true);
+      ?>
+      <?php if ($evPrice !== null): ?>
+        <p class="lede">Tarif : <strong><?= e(gb_eur($evPrice)) ?></strong> la place<?= $evPricePro !== null && $evPricePro !== $evPrice ? ' · <strong>' . e(gb_eur($evPricePro)) . '</strong> pour les entreprises' : '' ?>.</p>
+      <?php endif; ?>
+      <?php if ($evPlaces): ?>
+        <?php if ($galleryBooking['source'] === 'event'): ?>
+          <?php if ($galleryBooking['intro'] !== ''): ?><p class="lede"><?= nl2br(e($galleryBooking['intro'])) ?></p><?php endif; ?>
+          <p class="lede" style="margin:6px 0 0;">Choisissez une place libre : votre demande la réserve <?= (int) $galleryBooking['hold_days'] ?> jour(s), le temps que l'organisateur la valide.</p>
+        <?php else: ?>
+          <p class="lede" style="margin:6px 0 0;">Les réservations en ligne ne sont pas ouvertes pour le moment : les places ci-dessous montrent l'occupation de la manifestation.</p>
+        <?php endif; ?>
+        <style>
+          #ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;margin:12px 0 0;max-width:760px;}
+          .ev-place{font:600 .9rem/1 system-ui,sans-serif;padding:13px 4px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2,#f3efe7);color:var(--ink);cursor:default;}
+          .ev-place.is-free{cursor:pointer;border-color:#2f6b4f;background:#e6f2e9;color:#1c4a33;}
+          .ev-place.is-free:hover{border-color:#1c4a33;}
+          .ev-place.is-pending{border-color:#b7791f;background:#fdf0d7;color:#7a4c07;}
+          .ev-place.is-taken{border-color:#c9c0b2;background:#e9e3d9;color:#6b6257;}
+          .ev-place:disabled{opacity:.85;}
+          .ev-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 0;font-size:.85rem;color:var(--ink-soft);}
+        </style>
+        <div id="ev-grid" role="list" aria-label="Places de la manifestation">
+          <?php foreach ($evPlaces as $place):
+              $state = $evStates[$place['id']] ?? '';
+              $free = $state === '' && $galleryBooking['source'] === 'event';
+              $cls = $state === 'taken' ? 'is-taken' : ($state === 'pending' ? 'is-pending' : ($free ? 'is-free' : ''));
+              $label = 'Place ' . (int) $place['num'] . ' — ' . ($state === 'taken' ? 'attribuée' : ($state === 'pending' ? 'demande en cours' : ($free ? 'libre' : 'réservations fermées')));
+          ?>
+            <button type="button" role="listitem" class="ev-place <?= $cls ?>"<?= $free ? ' data-slot="' . e($place['id']) . '" data-num="' . (int) $place['num'] . '" data-price="' . (int) ($place['price_cents'] ?? '') . '" data-pricepro="' . (int) ($place['price_pro_cents'] ?? '') . '"' : ' disabled' ?> title="<?= e($label) ?>" aria-label="<?= e($label) ?>"><?= (int) $place['num'] ?></button>
+          <?php endforeach; ?>
+        </div>
+        <?php if ($galleryBooking['source'] === 'event'): ?>
+          <p class="ev-legend"><span>🟩 libre</span><span>🟧 demande en cours</span><span>⬜ attribuée</span></p>
+          <?php $evSlug = $gallery['slug']; require __DIR__ . '/_event-booking-form.php'; ?>
+          <script>
+          (function(){
+            var grid=document.getElementById('ev-grid');if(!grid)return;
+            grid.addEventListener('click',function(e){
+              var b=e.target.closest?e.target.closest('button[data-slot]'):null;
+              if(!b||b.disabled||!window.GXEventBooking)return;
+              var p=b.getAttribute('data-price'),pp=b.getAttribute('data-pricepro');
+              window.GXEventBooking.open(b.getAttribute('data-slot'),'Place '+(b.getAttribute('data-num')||''),p===''?null:+p,pp===''?null:+pp);
+            });
+            window.addEventListener('gx:booking',function(e){
+              var b=grid.querySelector('button[data-slot="'+e.detail.slot+'"]');if(!b)return;
+              b.disabled=true;b.classList.remove('is-free');b.classList.add('is-pending');
+              b.title='Place '+(b.getAttribute('data-num')||'')+' — demande en cours';
+              b.setAttribute('aria-label',b.title);
+            });
+          })();
+          </script>
+        <?php endif; ?>
+      <?php endif; ?>
+    </section>
+    <?php endif; ?>
+
+    <?php
+      // Plan d'implantation dessiné par la galerie : la carte (et ses fonds IGN) ne se charge qu'au clic du visiteur.
+      $planItems = [];
+      $planMap = $gallery['map'] ?? null;
+      $bk = $planMap['booking'] ?? ['enabled' => false];
+      $carteOn = !function_exists('gm_enabled') || gm_enabled($gallery, 'carte');
+      if ($gallery && !gt_feature($gallery, 'exposants')) $bk['enabled'] = false;      // fonctionnalité absente de ce type de galerie
+      if ($galleryBooking['source'] === 'event') $bk['enabled'] = false;               // l'événement remplace le choix sur le plan
+      $withPrices = $gallery && gt_feature($gallery, 'tarifs');
+      $slotStates = !empty($bk['enabled']) ? gb_states($gallery) : [];
+      $zoneNames = [];
+      foreach (($planMap['items'] ?? []) as $pi) if ($pi['role'] === 'zone') $zoneNames[$pi['id']] = gallery_zone_name($pi);
+      foreach (($planMap['items'] ?? []) as $pi) {
+          $ps = $shops[$pi['shop']] ?? null;
+          $isSlot = $pi['role'] === 'slot';
+          $free = $isSlot && !empty($bk['enabled']) && $pi['shop'] === '' && !isset($slotStates[$pi['id']]);
+          $planItems[] = ['id' => $pi['id'], 'kind' => $pi['kind'], 'role' => $pi['role'], 'pts' => $pi['pts'], 'color' => $pi['color'],
+              'label' => $pi['label'] !== '' ? $pi['label'] : ($ps['name'] ?? ''), 'num' => $pi['num'], 'note' => $pi['note'],
+              'm2' => $pi['kind'] === 'polygon' ? round(gallery_map_area_m2($pi['pts']), 1) : 0,
+              'ztype' => $pi['role'] === 'zone' ? (GALLERY_ZONE_TYPES[$pi['ztype']] ?? '') : '', 'zone' => $isSlot ? ($zoneNames[$pi['zone']] ?? '') : '',
+              'price' => $isSlot && $withPrices ? gallery_map_slot_price($planMap, $pi, false) : null, 'price_pro' => $isSlot && $withPrices ? gallery_map_slot_price($planMap, $pi, true) : null,
+              'state' => $isSlot && !empty($bk['enabled']) ? ($pi['shop'] !== '' ? 'taken' : ($slotStates[$pi['id']] ?? 'free')) : '', 'free' => $free,
+              'shop' => $ps ? $ps['name'] : '', 'url' => $ps ? ($ps['url'] !== '' ? $ps['url'] : gal_url(['commerce' => $pi['shop']]) . '#pieces') : ''];
+      }
+      $planData = $carteOn && $planItems ? ['center' => $planMap['center'], 'zoom' => $planMap['zoom'], 'base' => $planMap['base'], 'items' => $planItems,
+          'tiles' => ['osm' => GALLERY_MAP_TILE_PLAN, 'sat' => GALLERY_MAP_TILE_SAT],
+          'booking' => !empty($bk['enabled']) ? ['intro' => $bk['intro'], 'endpoint' => '/galerie/exposant.php', 'slug' => $gallery['slug']] : null] : null;
+    ?>
+    <?php if ($planData): ?>
+    <section id="plan-commerces" aria-labelledby="h-plan">
+      <h2 id="h-plan">Plan <?= e($vocab['of_plan'] ?? 'des commerces') ?></h2>
+      <p class="lede">Où trouver chaque <?= e($vocab['member'] ?? 'commerce') ?>. Touchez un repère ou une zone pour voir son nom<?= !empty($planData['booking']) ? ', son tarif' : '' ?> et ouvrir sa boutique.</p>
+      <?php if (!empty($planData['booking'])): ?>
+      <p style="margin:0 0 10px;"><button type="button" class="btn-cta" id="plan-book" style="font-size:.95rem;padding:10px 18px;">Je suis exposant : choisir mon emplacement</button>
+        <?php if ($planData['booking']['intro'] !== ''): ?><span class="lede" style="display:block;margin:6px 0 0;"><?= e($planData['booking']['intro']) ?></span><?php endif; ?></p>
+      <?php endif; ?>
+      <div id="plan-box" style="position:relative;height:min(70vh,520px);min-height:300px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2);">
+        <button type="button" id="plan-show" style="position:absolute;inset:0;width:100%;border:0;background:transparent;color:var(--ink);font:inherit;font-weight:600;cursor:pointer;">Afficher le plan<br><small style="font-weight:400;color:var(--ink-soft)">La carte est fournie par l'IGN : elle ne se charge qu'à votre demande.</small></button>
+      </div>
+      <div id="plan-legend" hidden style="display:none;gap:14px;flex-wrap:wrap;margin:8px 0 0;font-size:.85rem;color:var(--ink-soft);"><span>🟩 libre</span><span>🟧 demandé</span><span>⬜ attribué</span></div>
+      <style>
+      #plan-form .pf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;}
+      #plan-form .pf-grid label{display:grid;gap:3px;font-size:.85rem;}
+      #plan-form .pf-grid input,#plan-form .pf-grid select{width:100%;box-sizing:border-box;}
+      #plan-form .pf-box{border:1px solid var(--line);border-radius:8px;padding:10px;display:grid;gap:8px;}
+      #plan-form .pf-box>strong{font-size:.85rem;}
+      #plan-form .pf-consent{display:flex;gap:8px;align-items:flex-start;font-size:.85rem;}
+      #plan-form .pf-req{color:var(--accent-2,var(--accent));font-weight:700;}
+      </style>
+      <form id="plan-form" hidden enctype="multipart/form-data" style="margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:14px;display:none;gap:10px;max-width:760px;" autocomplete="on">
+        <strong id="plan-form-title">Votre demande</strong>
+        <p id="plan-form-price" style="margin:0;color:var(--ink-soft);"></p>
+        <input type="hidden" name="slot"><input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;" aria-hidden="true">
+        <div class="pf-grid">
+          <label>Nom affiché (facultatif)<input type="text" name="name" maxlength="80" autocomplete="name"></label>
+          <label>E-mail <span class="pf-req">*</span><input type="email" name="email" required maxlength="160" autocomplete="email"></label>
+          <label>Téléphone (facultatif)<input type="text" name="phone" maxlength="30" autocomplete="tel"></label>
+          <label>Je suis <span class="pf-req">*</span><select name="kind" id="plan-kind">
+            <option value="particulier">Particulier</option><option value="association">Association</option><option value="entreprise">Entreprise</option>
+          </select></label>
+        </div>
+        <p class="hint" style="margin:0;font-size:.8rem;">Le registre des vendeurs, obligatoire pour l'organisateur, demande l'identité, le domicile et les références de la pièce d'identité. <span class="pf-req">*</span> champs obligatoires.</p>
+
+        <div class="pf-box" data-ct="particulier">
+          <strong>Particulier</strong>
+          <div class="pf-grid">
+            <label>Prénom <span class="pf-req">*</span><input type="text" name="firstname" maxlength="60" autocomplete="given-name"></label>
+            <label>Nom <span class="pf-req">*</span><input type="text" name="lastname" maxlength="60" autocomplete="family-name"></label>
+            <label>Date de naissance (facultatif)<input type="date" name="birth_date" data-opt="1"></label>
+            <label>Lieu de naissance (facultatif)<input type="text" name="birth_place" maxlength="120" data-opt="1"></label>
+          </div>
+          <div class="pf-grid">
+            <label>Adresse du domicile <span class="pf-req">*</span><input type="text" name="address" maxlength="160" autocomplete="street-address"></label>
+            <label>Code postal <span class="pf-req">*</span><input type="text" name="postal_code" maxlength="12" autocomplete="postal-code" inputmode="numeric"></label>
+            <label>Ville <span class="pf-req">*</span><input type="text" name="city" maxlength="80" autocomplete="address-level2"></label>
+          </div>
+          <label class="pf-consent"><input type="checkbox" name="attestation" value="1"> <span>J'atteste sur l'honneur ne pas participer à plus de deux autres manifestations de ce type dans l'année et ne vendre que des objets personnels usagés.</span></label>
+        </div>
+
+        <div class="pf-box" data-ct="association entreprise">
+          <strong>Association ou entreprise</strong>
+          <div class="pf-grid">
+            <label>Dénomination <span class="pf-req">*</span><input type="text" name="org_name" maxlength="120" autocomplete="organization"></label>
+            <label data-ct="entreprise">Forme juridique <span class="pf-req">*</span><select name="legal_form"><option value="">Choisir…</option><?php foreach (CT_LEGAL_FORMS as $lk => $lv): ?><option value="<?= e($lk) ?>"><?= e($lv) ?></option><?php endforeach; ?></select></label>
+            <label data-ct="association">Numéro RNA (facultatif si SIRET)<input type="text" name="rna" maxlength="20" placeholder="W123456789" data-opt="1"></label>
+            <label>SIRET (ou SIREN)<input type="text" name="siret" maxlength="20" inputmode="numeric" placeholder="14 chiffres" data-opt="1"></label>
+            <label data-ct="entreprise">SIREN (si pas de SIRET)<input type="text" name="siren" maxlength="20" inputmode="numeric" data-opt="1"></label>
+            <label data-ct="entreprise">TVA intracommunautaire (facultatif)<input type="text" name="vat" maxlength="20" data-opt="1"></label>
+          </div>
+          <div class="pf-grid">
+            <label>Adresse du siège <span class="pf-req">*</span><input type="text" name="org_address" maxlength="160"></label>
+            <label>Code postal du siège <span class="pf-req">*</span><input type="text" name="org_postal_code" maxlength="12" inputmode="numeric"></label>
+            <label>Ville du siège <span class="pf-req">*</span><input type="text" name="org_city" maxlength="80"></label>
+          </div>
+          <div class="pf-grid">
+            <label>Prénom du représentant <span class="pf-req">*</span><input type="text" name="rep_firstname" maxlength="60"></label>
+            <label>Nom du représentant <span class="pf-req">*</span><input type="text" name="rep_lastname" maxlength="60"></label>
+            <label>Fonction du représentant <span class="pf-req">*</span><input type="text" name="rep_function" maxlength="80" placeholder="Président, gérant…"></label>
+          </div>
+          <label class="pf-consent" data-ct="association"><input type="checkbox" name="association_declaration" value="1" data-req="1"> <span>Je déclare que l'association ne vend que des objets usagés issus de dons de particuliers.</span></label>
+        </div>
+
+        <div class="pf-box">
+          <strong>Pièce d'identité (références obligatoires au registre)</strong>
+          <div class="pf-grid">
+            <label>Nature <span class="pf-req">*</span><select name="id_doc_type" required><option value="">Choisir…</option><?php foreach (CT_ID_DOC_TYPES as $dk => $dv): ?><option value="<?= e($dk) ?>"><?= e($dv) ?></option><?php endforeach; ?></select></label>
+            <label>Numéro <span class="pf-req">*</span><input type="text" name="id_doc_number" maxlength="40" required></label>
+            <label>Délivrée le <span class="pf-req">*</span><input type="date" name="id_doc_date" required></label>
+            <label>Autorité émettrice <span class="pf-req">*</span><input type="text" name="id_doc_issuer" maxlength="100" placeholder="Préfecture de…, mairie de…" required></label>
+          </div>
+          <p class="hint" style="margin:0;font-size:.8rem;">Ces références sont recopiées au registre des vendeurs, conservé cinq ans après la manifestation.</p>
+        </div>
+
+        <details class="pf-box">
+          <summary style="cursor:pointer;"><strong>Vérification d'identité : copie de la pièce (facultatif)</strong></summary>
+          <p class="hint" style="margin:6px 0 0;font-size:.8rem;">La copie n'est pas exigée par le registre. Si vous l'ajoutez, elle sert uniquement à l'organisateur pour vérifier la pièce, reste privée et est supprimée automatiquement au bout de <?= (int) GB_CNI_RETENTION_DAYS ?> jours. Vous pouvez la refuser et ne saisir que les références ci-dessus.</p>
+          <div class="pf-grid">
+            <label>Recto (photo)<input type="file" name="cni_recto" accept="image/*" capture="environment"></label>
+            <label>Verso (photo, si la pièce en a un)<input type="file" name="cni_verso" accept="image/*" capture="environment"></label>
+          </div>
+          <label class="pf-consent"><input type="checkbox" name="cni_consent" value="1"> <span>J'accepte le dépôt et la consultation de la copie de ma pièce d'identité par l'organisateur, pour vérification, avec suppression au terme du délai indiqué.</span></label>
+        </details>
+
+        <label>Message (facultatif)<input type="text" name="message" maxlength="400" style="width:100%;" placeholder="Matériel, type d'objets, véhicule…"></label>
+        <label class="pf-consent"><input type="checkbox" name="consent" value="1" required> <span>J'accepte que mes coordonnées et les informations de ce formulaire soient transmises à l'organisateur pour traiter ma demande et tenir le registre des vendeurs.</span></label>
+        <div><button type="submit" class="btn-cta" style="font-size:.95rem;padding:10px 18px;">Envoyer ma demande</button> <button type="button" id="plan-form-cancel" class="btn">Annuler</button></div>
+        <p id="plan-form-msg" role="status" style="margin:0;"></p>
+      </form>
+      <script type="application/json" id="plan-data"><?= json_encode($planData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+      <script>
+      (function(){var b=document.getElementById('plan-show');if(!b)return;
+      var d=JSON.parse(document.getElementById('plan-data').textContent),map=null,layers=[],bookMode=false,box=document.getElementById('plan-box');
+      function load(u,t){return new Promise(function(ok,ko){var e=document.createElement(t==='css'?'link':'script');if(t==='css'){e.rel='stylesheet';e.href=u}else e.src=u;e.onload=ok;e.onerror=ko;document.head.appendChild(e)})}
+      function eur(c){return c==null?null:(c/100).toFixed(2).replace('.',',')+' €'}
+      function style(it,l){
+        var c=it.color,o={color:c,weight:2,fillColor:c,fillOpacity:.3};
+        if(it.role==='zone')o={color:c,weight:2,dashArray:'8 6',fillColor:c,fillOpacity:.07};
+        if(bookMode&&it.role==='slot'&&it.state){var st={free:'#2e8b57',pending:'#e08a1e',taken:'#9a9a9a'}[it.state];o={color:st,weight:2,fillColor:st,fillOpacity:it.state==='free'?.45:.35}}
+        l.setStyle(o)}
+      function popup(it){
+        var p=document.createElement('div'),h=document.createElement('strong'),t=[];
+        if(it.role==='zone')t.push((it.ztype&&(it.label||'').toLowerCase().indexOf(it.ztype.toLowerCase())!==0?it.ztype+' ':'')+(it.label||''));else{if(it.num)t.push('Emplacement '+it.num);if(it.label)t.push(it.label);if(!t.length)t.push(it.shop||'Commerce')}
+        h.textContent=t.join(' — ');p.appendChild(h);
+        var add=function(x){var n=document.createElement('div');n.textContent=x;p.appendChild(n)};
+        if(it.zone)add(it.zone);if(it.m2>0)add((it.m2>=100?Math.round(it.m2):it.m2)+' m²');if(it.note)add(it.note);
+        if(it.role==='slot'&&it.price!=null)add('Tarif : '+eur(it.price)+(it.price_pro!=null&&it.price_pro!==it.price?' (entreprise : '+eur(it.price_pro)+')':''));
+        if(it.role==='slot'&&it.state)add({free:'Emplacement libre',pending:'Demande en cours',taken:'Emplacement attribué'}[it.state]);
+        if(it.url){var a=document.createElement('a');a.href=it.url;a.target='_blank';a.rel='noopener';a.textContent=it.shop?'Boutique '+it.shop+' ↗':'Boutique ↗';a.style.display='block';p.appendChild(a)}
+        if(bookMode&&it.role==='slot'&&it.free){var bt=document.createElement('button');bt.type='button';bt.textContent='Demander cet emplacement';bt.style.cssText='margin-top:6px;padding:6px 10px;cursor:pointer;';bt.addEventListener('click',function(){openForm(it);map.closePopup()});p.appendChild(bt)}
+        return p}
+      function openForm(it){var f=document.getElementById('plan-form');f.style.display='grid';f.hidden=false;f.slot.value=it.id;
+        var nm=[it.num?'Emplacement '+it.num:'Emplacement',it.zone].filter(Boolean).join(' — ');document.getElementById('plan-form-title').textContent='Demande pour : '+nm;
+        function price(){var pr=f.kind.value==='entreprise'&&it.price_pro!=null?it.price_pro:it.price;document.getElementById('plan-form-price').textContent=pr!=null?'Tarif : '+eur(pr)+' ('+(f.kind.value==='entreprise'?'entreprise':'particulier')+')':'Tarif communiqué par l\'organisateur'}
+        function syncKind(){
+          var t=f.kind.value;
+          [].forEach.call(f.querySelectorAll('[data-ct]'),function(g){
+            var on=g.getAttribute('data-ct').split(' ').indexOf(t)>=0,need=on&&g.querySelector('.pf-req')!==null;
+            g.hidden=!on;
+            [].forEach.call(g.querySelectorAll('input,select,textarea'),function(i){
+              i.disabled=!on;
+              if(i.type!=='file')i.required=on&&(need?i.dataset.opt!=='1':i.dataset.req==='1');
+              if(!on&&i.type==='checkbox')i.checked=false;
+            });
+          });
+        }
+        f.kind.onchange=function(){syncKind();price()};syncKind();price();document.getElementById('plan-form-msg').textContent='';f.scrollIntoView({behavior:'smooth',block:'center'})}
+      function render(){layers.forEach(function(x){x.l.remove()});layers=[];var all=[];
+        d.items.forEach(function(it){
+          var l;
+          if(it.kind==='marker')l=L.marker(it.pts[0],{icon:L.divIcon({className:'',html:'<span style="display:block;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45),0 2px 5px rgba(0,0,0,.35);background:'+it.color+'"></span>',iconSize:[18,18],iconAnchor:[9,9]})});
+          else{l=it.kind==='polygon'?L.polygon(it.pts):L.polyline(it.pts,{color:it.color,weight:3});if(it.kind==='polygon')style(it,l)}
+          if(it.role==='zone'){var bd=l.getBounds(),sp=document.createElement('span');sp.style.cssText='display:inline-block;transform:translate(-50%,-100%);white-space:nowrap;font:700 11px/1.3 system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#222;background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.3);border-radius:4px;padding:2px 7px;pointer-events:none';sp.textContent=(it.ztype&&(it.label||'').toLowerCase().indexOf(it.ztype.toLowerCase())!==0?it.ztype+' · ':'')+(it.label||'');
+            var zl=L.marker([bd.getNorth(),bd.getCenter().lng],{icon:L.divIcon({className:'',html:sp,iconSize:[0,0]}),interactive:false,keyboard:false});layers.push({l:zl});zl.addTo(map)}
+          else{var tt=[it.num,it.label].filter(Boolean).join(' · ');if(tt){var t=document.createElement('span');t.textContent=tt;l.bindTooltip(t,it.kind==='marker'?{permanent:true,direction:'top',offset:[0,-10]}:{permanent:true,direction:'center'})}}
+          l.bindPopup(function(){return popup(it)});l.addTo(map);if(it.role==='zone'&&l.bringToBack)l.bringToBack();layers.push({l:l});all.push(l)});
+        return all}
+      b.addEventListener('click',function(){b.textContent='Chargement…';
+        Promise.all([load('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css','css'),load('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js','js')]).then(function(){
+          box.textContent='';
+          map=L.map(box,{scrollWheelZoom:false,maxZoom:22}).setView(d.center||[46.6,2.4],d.center?d.zoom:6);
+          if(d.base==='none'){box.style.background='linear-gradient(rgba(0,0,0,.06) 1px,transparent 1px) 0 0/40px 40px, linear-gradient(90deg,rgba(0,0,0,.06) 1px,transparent 1px) 0 0/40px 40px, #f6f3ec'}
+          else{var sat=d.base==='sat',tl=L.tileLayer(d.tiles[sat?'sat':'osm'],{maxZoom:22,maxNativeZoom:19,attribution:sat?'Imagerie © <a href="https://www.ign.fr" target="_blank" rel="noopener">IGN</a>':'Plan © <a href="https://www.ign.fr" target="_blank" rel="noopener">IGN</a>'});
+            tl.on('tileerror',function(){if(!map.hasLayer(tl))return;map.removeLayer(tl);
+              tl=sat?L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:22,maxNativeZoom:19,attribution:'Imagerie © Esri, Maxar, Earthstar Geographics'})
+                :L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{subdomains:'abcd',maxZoom:22,maxNativeZoom:20,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'});
+              tl.addTo(map)});
+            tl.addTo(map)}
+          L.control.scale({metric:true,imperial:false}).addTo(map);
+          var all=render();
+          if(!d.center&&all.length)map.fitBounds(L.featureGroup(all).getBounds().pad(.2));
+          var bk=document.getElementById('plan-book');
+          if(bk)bk.addEventListener('click',function(){bookMode=!bookMode;bk.textContent=bookMode?'Quitter le choix d\'emplacement':'Je suis exposant : choisir mon emplacement';document.getElementById('plan-legend').style.display=bookMode?'flex':'none';document.getElementById('plan-legend').hidden=!bookMode;
+            d.items.forEach(function(it,i){});render();if(bookMode)document.getElementById('plan-box').scrollIntoView({behavior:'smooth',block:'center'})});
+          var f=document.getElementById('plan-form');
+          if(f){f.addEventListener('submit',function(e){e.preventDefault();var m=document.getElementById('plan-form-msg'),fd=new FormData(f);fd.set('g',d.booking.slug);
+            m.textContent='Un instant…';fetch(d.booking.endpoint,{method:'POST',headers:{Accept:'application/json'},body:fd}).then(function(r){return r.json()})
+              .then(function(r){m.textContent=r.error||r.message;if(!r.error){d.items.forEach(function(it){if(it.id===fd.get('slot')){it.state='pending';it.free=false}});render();f.reset();if(f.kind.onchange)f.kind.onchange()}}).catch(function(){m.textContent='Envoi impossible, réessayez.'})});
+            document.getElementById('plan-form-cancel').addEventListener('click',function(){f.style.display='none';f.hidden=true})}
+        }).catch(function(){b.textContent='Le plan est indisponible pour le moment.'})});})();
+      </script>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($shops): ?>
     <?php
       // Promotions : les visuels promo (photo + encart CTA) des commerces membres ; chaque affichage et chaque clic est compté (monétisation de la mise en avant).
       $promoItems = array_slice(array_values(array_filter($data['products'], static fn (array $p): bool => ($p['promo_visual'] ?? '') !== '')), 0, 6);
@@ -427,8 +760,8 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           <?php if ($activeFilters): ?><br><a href="<?= e(gal_url(['q' => null, 'commerce' => null, 'cat' => null, 'min' => null, 'max' => null])) ?>#pieces">Tout effacer</a><?php endif; ?></p>
       <?php endif; ?>
     </section>
-    <?php else: ?>
-      <section><p class="empty">Cette galerie n'a pas encore de commerce.</p></section>
+    <?php elseif (!$planData && !$hasEventSection): ?>
+      <section><p class="empty"><?= e($vocab['empty'] ?? "Cette galerie n'a pas encore de commerce.") ?></p></section>
     <?php endif; ?>
   </main>
 <?php endif; ?>
@@ -449,8 +782,34 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 <a class="cta-float" href="<?= e($ctaUrl) ?>">Créer ma boutique</a>
 <?php endif; ?>
 
+<?php if ($slug !== '' && $gallery && $gallery['published']): ?>
+<section class="gal-news" style="max-width:640px;margin:40px auto 0;padding:0 16px;">
+  <h2 style="margin:0 0 6px;font-size:1.15rem;">Les nouveautés de la galerie</h2>
+  <p style="margin:0 0 10px;color:var(--ink-soft);font-size:.92rem;">Recevez un message de temps en temps quand de nouvelles pièces arrivent. Désinscription en un clic.</p>
+  <form id="gal-news" style="display:flex;gap:8px;flex-wrap:wrap;" autocomplete="off">
+    <input type="email" name="email" required maxlength="160" placeholder="Votre e-mail" aria-label="Votre e-mail" style="flex:1;min-width:200px;padding:10px;border:1px solid var(--line);background:var(--bg);color:inherit;font:inherit;">
+    <input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;" aria-hidden="true">
+    <button type="submit" class="btn-cta" style="border:0;cursor:pointer;">Je m'abonne</button>
+  </form>
+  <p id="gal-news-msg" role="status" style="margin:8px 0 0;font-size:.9rem;"></p>
+</section>
+<script>
+(function(){var f=document.getElementById('gal-news');if(!f)return;f.addEventListener('submit',function(e){e.preventDefault();var m=document.getElementById('gal-news-msg'),d=new URLSearchParams(new FormData(f));d.set('a','subscribe');d.set('g',<?= json_encode($slug) ?>);
+fetch('/galerie/contact.php',{method:'POST',headers:{Accept:'application/json'},body:d}).then(function(r){return r.json()}).then(function(r){m.textContent=r.error||r.message;if(!r.error)f.reset()}).catch(function(){m.textContent='Envoi impossible, réessayez.'})});})();
+</script>
+<?php endif; ?>
+
+<?php if ($slug === ''): ?>
+<section style="max-width:640px;margin:36px auto 0;padding:0 16px;text-align:center;">
+  <h2 style="margin:0 0 6px;font-size:1.2rem;">Vous voulez créer votre propre galerie ?</h2>
+  <p style="margin:0 0 12px;color:var(--ink-soft);">Test gratuit, puis abonnement selon le nombre de commerces.</p>
+  <a class="btn-cta" href="/galerie/creer.php">Créer ma galerie</a>
+</section>
+<?php endif; ?>
+
 <footer><div class="wrap">
   <?php if ($slug !== ''): ?><a href="/galerie/">← Toutes les galeries</a> · <?php endif; ?><?= e($st['footer_text'] !== '' && $slug !== '' ? $st['footer_text'] : 'Les pièces sont vendues et expédiées par les commerces eux-mêmes.') ?>
+  · <a href="/galerie/admin.php" rel="nofollow">Gérer ma galerie</a>
 </div></footer>
 </body>
 </html>

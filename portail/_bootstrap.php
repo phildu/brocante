@@ -16,6 +16,7 @@ $portailLocal = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], tr
 
 session_start();
 require_once __DIR__ . '/../includes/tenant.php';
+require_once __DIR__ . '/../includes/business-presence.php';
 require_once __DIR__ . '/../includes/seed.php';
 
 function e($s): string
@@ -137,13 +138,25 @@ function portail_account(): ?array
     return is_array($data) && !empty($data['user']) && !empty($data['password_hash']) ? $data : null;
 }
 
-if (!$portailLocal && empty($_SESSION['portail_user'])) {
+// Administrateur d'une galerie (connecté via /galerie/admin.php) : accès restreint à SA galerie, aux seules pages ci-dessous (voir includes/gallery-admin.php).
+// L'exploitant, connecté au portail, garde l'accès complet ; en local, une connexion d'administrateur de galerie fait passer en mode restreint.
+require_once __DIR__ . '/../includes/gallery-admin.php';
+const GA_PAGES = ['galeries.php', 'galerie-tableau.php', 'galerie-prospects.php', 'galerie-compte.php', 'galerie-offre.php', 'galerie-plan.php', 'galerie-exposants.php', 'galerie-exposant.php', 'galerie-cni.php', 'galerie-import.php', 'addons.php'];
+$portailLoginRoute = basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'login.php';
+if (!$portailLoginRoute && empty($_SESSION['portail_user']) && ($gaAdmin = ga_current())) {
+    $gaScript = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (!in_array($gaScript, GA_PAGES, true)) { header('Location: /portail/galerie-tableau.php'); exit; }
+    if ($gaAdmin['must_change'] && $gaScript !== 'galerie-compte.php') { header('Location: /portail/galerie-compte.php'); exit; }
+    if (isset($_REQUEST['g']) && in_array((string) $_REQUEST['g'], $gaAdmin['slugs'], true)) $_SESSION['gallery_admin']['slug'] = $gaAdmin['slug'] = (string) $_REQUEST['g'];
+    define('GA_LIMITED', $gaAdmin['slug']);
+} elseif (!$portailLoginRoute && !$portailLocal && empty($_SESSION['portail_user'])) {
     portail_login_page();
 }
 
 /** Page de connexion du portail en ligne (termine la requête). */
 function portail_login_page(): never
 {
+    $portailLoginRoute = basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'login.php';
     $account = portail_account();
     if (!$account) {
         http_response_code(403);
@@ -155,7 +168,8 @@ function portail_login_page(): never
         if ($userOk && password_verify((string) ($_POST['password'] ?? ''), $account['password_hash'])) {
             session_regenerate_id(true);
             $_SESSION['portail_user'] = $account['user'];
-            header('Location: ' . ($_SERVER['REQUEST_URI'] ?? '/portail/'));
+            $destination = $portailLoginRoute ? '/portail/' : ($_SERVER['REQUEST_URI'] ?? '/portail/');
+            header('Location: ' . $destination);
             exit;
         }
         sleep(1); // freine les essais en série
@@ -189,6 +203,7 @@ function portail_login_page(): never
     <div class="send-actions"><button class="btn btn-primary" type="submit">Se connecter</button></div>
   </form>
 </div>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>
 <?php
@@ -373,7 +388,9 @@ function portail_gemini_json(string $prompt): array
     if ($body === false || $status >= 400) {
         error_log('portail_gemini_json: HTTP ' . $status . ' ' . substr((string) $body, 0, 300));
         throw new RuntimeException($status === 429 ? "Le service d'IA est saturé, réessayez dans un instant."
-            : ($status === 400 || $status === 403 ? 'La clé Gemini est refusée : vérifiez-la.' : "Le service d'IA n'a pas répondu, réessayez."));
+            : ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))
+                ? "Crédits Google AI Studio épuisés : rechargez votre compte sur https://ai.studio/projects."
+                : ($status === 400 || $status === 403 ? 'La clé Gemini est refusée : vérifiez-la.' : "Le service d'IA n'a pas répondu, réessayez.")));
     }
     $text = (string) (json_decode($body, true)['candidates'][0]['content']['parts'][0]['text'] ?? '');
     $text = trim(preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)));
