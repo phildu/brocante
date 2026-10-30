@@ -160,6 +160,31 @@
 #sa-review { display: flex; flex-direction: column; gap: 12px; }
 #sa-review[hidden] { display: none; }
 
+/* Validation vocale de la fiche */
+.sa-voice { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--accent); background: var(--bg); }
+.sa-voice[hidden], .sa-voice-intro[hidden], .sa-voice-panel[hidden], .sa-voice-answers[hidden], .sa-voice-input[hidden], .sa-voice-summary[hidden], .sa-voice-bar [hidden] { display: none !important; }
+.sa-voice-intro { display: flex; flex-direction: column; gap: 8px; }
+.sa-voice-intro h3 { margin: 0; font-size: 1.1rem; }
+.sa-voice-intro .sa-actions { margin-top: 2px; }
+.sa-voice-panel { display: flex; flex-direction: column; gap: 10px; }
+.sa-voice-count { margin: 0; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.sa-voice-question { margin: 0; font-family: var(--font-display); font-size: 1.15rem; line-height: 1.35; }
+.sa-voice-hint { margin: 0; font-size: 0.84rem; color: var(--ink-soft); }
+.sa-voice-hint:empty, .sa-voice-heard:empty { display: none; }
+.sa-voice-heard { margin: 0; min-height: 1.3em; font-size: 0.84rem; color: var(--accent); }
+.sa-voice-answers { display: flex; flex-wrap: wrap; gap: 8px; }
+.sa-voice-answers .btn { flex: 0 1 auto; }
+.sa-voice-input { margin: 0; }
+.sa-voice-input-row { display: flex; gap: 8px; }
+.sa-voice-input-row input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 11px; font-family: var(--font-body); font-size: 16px; }
+.sa-voice-bar { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.sa-voice-bar .btn { flex: 0 1 auto; }
+.sa-voice-bar .btn.is-listening { border-color: var(--accent); color: var(--accent); }
+.sa-voice-summary { list-style: none; margin: 0; padding: 10px 12px; display: grid; gap: 4px; border: 1px solid var(--line); background: var(--surface); font-size: 0.84rem; }
+.sa-voice-summary li::before { content: "✓ "; color: var(--sage); }
+.sa-voice-summary li.is-note::before { content: "↻ "; color: var(--accent); }
+.sa-field textarea.is-flagged { border-color: var(--accent); }
+
 .sa-audio-status { margin: 0; font-size: 0.78rem; color: var(--ink-soft); min-height: 1.2em; }
 .sa-audio-status:empty { display: none; }
 

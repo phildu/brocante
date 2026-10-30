@@ -7,7 +7,7 @@
 // « reconstitué ». Les événements qu'on ne peut pas reconstituer (résiliations, renouvellements, réglages, créations et suppressions manuelles)
 // n'existent que depuis le journal.
 //
-// Types : clé → [libellé, groupe, gravité]. Groupes : inscription, paiement, boutique, suppression, reglage, note.
+// Types : clé → [libellé, groupe, gravité]. Groupes : inscription, paiement, boutique, suppression, reglage, note, equipe.
 
 require_once __DIR__ . '/saas.php';
 
@@ -40,11 +40,18 @@ const SAAS_EVENT_TYPES = [
     'config_changed'        => ['Réglage modifié', 'reglage', 'info'],
     'webhook'               => ['Webhook Stripe reçu', 'reglage', 'info'],
     'note'                  => ['Note', 'note', 'info'],
+    'team_application'      => ['Candidature équipe reçue', 'equipe', 'info'],
+    'team_member_added'     => ['Membre de l\'équipe ajouté', 'equipe', 'ok'],
+    'team_application_accept' => ['Candidature équipe acceptée', 'equipe', 'ok'],
+    'team_application_refuse' => ['Candidature équipe refusée', 'equipe', 'warn'],
+    'team_partner_conditions' => ['Conditions partenaire mises à jour', 'equipe', 'info'],
+    'team_invitation'       => ['Lien d\'inscription à l\'équipe créé', 'equipe', 'info'],
+    'team_import'           => ['Contacts importés dans l\'équipe', 'equipe', 'ok'],
 ];
 
 const SAAS_EVENT_GROUPS = [
     'inscription' => 'Inscriptions', 'paiement' => 'Paiements', 'boutique' => 'Boutiques', 'suppression' => 'Suppressions et résiliations',
-    'reglage' => 'Réglages et système', 'note' => 'Notes',
+    'reglage' => 'Réglages et système', 'note' => 'Notes', 'equipe' => 'Équipe',
 ];
 
 function saas_events_file(): string

@@ -92,7 +92,7 @@ $ownerEmail = static function (string $kind, string $slug) use ($galleries): str
 <title>Commissions — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
   .gwrap { display: grid; gap: 16px; max-width: 1040px; margin: 0 auto; padding: 0 16px 48px; }
   .gcard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; } .gcard h2 { margin: 0; font-size: 1.05rem; } .gcard h3 { margin: 6px 0 0; font-size: .95rem; }

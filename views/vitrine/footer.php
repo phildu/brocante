@@ -40,6 +40,7 @@ $fc = get_content();
         <?php if (!empty($_GET['inscrit'])): ?><p class="form-note">Inscription enregistrée — merci !</p><?php endif; ?>
       </div>
     </div>
+    <?php if (($footerNote = shop_footer_note()) !== ''): ?><p class="footer-note"><?= h($footerNote) ?></p><?php endif; ?>
     <div class="vt-foot-bottom">
       <span>© <?= date('Y') ?> <?= h($siteName ?? tenant('name')) ?></span>
       <?= share_button_html(shop_abs_url('/'), (string) ($siteName ?? tenant('name')), (string) ($siteTagline ?? ''), '', 'share-link') ?>

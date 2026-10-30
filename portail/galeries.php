@@ -6,6 +6,7 @@ require_once PORTAIL_ROOT . '/includes/saas-events.php';
 require_once PORTAIL_ROOT . '/includes/galleries.php';
 require_once PORTAIL_ROOT . '/includes/gallery-admin.php';
 require_once PORTAIL_ROOT . '/includes/gallery-offers.php';
+require_once PORTAIL_ROOT . '/includes/banner-ai.php';
 
 // Mode restreint : administrateur d'une galerie (voir _bootstrap.php) — sa galerie seulement, ni création ni suppression, pas de gestion des comptes.
 $limited = defined('GA_LIMITED') ? GA_LIMITED : null;
@@ -148,34 +149,140 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'default_sort', 'dark_mode', 'cta_label', 'shops_title', 'shops_lede', 'pieces_title', 'footer_text'] as $k) {
                 if (isset($_POST[$k])) $new[$k] = $_POST[$k];
             }
+            $new['banner_slideshow'] = !empty($_POST['banner_slideshow']);
             // Les couleurs de fond, de texte et d'en-tête ne sont enregistrées que si leur case « personnaliser » est cochée (sinon : teintes d'origine).
             foreach (['bg' => 'use_bg', 'ink' => 'use_ink', 'hero_color' => 'use_hero'] as $k => $flag) if (empty($_POST[$flag])) $new[$k] = '';
             $new['show_stats'] = !empty($_POST['show_stats']);
             $new['show_cta'] = !empty($_POST['show_cta']);
-            $errors = [];
-            foreach (['banner' => [2000, 'banner'], 'logo' => [500, 'logo']] as $field => [$maxW, $kind]) {
-                if (!empty($_POST['remove_' . $field])) { gallery_image_delete($old[$field]); $new[$field] = ''; }
-                $file = $_FILES[$field] ?? null;
-                if ($file && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
-                    try {
-                        $path = gallery_image_store($file, $slug, $kind, $maxW);
-                        if ($old[$field] !== '' && $old[$field] !== $new[$field]) gallery_image_delete($old[$field]);
-                        elseif ($new[$field] !== '') gallery_image_delete($new[$field]);
-                        $new[$field] = $path;
-                    } catch (InvalidArgumentException $ex) {
-                        $errors[] = ($field === 'banner' ? 'Bannière' : 'Logo') . ' : ' . $ex->getMessage();
+            $errors = $added = [];
+            // Bannières : image principale, suppression par position, choix dans la médiathèque, puis fichiers envoyés.
+            $banners = gallery_banner_images($old);
+            $mainPath = $banners[max(0, (int) ($_POST['banner_main'] ?? 0))] ?? '';
+            $remove = array_map('intval', (array) ($_POST['remove_banners'] ?? []));
+            if (!empty($_POST['remove_banner']) && $banners) { gallery_image_delete(array_shift($banners)); }
+            foreach ($banners as $i => $path) {
+                if (!in_array($i, $remove, true)) continue;
+                gallery_image_delete($path);
+                unset($banners[$i]);
+            }
+            $banners = array_values($banners);
+            if ($mainPath !== '' && in_array($mainPath, $banners, true)) {
+                $banners = array_values(array_diff($banners, [$mainPath]));
+                array_unshift($banners, $mainPath);
+            }
+            $libraryPick = trim((string) ($_POST['library_banner'] ?? ''));
+            if ($libraryPick !== '') {
+                $item = banner_library_find($libraryPick);
+                $libAbs = banner_library_abs($libraryPick);
+                $same = false;
+                if ($libAbs !== null) {
+                    foreach ($banners as $existing) {
+                        $existingAbs = dirname(__DIR__) . '/' . $existing;
+                        if (is_file($existingAbs) && md5_file($existingAbs) === md5_file($libAbs)) { $same = true; break; }
                     }
+                }
+                if ($item === null || $libAbs === null || !empty($item['exclusive'])) {
+                    $errors[] = 'Bandeau de la médiathèque introuvable ou réservé à un commerce.';
+                } elseif ($same) {
+                    $errors[] = 'Ce bandeau de la médiathèque est déjà utilisé par la galerie.';
+                } elseif (count($banners) >= 6) {
+                    $errors[] = 'Six images au maximum : retirez-en une avant d’ajouter un bandeau de la médiathèque.';
+                } else {
+                    try {
+                        $path = banner_ai_adopt_library($libraryPick, $slug);
+                        $banners = array_values(array_diff($banners, [$path]));
+                        array_unshift($banners, $path);
+                        $added[] = $path;
+                    } catch (Throwable $ex) {
+                        $errors[] = 'Bandeau de la médiathèque : ' . $ex->getMessage();
+                    }
+                }
+            }
+            $uploaded = static function (array $files, int $i): ?array {
+                if ((int) ($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+                return ['error' => $files['error'][$i], 'tmp_name' => $files['tmp_name'][$i], 'size' => $files['size'][$i]];
+            };
+            $files = $_FILES['banners'] ?? null;
+            if (is_array($files) && is_array($files['name'] ?? null)) {
+                for ($i = 0; $i < count($files['name']) && count($banners) < 6; $i++) {
+                    $file = $uploaded($files, $i);
+                    if (!$file) continue;
+                    try {
+                        $path = gallery_image_store($file, $slug, 'banner', 2000);
+                        $banners[] = $path;
+                        $added[] = $path;
+                    } catch (InvalidArgumentException $ex) {
+                        $errors[] = 'Bannière : ' . $ex->getMessage();
+                    }
+                }
+            }
+            if (isset($_FILES['banner']) && ($_FILES['banner']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE && count($banners) < 6) {
+                try {
+                    $path = gallery_image_store($_FILES['banner'], $slug, 'banner', 2000);
+                    $banners[] = $path;
+                    $added[] = $path;
+                } catch (InvalidArgumentException $ex) {
+                    $errors[] = 'Bannière : ' . $ex->getMessage();
+                }
+            }
+            $new['banners'] = array_slice($banners, 0, 6);
+            $new['banner'] = $new['banners'][0] ?? '';
+            if (!empty($_POST['remove_logo'])) { gallery_image_delete((string) $old['logo']); $new['logo'] = ''; }
+            $file = $_FILES['logo'] ?? null;
+            if ($file && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                try {
+                    $path = gallery_image_store($file, $slug, 'logo', 500);
+                    if ($old['logo'] !== '') gallery_image_delete((string) $old['logo']);
+                    $new['logo'] = $path;
+                    $added[] = $path;
+                } catch (InvalidArgumentException $ex) {
+                    $errors[] = 'Logo : ' . $ex->getMessage();
                 }
             }
             $gallery['accent'] = (string) ($_POST['accent'] ?? $gallery['accent']);
             $gallery['style'] = $new;
             $ok = gallery_save($gallery);
+            if (!$ok) foreach ($added as $path) gallery_image_delete($path);
             portail_flash($errors ? implode(' ', $errors) . ($ok ? ' Le reste est enregistré.' : '') : ($ok ? "Apparence enregistrée : elle s'applique à la page publique." : "Impossible d'écrire la galerie (droits du dossier data/galeries)."), $errors || !$ok ? 'error' : 'ok');
+            break;
+
+        case 'banner_ai':
+            if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            $banners = gallery_banner_images($gallery['style']);
+            $room = 6 - count($banners);
+            if ($room <= 0) { portail_flash('Six images au maximum : retirez-en une pour en générer une autre.', 'error'); break; }
+            $count = min($room, max(1, min(3, (int) ($_POST['count'] ?? 1))));
+            $hint = trim((string) ($_POST['hint'] ?? ''));
+            $subject = 'la galerie « ' . $gallery['name'] . ' »'
+                . ($gallery['tagline'] !== '' ? '. ' . $gallery['tagline'] : '')
+                . ($gallery['description'] !== '' ? '. ' . mb_substr($gallery['description'], 0, 180) : '')
+                . '. ' . gt_of($gallery)['name'] . ' convivial en France';
+            $prompts = [];
+            for ($i = 0; $i < $count; $i++) $prompts[] = banner_ai_prompt($subject . ($i > 0 ? ' (variation ' . ($i + 1) . ', composition différente)' : ''), $hint);
+            try {
+                $images = banner_ai_generate_many($prompts);
+                banner_ai_usage_log('galerie', $slug, count($images));
+                $paths = [];
+                foreach ($images as $bytes) {
+                    $path = banner_ai_save($bytes, 'uploads/galeries', $slug . '-banner', 2000);
+                    $paths[] = $path;
+                    banner_library_store(dirname(__DIR__) . '/' . $path, $hint !== '' ? $hint : $subject, 'galerie', 'galeries');
+                }
+                $gallery['style']['banners'] = array_slice(array_merge($banners, $paths), 0, 6);
+                $gallery['style']['banner'] = $gallery['style']['banners'][0];
+                if (!gallery_save($gallery)) {
+                    foreach ($paths as $path) gallery_image_delete($path);
+                    throw new RuntimeException("Impossible d'écrire la galerie (droits du dossier data/galeries).");
+                }
+                portail_flash(count($paths) . ' image' . (count($paths) > 1 ? 's' : '') . " générée" . (count($paths) > 1 ? 's' : '') . " par l'IA : elles rejoignent aussi la médiathèque commune, réutilisable par les autres galeries et boutiques. Choisissez l'image principale dans l'apparence.");
+            } catch (Throwable $ex) {
+                portail_flash($ex->getMessage(), 'error');
+            }
             break;
 
         case 'style_reset':
             if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
-            foreach (['banner', 'logo'] as $f) gallery_image_delete($gallery['style'][$f]);
+            foreach (array_merge(gallery_banner_images($gallery['style']), [(string) ($gallery['style']['logo'] ?? '')]) as $f) gallery_image_delete($f);
             $gallery['style'] = gallery_style_normalize([]);
             $gallery['accent'] = '#b5502e';
             gallery_save($gallery);
@@ -264,27 +371,25 @@ $confirmDelete = !$limited && $edit && ($_GET['supprimer'] ?? '') === '1';
 <title>Galeries commerciales — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
-  .gwrap { display: grid; gap: 16px; max-width: 920px; margin: 0 auto; padding: 0 16px 48px; }
-  .gcard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
-  .gcard h2 { margin: 0; font-size: 1.05rem; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .gcard input[type=text], .gcard input[type=url], .gcard textarea, .gcard input[type=search] { flex: 1; min-width: 200px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; font: inherit; }
-  .gcard textarea { width: 100%; min-height: 76px; }
-  .gcard label.f { display: grid; gap: 4px; font-size: .8rem; font-weight: 600; flex: 1; min-width: 200px; }
   .member { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
   .member .name { flex: 1; } .member small { opacity: .7; }
   .swatch-in { width: 44px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
-  .gl { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .gl { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
   .gl:first-child { border-top: 0; }
+  .gl > div { min-width: 0; }
+  .gl .pill { white-space: nowrap; }
+  @media (max-width: 560px) { .gl > .row { width: 100%; } }
   .style-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; } @media (max-width: 900px) { .style-layout { grid-template-columns: 1fr; } }
   .style-fields fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 0 0 12px; display: grid; gap: 10px; min-width: 0; } .style-fields legend { font-weight: 700; padding: 0 6px; }
-  .style-fields select, .style-fields input[type=file] { padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; font: inherit; width: 100%; max-width: 100%; }
+  .style-fields select, .style-fields input[type=file] { padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: inherit; font: inherit; width: 100%; max-width: 100%; }
   .style-fields label.sw { flex: none; min-width: 0; } .presets { display: flex; flex-wrap: wrap; gap: 6px; }
   .preset { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 4px 8px 4px 5px; cursor: pointer; font: inherit; font-size: .78rem; color: inherit; }
   .preset i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); display: inline-block; } .preset:hover { border-color: var(--accent); }
   .thumb { width: 84px; height: 48px; border-radius: 6px; border: 1px solid var(--line); background-size: cover; background-position: center; display: inline-block; } .thumb.logo { background-size: contain; background-repeat: no-repeat; background-color: #fff; }
+  .shots { display: flex; flex-wrap: wrap; gap: 10px; } .shots label { display: grid; gap: 3px; font-size: .76rem; }
+  .shots .thumb { width: 132px; height: 74px; } .shots .first .thumb { outline: 2px solid var(--accent); outline-offset: 1px; }
   .style-preview { position: sticky; top: 12px; } .pv { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--f-body, inherit); }
   .pv-hero { position: relative; background: var(--hero-bg); color: var(--hero-ink); padding: 22px 16px; overflow: hidden; } .pv-hero.h-compact { padding: 12px 16px; } .pv-hero.h-tall { padding: 44px 16px 24px; }
   .pv-media, .pv-shade { position: absolute; inset: 0; background-size: cover; } .pv-in { position: relative; } .pv-hero.a-center { text-align: center; } .pv-hero.a-center .pv-in img { margin-inline: auto; }
@@ -292,7 +397,7 @@ $confirmDelete = !$limited && $edit && ($_GET['supprimer'] ?? '') === '1';
   .pv-in h3 { margin: 0; font-family: var(--f-display, inherit); font-size: 1.4rem; line-height: 1.05; color: inherit; } .pv-tag { margin: 6px 0 10px; font-size: .78rem; opacity: .92; }
   .pv-btn { display: inline-block; background: var(--hero-ink); color: var(--hero-bg); font-weight: 700; font-size: .72rem; padding: 6px 10px; border-radius: var(--r); } .pv-btn[hidden] { display: none; }
   .pv-body { padding: 12px 14px 14px; } .pv-h { margin: 0 0 8px; font-family: var(--f-display, inherit); font-weight: 700; } .pv-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; } .pv-cards i { aspect-ratio: 4 / 5; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
-  code.url { font-family: 'IBM Plex Mono', monospace; font-size: .82rem; word-break: break-all; }
+  code.url { font-family: 'IBM Plex Mono', monospace; font-size: .82rem; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -323,7 +428,7 @@ portail_page_start([
 ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
-  <div class="gwrap">
+  <div class="gwrap ga-page">
   <?php if (!$edit): ?>
     <section class="gcard">
       <h2>Mes galeries</h2>
@@ -469,6 +574,16 @@ portail_page_start([
       foreach (APPEARANCE_FONTS as $role => $list) foreach ($list as $name => [$param]) $fontUrls[$name] = 'https://fonts.googleapis.com/css2?family=' . $param . '&display=swap';
       $sel = static fn (string $key, string $value): string => implode('', array_map(static fn ($k, $l) => '<option value="' . e((string) $k) . '"' . ((string) $k === $value ? ' selected' : '') . '>' . e($l) . '</option>', array_keys(GALLERY_STYLE_CHOICES[$key]), GALLERY_STYLE_CHOICES[$key]));
       $fontSel = static fn (string $role, string $value): string => '<option value="">Par défaut</option>' . implode('', array_map(static fn ($n, $f) => '<option value="' . e($n) . '"' . ($n === $value ? ' selected' : '') . '>' . e($n) . ' — ' . e($f[2]) . '</option>', array_keys(APPEARANCE_FONTS[$role]), APPEARANCE_FONTS[$role]));
+      // Médiathèque commune : bandeaux partagés non réservés et pas déjà présents dans cette galerie.
+      $usedHashes = [];
+      foreach (gallery_banner_images($st) as $usedPath) { $usedAbs = dirname(__DIR__) . '/' . $usedPath; if (is_file($usedAbs)) $usedHashes[md5_file($usedAbs)] = true; }
+      $libraryBanners = [];
+      foreach (array_slice(banner_library_list(), 0, 12) as $item) {
+          if (!empty($item['exclusive'])) continue;
+          $itemAbs = banner_library_dir() . '/' . (string) $item['file'];
+          if (!is_file($itemAbs) || isset($usedHashes[md5_file($itemAbs)])) continue;
+          $libraryBanners[] = $item;
+      }
     ?>
     <form class="gcard" method="post" enctype="multipart/form-data" autocomplete="off" id="style-form">
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="style"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
@@ -490,17 +605,41 @@ portail_page_start([
             <p class="meta">Cases décochées : les teintes d'origine (fond crème, texte brun) sont gardées ; l'en-tête reprend la couleur principale. Les nuances intermédiaires et le thème sombre sont calculés.</p>
           </fieldset>
 
-          <fieldset><legend>Bannière et logo</legend>
-            <div class="row"><label class="f">Image de bannière <small>(JPEG, PNG ou WebP, 12 Mo max, large de préférence)</small><input type="file" name="banner" accept="image/jpeg,image/png,image/webp"></label>
-              <?php if ($st['banner'] !== ''): ?><span class="thumb" style="background-image:url('/<?= e($st['banner']) ?>')"></span><label><input type="checkbox" name="remove_banner" value="1"> Retirer</label><?php endif; ?></div>
+          <fieldset><legend>Bannières et logo</legend>
+            <p class="meta">Jusqu'à six images, affichées en fondu enchaîné. La première sert d'image de partage sur les réseaux sociaux.</p>
+            <?php $banners = gallery_banner_images($st); ?>
+            <?php if ($banners): ?>
+              <div class="shots">
+                <?php foreach ($banners as $i => $path): ?>
+                  <label class="<?= $i === 0 ? 'first' : '' ?>"><span class="thumb" style="background-image:url('/<?= e($path) ?>')"></span>
+                    <span><input type="radio" name="banner_main" value="<?= (int) $i ?>"<?= $i === 0 ? ' checked' : '' ?>> Image principale</span>
+                    <span><input type="checkbox" name="remove_banners[]" value="<?= (int) $i ?>"> Retirer<?= $i === 0 ? ' (1re)' : '' ?></span></label>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
+            <div class="row"><label class="f">Ajouter des images <small>(JPEG, PNG ou WebP, 12 Mo max chacune, large de préférence)</small><input type="file" name="banners[]" accept="image/jpeg,image/png,image/webp" multiple></label></div>
             <div class="row">
               <label class="f">Assombrissement <output id="ov-out"><?= (int) $st['banner_overlay'] ?> %</output><input type="range" name="banner_overlay" min="0" max="80" step="5" value="<?= (int) $st['banner_overlay'] ?>"></label>
               <label class="f">Cadrage<select name="banner_pos"><?= $sel('banner_pos', $st['banner_pos']) ?></select></label>
               <label class="f">Hauteur<select name="hero_height"><?= $sel('hero_height', $st['hero_height']) ?></select></label>
-              <label class="f">Alignement<select name="hero_align"><?= $sel('hero_align', $st['hero_align']) ?></select></label></div>
+              <label class="f">Alignement<select name="hero_align"><?= $sel('hero_align', $st['hero_align']) ?></select></label>
+              <label class="row" style="gap:6px;align-self:end;"><input type="checkbox" name="banner_slideshow" value="1"<?= $st['banner_slideshow'] ? ' checked' : '' ?>> Diaporama automatique</label></div>
             <div class="row"><label class="f">Logo <small>(PNG transparent conseillé)</small><input type="file" name="logo" accept="image/png,image/jpeg,image/webp"></label>
               <?php if ($st['logo'] !== ''): ?><span class="thumb logo" style="background-image:url('/<?= e($st['logo']) ?>')"></span><label><input type="checkbox" name="remove_logo" value="1"> Retirer</label><?php endif; ?></div>
           </fieldset>
+
+          <?php if ($libraryBanners): ?>
+          <fieldset><legend>Médiathèque de bandeaux</legend>
+            <p class="meta">Images déjà générées par l'IA pour la plateforme, réutilisables sans nouveau crédit. En choisir une l'ajoute à cette galerie (une copie propre) et en fait l'image principale ; elle reste proposée aux autres galeries et boutiques.</p>
+            <div class="shots library">
+              <?php foreach ($libraryBanners as $item): ?>
+                <label class="pick"><span class="thumb" style="background-image:url('/uploads/banner-library/<?= e((string) $item['file']) ?>')"></span>
+                  <span><input type="radio" name="library_banner" value="<?= e((string) $item['file']) ?>"> Utiliser</span></label>
+              <?php endforeach; ?>
+            </div>
+            <p class="meta"><label><input type="radio" name="library_banner" value="" checked> Garder les bannières actuelles</label></p>
+          </fieldset>
+          <?php endif; ?>
 
           <fieldset><legend>Polices</legend>
             <div class="row"><label class="f">Titres<select name="font_display"><?= $fontSel('display', $st['font_display']) ?></select></label>
@@ -553,7 +692,7 @@ portail_page_start([
       function render() {
         var accent = val('accent').value, useBg = val('use_bg').checked, useInk = val('use_ink').checked, useHero = val('use_hero').checked;
         var bg = useBg ? val('bg').value : '#f7f3ec', ink = useInk ? val('ink').value : '#221f1a', hero = useHero ? val('hero_color').value : accent;
-        var banner = val('remove_banner') && val('remove_banner').checked ? '' : (val('banner').files[0] ? URL.createObjectURL(val('banner').files[0]) : current.banner);
+        var banner = val('banners') && val('banners').files[0] ? URL.createObjectURL(val('banners').files[0]) : current.banner;
         var logo = val('remove_logo') && val('remove_logo').checked ? '' : (val('logo').files[0] ? URL.createObjectURL(val('logo').files[0]) : current.logo);
         var s = pv.style;
         s.setProperty('--bg', bg); s.setProperty('--ink', ink); s.setProperty('--accent', accent); s.setProperty('--accent-ink', on(accent));
@@ -581,6 +720,21 @@ portail_page_start([
       render();
     })();
     </script>
+
+    <?php if (!$limited): $bannerAiOk = banner_ai_available(); ?>
+    <section class="gcard">
+      <h2>Bannière par l'IA</h2>
+      <p class="meta">L'IA ajoute une image panoramique 16:9 à la fin des bannières (six au maximum), que vous pouvez retirer dans l'apparence. Coût estimé ≈ <?= e(ai_format_eur(ai_eur(AI_PRICING_DEFAULTS['image']))) ?> par image, sur la clé Gemini de la plateforme.</p>
+      <?php if (!$bannerAiOk): ?><p class="flash" data-kind="error" role="status">Génération indisponible : activez le fournisseur d'images Gemini et vérifiez sa clé dans <a href="/portail/ia-fournisseurs.php">Fournisseurs IA</a>.</p><?php endif; ?>
+      <?= banner_ai_usage_html() ?>
+      <form method="post" class="row" autocomplete="off">
+        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="banner_ai"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
+        <label class="f">Ambiance souhaitée (facultatif)<input type="text" name="hint" maxlength="200" placeholder="ex. allée d'étals colorés au soleil"></label>
+        <label class="f" style="flex:none;min-width:130px;">Images<select name="count"><?php foreach ([1, 2, 3] as $n): ?><option value="<?= $n ?>"><?= $n ?> image<?= $n > 1 ? 's' : '' ?></option><?php endforeach; ?></select></label>
+        <button class="btn btn-primary" type="submit"<?= $bannerAiOk ? '' : ' disabled' ?>>Générer avec l'IA</button>
+      </form>
+    </section>
+    <?php endif; ?>
 
     <form class="gcard" method="post" autocomplete="off">
       <h2>Ajouter un <?= e(gt_word($g, 'member')) ?> d'ailleurs</h2>

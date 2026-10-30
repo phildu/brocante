@@ -12,12 +12,13 @@
 const ACCOUNT_ROLES = [
     'admin' => 'Administrateur',
     'community_manager' => 'Community manager',
+    'photographe' => 'Photographe',
     'client' => 'Client',
     'prospect' => 'Prospect',
 ];
 
 /** Rôles qui se connectent à l'administration (les autres sont des contacts, sans accès). */
-const ACCOUNT_STAFF_ROLES = ['admin', 'community_manager'];
+const ACCOUNT_STAFF_ROLES = ['admin', 'community_manager', 'photographe'];
 
 const ACCOUNT_SOURCES = ['manuel' => 'Ajouté à la main', 'commande' => 'Commande', 'newsletter' => 'Newsletter', 'connexion' => 'Connexion sociale', 'import' => 'Import (fichier ou CRM)', 'inscription' => 'Inscription client'];
 
@@ -142,17 +143,34 @@ const ACCOUNT_COMMUNITY_MANAGER_PAGES = [
     'plugin.php', 'plugin-api.php', // plugins : chaque page et route vérifie ensuite les rôles de son manifeste (includes/plugins.php)
 ];
 
+/**
+ * Pages d'un photographe : le shooting du lieu et son propre profil. Ses photos
+ * partent en validation ; il n'a aucun écran de mise en ligne, de catalogue ni
+ * de réglages. Toute autre page reste réservée aux administrateurs.
+ */
+const ACCOUNT_PHOTOGRAPHER_PAGES = [
+    'shop-shooting.php', 'shop-shooting-action.php',
+    'profile.php', 'profile-action.php',
+];
+
 function admin_role_can_access(string $role, string $script): bool
 {
     if ($role === 'admin') {
         return true;
     }
-    return $role === 'community_manager' && in_array(basename($script), ACCOUNT_COMMUNITY_MANAGER_PAGES, true);
+    $page = basename($script);
+    if ($role === 'photographe') {
+        return in_array($page, ACCOUNT_PHOTOGRAPHER_PAGES, true);
+    }
+    return $role === 'community_manager' && in_array($page, ACCOUNT_COMMUNITY_MANAGER_PAGES, true);
 }
 
 /** Première page d'administration ouverte à ce rôle (page d'arrivée après connexion). */
 function admin_home_for_role(string $role): string
 {
+    if ($role === 'photographe') {
+        return '/admin/shop-shooting.php';
+    }
     return $role === 'community_manager' ? '/admin/media.php' : '/admin/dashboard.php';
 }
 
@@ -172,7 +190,11 @@ function account_find_by_email(string $email): ?array
     return $stmt->fetch() ?: null;
 }
 
-/** Compte de l'équipe actif correspondant à un identifiant de connexion (e-mail ou identifiant). */
+/**
+ * Compte de l'équipe actif correspondant à un identifiant de connexion :
+ * e-mail, identifiant ou nom. Le nom n'est accepté que s'il désigne un seul
+ * compte (sinon deux homonymes ouvriraient le compte de l'autre).
+ */
 function account_staff_by_login(string $login): ?array
 {
     $login = trim($login);
@@ -180,15 +202,22 @@ function account_staff_by_login(string $login): ?array
         return null;
     }
     $stmt = db()->prepare("SELECT * FROM accounts WHERE (email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE)
-        AND role IN ('admin', 'community_manager') AND is_active = 1 AND password_hash IS NOT NULL LIMIT 1");
+        AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND password_hash IS NOT NULL LIMIT 1");
     $stmt->execute([$login, $login]);
-    return $stmt->fetch() ?: null;
+    if ($row = $stmt->fetch()) {
+        return $row;
+    }
+    $byName = db()->prepare("SELECT * FROM accounts WHERE name = ? COLLATE NOCASE AND name != ''
+        AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND password_hash IS NOT NULL LIMIT 2");
+    $byName->execute([$login]);
+    $rows = $byName->fetchAll();
+    return count($rows) === 1 ? $rows[0] : null;
 }
 
 /** Compte de l'équipe actif portant cette adresse e-mail, avec ou sans mot de passe (connexion par un réseau social : l'adresse vérifiée suffit). */
 function account_staff_by_email(string $email): ?array
 {
-    $stmt = db()->prepare("SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND role IN ('admin', 'community_manager') AND is_active = 1 LIMIT 1");
+    $stmt = db()->prepare("SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 LIMIT 1");
     $stmt->execute([trim($email)]);
     return $stmt->fetch() ?: null;
 }
@@ -226,7 +255,7 @@ function accounts_list(?string $role = null, string $search = ''): array
         (SELECT COUNT(*) FROM orders o WHERE o.status = 'paid' AND o.email = a.email COLLATE NOCASE) AS orders_count,
         (SELECT COALESCE(SUM(o.amount_total), 0) FROM orders o WHERE o.status = 'paid' AND o.email = a.email COLLATE NOCASE) AS orders_total
         FROM accounts a" . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-        . " ORDER BY CASE a.role WHEN 'admin' THEN 0 WHEN 'community_manager' THEN 1 WHEN 'client' THEN 2 ELSE 3 END, a.name COLLATE NOCASE, a.email COLLATE NOCASE";
+        . " ORDER BY CASE a.role WHEN 'admin' THEN 0 WHEN 'community_manager' THEN 1 WHEN 'photographe' THEN 2 WHEN 'client' THEN 3 ELSE 4 END, a.name COLLATE NOCASE, a.email COLLATE NOCASE";
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetchAll();

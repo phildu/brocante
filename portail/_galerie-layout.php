@@ -16,13 +16,18 @@ if (!$gaGallery) {
 $gaOrigin = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
 /** Début de page (jusqu'à la barre de navigation). */
-function ga_head(string $title): void
+function ga_head(string $title, string $actions = ''): void
 {
-    global $gaGallery, $limited;
+    global $gaGallery, $gaSlug, $gaOrigin, $limited;
     $flash = portail_flash();
     ob_start();
     include __DIR__ . '/_galerie-nav.php';
     $gaNav = (string) ob_get_clean();
+    $publicUrl = $gaOrigin . '/galerie/' . rawurlencode((string) $gaSlug) . '/';
+    $gaActions = '';
+    if (!$limited) $gaActions .= '<a class="btn" href="/portail/galeries.php">← Galeries</a>';
+    $gaActions .= '<a class="btn" href="' . e($publicUrl) . '" target="_blank" rel="noopener">Voir la galerie ↗</a>';
+    $gaActions .= $actions;
     ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -32,20 +37,7 @@ function ga_head(string $title): void
 <title><?= e($title) ?> — <?= e($gaGallery['name']) ?></title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
-<style>
-  .gwrap { display: grid; gap: 16px; max-width: 980px; margin: 0 auto; padding: 0 16px 48px; }
-  .gcard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
-  .gcard h2 { margin: 0; font-size: 1.05rem; } .gcard h3 { margin: 6px 0 0; font-size: .95rem; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .gcard input[type=text], .gcard input[type=email], .gcard input[type=password], .gcard textarea, .gcard select { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; font: inherit; }
-  .gcard textarea { width: 100%; min-height: 120px; }
-  .gcard label.f { display: grid; gap: 4px; font-size: .8rem; font-weight: 600; flex: 1; min-width: 180px; }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-  .kpi { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel); } .kpi b { display: block; font-size: 1.5rem; } .kpi span { font-size: .78rem; opacity: .75; }
-  table.t { width: 100%; border-collapse: collapse; font-size: .9rem; } table.t th, table.t td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } table.t th { font-size: .75rem; opacity: .7; }
-  .num { text-align: right !important; } .chart svg { width: 100%; height: auto; display: block; color: var(--accent, #b5502e); }
-</style>
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 </head>
 <body>
 <div class="app">
@@ -54,11 +46,12 @@ function ga_head(string $title): void
     'eyebrow' => $gaGallery['name'],
     'section' => $limited ? 'Galerie' : 'Boutiques',
     'desc' => $limited ? 'Espace d’administration de votre galerie.' : 'Administration de la galerie et de ses exposants.',
+    'actions' => $gaActions,
     'nav_html' => $limited ? $gaNav : '',
     'tabs' => $limited ? null : $gaNav,
 ]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
-  <div class="gwrap">
+  <div class="gwrap ga-page">
 <?php
 }
 

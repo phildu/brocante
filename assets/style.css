@@ -1243,6 +1243,25 @@
     font-family: var(--font-mono);
   }
 
+  .footer-note {
+    margin: 24px 0 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+
+  /* Annonce d'horaires / fermeture, en haut de toutes les pages publiques. */
+  .shop-notice { border-bottom: 1px solid var(--line); background: var(--surface); font-size: 0.86rem; }
+  .shop-notice .wrap { display: flex; align-items: center; gap: 12px; padding: 10px 20px; }
+  .shop-notice p { margin: 0; flex: 1; }
+  .shop-notice-warning { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .shop-notice-close {
+    border: 0; background: transparent; color: inherit; cursor: pointer;
+    font-size: 1.1rem; line-height: 1; padding: 2px 4px; opacity: 0.7;
+  }
+  .shop-notice-close:hover, .shop-notice-close:focus-visible { opacity: 1; }
+
   .is-hidden { display: none !important; }
 
   /* ---------- admin ---------- */

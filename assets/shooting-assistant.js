@@ -30,6 +30,7 @@
     ref: null,
     visuals: [],
     sheet: null,
+    failed: [],
     generationDone: false
   };
   try { state.audio = localStorage.getItem('sa-audio') !== '0'; } catch (e) {}
@@ -760,6 +761,7 @@
   }
 
   function finishJob(ref, failed) {
+    state.failed = failed.slice();
     var fd = new FormData();
     fd.append('action', 'finish');
     fd.append('ref', ref);
@@ -780,11 +782,14 @@
       if (res.ok && res.product) {
         $('sa-f-name').value = res.product.name || '';
         $('sa-f-price').value = String(res.product.price || '').replace(/[^0-9.,]/g, '').replace(',', '.');
+        $('sa-f-new-price').value = moneyValue(res.product.new_price);
         $('sa-f-desc').value = res.product.description || '';
         $('sa-f-weight').value = res.product.weight_grams || '';
         $('sa-review').hidden = false;
+        setupVoice(res.product);
       } else {
         $('sa-review').hidden = true;
+        $('sa-voice').hidden = true;
       }
       showPanel('done');
       if (state.audio) speak('La fiche est prête. Relisez le nom, le prix et la description, puis enregistrez.');
@@ -819,6 +824,7 @@
     fd.append('ref', state.ref);
     fd.append('name', $('sa-f-name').value);
     fd.append('price', $('sa-f-price').value);
+    fd.append('new_price', $('sa-f-new-price').value);
     fd.append('weight_grams', $('sa-f-weight').value || '0');
     fd.append('description', $('sa-f-desc').value);
     if ($('sa-f-publish').checked) fd.append('publish', '1');
@@ -839,6 +845,696 @@
     renderShot(); renderThumbs(); showPanel('shots'); announceShot();
   });
 
+  // ── Validation vocale de la fiche ────────────────────────────────────────
+  // L'assistant pose les questions à voix haute, écoute la réponse, et n'envoie au serveur que les
+  // corrections explicites : « oui » et « je ne sais pas » laissent la fiche telle que l'IA l'a remplie.
+  var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var voice = {
+    active: false,
+    product: null,
+    questions: [],
+    index: 0,
+    awaiting: null,
+    summary: [],
+    notes: [],
+    token: 0,
+    rec: null,
+    listening: false
+  };
+
+  function conditionLabel(key) {
+    if (!key) return '';
+    return (DATA.conditionLabels && DATA.conditionLabels[key]) || key;
+  }
+  function moneyValue(text) {
+    var m = String(text || '').replace(/\s/g, '').match(/\d+(?:[.,]\d{1,2})?/);
+    return m ? m[0].replace(',', '.') : '';
+  }
+  function formatEuros(text) {
+    var v = moneyValue(text);
+    if (v === '') return '';
+    return (v.indexOf('.') >= 0 ? v.replace('.', ',') : v) + ' €';
+  }
+  function voiceHint(text) { $('sa-voice-hint').textContent = text || ''; }
+
+  function voiceSupportText() {
+    return SpeechRec
+      ? "Répondez à la voix ou avec les boutons. « Je ne sais pas » ne change rien. La dictée utilise la reconnaissance vocale du navigateur."
+      : "La dictée n'est pas disponible dans ce navigateur : répondez avec les boutons, et au clavier pour les montants.";
+  }
+
+  function setupVoice(product) {
+    voice.product = product;
+    voice.active = false;
+    voice.awaiting = null;
+    voice.questions = [];
+    voice.index = 0;
+    voice.summary = [];
+    voice.notes = [];
+    stopVoiceRecognition();
+    $('sa-voice').hidden = false;
+    $('sa-voice-intro').hidden = false;
+    $('sa-voice-panel').hidden = true;
+    $('sa-voice-start').textContent = '🎙 Vérifier à la voix';
+    $('sa-voice-support').textContent = voiceSupportText();
+  }
+
+  function buildVoiceQuestions(p) {
+    var qs = [];
+    var colors = String(p.colors || '').trim();
+    var etatLabel = String(p.etat_label || conditionLabel(p.etat) || '').trim();
+    var newPrice = parseFloat(moneyValue(p.new_price) || '0');
+    var price = parseFloat(moneyValue(p.price) || '0');
+    var name = String(p.name || '').trim();
+    var weight = Number(p.weight_grams) || 0;
+    var barcode = String(p.barcode || '').trim();
+    var options = DATA.voiceConditions || [];
+    var optionText = options.map(function (o) { return o.label; }).join(', ');
+
+    if (state.visuals.length && state.failed.indexOf('detoure') < 0) {
+      qs.push({
+        key: 'cutout', type: 'confirm', field: null,
+        text: 'Le détourage de la photo vous convient-il ?',
+        hint: 'Si non, vous pourrez le refaire depuis la fiche, dans le catalogue.',
+        onNo: function () { addVoiceNote('Détourage à revoir : relancez-le depuis la fiche dans le catalogue.'); }
+      });
+    }
+
+    if (colors) {
+      qs.push({
+        key: 'colors', type: 'confirm', field: 'colors',
+        text: 'L\'IA indique les couleurs : ' + colors + '. Est-ce exact ?',
+        follow: { type: 'text', field: 'colors', text: 'Quelle est la couleur ?', input: 'Ex. : bleu marine, blanc', unknown: 'clear' }
+      });
+    } else {
+      qs.push({
+        key: 'colors', type: 'text', field: 'colors',
+        text: 'Quelle est la couleur dominante de la pièce ?',
+        hint: 'Dites la couleur, ou « je ne sais pas ».',
+        input: 'Ex. : bleu marine, blanc',
+        unknown: 'keep'
+      });
+    }
+
+    if (etatLabel) {
+      qs.push({
+        key: 'etat', type: 'confirm', field: 'etat',
+        text: 'L\'état indiqué est « ' + etatLabel + ' ». Est-ce exact ?',
+        follow: { type: 'choice', field: 'etat', text: 'Quel est l\'état de la pièce ?', hint: 'Dites par exemple : ' + optionText + '.', options: options, unknown: 'clear' }
+      });
+    } else {
+      qs.push({
+        key: 'etat', type: 'choice', field: 'etat',
+        text: 'Quel est l\'état de la pièce ?',
+        hint: 'Dites par exemple : ' + optionText + '.',
+        options: options,
+        unknown: 'keep'
+      });
+    }
+
+    if (newPrice > 0) {
+      qs.push({
+        key: 'new_price', type: 'confirm', field: 'new_price',
+        text: 'Le prix du neuf est indiqué à ' + formatEuros(p.new_price) + '. Est-ce exact ?',
+        follow: { type: 'number', field: 'new_price', text: 'Quel est le prix du neuf ?', input: 'Ex. : 40', unknown: 'clear' }
+      });
+    } else {
+      qs.push({
+        key: 'new_price', type: 'number', field: 'new_price',
+        text: 'Quel est le prix du neuf de cette pièce ?',
+        hint: 'Dites un montant, ou « je ne sais pas » si vous ne le connaissez pas.',
+        input: 'Ex. : 40',
+        unknown: 'keep'
+      });
+    }
+
+    if (price > 0) {
+      qs.push({
+        key: 'price', type: 'confirm', field: 'price',
+        text: 'Le prix affiché est de ' + formatEuros(p.price) + '. Est-ce exact ?',
+        follow: { type: 'number', field: 'price', text: 'Quel prix voulez-vous afficher ?', input: 'Ex. : 25', unknown: 'keep' }
+      });
+    } else {
+      qs.push({
+        key: 'price', type: 'number', field: 'price',
+        text: 'Quel prix voulez-vous afficher ?',
+        input: 'Ex. : 25',
+        unknown: 'keep'
+      });
+    }
+
+    if (!barcode && name) {
+      qs.push({
+        key: 'name', type: 'confirm', field: 'name',
+        text: 'Le nom « ' + name + ' » vous convient-il ?',
+        follow: { type: 'text', field: 'name', text: 'Dites le bon nom.', input: 'Ex. : Chemise en lin bleue', unknown: 'keep' }
+      });
+    }
+
+    if (!barcode && String(p.description || '').trim()) {
+      qs.push({
+        key: 'description', type: 'confirm', field: 'description',
+        text: 'La description vous convient-elle ?',
+        hint: 'Elle est affichée à l\'écran. Si non, vous pourrez la modifier juste après.',
+        onNo: function () {
+          addVoiceNote('Description à modifier à l\'écran.');
+          var field = $('sa-f-desc');
+          if (field) { field.focus(); field.classList.add('is-flagged'); }
+        }
+      });
+    }
+
+    if (weight > 0) {
+      qs.push({
+        key: 'weight_grams', type: 'confirm', field: 'weight_grams',
+        text: 'Le poids est estimé à ' + weight + ' grammes. Est-ce exact ?',
+        follow: { type: 'number', field: 'weight_grams', text: 'Quel est le poids, en grammes ?', input: 'Ex. : 800, ou 1 kilo 200', unknown: 'keep' }
+      });
+    } else {
+      qs.push({
+        key: 'weight_grams', type: 'number', field: 'weight_grams',
+        text: 'Quel est le poids de la pièce, en grammes ?',
+        input: 'Ex. : 800, ou 1 kilo 200',
+        unknown: 'keep'
+      });
+    }
+
+    return qs;
+  }
+
+  function startVoice() {
+    if (!voice.product) return;
+    voice.questions = buildVoiceQuestions(voice.product);
+    if (!voice.questions.length) return;
+    voice.active = true;
+    voice.index = 0;
+    voice.summary = [];
+    voice.notes = [];
+    $('sa-voice-support').textContent = voiceSupportText();
+    $('sa-voice-intro').hidden = true;
+    $('sa-voice-panel').hidden = false;
+    $('sa-voice-stop').hidden = false;
+    renderVoiceSummary();
+    askQuestion(voice.questions[0]);
+  }
+
+  function askQuestion(q) {
+    voice.awaiting = q;
+    voice.token++;
+    var token = voice.token;
+    stopVoiceRecognition();
+    $('sa-voice-count').textContent = 'Question ' + (voice.index + 1) + ' sur ' + voice.questions.length;
+    $('sa-voice-question').textContent = q.text;
+    $('sa-voice-hint').textContent = q.hint || '';
+    $('sa-voice-heard').textContent = '';
+    $('sa-voice-answers').hidden = false;
+    renderVoiceAnswers(q);
+    renderVoiceInput(q);
+    $('sa-voice-mic').hidden = !SpeechRec;
+    $('sa-voice-repeat').hidden = false;
+    $('sa-voice-unknown').hidden = false;
+    $('sa-voice-stop').hidden = false;
+    setMicState(false);
+    speak(q.text + (q.hint ? ' ' + q.hint : ''), false, function () {
+      if (!voice.active || voice.token !== token || voice.awaiting !== q) return;
+      setTimeout(function () {
+        if (!voice.active || voice.token !== token || voice.awaiting !== q) return;
+        listenVoice();
+      }, 350);
+    });
+  }
+
+  function renderVoiceAnswers(q) {
+    var box = $('sa-voice-answers');
+    box.textContent = '';
+    if (q.type === 'confirm') {
+      var yes = el('button', 'btn btn-primary', 'Oui');
+      yes.type = 'button';
+      yes.addEventListener('click', function () { answerYesNo('yes'); });
+      var no = el('button', 'btn btn-ghost', 'Non');
+      no.type = 'button';
+      no.addEventListener('click', function () { answerYesNo('no'); });
+      box.appendChild(yes);
+      box.appendChild(no);
+    } else if (q.type === 'choice') {
+      (q.options || []).forEach(function (o) {
+        var b = el('button', 'btn btn-ghost', o.label);
+        b.type = 'button';
+        if (o.hint) b.title = o.hint;
+        b.addEventListener('click', function () { answerChoice(o); });
+        box.appendChild(b);
+      });
+    }
+    box.hidden = !box.childNodes.length;
+  }
+
+  function renderVoiceInput(q) {
+    var wrap = $('sa-voice-input-wrap');
+    var input = $('sa-voice-input');
+    var open = q.type === 'text' || q.type === 'number';
+    wrap.hidden = !open;
+    input.value = '';
+    if (!open) return;
+    input.inputMode = q.type === 'number' ? 'decimal' : 'text';
+    input.placeholder = q.input || '';
+    $('sa-voice-input-label').textContent = q.field === 'weight_grams' ? 'Ou tapez le poids (g)' : (q.type === 'number' ? 'Ou tapez le montant' : 'Ou tapez votre réponse');
+  }
+
+  function listenVoice() {
+    if (!SpeechRec || !voice.active || voice.listening || !voice.awaiting) return;
+    stopSpeaking();
+    var rec = new SpeechRec();
+    rec.lang = 'fr-FR';
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    voice.rec = rec;
+    voice.listening = true;
+    setMicState(true);
+    $('sa-voice-heard').textContent = '🎤 Je vous écoute…';
+    voiceHint('');
+    rec.onresult = function (event) {
+      var interim = '', final = '';
+      for (var i = event.resultIndex; i < event.results.length; i++) {
+        var r = event.results[i];
+        if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript;
+      }
+      if (interim) $('sa-voice-heard').textContent = '🎤 ' + interim;
+      if (!final.trim()) return;
+      $('sa-voice-heard').textContent = 'Entendu : « ' + final.trim() + ' »';
+      voice.listening = false;
+      setMicState(false);
+      try { rec.stop(); } catch (e) {}
+      handleVoiceAnswer(final.trim());
+    };
+    rec.onerror = function (event) {
+      voice.listening = false;
+      setMicState(false);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        voiceHint('Micro refusé : autorisez-le dans le navigateur, ou répondez avec les boutons.');
+      } else if (event.error === 'no-speech') {
+        voiceHint('Je n\'ai rien entendu. Réessayez, ou répondez avec les boutons.');
+      } else if (event.error !== 'aborted') {
+        voiceHint('La dictée s\'est arrêtée. Réessayez, ou répondez avec les boutons.');
+      }
+    };
+    rec.onend = function () {
+      voice.listening = false;
+      voice.rec = null;
+      setMicState(false);
+    };
+    try { rec.start(); } catch (e) {
+      voice.listening = false;
+      voice.rec = null;
+      setMicState(false);
+    }
+  }
+
+  function stopVoiceRecognition() {
+    if (voice.rec) { try { voice.rec.abort(); } catch (e) {} }
+    voice.rec = null;
+    voice.listening = false;
+    setMicState(false);
+  }
+
+  function setMicState(on) {
+    var b = $('sa-voice-mic');
+    if (!b) return;
+    b.classList.toggle('is-listening', on);
+    b.textContent = on ? '⏹ J\'écoute…' : '🎤 Répondre';
+  }
+
+  function handleVoiceAnswer(text) {
+    var q = voice.awaiting;
+    if (!q) return;
+    if (q.type === 'confirm') {
+      var answer = parseYesNo(text);
+      if (!answer) { voiceHint('Répondez par oui, non, ou « je ne sais pas ».'); return; }
+      answerYesNo(answer);
+    } else if (q.type === 'choice') {
+      var option = matchCondition(text);
+      if (!option) { voiceHint('Je n\'ai pas reconnu l\'état. Réessayez, ou choisissez un bouton.'); return; }
+      answerChoice(option);
+    } else if (q.type === 'number') {
+      var value = q.field === 'weight_grams' ? parseGrams(text) : parseAmount(text);
+      if (value == null || !(value > 0)) { voiceHint('Je n\'ai pas compris le nombre. Réessayez, ou tapez-le.'); return; }
+      answerNumber(value, q);
+    } else {
+      var spoken = cleanSpokenText(text);
+      if (spoken === '') { voiceHint('Je n\'ai pas compris. Réessayez, ou tapez votre réponse.'); return; }
+      answerText(spoken, q);
+    }
+  }
+
+  function answerYesNo(kind) {
+    var q = voice.awaiting;
+    if (!q || q.type !== 'confirm') return;
+    if (kind === 'yes') { nextVoiceQuestion(); return; }
+    if (kind === 'unknown') {
+      if (q.follow && q.follow.unknown === 'clear' && q.field) applyCorrection(q.field, '');
+      nextVoiceQuestion();
+      return;
+    }
+    if (q.follow) { askFollow(q); return; }
+    if (q.onNo) q.onNo();
+    nextVoiceQuestion();
+  }
+
+  function askFollow(parent) {
+    var f = parent.follow;
+    askQuestion({
+      key: parent.key,
+      type: f.type,
+      field: f.field || parent.field,
+      text: f.text,
+      hint: f.hint || '',
+      input: f.input || '',
+      options: f.options || null,
+      unknown: f.unknown || 'keep',
+      isFollow: true
+    });
+  }
+
+  function answerChoice(option) {
+    var q = voice.awaiting;
+    if (!q) return;
+    applyCorrection(q.field || 'etat', option.key);
+    nextVoiceQuestion();
+  }
+
+  function answerNumber(value, q) {
+    if (q.field === 'weight_grams') {
+      var grams = Math.round(value);
+      if (grams <= 0) { voiceHint('Le poids doit être supérieur à zéro.'); return; }
+      applyCorrection('weight_grams', String(grams));
+    } else {
+      if (!(value > 0)) { voiceHint('Le montant doit être supérieur à zéro.'); return; }
+      applyCorrection(q.field, String(Math.round(value * 100) / 100));
+    }
+    nextVoiceQuestion();
+  }
+
+  function answerText(value, q) {
+    if (q.field === 'name') value = value.charAt(0).toUpperCase() + value.slice(1);
+    applyCorrection(q.field, value);
+    nextVoiceQuestion();
+  }
+
+  function nextVoiceQuestion() {
+    stopVoiceRecognition();
+    voice.awaiting = null;
+    voice.index++;
+    if (voice.index >= voice.questions.length) { finishVoice(); return; }
+    askQuestion(voice.questions[voice.index]);
+  }
+
+  function finishVoice() {
+    voice.active = false;
+    voice.awaiting = null;
+    stopVoiceRecognition();
+    stopSpeaking();
+    $('sa-voice-count').textContent = 'Vérification terminée';
+    $('sa-voice-question').textContent = (voice.summary.length || voice.notes.length)
+      ? 'Merci : vos corrections sont enregistrées.'
+      : 'Aucune correction : la fiche reste telle quelle.';
+    $('sa-voice-hint').textContent = '';
+    $('sa-voice-heard').textContent = '';
+    $('sa-voice-input-wrap').hidden = true;
+    $('sa-voice-mic').hidden = true;
+    $('sa-voice-repeat').hidden = true;
+    $('sa-voice-unknown').hidden = true;
+    $('sa-voice-stop').hidden = true;
+    var box = $('sa-voice-answers');
+    box.textContent = '';
+    box.hidden = false;
+    var again = el('button', 'btn btn-ghost', '↺ Recommencer');
+    again.type = 'button';
+    again.addEventListener('click', startVoice);
+    var close = el('button', 'btn btn-primary', 'Terminer');
+    close.type = 'button';
+    close.addEventListener('click', closeVoice);
+    box.appendChild(again);
+    box.appendChild(close);
+    renderVoiceSummary();
+    speak('Vérification terminée. Vérifiez la fiche, puis enregistrez.');
+  }
+
+  function voiceRecap() {
+    return voice.summary.concat(voice.notes).join(' · ');
+  }
+
+  function closeVoice() {
+    voice.active = false;
+    voice.awaiting = null;
+    stopVoiceRecognition();
+    stopSpeaking();
+    $('sa-voice-panel').hidden = true;
+    $('sa-voice-intro').hidden = false;
+    $('sa-voice-start').textContent = '🎙 Refaire la vérification';
+    var recap = voiceRecap();
+    if (recap) $('sa-voice-support').textContent = 'Vérification terminée : ' + recap;
+  }
+
+  function stopVoice() {
+    var wasActive = voice.active;
+    voice.active = false;
+    voice.awaiting = null;
+    stopVoiceRecognition();
+    stopSpeaking();
+    $('sa-voice-panel').hidden = true;
+    $('sa-voice-intro').hidden = false;
+    $('sa-voice-start').textContent = '🎙 Reprendre la vérification';
+    var recap = voiceRecap();
+    if (wasActive && recap) $('sa-voice-support').textContent = 'Vérification arrêtée. À retenir : ' + recap;
+  }
+
+  function answerVoiceUnknown() {
+    var q = voice.awaiting;
+    if (!voice.active || !q) return;
+    if (q.type === 'confirm') { answerYesNo('unknown'); return; }
+    if (q.unknown === 'clear' && q.field) applyCorrection(q.field, '');
+    nextVoiceQuestion();
+  }
+
+  function submitTypedVoice() {
+    var q = voice.awaiting;
+    if (!voice.active || !q) return;
+    var text = $('sa-voice-input').value.trim();
+    if (text === '') return;
+    stopVoiceRecognition();
+    $('sa-voice-heard').textContent = 'Saisi : « ' + text + ' »';
+    handleVoiceAnswer(text);
+  }
+
+  function addVoiceNote(text) {
+    if (voice.notes.indexOf(text) < 0) voice.notes.push(text);
+    renderVoiceSummary();
+  }
+
+  function renderVoiceSummary() {
+    var box = $('sa-voice-summary');
+    box.textContent = '';
+    voice.summary.forEach(function (line) { box.appendChild(el('li', '', line)); });
+    voice.notes.forEach(function (line) { box.appendChild(el('li', 'is-note', line)); });
+    box.hidden = !(voice.summary.length + voice.notes.length);
+  }
+
+  function applyCorrection(field, value) {
+    var p = voice.product || (voice.product = {});
+    if (field === 'colors') {
+      p.colors = String(value || '');
+      addVoiceSummary(p.colors ? 'Couleurs : ' + p.colors : 'Couleurs retirées : à vérifier');
+    } else if (field === 'etat') {
+      p.etat = String(value || '');
+      p.etat_label = p.etat ? conditionLabel(p.etat) : '';
+      addVoiceSummary(p.etat_label ? 'État : ' + p.etat_label : 'État retiré : à préciser');
+    } else if (field === 'new_price') {
+      p.new_price = value ? formatEuros(value) : '';
+      $('sa-f-new-price').value = moneyValue(p.new_price);
+      addVoiceSummary(p.new_price ? 'Prix du neuf : ' + p.new_price : 'Prix du neuf retiré');
+    } else if (field === 'price') {
+      p.price = formatEuros(value);
+      $('sa-f-price').value = moneyValue(p.price);
+      addVoiceSummary('Prix affiché : ' + p.price);
+    } else if (field === 'weight_grams') {
+      p.weight_grams = Number(value) || 0;
+      $('sa-f-weight').value = p.weight_grams || '';
+      addVoiceSummary(p.weight_grams ? 'Poids : ' + p.weight_grams + ' g' : 'Poids retiré');
+    } else if (field === 'name') {
+      p.name = String(value || '');
+      $('sa-f-name').value = p.name;
+      addVoiceSummary('Nom : ' + p.name);
+    } else if (field === 'description') {
+      p.description = String(value || '');
+      $('sa-f-desc').value = p.description;
+      addVoiceSummary('Description corrigée');
+    }
+    sendVoiceCorrection(field, value);
+  }
+
+  function addVoiceSummary(text) {
+    if (voice.summary.indexOf(text) < 0) voice.summary.push(text);
+    renderVoiceSummary();
+  }
+
+  function sendVoiceCorrection(field, value) {
+    if (!state.ref) return;
+    var fd = new FormData();
+    fd.append('action', 'validate');
+    fd.append('ref', state.ref);
+    fd.append(field, value == null ? '' : String(value));
+    post(ACTION, fd).then(function (res) {
+      if (!res.ok) { voiceHint(res.error || 'La correction n\'a pas pu être enregistrée.'); return; }
+      if (!res.product) return;
+      voice.product = res.product;
+      // Le serveur normalise : le champ du formulaire reprend sa valeur enregistrée.
+      if (field === 'price') $('sa-f-price').value = moneyValue(res.product.price);
+      if (field === 'new_price') $('sa-f-new-price').value = moneyValue(res.product.new_price);
+      if (field === 'name') $('sa-f-name').value = res.product.name || '';
+    });
+  }
+
+  function normalizeVoice(text) {
+    return String(text || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[’']/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+  function hasPhrase(haystack, phrase) {
+    return (' ' + haystack + ' ').indexOf(' ' + phrase + ' ') >= 0;
+  }
+
+  function parseYesNo(text) {
+    var t = normalizeVoice(text);
+    var unknown = ['je ne sais pas', 'je sais pas', 'je ne sais', 'sais pas', 'aucune idee', 'pas d idee', 'je ne connais pas', 'connais pas', 'pas sur', 'pas certain', 'pas certaine', 'peut etre', 'incertain', 'impossible a dire', 'je ne peux pas dire', 'je ne me souviens pas'];
+    var no = ['non', 'pas bon', 'pas bonne', 'pas exact', 'pas exacte', 'pas correct', 'pas correcte', 'incorrect', 'incorrecte', 'faux', 'pas du tout', 'pas vraiment', 'negatif', 'ce n est pas bon', 'ce n est pas ca', 'c est pas bon', 'pas ca'];
+    var yes = ['oui', 'ouais', 'exact', 'exacte', 'c est bon', 'c est exact', 'c est ca', 'tout a fait', 'absolument', 'parfait', 'correct', 'correcte', 'd accord', 'affirmatif', 'ca me va', 'tres bien', 'valide', 'confirme', 'ok'];
+    var i;
+    for (i = 0; i < unknown.length; i++) if (hasPhrase(t, unknown[i])) return 'unknown';
+    for (i = 0; i < no.length; i++) if (hasPhrase(t, no[i])) return 'no';
+    for (i = 0; i < yes.length; i++) if (hasPhrase(t, yes[i])) return 'yes';
+    return null;
+  }
+
+  var CONDITION_ALIASES = [
+    ['neuf avec etiquette', 'neuf'], ['neuf emballe', 'neuf'], ['neuf avec sa boite', 'neuf'], ['neuf sans etiquette', 'neuf'],
+    ['comme neuf', 'comme_neuf'], ['presque neuf', 'comme_neuf'], ['excellent etat', 'comme_neuf'], ['impeccable', 'comme_neuf'],
+    ['tres bon etat', 'tres_bon'], ['tres bon', 'tres_bon'],
+    ['bon etat pour son age', 'bon'], ['belle patine', 'bon'], ['bon etat', 'bon'],
+    ['etat correct', 'correct'], ['traces d usage', 'correct'], ['correct', 'correct'],
+    ['petits defauts', 'use'], ['tres use', 'use'], ['usage marque', 'use'], ['use', 'use'],
+    ['a restaurer', 'restaurer'], ['restaurer', 'restaurer'], ['restauration', 'restaurer'],
+    ['pour pieces', 'pieces'], ['pour decoration', 'pieces'], ['ne fonctionne pas', 'pieces'], ['pieces', 'pieces'],
+    ['neuf', 'neuf'], ['bon', 'bon']
+  ];
+
+  function matchCondition(text) {
+    var t = normalizeVoice(text);
+    var options = (voice.awaiting && voice.awaiting.options) || DATA.voiceConditions || [];
+    for (var i = 0; i < CONDITION_ALIASES.length; i++) {
+      if (!hasPhrase(t, CONDITION_ALIASES[i][0])) continue;
+      var key = CONDITION_ALIASES[i][1];
+      for (var j = 0; j < options.length; j++) {
+        if (options[j].key === key) return options[j];
+      }
+      return { key: key, label: conditionLabel(key) };
+    }
+    return null;
+  }
+
+  function wordsToNumber(text) {
+    var words = normalizeVoice(text).split(' ').filter(Boolean);
+    var units = { zero: 0, un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, onze: 11, douze: 12, treize: 13, quatorze: 14, quinze: 15, seize: 16 };
+    var tens = { vingt: 20, trente: 30, quarante: 40, cinquante: 50, soixante: 60 };
+    var total = 0, current = 0, seen = false;
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i];
+      if (w === 'et') continue;
+      if (w === 'quatre' && words[i + 1] === 'vingt') { current += 80; i++; seen = true; continue; }
+      if (units[w] != null) { current += units[w]; seen = true; continue; }
+      if (tens[w] != null) { current += tens[w]; seen = true; continue; }
+      if (w === 'cent' || w === 'cents') { current = (current || 1) * 100; seen = true; continue; }
+      if (w === 'mille') { total += (current || 1) * 1000; current = 0; seen = true; continue; }
+    }
+    return seen ? total + current : null;
+  }
+
+  function parseAmount(text) {
+    var raw = String(text || '');
+    var t = normalizeVoice(raw);
+    var nums = raw.match(/\d+(?:[.,]\d{1,2})?/g);
+    if (nums) {
+      var first = parseFloat(nums[0].replace(',', '.'));
+      if (nums.length > 1) {
+        var second = parseFloat(nums[1].replace(',', '.'));
+        // « 1 200 euros » : le second groupe est le reste des milliers, pas des centimes.
+        if (second >= 100 && !/[.,]/.test(nums[0])) return Math.round((first * 1000 + second) * 100) / 100;
+        if (second > 0 && second < 100 && (hasPhrase(t, 'euro') || hasPhrase(t, 'euros') || hasPhrase(t, 'centime') || hasPhrase(t, 'centimes'))) {
+          return Math.round((first + second / 100) * 100) / 100;
+        }
+      }
+      return Math.round(first * 100) / 100;
+    }
+    var parts = t.split(/ euros? /);
+    var euros = wordsToNumber(parts[0]);
+    if (euros == null) return null;
+    if (parts.length > 1) {
+      var cents = wordsToNumber(parts[1]);
+      if (cents != null && cents > 0 && cents < 100) euros += cents / 100;
+    }
+    return Math.round(euros * 100) / 100;
+  }
+
+  function parseGrams(text) {
+    var raw = String(text || '');
+    var t = normalizeVoice(raw);
+    // « 1 kilo 200 » : le nombre après l'unité s'ajoute, ce ne sont pas des décimales.
+    var kg = raw.match(/(\d+(?:[.,]\d{1,3})?)\s*(?:kilos?|kg)\b\s*(?:et\s+)?(\d{1,3})?/i);
+    if (kg) {
+      var kilos = parseFloat(kg[1].replace(',', '.'));
+      var extra = kg[2] ? parseInt(kg[2], 10) : 0;
+      return Math.round(kilos * 1000 + extra);
+    }
+    var m = raw.match(/(\d+(?:[.,]\d{1,3})?)\s*(?:grammes?|g)\b/i);
+    if (m) return Math.round(parseFloat(m[1].replace(',', '.')));
+    var idx = t.indexOf('kilo');
+    if (idx >= 0) {
+      var before = wordsToNumber(t.slice(0, idx));
+      var after = wordsToNumber(t.slice(idx + 4));
+      var kg = before == null ? 1 : before;
+      return Math.round(kg * 1000 + (after || 0));
+    }
+    var n = wordsToNumber(t);
+    if (n != null) return Math.round(n);
+    var bare = t.match(/^\d+(?:[.,]\d+)?$/);
+    return bare ? Math.round(parseFloat(bare[0].replace(',', '.'))) : null;
+  }
+
+  function cleanSpokenText(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim().replace(/[.!?…]+$/g, '').trim();
+    t = t.replace(/^(alors|donc|euh|hum)\s+/i, '');
+    t = t.replace(/^(la |les |des )?couleurs? (est|sont|serait|seraient)\s+/i, '');
+    t = t.replace(/^(le nom|c'est|ce sont|ça s'appelle|ca s'appelle)\s+(est\s+)?/i, '');
+    return t.trim();
+  }
+
+  $('sa-voice-start').addEventListener('click', startVoice);
+  $('sa-voice-mic').addEventListener('click', function () { if (voice.listening) stopVoiceRecognition(); else listenVoice(); });
+  $('sa-voice-repeat').addEventListener('click', function () {
+    var q = voice.awaiting;
+    if (!q) return;
+    stopVoiceRecognition();
+    speak(q.text + (q.hint ? ' ' + q.hint : ''), true);
+  });
+  $('sa-voice-unknown').addEventListener('click', answerVoiceUnknown);
+  $('sa-voice-stop').addEventListener('click', stopVoice);
+  $('sa-voice-send').addEventListener('click', submitTypedVoice);
+  $('sa-voice-input').addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') { event.preventDefault(); submitTypedVoice(); }
+  });
+  $('sa-f-desc').addEventListener('input', function () { this.classList.remove('is-flagged'); });
+
   // ── Coaching audio ───────────────────────────────────────────────────────
   var synth = window.speechSynthesis || null;
   var voices = [];
@@ -855,18 +1551,26 @@
     audioStatus('');
     $('sa-audio-stop').hidden = true;
   }
-  function speak(text, force) {
-    if ((!state.audio && !force) || !synth || !text) return;
+  function speak(text, force, done) {
+    if ((!state.audio && !force) || !synth || !text) { if (done) done(); return; }
+    var finished = false;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      if (done) done();
+    }
     try {
       synth.cancel();
       var u = new SpeechSynthesisUtterance(text);
       u.lang = 'fr-FR'; u.rate = 0.98; u.pitch = 1;
       var v = frenchVoice(); if (v) u.voice = v;
       u.onstart = function () { audioStatus('🔊 Coaching audio en cours…'); $('sa-audio-stop').hidden = false; };
-      u.onend = function () { audioStatus(''); $('sa-audio-stop').hidden = true; };
-      u.onerror = function () { audioStatus(''); $('sa-audio-stop').hidden = true; };
+      u.onend = function () { audioStatus(''); $('sa-audio-stop').hidden = true; finish(); };
+      u.onerror = function () { audioStatus(''); $('sa-audio-stop').hidden = true; finish(); };
       synth.speak(u);
-    } catch (e) {}
+      // Filet de sécurité : certains navigateurs n'appellent pas onend après cancel().
+      setTimeout(finish, Math.max(2500, text.length * 120));
+    } catch (e) { finish(); }
   }
   $('sa-audio-play').addEventListener('click', function () { speak(programSpeech(state.program || programFor()), true); });
   $('sa-audio-stop').addEventListener('click', stopSpeaking);

@@ -77,7 +77,8 @@
 /* ── Base ─────────────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 body { background: var(--bg); }
-body.has-admin-shell { padding-left: var(--pnav-w); }
+body.has-admin-shell { padding: 0 0 0 var(--pnav-w); }
+.app > * { min-width: 0; }
 .app {
   max-width: 1520px;
   padding: 20px clamp(16px, 2.2vw, 30px) 64px;
@@ -386,6 +387,10 @@ p { text-wrap: pretty; }
 
 /* ── Boutons ──────────────────────────────────────────────────────── */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 8px 13px;
@@ -432,6 +437,7 @@ a.btn.danger:not(.btn-primary) { color: var(--danger); }
 .app .gwrap,
 .app .iwrap,
 .app .aw,
+.app .ia,
 .app .menu-wrap {
   max-width: 1280px;
   margin: 0;
@@ -553,10 +559,49 @@ a.btn.danger:not(.btn-primary) { color: var(--danger); }
 .app .check { font-weight: 600; }
 .app fieldset { border-color: var(--line); }
 
+/* ── Lignes, libellés et textes secondaires hérités ───────────────── */
+/* portail.css définit .row en grille 1fr/120px : les pages d'administration l'utilisent comme une rangée souple. */
+.app .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.app label.f { display: grid; gap: 4px; font-size: 0.8rem; font-weight: 600; color: var(--muted); flex: 1; min-width: 180px; }
+.app .meta { color: var(--muted); font-size: 0.84rem; }
+.app .btn.mini { padding: 4px 8px; font-size: 0.75rem; border-radius: 7px; }
+
+/* ── Administration d'une galerie ─────────────────────────────────── */
+.ga-page { gap: 16px; }
+.ga-page .kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.ga-page .gcard h3 { margin: 4px 0 0; font-size: 0.95rem; }
+.ga-page .gcard > h2 + p { margin-top: -2px; }
+.ga-page .gcard a:not(.btn) { color: var(--accent); font-weight: 600; text-decoration: none; }
+.ga-page .gcard a:not(.btn):hover { text-decoration: underline; text-underline-offset: 2px; }
+.ga-page .gcard .gcard { background: var(--panel-2); box-shadow: none; }
+.ga-page .chart svg { width: 100%; height: auto; display: block; color: var(--accent); }
+.ga-page .chart-empty {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  min-height: 150px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.84rem;
+  text-align: center;
+}
+.ga-page .chart-empty strong { color: var(--ink); font-size: 0.92rem; }
+@media (max-width: 760px) {
+  .ga-page .gcard { padding: 14px; }
+  .ga-page .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ga-page table.t { display: block; overflow-x: auto; white-space: nowrap; }
+  .ga-page .gcard .row input,
+  .ga-page .gcard .row select { width: 100%; }
+}
+
 /* ── Tableau de bord des boutiques ────────────────────────────────── */
 .dash { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 540px); gap: 16px; align-items: start; margin-top: 16px; }
 .dash-main { display: grid; gap: 16px; min-width: 0; }
 .dash-panel { padding: 0; overflow: hidden; }
+.app .panel.dash-panel { padding: 0; gap: 0; overflow: hidden; }
 .kpi .s a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .kpi .s a:hover { color: var(--accent); }
 .dash-side { position: sticky; top: 74px; min-width: 0; }
@@ -651,8 +696,9 @@ a.btn.danger:not(.btn-primary) { color: var(--danger); }
 .shopcard .confirm input { background: var(--panel); }
 .shopcard .confirm .actions { margin-top: 2px; }
 .shop-more { position: relative; }
-.shop-more > summary { list-style: none; }
+.shop-more > summary { list-style: none; cursor: pointer; }
 .shop-more > summary::-webkit-details-marker { display: none; }
+.shop-more:not([open]) > .shop-more-panel { display: none; }
 .shop-more[open] > summary { border-color: var(--line-strong); background: var(--panel-2); }
 .shop-more-panel {
   position: absolute;
@@ -697,8 +743,9 @@ a.btn.danger:not(.btn-primary) { color: var(--danger); }
 .preview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .preview-head h2 { margin: 0; font-size: 0.98rem; font-weight: 700; }
 .preview-head p { margin: 3px 0 0; color: var(--muted); font-family: var(--font-mono); font-size: 0.73rem; }
-.preview-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
-.preview-tools .seg { background: var(--panel); }
+.preview-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+.preview-tools .seg { background: var(--panel); flex-wrap: wrap; max-width: 100%; }
+.preview-tools .seg button { padding: 5px 9px; font-size: 0.78rem; }
 .preview-stage { flex: 1; min-height: 440px; padding: 12px; display: flex; justify-content: center; background: var(--panel-2); }
 .preview-stage .stage { width: 100%; height: min(62vh, 640px); min-height: 0; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .preview-stage .stage iframe { min-height: 0; }
@@ -755,8 +802,9 @@ a.btn.danger:not(.btn-primary) { color: var(--danger); }
 .empty-state { padding: 34px 18px; text-align: center; color: var(--muted); font-size: 0.9rem; }
 .empty-state b { display: block; margin-bottom: 4px; color: var(--ink); font-size: 1rem; }
 .pill { font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
-.app .pill.done { background: var(--ok-soft); color: var(--ok); }
-.app .pill.sent { background: var(--accent-soft); color: var(--accent); }
+.app .pill { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.app .pill.done { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 26%, transparent); }
+.app .pill.sent { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 24%, transparent); }
 .pico { display: block; flex: none; }
 .app .stage-note { color: var(--muted); }
 .app .pager a { color: var(--accent); font-weight: 600; }
@@ -799,7 +847,9 @@ a.btn.danger:not(.btn-primary) { color: var(--danger); }
   .shop-more-panel { position: static; margin-top: 6px; box-shadow: none; }
 }
 @media (max-width: 520px) {
-  .kpis { grid-template-columns: 1fr; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpis .kpi .n { font-size: 1.5rem; }
+  .kpis .kpi-wide { grid-column: 1 / -1; }
   .pbar-tools .picon[href="/"] { display: none; }
   .phead h1 { font-size: 1.45rem; }
 }
@@ -808,3 +858,61 @@ a.btn.danger:not(.btn-primary) { color: var(--danger); }
   .pnav { transition: none; }
   .btn { transition: none; }
 }
+
+/* ── Connexion ────────────────────────────────────────────────────── */
+body.login-body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 6vw, 64px);
+  background:
+    radial-gradient(1100px 520px at 12% -8%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 62%),
+    radial-gradient(900px 480px at 100% 110%, color-mix(in srgb, var(--ok) 12%, transparent), transparent 60%),
+    var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+.login-card {
+  width: min(400px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: clamp(22px, 4vw, 32px);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 30px 80px -40px rgba(12, 20, 15, 0.45);
+}
+.login-brand { display: flex; align-items: center; gap: 12px; }
+.login-brand .mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--pnav-bg); color: #e9f2ec; flex: none; }
+.login-brand b { display: block; font-size: 1.15rem; letter-spacing: -0.03em; line-height: 1.1; }
+.login-brand small { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; }
+.login-card h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.03em; }
+.login-card .hint { margin: -8px 0 0; }
+.login-form { display: grid; gap: 14px; }
+.login-form label.field { display: grid; gap: 6px; }
+.login-form input[type="text"],
+.login-form input[type="email"],
+.login-form input[type="password"] { width: 100%; box-sizing: border-box; }
+.login-card a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.login-card a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.login-form .btn { width: 100%; justify-content: center; padding: 11px 14px; font-size: 0.95rem; }
+.login-form .password-field { position: relative; display: flex; }
+.login-form .password-field input { padding-right: 84px; }
+.login-form .password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.login-form .password-toggle:hover { background: var(--accent-soft); }
+.login-foot { margin: 0; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; text-align: center; }

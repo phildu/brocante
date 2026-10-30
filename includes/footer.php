@@ -27,6 +27,9 @@
       </ul>
     </div>
   </div>
+  <?php if (($footerNote = shop_footer_note()) !== ''): ?>
+    <div class="wrap footer-note"><p><?= h($footerNote) ?></p></div>
+  <?php endif; ?>
   <div class="wrap footer-bottom">
     <span>© 2026 <?= h($siteName ?? tenant('name')) ?></span>
     <?= share_button_html(shop_abs_url('/'), (string) ($siteName ?? tenant('name')), (string) ($siteTagline ?? ''), '', 'share-link') ?>

@@ -18,6 +18,7 @@ require_once __DIR__ . '/password-reset.php';
 require_once __DIR__ . '/veo.php';
 require_once __DIR__ . '/siliconflow-video.php';
 require_once __DIR__ . '/modal-video.php';
+require_once __DIR__ . '/shop-hours.php';
 
 function h($s): string
 {
@@ -57,7 +58,17 @@ function category_icon(string $key): string
 function get_content(): array
 {
     $row = db()->query('SELECT * FROM content WHERE id = 1')->fetch();
-    return $row ?: [];
+    if (!$row) return [];
+    // L'adresse et les horaires viennent de la définition globale (identité du
+    // vendeur) et de la grille d'horaires ; tant qu'aucune grille n'est
+    // enregistrée, le texte libre existant reste affiché tel quel.
+    if (function_exists('shop_public_address')) {
+        $address = shop_public_address($row);
+        if ($address !== '') $row['contact_address'] = $address;
+        $hours = shop_hours_summary_text();
+        if ($hours !== '') $row['contact_hours'] = $hours;
+    }
+    return $row;
 }
 
 /**
@@ -3177,14 +3188,28 @@ function admin_accounts(): array
 }
 
 /**
- * Vérifie un couple identifiant / mot de passe. Le mot de passe peut être
- * stocké en clair ou haché (password_hash, comme le fait le portail local).
+ * Vérifie un couple identifiant / mot de passe. L'identifiant du compte
+ * principal peut être son identifiant (admin_user) ou son adresse de contact
+ * (admin_email), pour que le champ « identifiant, nom ou e-mail » accepte les
+ * deux. Le mot de passe peut être stocké en clair ou haché (password_hash,
+ * comme le fait le portail local).
  */
 function admin_login_matches(string $user, string $password): bool
 {
     $user = mb_strtolower(trim($user));
+    if ($user === '') {
+        return false;
+    }
+    $mainUser = mb_strtolower(trim((string) tenant('admin_user')));
+    $mainEmail = mb_strtolower(trim((string) tenant('admin_email', '')));
     foreach (admin_accounts() as [$expectedUser, $expected]) {
-        if ($expectedUser === '' || $expected === '' || !hash_equals(mb_strtolower($expectedUser), $user)) {
+        $expectedUser = mb_strtolower(trim($expectedUser));
+        if ($expectedUser === '' || $expected === '') {
+            continue;
+        }
+        $matches = hash_equals($expectedUser, $user)
+            || ($mainUser !== '' && $expectedUser === $mainUser && $mainEmail !== '' && hash_equals($mainEmail, $user));
+        if (!$matches) {
             continue;
         }
         $ok = password_get_info($expected)['algo'] !== null
@@ -3205,7 +3230,7 @@ function admin_password_configured(): bool
         }
     }
     try {
-        return (bool) db()->query("SELECT 1 FROM accounts WHERE role IN ('admin', 'community_manager') AND is_active = 1 AND password_hash IS NOT NULL")->fetchColumn();
+        return (bool) db()->query("SELECT 1 FROM accounts WHERE role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND password_hash IS NOT NULL")->fetchColumn();
     } catch (Throwable $e) {
         return false;
     }

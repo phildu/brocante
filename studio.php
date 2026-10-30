@@ -8,6 +8,7 @@ require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/share.php';
 require_once __DIR__ . '/includes/oauth.php';
+require_once __DIR__ . '/includes/login-ui.php';
 
 header('Cache-Control: no-store');
 $content = get_content();
@@ -51,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         sleep(1); // freine les essais en série
-        $error = 'Identifiant ou mot de passe incorrect.';
+        $error = 'Identifiant, nom ou e-mail incorrect.';
     }
 }
 
@@ -83,6 +84,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="/assets/studio.css">
 <link rel="stylesheet" href="/assets/oauth.css">
+<link rel="stylesheet" href="/assets/login.css">
 <link rel="stylesheet" href="/assets/barcode-scan.css">
 <link rel="stylesheet" href="/assets/object-picker.css">
 <link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/assets/share.css') ?>">
@@ -98,31 +100,20 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
     <?php if ($notice): ?><p class="st-notice" role="status"><?= h($notice) ?></p><?php endif; ?>
     <?php if ($error): ?><p class="st-error" role="alert"><?= h($error) ?></p><?php endif; ?>
     <?php if (!admin_password_configured()): ?><p class="st-error" role="alert">Aucun compte n'est défini pour ce commerce.</p><?php endif; ?>
-    <?php if ($social = oauth_buttons_html('admin', ['next' => '/studio.php'])): ?>
-      <?= $social ?>
-      <div class="oauth-sep"><span>ou</span></div>
-    <?php endif; ?>
-    <form method="post" class="st-form">
-      <input type="hidden" name="action" value="login">
-      <label class="qa-field">Identifiant ou e-mail
-        <input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required value="<?= h($_POST['username'] ?? '') ?>">
-      </label>
-      <label class="qa-field">Mot de passe
-        <input type="password" name="password" id="st-password" autocomplete="current-password" required>
-      </label>
-      <label class="qa-switch"><input type="checkbox" id="st-show-password"> <span>Afficher le mot de passe</span></label>
-      <label class="qa-switch"><input type="checkbox" name="remember" value="1" checked> <span>Rester connecté sur ce téléphone<br><small class="qa-note">30 jours. Décochez sur un appareil partagé.</small></span></label>
-      <button class="btn btn-primary" type="submit">Se connecter</button>
-      <p class="st-forgot"><a href="/admin/mot-de-passe-oublie.php?from=studio">Mot de passe oublié ?</a></p>
-    </form>
+    <?= login_form_html([
+      'id' => 'studio-login',
+      'identifier_name' => 'username',
+      'social' => oauth_buttons_html('admin', ['next' => '/studio.php']),
+      'forgot_url' => '/admin/mot-de-passe-oublie.php?from=studio',
+      'submit' => 'Se connecter',
+      'remember' => true,
+      'remember_name' => 'remember',
+      'remember_label' => 'Rester connecté sur ce téléphone (30 jours)',
+      'remember_checked' => true,
+      'hidden' => ['action' => 'login'],
+    ]) ?>
     <p class="st-share-row"><button type="button" class="btn btn-ghost"<?= $shareAttrs ?> data-share-open="share">Partager l'application</button></p>
   </main>
-  <script>
-    (function () {
-      var box = document.getElementById('st-show-password'), pw = document.getElementById('st-password');
-      if (box && pw) box.addEventListener('change', function () { pw.type = box.checked ? 'text' : 'password'; });
-    })();
-  </script>
 <?php elseif (!$isAdmin): ?>
   <main class="st-login">
     <p class="eyebrow">Studio</p>

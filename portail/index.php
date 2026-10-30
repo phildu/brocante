@@ -2,11 +2,13 @@
 require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas.php';
 require_once PORTAIL_ROOT . '/includes/galleries.php';
+require_once PORTAIL_ROOT . '/includes/equipe.php';
 
 $shops = tenant_list();
 $flash = portail_flash();
 $pendingRequests = count(array_filter(saas_requests(), static fn ($r) => $r['status'] === 'pending'));
 $galleryCount = count(gallery_list());
+$team = eq_stats();
 $onlineCount = 0;
 foreach ($shops as $shop) {
     if (portail_presence_mode($shop) !== 'physical') $onlineCount++;
@@ -37,7 +39,7 @@ $current = $shops[$viewing] ?? null;
 <title>Vue d'ensemble — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 </head>
 <body>
 <div class="app">
@@ -68,7 +70,12 @@ $current = $shops[$viewing] ?? null;
       <span class="l">Inscriptions à traiter</span>
       <span class="s"><a href="/portail/inscriptions.php"><?= $pendingRequests ? 'Ouvrir la file d’attente' : 'File à jour' ?></a></span>
     </div>
-    <div class="kpi">
+    <div class="kpi<?= $team['attente'] ? ' bad' : '' ?>">
+      <span class="n"><?= (int) $team['actifs'] ?></span>
+      <span class="l">Équipe du projet</span>
+      <span class="s"><a href="/portail/equipe.php"><?= $team['attente'] ? (int) $team['attente'] . ' candidature' . ($team['attente'] > 1 ? 's' : '') . ' à traiter' : 'Aucune candidature en attente' ?></a></span>
+    </div>
+    <div class="kpi kpi-wide">
       <span class="n" style="font-size:1rem;line-height:1.35;"><?= e(portail_address_pattern()) ?></span>
       <span class="l">Adresse d’une boutique</span>
       <span class="s">Chaque commerce garde son adresse propre.</span>
@@ -147,10 +154,7 @@ $current = $shops[$viewing] ?? null;
                   <input type="hidden" name="slug" value="<?= e($slug) ?>">
                   <label class="field">Identifiant<input name="admin_user" required pattern="[A-Za-z0-9._@\-]{3,40}" maxlength="40" autocapitalize="none" value="<?= e($shop['admin_user']) ?>"></label>
                   <label class="field">Nouveau mot de passe
-                    <span class="password-field">
-                      <input type="password" name="admin_password" id="pw-<?= e($slug) ?>" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum">
-                      <button type="button" class="password-toggle" data-toggle="pw-<?= e($slug) ?>" aria-pressed="false">Afficher</button>
-                    </span>
+                    <input type="password" name="admin_password" id="pw-<?= e($slug) ?>" required minlength="6" maxlength="60" autocomplete="new-password" placeholder="6 caractères minimum">
                   </label>
                   <span class="actions" style="margin:0;">
                     <button class="btn small btn-primary" type="submit">Enregistrer</button>

@@ -15,7 +15,7 @@ $fields = [
     'principle1_title', 'principle1_text',
     'principle2_title', 'principle2_text',
     'principle3_title', 'principle3_text',
-    'contact_address', 'contact_hours', 'contact_delivery',
+    'contact_delivery',
     'shipping_fee', 'pickup_label', 'shipping_label',
     'pickup_only_below', 'pickup_only_message',
 ];
@@ -58,7 +58,12 @@ $sql = 'UPDATE content SET ' . implode(', ', $set) . ' WHERE id = 1';
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
 
+if (array_key_exists('footer_note', $_POST)) {
+    shop_setting_set('footer_note', mb_substr(trim((string) $_POST['footer_note']), 0, 200));
+}
+
 flash_set('Contenus mis à jour.');
 $backTab = in_array($_POST['tab'] ?? '', ['general', 'pages', 'paiement'], true) ? $_POST['tab'] : 'general';
-header('Location: /admin/index.php?s=' . $backTab);
+$backPage = in_array($_POST['p'] ?? '', ['accueil', 'sections', 'footer', 'horaires'], true) ? (string) $_POST['p'] : '';
+header('Location: /admin/index.php?s=' . $backTab . ($backPage !== '' ? '&p=' . $backPage : ''));
 exit;

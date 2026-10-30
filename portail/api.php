@@ -21,7 +21,7 @@ $flash = portail_flash();
 <title>API &amp; réseaux — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 </head>
 <body>
 <div class="app">

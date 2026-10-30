@@ -40,6 +40,64 @@ function saas_default_plans(): array
     ];
 }
 
+/** Réglages de la page d'accueil publique : textes du bandeau, images (uploads/saas/), diaporama, assombrissement. */
+function saas_home_normalize(array $h): array
+{
+    $text = static fn ($v, int $max): string => mb_substr(trim((string) $v), 0, $max);
+    $images = [];
+    foreach ((array) ($h['images'] ?? []) as $image) {
+        $image = (string) $image;
+        if (!preg_match('#^uploads/saas/[a-z0-9][a-z0-9._-]*\.(?:jpg|png|webp)$#', $image) || in_array($image, $images, true)) continue;
+        $images[] = $image;
+        if (count($images) >= 6) break;
+    }
+    return [
+        'eyebrow' => $text($h['eyebrow'] ?? '', 120),
+        'title' => $text($h['title'] ?? '', 140),
+        'lede' => $text($h['lede'] ?? '', 400),
+        'images' => $images,
+        'slideshow' => !array_key_exists('slideshow', $h) || !empty($h['slideshow']),
+        'overlay' => max(0, min(80, (int) ($h['overlay'] ?? 35))),
+    ];
+}
+
+/** Images du bandeau d'accueil, dans l'ordre d'affichage. */
+function saas_home_banners(array $cfg): array
+{
+    return (array) ($cfg['home']['images'] ?? []);
+}
+
+/** Enregistre un bandeau d'accueil (JPEG, PNG ou WebP) redimensionné dans uploads/saas/ ; rend le chemin relatif. */
+function saas_banner_store(array $file, int $maxW = 2000): string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new InvalidArgumentException(($file['error'] ?? 0) === UPLOAD_ERR_INI_SIZE || ($file['error'] ?? 0) === UPLOAD_ERR_FORM_SIZE ? "L'image est trop lourde pour le serveur." : "L'image n'a pas pu être envoyée.");
+    }
+    $info = @getimagesize((string) $file['tmp_name']);
+    if (!$info || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) {
+        throw new InvalidArgumentException('Image non reconnue : JPEG, PNG ou WebP.');
+    }
+    if ((int) ($file['size'] ?? 0) > 12 * 1024 * 1024) throw new InvalidArgumentException("L'image dépasse 12 Mo.");
+    $src = match ($info[2]) { IMAGETYPE_JPEG => @imagecreatefromjpeg((string) $file['tmp_name']), IMAGETYPE_PNG => @imagecreatefrompng((string) $file['tmp_name']), default => @imagecreatefromwebp((string) $file['tmp_name']) };
+    if (!$src) throw new InvalidArgumentException("L'image est illisible.");
+    [$w, $h] = [imagesx($src), imagesy($src)];
+    $scale = min(1, $maxW / $w);
+    $dst = imagecreatetruecolor(max(1, (int) round($w * $scale)), max(1, (int) round($h * $scale)));
+    imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, imagesx($dst), imagesy($dst), $w, $h);
+    $dir = dirname(__DIR__) . '/uploads/saas';
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) throw new InvalidArgumentException('Dossier uploads/saas/ non inscriptible.');
+    $name = 'accueil-' . substr(bin2hex(random_bytes(4)), 0, 8) . '.jpg';
+    if (!imagejpeg($dst, "$dir/$name", 82)) throw new InvalidArgumentException("L'image n'a pas pu être enregistrée.");
+    return 'uploads/saas/' . $name;
+}
+
+/** Supprime une image du bandeau d'accueil (uniquement sous uploads/saas/). */
+function saas_banner_delete(string $path): void
+{
+    if (preg_match('#^uploads/saas/[a-z0-9][a-z0-9._-]*$#', $path)) @unlink(dirname(__DIR__) . '/' . $path);
+}
+
 /** Réglages de la plateforme, valeurs par défaut comprises. */
 function saas_config(): array
 {
@@ -71,6 +129,7 @@ function saas_config(): array
         'free_daily_cap' => max(0, min(1000, (int) ($saved['free_daily_cap'] ?? 10))),
         'hidden' => array_values(array_filter(array_map('strval', (array) ($saved['hidden'] ?? ['exemple-librairie'])))),
         'remote' => array_values(array_filter((array) ($saved['remote'] ?? []), static fn ($r) => is_array($r) && gallery_remote_url_valid((string) ($r['url'] ?? '')))),
+        'home' => saas_home_normalize((array) ($saved['home'] ?? [])),
     ];
     return $cfg;
 }
@@ -79,6 +138,7 @@ function saas_config_save(array $cfg): bool
 {
     $dir = saas_data_dir();
     if (!is_dir($dir) && !@mkdir($dir, 0755, true)) return false;
+    $cfg['home'] = saas_home_normalize((array) ($cfg['home'] ?? []));
     $ok = @file_put_contents($dir . '/saas.json', json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)) !== false;
     @unlink(saas_data_dir() . '/saas/cache.json');
     return $ok;

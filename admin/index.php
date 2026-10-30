@@ -9,6 +9,15 @@ $mediaPhotos = get_media_items('photo');
 $flash = flash_get();
 $settingsTabs = ['general' => 'Général', 'pages' => 'Contenu des pages', 'paiement' => 'Paiement & livraison'];
 $tab = isset($settingsTabs[$_GET['s'] ?? '']) ? (string) $_GET['s'] : 'general';
+$pagesSubtabs = ['accueil' => 'Page d’accueil', 'sections' => 'Sections', 'footer' => 'Pied de page', 'horaires' => 'Horaires & fermetures'];
+$pagesSub = isset($pagesSubtabs[$_GET['p'] ?? '']) ? (string) $_GET['p'] : 'accueil';
+$hoursSchedule = shop_hours_editor_schedule();
+$hoursClosures = shop_hours_closures();
+$hoursSummary = shop_hours_summary_text();
+$hoursStatus = shop_hours_status();
+$publicAddress = shop_public_address($content);
+$footerNote = shop_footer_note();
+$visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'atelier";
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -35,6 +44,25 @@ $tab = isset($settingsTabs[$_GET['s'] ?? '']) ? (string) $_GET['s'] : 'general';
   .media-pick-item span { display: block; font-size: 0.68rem; padding: 4px 6px; color: var(--ink-soft); }
   .media-pick-item:hover { outline: 2px solid var(--accent); }
   [data-panel][hidden] { display: none !important; }
+  [data-subpanel][hidden] { display: none !important; }
+  .pages-subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; border-bottom: 1px solid var(--line); }
+  .pages-subtabs a { padding: 9px 13px; font-size: 0.85rem; color: var(--ink-soft); text-decoration: none; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; }
+  .pages-subtabs a:hover { color: var(--ink); }
+  .pages-subtabs a[aria-current="page"] { background: var(--surface); border-color: var(--line); color: var(--ink); font-weight: 600; margin-bottom: -1px; }
+  .hours-week { display: flex; flex-direction: column; gap: 10px; }
+  .hours-day { display: grid; grid-template-columns: 110px 86px 1fr auto; gap: 10px; align-items: center; }
+  .hours-day-name { font-weight: 600; }
+  .hours-closed { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+  .hours-ranges { display: flex; flex-wrap: wrap; gap: 8px; }
+  .hours-range { display: inline-flex; align-items: center; gap: 6px; }
+  .hours-range input[type="time"] { width: 112px; }
+  .closure-row { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)) auto; gap: 8px; align-items: end; margin-bottom: 8px; }
+  .closure-row label { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--ink-soft); }
+  .footer-recap { margin: 16px 0 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .footer-recap p { margin: 4px 0; font-size: 0.9rem; }
+  @media (max-width: 780px) {
+    .hours-day, .closure-row { grid-template-columns: 1fr; align-items: stretch; }
+  }
 </style>
 </head>
 <body>
@@ -68,6 +96,13 @@ $tab = isset($settingsTabs[$_GET['s'] ?? '']) ? (string) $_GET['s'] : 'general';
         </div>
 
         <div data-panel="pages">
+        <nav class="pages-subtabs" aria-label="Contenu des pages">
+          <?php foreach ($pagesSubtabs as $key => $label): ?>
+            <a href="/admin/index.php?s=pages&amp;p=<?= h($key) ?>"<?= $pagesSub === $key ? ' aria-current="page"' : '' ?>><?= h($label) ?></a>
+          <?php endforeach; ?>
+        </nav>
+
+        <div data-subpanel="accueil"<?= $pagesSub !== 'accueil' ? ' hidden' : '' ?>>
         <h2>Page d'accueil</h2>
         <p class="hint">Le texte d'introduction et la photo mise en avant en haut du site.</p>
         <div class="field"><label>Eyebrow</label><input type="text" name="hero_eyebrow" value="<?= h($content['hero_eyebrow']) ?>"></div>
@@ -115,8 +150,11 @@ $tab = isset($settingsTabs[$_GET['s'] ?? '']) ? (string) $_GET['s'] : 'general';
           });
         })();
         </script>
+        <button type="submit" class="btn btn-primary" style="margin-top:18px;">Enregistrer les contenus</button>
+        </div>
 
-        <h2 style="margin-top:36px;">Notre histoire</h2>
+        <div data-subpanel="sections"<?= $pagesSub !== 'sections' ? ' hidden' : '' ?>>
+        <h2>Notre histoire</h2>
         <p class="hint">Le récit affiché sur la page d'accueil, et les trois points qui le suivent.</p>
         <div class="field"><label>Eyebrow</label><input type="text" name="story_eyebrow" value="<?= h($content['story_eyebrow']) ?>"></div>
         <div class="field"><label>Titre</label><input type="text" name="story_title" value="<?= h($content['story_title']) ?>"></div>
@@ -147,13 +185,35 @@ $tab = isset($settingsTabs[$_GET['s'] ?? '']) ? (string) $_GET['s'] : 'general';
           <?php endfor; ?>
         </div>
 
-        <h2 style="margin-top:36px;">Visiter l'atelier</h2>
-        <p class="hint">Coordonnées affichées en bas de la page d'accueil.</p>
-        <div class="field"><label>Adresse</label><input type="text" name="contact_address" value="<?= h($content['contact_address']) ?>"></div>
-        <div class="field"><label>Horaires</label><input type="text" name="contact_hours" value="<?= h($content['contact_hours']) ?>"></div>
+        <h2 style="margin-top:36px;"><?= h($visitTitle) ?></h2>
+        <p class="hint">Coordonnées affichées en bas de la page d'accueil et dans le pied de page.</p>
+        <div class="field">
+          <label>Adresse</label>
+          <input type="text" value="<?= h($publicAddress) ?>" readonly>
+          <p class="hint" style="margin:4px 0 0;">Reprise de la <a href="/admin/legal.php#legal-identity" style="color:var(--accent);">définition globale de la boutique</a> (Pages légales → Identité du vendeur). Pour la modifier, changez-y l'adresse du vendeur.</p>
+        </div>
+        <div class="field">
+          <label>Horaires</label>
+          <input type="text" value="<?= h($hoursSummary !== '' ? $hoursSummary : $content['contact_hours']) ?>" readonly>
+          <p class="hint" style="margin:4px 0 0;"><?= $hoursSummary !== '' ? 'Calculés depuis la grille d’horaires.' : 'Texte libre actuel — aucun horaire structuré enregistré.' ?> <a href="/admin/index.php?s=pages&amp;p=horaires" style="color:var(--accent);">Gérer les horaires →</a></p>
+        </div>
         <div class="field"><label>Livraison</label><input type="text" name="contact_delivery" value="<?= h($content['contact_delivery']) ?>"></div>
 
         <button type="submit" class="btn btn-primary" style="margin-top:18px;">Enregistrer les contenus</button>
+        </div>
+
+        <div data-subpanel="footer"<?= $pagesSub !== 'footer' ? ' hidden' : '' ?>>
+        <h2>Pied de page</h2>
+        <p class="hint">Le pied de page reprend automatiquement les coordonnées ci-dessous. Ajoutez-y une phrase si vous le souhaitez.</p>
+        <div class="field"><label>Note de pied de page (facultatif)</label><input type="text" name="footer_note" maxlength="200" value="<?= h($footerNote) ?>" placeholder="ex. Fermeture annuelle du 3 au 10 novembre."></div>
+        <div class="footer-recap">
+          <p><strong>Adresse</strong> <?= h($publicAddress !== '' ? $publicAddress : '—') ?></p>
+          <p><strong>Horaires</strong> <?= h($hoursSummary !== '' ? $hoursSummary : $content['contact_hours']) ?></p>
+          <p><strong>Livraison</strong> <?= h($content['contact_delivery']) ?></p>
+        </div>
+        <p class="hint">L'adresse se règle dans la <a href="/admin/legal.php#legal-identity" style="color:var(--accent);">définition globale de la boutique</a> ; les horaires dans <a href="/admin/index.php?s=pages&amp;p=horaires" style="color:var(--accent);">Horaires &amp; fermetures</a>.</p>
+        <button type="submit" class="btn btn-primary" style="margin-top:18px;">Enregistrer les contenus</button>
+        </div>
         </div>
 
         <div data-panel="paiement" id="shipping-settings">
@@ -173,6 +233,126 @@ $tab = isset($settingsTabs[$_GET['s'] ?? '']) ? (string) $_GET['s'] : 'general';
         <button type="submit" class="btn btn-primary" style="margin-top:18px;">Enregistrer les contenus</button>
         </div>
       </form>
+
+      <div class="admin-block" data-panel="pages" data-subpanel="horaires"<?= $pagesSub !== 'horaires' ? ' hidden' : '' ?>>
+        <form method="post" action="/admin/save-hours.php">
+          <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+          <h2>Horaires d’ouverture</h2>
+          <p class="hint">Un créneau par plage horaire : ajoutez-en un second pour une coupure le midi. Cochez « Fermé » pour un jour sans ouverture. Ces horaires remplacent le texte libre affiché sur le site.</p>
+          <div class="hours-week">
+            <?php foreach (SHOP_HOURS_DAYS as $dayKey => $dayLabel): $day = $hoursSchedule[$dayKey] ?? ['closed' => true, 'ranges' => []]; $ranges = $day['ranges'] ?: [['from' => '', 'to' => '']]; ?>
+              <div class="hours-day" data-day-row>
+                <span class="hours-day-name"><?= h($dayLabel) ?></span>
+                <label class="hours-closed"><input type="checkbox" name="hours[<?= h($dayKey) ?>][closed]" value="1"<?= $day['closed'] ? ' checked' : '' ?>> Fermé</label>
+                <div class="hours-ranges" data-ranges>
+                  <?php foreach ($ranges as $range): ?>
+                    <span class="hours-range">
+                      <input type="time" name="hours[<?= h($dayKey) ?>][from][]" value="<?= h($range['from']) ?>" aria-label="Ouverture, <?= h($dayLabel) ?>">
+                      <span aria-hidden="true">–</span>
+                      <input type="time" name="hours[<?= h($dayKey) ?>][to][]" value="<?= h($range['to']) ?>" aria-label="Fermeture, <?= h($dayLabel) ?>">
+                      <button type="button" class="btn-small" data-remove-range aria-label="Retirer ce créneau">×</button>
+                    </span>
+                  <?php endforeach; ?>
+                </div>
+                <button type="button" class="btn-small" data-add-range>+ Créneau</button>
+              </div>
+            <?php endforeach; ?>
+          </div>
+
+          <h2 style="margin-top:32px;">Fermetures exceptionnelles, jours fériés et vacances</h2>
+          <p class="hint">Chaque période fermée est annoncée automatiquement en haut du site (avec la réouverture) et reprise dans les coordonnées. Laissez « Au » vide pour une fermeture d’un seul jour.</p>
+          <div data-closures>
+            <?php if (!$hoursClosures): ?><p class="hint" data-closures-empty>Aucune fermeture enregistrée.</p><?php endif; ?>
+            <?php foreach ($hoursClosures as $i => $closure): ?>
+              <div class="closure-row" data-closure-row>
+                <label>Du<input type="date" name="closures[<?= $i ?>][from]" value="<?= h($closure['from']) ?>"></label>
+                <label>Au<input type="date" name="closures[<?= $i ?>][to]" value="<?= h($closure['to']) ?>"></label>
+                <label>Type
+                  <select name="closures[<?= $i ?>][type]">
+                    <?php foreach (SHOP_HOURS_CLOSURE_TYPES as $typeKey => $typeLabel): ?><option value="<?= h($typeKey) ?>"<?= $closure['type'] === $typeKey ? ' selected' : '' ?>><?= h($typeLabel) ?></option><?php endforeach; ?>
+                  </select>
+                </label>
+                <label>Motif<input type="text" name="closures[<?= $i ?>][label]" maxlength="120" value="<?= h($closure['label']) ?>" placeholder="ex. Congés d’automne"></label>
+                <button type="button" class="btn-small" data-remove-closure aria-label="Retirer cette fermeture">×</button>
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <button type="button" class="btn-small" id="add-closure">+ Ajouter une fermeture</button>
+
+          <h2 style="margin-top:32px;">Message aux visiteurs</h2>
+          <div class="field">
+            <label>Message libre (facultatif)</label>
+            <textarea name="opening_notice" maxlength="300" placeholder="ex. Fermeture annuelle du 3 au 10 novembre, réouverture le 12 à 10 h."><?= h(shop_setting('opening_notice', '')) ?></textarea>
+            <p class="hint" style="margin:4px 0 0;">S’il est rempli, il remplace le message automatique du bandeau. Laissez vide pour laisser le site annoncer les fermetures et le statut du jour.</p>
+          </div>
+
+          <?php $previewNotice = shop_hours_announcement(); ?>
+          <p class="hint">Aperçu public : <?= h($hoursSummary !== '' ? $hoursSummary : 'aucun horaire structuré — le texte libre actuel reste affiché') ?>.</p>
+          <p class="hint">Statut maintenant : <?= h($hoursStatus['label'] !== '' ? $hoursStatus['label'] : '—') ?><?= $previewNotice ? ' · Bandeau : ' . h($previewNotice['text']) : '' ?></p>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;">
+            <button type="submit" class="btn btn-primary">Enregistrer les horaires</button>
+            <?php if ($hoursSummary !== ''): ?>
+              <button type="submit" name="reset_hours" value="1" class="btn" onclick="return confirm('Retirer la grille d’horaires et revenir au texte libre ? Les fermetures et le message seront effacés.');">Revenir au texte libre</button>
+            <?php endif; ?>
+          </div>
+        </form>
+
+        <template id="closure-template">
+          <div class="closure-row" data-closure-row>
+            <label>Du<input type="date" name="closures[__i__][from]"></label>
+            <label>Au<input type="date" name="closures[__i__][to]"></label>
+            <label>Type
+              <select name="closures[__i__][type]">
+                <?php foreach (SHOP_HOURS_CLOSURE_TYPES as $typeKey => $typeLabel): ?><option value="<?= h($typeKey) ?>"><?= h($typeLabel) ?></option><?php endforeach; ?>
+              </select>
+            </label>
+            <label>Motif<input type="text" name="closures[__i__][label]" maxlength="120" placeholder="ex. Congés d’automne"></label>
+            <button type="button" class="btn-small" data-remove-closure aria-label="Retirer cette fermeture">×</button>
+          </div>
+        </template>
+
+        <script>
+        (function () {
+          document.querySelectorAll('[data-add-range]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var list = btn.closest('[data-day-row]').querySelector('[data-ranges]');
+              var first = list.querySelector('.hours-range');
+              if (!first) return;
+              var clone = first.cloneNode(true);
+              clone.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+              list.appendChild(clone);
+            });
+          });
+          document.addEventListener('click', function (e) {
+            var remove = e.target.closest('[data-remove-range]');
+            if (!remove) return;
+            var range = remove.closest('.hours-range');
+            var list = range.closest('[data-ranges]');
+            if (list.querySelectorAll('.hours-range').length > 1) range.remove();
+            else range.querySelectorAll('input').forEach(function (input) { input.value = ''; });
+          });
+
+          var list = document.querySelector('[data-closures]');
+          var index = <?= (int) count($hoursClosures) ?>;
+          var add = document.getElementById('add-closure');
+          if (add && list) {
+            add.addEventListener('click', function () {
+              var tpl = document.getElementById('closure-template');
+              list.insertAdjacentHTML('beforeend', tpl.innerHTML.replace(/__i__/g, String(index++)));
+              var empty = list.querySelector('[data-closures-empty]');
+              if (empty) empty.remove();
+            });
+          }
+          document.addEventListener('click', function (e) {
+            var remove = e.target.closest('[data-remove-closure]');
+            if (!remove) return;
+            var row = remove.closest('[data-closure-row]');
+            if (row) row.remove();
+          });
+        })();
+        </script>
+      </div>
 
       <form class="admin-block" method="post" action="/admin/save-stripe-keys.php" id="stripe-settings" data-panel="paiement">
         <h2>Réglages Stripe</h2>
@@ -244,11 +424,17 @@ $tab = isset($settingsTabs[$_GET['s'] ?? '']) ? (string) $_GET['s'] : 'general';
   // Anciennes adresses : les clés d'API et d'IA sont maintenant dans « API & réseaux ».
   if (/^#(gemini|fal|modal-video|siliconflow)-settings$/.test(location.hash)) { location.replace('/admin/social.php' + location.hash); return; }
   var current = <?= json_encode($tab) ?>;
+  var currentSub = <?= json_encode($pagesSub) ?>;
   var panels = document.querySelectorAll('[data-panel]');
-  panels.forEach(function (p) { p.hidden = p.dataset.panel !== current; });
+  panels.forEach(function (p) {
+    var show = p.dataset.panel === current;
+    if (show && p.hasAttribute('data-subpanel')) show = p.dataset.subpanel === currentSub;
+    p.hidden = !show;
+  });
   var target = location.hash ? document.getElementById(location.hash.slice(1)) : null;
   var owner = target && target.closest('[data-panel]');
   if (owner && owner.dataset.panel !== current) { location.replace('/admin/index.php?s=' + owner.dataset.panel + location.hash); return; }
+  if (owner && owner.hasAttribute('data-subpanel') && owner.dataset.subpanel !== currentSub) { location.replace('/admin/index.php?s=pages&p=' + owner.dataset.subpanel + location.hash); return; }
   if (owner) target.scrollIntoView();
 })();
 (function () {

@@ -77,6 +77,7 @@ if ($nature !== '' && $sous !== '') $active[] = [$natures[$nature]['subs'][$sous
     <?php if ($active): ?><p><a class="fl-btn" href="/boutique.php">Effacer les filtres</a></p><?php endif; ?>
   <?php endif; ?>
 </section>
+<?= plugin_render('boutique_bottom') ?>
 <script>
   (function () {
     var d = document.querySelector('.fl-filters');

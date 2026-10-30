@@ -29,26 +29,58 @@ function password_reset_ensure_schema(): void
     )");
 }
 
-/** Qui reçoit le lien pour cet identifiant ou cet e-mail ? ['account_id' => id|null, 'email' => …] ou null. */
+/**
+ * Qui reçoit le lien pour cet identifiant, ce nom ou cet e-mail ?
+ * ['account_id' => id|null, 'email' => …, 'phone' => …, 'name' => …] ou null.
+ * Le nom n'est accepté que s'il désigne un seul compte.
+ */
 function password_reset_target(string $login): ?array
 {
     $login = trim($login);
     if ($login === '') return null;
     // Compte de l'équipe : identifiant ou e-mail, avec ou sans mot de passe (un compte créé par connexion sociale peut en choisir un).
-    $stmt = db()->prepare("SELECT id, email FROM accounts WHERE (email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE)
-        AND role IN ('admin', 'community_manager') AND is_active = 1 AND email != '' LIMIT 1");
+    $stmt = db()->prepare("SELECT id, email, phone, name FROM accounts WHERE (email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE)
+        AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND email != '' LIMIT 1");
     $stmt->execute([$login, $login]);
-    if ($row = $stmt->fetch()) {
-        return filter_var($row['email'], FILTER_VALIDATE_EMAIL) ? ['account_id' => (int) $row['id'], 'email' => (string) $row['email']] : null;
+    $row = $stmt->fetch();
+    if (!$row) {
+        $byName = db()->prepare("SELECT id, email, phone, name FROM accounts WHERE name = ? COLLATE NOCASE AND name != ''
+            AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND email != '' LIMIT 2");
+        $byName->execute([$login]);
+        $rows = $byName->fetchAll();
+        $row = count($rows) === 1 ? $rows[0] : null;
     }
-    // Compte principal du commerce.
+    if ($row) {
+        return filter_var($row['email'], FILTER_VALIDATE_EMAIL)
+            ? ['account_id' => (int) $row['id'], 'email' => (string) $row['email'], 'phone' => (string) ($row['phone'] ?? ''), 'name' => (string) ($row['name'] ?? '')]
+            : null;
+    }
+    // Compte principal du commerce : son identifiant (admin_user) ou son adresse de contact (admin_email).
     $user = mb_strtolower(trim((string) tenant('admin_user')));
-    if ($user === '' || mb_strtolower($login) !== $user) return null;
-    $email = filter_var($user, FILTER_VALIDATE_EMAIL) ? $user : trim((string) tenant('admin_email', ''));
+    $contact = mb_strtolower(trim((string) tenant('admin_email', '')));
+    if ($user === '' || (mb_strtolower($login) !== $user && ($contact === '' || mb_strtolower($login) !== $contact))) return null;
+    $email = filter_var($user, FILTER_VALIDATE_EMAIL) ? $user : $contact;
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $email = (string) (pricing_admin_emails()[0] ?? '');
     }
-    return filter_var($email, FILTER_VALIDATE_EMAIL) ? ['account_id' => null, 'email' => $email] : null;
+    return filter_var($email, FILTER_VALIDATE_EMAIL)
+        ? ['account_id' => null, 'email' => $email, 'phone' => trim((string) tenant('admin_phone', '')), 'name' => '']
+        : null;
+}
+
+/** Applique un nouveau mot de passe à la cible d'une réinitialisation (compte d'équipe ou compte principal). */
+function password_reset_set_target(array $target, string $password): void
+{
+    if (mb_strlen($password) < ACCOUNT_PASSWORD_MIN) throw new InvalidArgumentException('Le mot de passe doit faire au moins ' . ACCOUNT_PASSWORD_MIN . ' caractères.');
+    if (mb_strlen($password) > 200) throw new InvalidArgumentException('Mot de passe trop long.');
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    if (($target['account_id'] ?? null) !== null) {
+        $upd = db()->prepare("UPDATE accounts SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1");
+        $upd->execute([$hash, (int) $target['account_id']]);
+        if (!$upd->rowCount()) throw new InvalidArgumentException('Ce compte n\'existe plus ou est désactivé.');
+    } else {
+        shop_setting_set('admin_password_override', json_encode(['hash' => $hash, 'base' => sha1((string) tenant('admin_password'))]));
+    }
 }
 
 /** Message e-mail simple (UTF-8). En local (hôte « localhost », « .test », adresse IP), le message est aussi écrit dans data/mail-outbox.log. */
@@ -115,17 +147,8 @@ function password_reset_find(string $token): ?array
 function password_reset_apply(array $reset, string $password, string $confirm): void
 {
     db();
-    if (mb_strlen($password) < ACCOUNT_PASSWORD_MIN) throw new InvalidArgumentException('Le mot de passe doit faire au moins ' . ACCOUNT_PASSWORD_MIN . ' caractères.');
-    if (mb_strlen($password) > 200) throw new InvalidArgumentException('Mot de passe trop long.');
     if (!hash_equals($password, $confirm)) throw new InvalidArgumentException('Les deux mots de passe ne sont pas identiques.');
-    $hash = password_hash($password, PASSWORD_DEFAULT);
-    if ($reset['account_id'] !== null) {
-        $upd = db()->prepare("UPDATE accounts SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role IN ('admin', 'community_manager') AND is_active = 1");
-        $upd->execute([$hash, (int) $reset['account_id']]);
-        if (!$upd->rowCount()) throw new InvalidArgumentException('Ce compte n\'existe plus ou est désactivé.');
-    } else {
-        shop_setting_set('admin_password_override', json_encode(['hash' => $hash, 'base' => sha1((string) tenant('admin_password'))]));
-    }
+    password_reset_set_target(['account_id' => $reset['account_id']], $password);
     db()->prepare('UPDATE password_resets SET used_at = ? WHERE (account_id IS ? OR account_id = ?) AND used_at IS NULL')
         ->execute([time(), $reset['account_id'], $reset['account_id']]);
 }
@@ -157,15 +180,12 @@ function password_reset_page(string $title, string $bodyHtml): never
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/login.css">
 <style>
-  .login-wrap { max-width: 400px; margin: 12vh auto 40px; padding: 0 20px; }
+  .login-wrap { max-width: 420px; margin: 12vh auto 40px; padding: 0 20px; }
   .login-box { background: var(--surface); border: 1px solid var(--line); padding: 32px; }
   .login-box h1 { font-size: 1.5rem; margin-bottom: 6px; }
   .login-box p.lede { font-size: 0.92rem; margin-bottom: 20px; }
-  .login-box input[type="password"], .login-box input[type="text"] {
-    width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--line); color: var(--ink);
-    padding: 12px 14px; font-family: var(--font-body); font-size: 16px; margin-bottom: 14px;
-  }
   .login-box label.lbl { display: block; font-size: .85rem; margin-bottom: 4px; color: var(--ink-soft); }
   .login-error { color: var(--accent); font-size: 0.88rem; margin-bottom: 14px; font-family: var(--font-mono); }
   .login-ok { font-size: 0.92rem; margin-bottom: 14px; padding: 12px; border: 1px solid var(--line); background: var(--bg); }

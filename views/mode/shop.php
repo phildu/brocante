@@ -53,6 +53,7 @@ $title = $cat !== 'tous' ? category_label($cat) : 'Toute la collection';
     <?php endif; ?>
   </div>
 </section>
+<?= plugin_render('boutique_bottom') ?>
 <script>
 (function () {
   var header = document.querySelector('header.site');

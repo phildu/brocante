@@ -339,14 +339,15 @@ ga_head('Plan des commerces');
       // La carte pivote autour de son centre ; pour qu'aucun coin ne reste vide, le cadre prend la taille de la diagonale.
       // Les clics sont ramenés dans le repère de Leaflet (sinon Leaflet croit la carte droite et le curseur se décale).
       var bearing = 0;
-      var baseMousePoint = map.mouseEventToContainerPoint.bind(map);
-      map.mouseEventToContainerPoint = function (e) {
-        if (!bearing) return baseMousePoint(e);
+      function rotatedPoint(clientX, clientY) {
         var r = planEl.getBoundingClientRect(), size = map.getSize();
-        var dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+        var dx = clientX - (r.left + r.width / 2), dy = clientY - (r.top + r.height / 2);
         var a = -bearing * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
         return L.point(size.x / 2 + dx * c - dy * s, size.y / 2 + dx * s + dy * c);
-      };
+      }
+      var baseMousePoint = map.mouseEventToContainerPoint.bind(map);
+      // Leaflet 1.9 passe aussi les « Touch » par mouseEventToContainerPoint : un seul correctif suffit.
+      map.mouseEventToContainerPoint = function (e) { return bearing ? rotatedPoint(e.clientX, e.clientY) : baseMousePoint(e); };
       function syncGeometry() {
         if (!bearing) {
           planEl.classList.remove('rotated'); planEl.style.width = planEl.style.height = ''; planEl.style.transform = ''; planEl.style.removeProperty('--bearing');
@@ -904,7 +905,11 @@ ga_head('Plan des commerces');
       }
       $('fsOpen').addEventListener('click', openFs);
       $('fsClose').addEventListener('click', closeFs);
-      window.addEventListener('resize', function () { if (fsOn) { resizeMap(); if (bearing) syncGeometry(); } });
+      var resizeTimer;
+      window.addEventListener('resize', function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () { if (bearing) syncGeometry(); else resizeMap(); }, 120);
+      });
       document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;
         if (e.__posee) return;        // un premier Échap termine la pose, le suivant ferme le plein écran

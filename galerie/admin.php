@@ -4,6 +4,7 @@
 session_start();
 require_once __DIR__ . '/../includes/gallery-admin.php';
 require_once __DIR__ . '/../includes/oauth.php';
+require_once __DIR__ . '/../includes/login-ui.php';
 
 function ga_e($s): string
 {
@@ -33,6 +34,7 @@ if ($admin = ga_current()) {
     exit;
 }
 http_response_code($error ? 401 : 200);
+$social = oauth_buttons_html('gadmin', ['csrf' => $_SESSION['ga_csrf']]);
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -40,36 +42,34 @@ http_response_code($error ? 401 : 200);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Administration de galerie — Connexion</title>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/oauth.css">
-<style>
-  body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: #f4f0e8; color: #221f1a; margin: 0; }
-  main { max-width: 380px; margin: 12vh auto 0; padding: 0 18px; }
-  form { background: #fff; border: 1px solid #ddd5c6; border-radius: 10px; padding: 22px; display: grid; gap: 12px; }
-  h1 { font-size: 1.3rem; margin: 0; }
-  label { display: grid; gap: 4px; font-size: .85rem; font-weight: 600; }
-  input { padding: 10px; border: 1px solid #cfc6b4; border-radius: 8px; font: inherit; }
-  button { padding: 11px; border: 0; border-radius: 8px; background: #221f1a; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
-  .err { color: #a4361b; margin: 0; } .ok { color: #1e6b3a; margin: 0; } small { color: #6b6457; }
-</style>
+<link rel="stylesheet" href="/assets/login.css">
+<link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 </head>
-<body>
-<main>
-  <form method="post" autocomplete="on">
-    <h1>Administration de galerie</h1>
-    <?php if ($error): ?><p class="err" role="alert"><?= ga_e($error) ?></p><?php endif; ?>
-    <?php if ($notice): ?><p class="ok" role="status"><?= ga_e($notice) ?></p><?php endif; ?>
-    <input type="hidden" name="csrf" value="<?= ga_e($_SESSION['ga_csrf']) ?>">
-    <input type="hidden" name="action" value="login">
-    <label>Adresse e-mail<input type="email" name="email" autocomplete="username" required autofocus value="<?= ga_e($_POST['email'] ?? '') ?>"></label>
-    <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
-    <button type="submit">Se connecter</button>
-    <small>Compte créé par l'exploitant de la plateforme. <a href="/galerie/mot-de-passe.php">Mot de passe oublié ?</a></small>
-  </form>
-  <?php if ($social = oauth_buttons_html('gadmin', ['csrf' => $_SESSION['ga_csrf']])): ?>
-    <div class="oauth-sep"><span>ou</span></div>
-    <?= $social ?>
+<body class="login-body">
+<main class="login-card">
+  <div class="login-brand">
+    <span class="mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></span>
+    <div><b>brocs</b><small>Espace galerie</small></div>
+  </div>
+  <h1>Connexion</h1>
+  <p class="hint">Gérez votre galerie commerciale, ses commerces membres et ses exposants.</p>
+  <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= ga_e($error) ?></p><?php endif; ?>
+  <?php if ($notice): ?><p class="flash" data-kind="ok" role="status"><?= ga_e($notice) ?></p><?php endif; ?>
+  <?= login_form_html([
+    'id' => 'gallery-login',
+    'identifier_name' => 'email',
+    'social' => $social,
+    'forgot_url' => '/galerie/mot-de-passe.php',
+    'submit' => 'Se connecter',
+    'hidden' => ['csrf' => $_SESSION['ga_csrf'], 'action' => 'login'],
+  ]) ?>
+  <?php if ($social): ?>
     <p class="oauth-note">Avec un réseau social, l'adresse e-mail doit être celle de votre compte d'administrateur de galerie.</p>
   <?php endif; ?>
+  <p class="login-foot">Compte créé par l'exploitant de la plateforme.</p>
 </main>
 <script src="/assets/pwd-toggle.js" defer></script>
 </body>

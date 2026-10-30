@@ -3,6 +3,7 @@
 //   analyze  → mesure la photo, compte les objets et reconnaît la nature (Gemini + mesures GD)
 //   objects  → objets distincts d'une photo, pour en isoler un (assets/object-picker.js)
 //   enhance  → retouche IA de l'exposition, du contraste et de la netteté (Gemini image)
+//   validate → corrections dictées de la fiche générée (couleurs, état, prix du neuf, prix, nom, poids…)
 // La création et la génération de la fiche passent ensuite par admin/quick-add-action.php.
 // Réponses JSON : {ok: true, ...} ou {ok: false, error: "..."}.
 
@@ -57,6 +58,33 @@ function sa_gemini_probe(): array
         default => 'erreur HTTP ' . $status,
     };
     return [$status, $reason];
+}
+
+/** Fiche renvoyée à la validation vocale : les champs de « get » utiles aux questions, plus l'état lisible. */
+function sa_product_payload(array $product): array
+{
+    $condition = product_condition((string) ($product['etat'] ?? ''));
+    return [
+        'ref' => $product['ref'],
+        'name' => $product['name'],
+        'price' => $product['price'],
+        'new_price' => (string) ($product['new_price'] ?? ''),
+        'cat' => $product['cat'],
+        'description' => $product['description'],
+        'materials' => (string) $product['materials'],
+        'colors' => (string) ($product['colors'] ?? ''),
+        'brand' => (string) ($product['brand'] ?? ''),
+        'distributor' => (string) ($product['distributor'] ?? ''),
+        'etat' => (string) ($product['etat'] ?? ''),
+        'etat_label' => $condition[0] ?? '',
+        'nature' => (string) ($product['nature'] ?? ''),
+        'sous_categorie' => (string) ($product['sous_categorie'] ?? ''),
+        'badge' => $product['badge'],
+        'weight_grams' => (int) $product['weight_grams'],
+        'size_text' => (string) ($product['size_text'] ?? ''),
+        'barcode' => (string) ($product['barcode'] ?? ''),
+        'hidden' => (bool) $product['is_hidden'],
+    ];
 }
 
 /** Photo reçue, validée comme image lisible. */
@@ -168,6 +196,74 @@ switch ($action) {
         }
         imagedestroy($img);
         sa_reply(['ok' => true, 'path' => 'uploads/' . $name, 'url' => '/uploads/' . $name]);
+    }
+
+    // Validation vocale de la fiche générée : seules les réponses corrigées arrivent ici (« oui » n'envoie
+    // rien). Chaque champ garde le normaliseur de l'enregistrement (admin/quick-add-action.php), et une
+    // valeur vide efface un champ facultatif que le vendeur a refusé (couleurs, état, prix du neuf).
+    case 'validate': {
+        $ref = (string) ($_POST['ref'] ?? '');
+        $product = $ref !== '' ? get_product($ref) : null;
+        if (!$product) sa_reply(['ok' => false, 'error' => 'Fiche introuvable.'], 404);
+
+        $set = [];
+        $params = [];
+        $changes = [];
+
+        if (isset($_POST['name'])) {
+            $name = mb_substr(trim((string) $_POST['name']), 0, 120);
+            if ($name !== '' && $name !== (string) $product['name']) {
+                $set[] = 'name = ?'; $params[] = $name; $changes[] = 'name';
+            }
+        }
+        if (isset($_POST['description'])) {
+            $description = mb_substr(trim((string) $_POST['description']), 0, 1200);
+            if ($description !== '' && $description !== (string) $product['description']) {
+                $set[] = 'description = ?'; $params[] = $description; $changes[] = 'description';
+            }
+        }
+        if (isset($_POST['colors'])) {
+            $colors = product_colors_clean((string) $_POST['colors']);
+            if ($colors !== (string) ($product['colors'] ?? '')) {
+                $set[] = 'colors = ?'; $params[] = $colors; $changes[] = 'colors';
+            }
+        }
+        if (isset($_POST['etat'])) {
+            $posted = trim((string) $_POST['etat']);
+            $etat = product_condition_key($posted);
+            if ($etat === '' && $posted !== '') sa_reply(['ok' => false, 'error' => 'État non reconnu.'], 422);
+            if ($etat !== (string) ($product['etat'] ?? '')) {
+                $set[] = 'etat = ?'; $params[] = $etat !== '' ? $etat : null; $changes[] = 'etat';
+            }
+        }
+        if (isset($_POST['new_price'])) {
+            $newPrice = price_from_input((string) $_POST['new_price']) ?: null;
+            if ($newPrice !== ($product['new_price'] ?? null)) {
+                $set[] = 'new_price = ?'; $params[] = $newPrice; $changes[] = 'new_price';
+            }
+        }
+        // Le prix affiché n'est jamais recalculé : une correction reste la décision du vendeur.
+        if (isset($_POST['price']) && trim((string) $_POST['price']) !== '') {
+            $price = price_from_input((string) $_POST['price'], (string) $product['price']);
+            if ($price !== (string) $product['price']) {
+                $set[] = 'price = ?'; $params[] = $price; $changes[] = 'price';
+            }
+        }
+        if (isset($_POST['weight_grams'])) {
+            $grams = max(0, (int) $_POST['weight_grams']);
+            if ($grams !== (int) $product['weight_grams']) {
+                $set[] = 'weight_grams = ?'; $params[] = $grams;
+                $set[] = 'weight_text = ?'; $params[] = product_weight_text($grams);
+                $changes[] = 'weight_grams';
+            }
+        }
+
+        if ($set) {
+            $params[] = (string) $product['ref'];
+            db()->prepare('UPDATE products SET ' . implode(', ', $set) . ' WHERE ref = ?')->execute($params);
+            $product = get_product($product['ref']) ?: $product;
+        }
+        sa_reply(['ok' => true, 'changes' => $changes, 'product' => sa_product_payload($product)]);
     }
 }
 

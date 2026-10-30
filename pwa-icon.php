@@ -6,7 +6,7 @@ require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/studio-theme.php';
 
 $size = (int) ($_GET['s'] ?? 192);
-$size = in_array($size, [120, 152, 167, 180, 192, 512], true) ? $size : 192;
+$size = in_array($size, [16, 32, 48, 120, 152, 167, 180, 192, 512], true) ? $size : 192;
 $theme = studio_theme_colors();
 $hex = static fn (string $c): array => sscanf($c, '#%02x%02x%02x');
 

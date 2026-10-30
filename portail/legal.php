@@ -77,7 +77,7 @@ $defaultHost = legal_default_host();
 <title>Pages légales — <?= e($shop['name']) ?> — Portail</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
   .legal-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); gap: 16px; align-items: start; max-width: 1100px; }
   @media (max-width: 900px) { .legal-layout { grid-template-columns: 1fr; } }

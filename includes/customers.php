@@ -49,6 +49,24 @@ function customer_account(string $email): ?array
     return $a && !account_is_staff($a['role']) ? $a : null;
 }
 
+/**
+ * Fiche de client à partir de l'identifiant saisi (e-mail ou nom). Le nom
+ * n'est accepté que s'il désigne un seul client actif, pour ne jamais ouvrir
+ * le compte d'un homonyme.
+ */
+function customer_account_by_login(string $login): ?array
+{
+    $login = trim($login);
+    if ($login === '') return null;
+    $byEmail = customer_account($login);
+    if ($byEmail) return $byEmail;
+    $stmt = db()->prepare("SELECT * FROM accounts WHERE name = ? COLLATE NOCASE AND name != ''
+        AND role IN ('prospect', 'client') AND is_active = 1 LIMIT 2");
+    $stmt->execute([$login]);
+    $rows = $stmt->fetchAll();
+    return count($rows) === 1 ? $rows[0] : null;
+}
+
 function customer_rate_ok(string $key, int $max, int $window): bool
 {
     db()->prepare('DELETE FROM customer_hits WHERE at < ?')->execute([time() - 3600]);
@@ -75,24 +93,52 @@ function customer_login_session(array $account, string $provider = 'password'): 
     account_touch_login((int) $account['id']);
 }
 
-/** Connexion par e-mail et mot de passe. -> [compte, erreur]. */
-function customer_login(string $email, string $password): array
+/** Connexion par identifiant, nom ou e-mail et mot de passe. -> [compte, erreur]. */
+function customer_login(string $login, string $password): array
 {
-    $email = mb_strtolower(trim($email));
-    $key = 'login:' . $email . ':' . customer_ip_hash();
+    $login = mb_strtolower(trim($login));
+    $key = 'login:' . $login . ':' . customer_ip_hash();
     if (!customer_rate_ok($key, CUSTOMER_LOGIN_MAX, 900)) return [null, 'Trop d\'essais : réessayez dans un quart d\'heure.'];
-    $a = customer_account($email);
+    $a = customer_account_by_login($login);
     // Même durée et même message que le compte existe ou non (on ne révèle pas qui est inscrit).
     $ok = $a && (int) $a['is_active'] === 1 && !empty($a['password_hash']) && password_verify($password, $a['password_hash']);
     if (!$ok) {
         customer_rate_note($key);
         if (!$a || empty($a['password_hash'])) { static $dummy = null; $dummy ??= password_hash('dummy-password', PASSWORD_DEFAULT); password_verify($password, $dummy); }
-        return [null, 'Adresse e-mail ou mot de passe incorrect. Pas encore de compte, ou mot de passe oublié ? Utilisez les liens ci-dessous.'];
+        return [null, 'Identifiant, nom ou e-mail incorrect. Pas encore de compte, ou mot de passe oublié ? Utilisez les liens ci-dessous.'];
     }
     if (password_needs_rehash($a['password_hash'], PASSWORD_DEFAULT)) {
         db()->prepare('UPDATE accounts SET password_hash = ? WHERE id = ?')->execute([password_hash($password, PASSWORD_DEFAULT), $a['id']]);
     }
     return [$a, null];
+}
+
+/** Demande « mot de passe oublié » à partir d'un identifiant, d'un nom ou d'un e-mail. Réponse toujours identique. */
+function customer_request_reset(string $login): array
+{
+    $a = customer_account_by_login($login);
+    if ($a && !empty($a['password_hash'])) {
+        return customer_send_link((string) $a['email'], '', '', 'reset');
+    }
+    $ip = 'link:' . customer_ip_hash();
+    if (!customer_rate_ok($ip, CUSTOMER_LINK_MAX, 3600)) return [null, 'Trop de demandes depuis votre connexion : réessayez dans une heure.'];
+    customer_rate_note($ip);
+    return ['Si un compte correspond à ces informations, un e-mail avec un lien vient de lui être envoyé (valable 24 h). Pensez à regarder vos courriers indésirables.', null];
+}
+
+/** Nouveau mot de passe d'un compte client (vérification par code SMS, sans lien). -> erreur ou null. */
+function customer_set_password(array $account, string $password, string $confirm): ?string
+{
+    if ($password !== $confirm) return 'Les deux mots de passe ne sont pas identiques.';
+    try {
+        account_validate_password($password);
+    } catch (InvalidArgumentException $e) {
+        return $e->getMessage();
+    }
+    $upd = db()->prepare("UPDATE accounts SET password_hash = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND role IN ('prospect', 'client')");
+    $upd->execute([password_hash($password, PASSWORD_DEFAULT), (int) $account['id']]);
+    return $upd->rowCount() ? null : 'Ce compte n\'existe plus.';
 }
 
 /**

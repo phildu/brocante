@@ -204,7 +204,7 @@ $scopeLabel = match ($scope) {
 <meta name="robots" content="noindex, nofollow">
 <title>Tarifs des plugins — Portail</title>
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
   .aw { max-width: 900px; margin: 0 auto; padding: 0 16px 48px; display: grid; gap: 16px; }
   .ac { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 18px; display: grid; gap: 14px; }

@@ -4,6 +4,7 @@
 // Les limites écrites dans une formule (« jusqu'à 20 pièces »…) sont du texte affiché : elles ne sont pas appliquées par la plateforme.
 require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas.php';
+require_once PORTAIL_ROOT . '/includes/banner-ai.php';
 
 $shops = tenant_list();
 
@@ -22,6 +23,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         $ok = saas_config_save($cfg);
         portail_flash($ok ? 'Réglages enregistrés.' : "Impossible d'écrire data/saas.json (droits du dossier data).", $ok ? 'ok' : 'error');
+    } elseif ($action === 'home_save') {
+        $home = $cfg['home'];
+        foreach (['eyebrow' => 120, 'title' => 140, 'lede' => 400] as $key => $max) $home[$key] = mb_substr(trim((string) ($_POST[$key] ?? '')), 0, $max);
+        $home['overlay'] = max(0, min(80, (int) ($_POST['overlay'] ?? 35)));
+        $home['slideshow'] = !empty($_POST['slideshow']);
+        $images = (array) $home['images'];
+        $remove = array_map('intval', (array) ($_POST['remove_image'] ?? []));
+        foreach ($images as $i => $path) {
+            if (!in_array($i, $remove, true)) continue;
+            saas_banner_delete((string) $path);
+            unset($images[$i]);
+        }
+        $images = array_values($images);
+        $added = $errors = [];
+        $files = $_FILES['images'] ?? null;
+        if (is_array($files) && is_array($files['name'] ?? null)) {
+            for ($i = 0; $i < count($files['name']) && count($images) < 6; $i++) {
+                if ((int) ($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
+                try {
+                    $images[] = saas_banner_store(['error' => $files['error'][$i], 'tmp_name' => $files['tmp_name'][$i], 'size' => $files['size'][$i]]);
+                    $added[] = end($images);
+                } catch (InvalidArgumentException $ex) {
+                    $errors[] = 'Bannière : ' . $ex->getMessage();
+                }
+            }
+        }
+        $home['images'] = array_slice($images, 0, 6);
+        $cfg['home'] = $home;
+        $ok = saas_config_save($cfg);
+        if (!$ok) foreach ($added as $path) saas_banner_delete($path);
+        portail_flash($errors ? implode(' ', $errors) . ($ok ? ' Le reste est enregistré.' : '') : ($ok ? "Page d'accueil enregistrée : elle s'applique immédiatement." : "Impossible d'écrire data/saas.json (droits du dossier data)."), $errors || !$ok ? 'error' : 'ok');
+    } elseif ($action === 'home_ai') {
+        $images = (array) $cfg['home']['images'];
+        $room = 6 - count($images);
+        $count = max(1, min(3, (int) ($_POST['ai_count'] ?? 1)));
+        $hint = trim((string) ($_POST['ai_hint'] ?? ''));
+        if ($room <= 0) {
+            portail_flash('Six images au maximum : retirez-en une pour en générer une autre.', 'error');
+        } else {
+            $count = min($count, $room);
+            $subject = '« ' . $cfg['name'] . ' », plateforme française de boutiques en ligne, galeries marchandes, marchés aux puces et vides-greniers'
+                . ($cfg['tagline'] !== '' ? '. ' . $cfg['tagline'] : '');
+            $prompts = [];
+            for ($i = 0; $i < $count; $i++) {
+                $prompts[] = banner_ai_prompt($subject . ($i > 0 ? ' (variation ' . ($i + 1) . ', composition différente)' : ''), $hint);
+            }
+            try {
+                $bytes = banner_ai_generate_many($prompts);
+                banner_ai_usage_log('accueil', 'accueil', count($bytes));
+                $paths = [];
+                foreach ($bytes as $image) $paths[] = banner_ai_save($image, 'uploads/saas', 'accueil', 2000);
+                $cfg['home']['images'] = array_slice(array_merge($images, $paths), 0, 6);
+                if (!saas_config_save($cfg)) {
+                    foreach ($paths as $path) saas_banner_delete($path);
+                    throw new RuntimeException("Impossible d'écrire data/saas.json (droits du dossier data).");
+                }
+                portail_flash(count($paths) . ' image' . (count($paths) > 1 ? 's' : '') . " générée" . (count($paths) > 1 ? 's' : '') . " par l'IA : relisez-les avant de publier.");
+            } catch (Throwable $ex) {
+                portail_flash($ex->getMessage(), 'error');
+            }
+        }
     } elseif ($action === 'add_remote') {
         $url = rtrim(trim((string) ($_POST['url'] ?? '')), '/');
         if (!gallery_remote_url_valid($url)) { portail_flash('Adresse non valide : une adresse http(s) publique, par exemple https://brocante.arrimage.com', 'error'); }
@@ -77,7 +139,7 @@ $origin = saas_origin();
 <title>Offres et annuaire — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
   .owrap { display: grid; gap: 16px; max-width: 920px; margin: 0 auto; padding: 0 16px 48px; }
   .ocard { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
@@ -89,6 +151,10 @@ $origin = saas_origin();
   .plan-edit { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
   .member { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; } .member .name { flex: 1; } .member small { opacity: .7; }
   .swatch-in { width: 44px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+  .home-shots { display: flex; flex-wrap: wrap; gap: 10px; }
+  .home-shot { display: grid; gap: 4px; font-size: .78rem; }
+  .home-shot .thumb { width: 148px; height: 83px; border-radius: 6px; border: 1px solid var(--line); background-size: cover; background-position: center; display: block; }
+  .home-ai { border-top: 1px dashed var(--line); padding-top: 12px; display: grid; gap: 8px; }
 </style>
 </head>
 <body>
@@ -125,6 +191,49 @@ $origin = saas_origin();
           <span class="name"><strong><?= e($shop['name']) ?></strong> <small>— <?= e($slug) ?></small></span></label>
       <?php endforeach; ?>
       <p><button class="btn btn-primary" type="submit">Enregistrer</button></p>
+    </form>
+
+    <?php $home = $cfg['home']; $homeBanners = saas_home_banners($cfg); ?>
+    <form class="ocard" method="post" enctype="multipart/form-data" autocomplete="off">
+      <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="home_save">
+      <h2>Page d'accueil publique</h2>
+      <p class="meta">Le grand bandeau de <a href="<?= e($origin) ?>/" target="_blank" rel="noopener">l'accueil</a> : textes, images et diaporama. Un champ vide garde le texte par défaut ; <code>{nom}</code> est remplacé par le nom de la plateforme.</p>
+      <label class="f">Surtitre<input type="text" name="eyebrow" maxlength="120" value="<?= e($home['eyebrow']) ?>" placeholder="Boutiques · galeries · marchés aux puces · vides-greniers"></label>
+      <label class="f">Titre<input type="text" name="title" maxlength="140" value="<?= e($home['title']) ?>" placeholder="Vendez, réunissez, organisez avec {nom}"></label>
+      <label class="f">Phrase d'introduction<textarea name="lede" maxlength="400" placeholder="Laissez vide pour le texte par défaut (slogan suivi de la présentation de la plateforme)."><?= e($home['lede']) ?></textarea></label>
+
+      <h2 style="margin-top:6px">Images du bandeau</h2>
+      <p class="meta">Jusqu'à six images, affichées en fondu enchaîné. La première sert d'image de partage sur les réseaux. Sans image, le bandeau reprend la couleur principale.</p>
+      <?php if ($homeBanners): ?>
+        <div class="home-shots">
+          <?php foreach ($homeBanners as $i => $path): ?>
+            <label class="home-shot"><span class="thumb" style="background-image:url('/<?= e($path) ?>')"></span>
+              <span><input type="checkbox" name="remove_image[]" value="<?= (int) $i ?>"> Retirer<?= $i === 0 ? ' (1re image)' : '' ?></span></label>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+      <div class="row">
+        <label class="f">Ajouter des images <small>(JPEG, PNG ou WebP, 12 Mo max chacune, large de préférence)</small><input type="file" name="images[]" accept="image/jpeg,image/png,image/webp" multiple></label>
+        <label class="f">Assombrissement <output id="home-ov"><?= (int) $home['overlay'] ?> %</output><input type="range" name="overlay" min="0" max="80" step="5" value="<?= (int) $home['overlay'] ?>" oninput="document.getElementById('home-ov').value=this.value + ' %';document.getElementById('home-ov').textContent=this.value + ' %'"></label>
+        <label class="row" style="gap:6px;align-self:end;"><input type="checkbox" name="slideshow" value="1"<?= $home['slideshow'] ? ' checked' : '' ?>> Diaporama automatique</label>
+      </div>
+      <p><button class="btn btn-primary" type="submit">Enregistrer la page d'accueil</button></p>
+
+      <div class="home-ai">
+        <?php $bannerAiOk = banner_ai_available(); ?>
+        <h2>Une image par l'IA</h2>
+        <p class="meta">Décrivez l'ambiance (marché, rue, atelier, lumière…) : l'IA ajoute une image panoramique 16:9, à relire avant publication. Coût estimé ≈ <?= e(ai_format_eur(ai_eur(AI_PRICING_DEFAULTS['image']))) ?> par image, sur la clé Gemini de la plateforme.</p>
+        <?php if (!$bannerAiOk): ?><p class="flash" data-kind="error" role="status">Génération indisponible : activez le fournisseur d'images Gemini et vérifiez sa clé dans <a href="/portail/ia-fournisseurs.php">Fournisseurs IA</a>.</p><?php endif; ?>
+        <?= banner_ai_usage_html() ?>
+      </div>
+    </form>
+    <form class="ocard" method="post" autocomplete="off" style="margin-top:-16px">
+      <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="home_ai">
+      <div class="row">
+        <label class="f">Ambiance souhaitée (facultatif)<input type="text" name="ai_hint" maxlength="200" placeholder="ex. marché de plein air au soleil, étals colorés"></label>
+        <label class="f" style="flex:none;min-width:140px;">Images<select name="ai_count"><?php foreach ([1, 2, 3] as $n): ?><option value="<?= $n ?>"><?= $n ?> image<?= $n > 1 ? 's' : '' ?></option><?php endforeach; ?></select></label>
+        <button class="btn" type="submit"<?= $bannerAiOk ? '' : ' disabled' ?>>Générer avec l'IA</button>
+      </div>
     </form>
 
     <section class="ocard" id="stripe">

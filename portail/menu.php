@@ -33,7 +33,7 @@ $itemCount = array_sum(array_map(static fn (array $g): int => count($g['items'])
 <title>Menu latéral — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
   .menu-wrap { width: 100%; max-width: 1100px; margin: 0 auto; padding-bottom: 56px; }
   .menu-help { color: var(--muted); font-size: 0.88rem; max-width: 820px; margin: 0; }

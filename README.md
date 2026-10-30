@@ -881,7 +881,9 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   de ce pack sont reprises automatiquement dans le nouveau registre d'accès à leur première ouverture. Dans une portée héritée, un champ vide
   conserve la valeur supérieure ; les cases « hériter » permettent de rétablir l'héritage d'un champ configuré localement.
 - **Tâches planifiées** : une seule entrée dans la tâche planifiée de l'hébergeur (OVH : Hébergement → Tâches planifiées - Cron,
-  langage PHP 8, toutes les 5 ou 15 minutes) lance `scripts/plugins-cron.php`. Le script fait le tour des boutiques et, pour chaque
+  langage PHP 8) lance `scripts/plugins-cron.php`. Sur un hébergement mutualisé OVH, la plus petite fréquence possible est **une fois par
+  heure** (le champ Minutes est désactivé) : la tâche tourne donc à la minute choisie de chaque heure. Sur un serveur avec crontab, on
+  peut descendre à 5 ou 15 minutes. Le script fait le tour des boutiques et, pour chaque
   plugin activé et à jour, exécute ses tâches (`cron` du manifeste) dans un processus séparé, avec `TENANT=<boutique>` : une tâche ne
   voit que sa boutique. Journal : `var/log/plugins-cron.log`. Options : `--plugin=<id>`, `--tenant=<boutique>`. En ligne de commande
   seulement (rien n'est servi par le web).
@@ -898,6 +900,29 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
 - **Retour arrière** : redéployer l'ancien code met le plugin en pause (« base plus récente que le code ») ; pour revenir vraiment à
   l'ancienne version, remplacer la base de la boutique par la sauvegarde d'avant la mise à jour (site au repos ; les écritures faites
   depuis sont perdues).
+
+## Retours testeurs : widget « Un retour ? », triage et relances
+
+Un dispositif distinct des retours par module (`includes/addons.php`) : il recueille **tous** les bugs, idées et gênes des
+boutiques testeuses, avec une capture d'écran facultative, et les suit jusqu'à la réponse.
+
+- **Le widget** (`includes/feedback.php`, `assets/feedback-widget.*`, API `admin/feedback-api.php`) apparaît en bas à droite de
+  l'administration des boutiques couvertes (`includes/admin-nav.php`). Formulaire court (nature, gravité pour un bug, message,
+  capture JPEG/PNG/WebP ≤ 3 Mo), puis onglet **Mes retours** avec le statut et les réponses de l'équipe ; une pastille signale une
+  réponse non lue, sans la marquer lue avant l'ouverture de l'onglet. L'onglet reçoit le module courant (`?p=`) et la page.
+- **Couverture** : portail → **Retours testeurs** → *Programme testeurs*. On coche des boutiques et/ou des galeries (tous leurs
+  membres locaux), on peut inclure automatiquement les testeurs déjà déclarés sur les modules « En test » (Tarifs des plugins), ou
+  ouvrir le widget à toutes les boutiques. Le même écran règle l'e-mail d'alerte et le délai de relance.
+- **Triage** (`portail/retours.php`) : filtres statut/type/boutique/période/recherche, mise à jour statut et priorité, note interne,
+  réponse par e-mail (le testeur la voit dans l'historique du widget), journal du suivi, participation par boutique (actif,
+  silencieux, jamais), export CSV. Les captures se consultent via `portail/retour-media.php?id=…`, réservé au portail.
+- **Relances** : le bouton du portail, ou chaque jour `php scripts/feedback-reminders.php` (`--dry` pour compter sans envoyer).
+  Au plus un e-mail par période et par boutique, uniquement si une adresse de réponse est connue (identifiant de connexion du
+  commerce ou compte). Comme pour les modules en test, planifier le script dans la tâche cron de l'hébergeur.
+- **Données et sécurité** : `data/saas/feedback.json` (écriture sous verrou, remplacement atomique), `feedback-settings.json`,
+  `feedback-reminders.json` et `feedback-media/` ne sont jamais servis directement. Boutique forcée côté serveur, jeton CSRF pour
+  l'API, limite de 10 envois par heure et par boutique, doublons (< 3 min) fusionnés, 5 000 retours conservés au maximum.
+  Tests : `tests/FeedbackTest.php` (`FEEDBACK_DATA_DIR` temporaire, e-mails neutralisés).
 
 ## Pack Communication : la médiathèque, l'éditeur et la publication d'electroboy80, portés tels quels (plugin `communication`)
 

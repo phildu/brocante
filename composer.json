@@ -11,5 +11,8 @@
     "ext-pdo_sqlite": "*",
     "ovh/ovh": "^3.0",
     "phpoffice/phpspreadsheet": "^2.1"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^13.4"
   }
 }

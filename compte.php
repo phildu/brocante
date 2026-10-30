@@ -4,6 +4,8 @@ require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/oauth.php';
 require_once __DIR__ . '/includes/customers.php';
 require_once __DIR__ . '/includes/legal.php';
+require_once __DIR__ . '/includes/login-ui.php';
+require_once __DIR__ . '/includes/login-otp.php';
 
 // Compte client : e-mail + mot de passe (création confirmée par un lien envoyé à l'adresse), ou connexion par un réseau social (Google, Facebook…) ;
 // puis suivi des commandes payées avec la même adresse e-mail, téléphone, mot de passe, suppression du compte.
@@ -43,8 +45,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             [$msg, $err] = customer_send_link((string) ($_POST['email'] ?? ''), (string) ($_POST['name'] ?? ''), $phone, 'setup');
             compte_back($err ?? $msg, (bool) $err, $err ? '/compte.php?creer=1' : '/compte.php');
         case 'forgot':
-            [$msg, $err] = customer_send_link((string) ($_POST['email'] ?? ''), '', '', 'reset');
+            $login = (string) ($_POST['email'] ?? '');
+            if (($_POST['method'] ?? 'email') === 'sms') {
+                $res = login_otp_request('customer', $login);
+                if ($res['sent']) {
+                    $_SESSION['customer_otp'] = ['login' => $login, 'phone' => $res['phone']];
+                    compte_back('Un code à 6 chiffres vient d\'être envoyé par SMS au ' . $res['phone'] . '.', false, '/compte.php?oubli=1&otp=1' . ($next === '/cart.php' ? '&next=cart' : ''));
+                }
+                compte_back($res['error'], true, '/compte.php?oubli=1' . ($next === '/cart.php' ? '&next=cart' : ''));
+            }
+            [$msg, $err] = customer_request_reset($login);
             compte_back($err ?? $msg, (bool) $err, $err ? '/compte.php?oubli=1' : '/compte.php');
+        case 'otp':
+            $otp = $_SESSION['customer_otp'] ?? null;
+            if (!is_array($otp) || empty($otp['login'])) compte_back('Demandez d\'abord un code par SMS.', true, '/compte.php?oubli=1');
+            $err = login_otp_apply('customer', (string) $otp['login'], (string) ($_POST['code'] ?? ''), (string) ($_POST['password'] ?? ''), (string) ($_POST['confirm'] ?? ''));
+            if ($err) compte_back($err, true, '/compte.php?oubli=1&otp=1' . ($next === '/cart.php' ? '&next=cart' : ''));
+            unset($_SESSION['customer_otp']);
+            $a = customer_account_by_login((string) $otp['login']);
+            if ($a) customer_login_session($a);
+            compte_back('Votre mot de passe est enregistré : vous êtes connecté·e.', false, $next);
         case 'setpw':
             $err = customer_token_use((string) ($_POST['t'] ?? ''), (string) ($_POST['password'] ?? ''), (string) ($_POST['confirm'] ?? ''));
             if ($err) compte_back($err, true, '/compte.php?a=lien&t=' . rawurlencode((string) ($_POST['t'] ?? '')));
@@ -77,7 +97,7 @@ if (($_GET['a'] ?? '') === 'lien') {
     $view = $tokenRow ? 'setpw' : 'login';
     if (!$tokenRow) $error = $error ?: 'Ce lien n\'est plus valable : demandez-en un nouveau (« Mot de passe oublié » ou « Créer mon compte »).';
 } elseif (isset($_GET['creer'])) $view = 'register';
-elseif (isset($_GET['oubli'])) $view = 'forgot';
+elseif (isset($_GET['oubli'])) $view = (!empty($_GET['otp']) && !empty($_SESSION['customer_otp'])) ? 'otp' : 'forgot';
 $orders = $customer ? customer_orders($customer['email']) : [];
 $csrf = (string) $_SESSION['customer_csrf'];
 $nextField = $next === '/cart.php' ? '<input type="hidden" name="next" value="cart">' : '';
@@ -87,11 +107,13 @@ $pageTitle = 'Mon compte';
 include __DIR__ . '/includes/header.php';
 ?>
 <link rel="stylesheet" href="/assets/oauth.css">
+<link rel="stylesheet" href="/assets/login.css">
 <style>
   .cpt-card { max-width: 440px; display: grid; gap: 14px; margin-top: 18px; }
   .cpt-card label { display: block; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-soft); }
   .cpt-card input[type=text], .cpt-card input[type=email], .cpt-card input[type=tel], .cpt-card input[type=password] { display: block; width: 100%; margin-top: 6px; min-height: 44px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 8px 10px; font: inherit; font-family: var(--font-body); font-size: 1rem; }
   .cpt-card small { display: block; margin-top: 4px; font-family: var(--font-body); font-size: .78rem; }
+  .login-unified { max-width: 440px; margin-inline: 0; }
   .cpt-check { display: flex; gap: 10px; align-items: flex-start; font-family: var(--font-body) !important; font-size: .88rem !important; color: var(--ink) !important; line-height: 1.45; }
   .cpt-check input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
   .cpt-links { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: .9rem; margin-top: 4px; } .cpt-links a { display: inline-block; padding: 8px 0; }
@@ -193,32 +215,45 @@ include __DIR__ . '/includes/header.php';
 
     <?php elseif ($view === 'forgot'): ?>
       <h1 style="font-size:2rem;margin:12px 0 8px;">Mot de passe oublié</h1>
-      <p class="lede">Indiquez votre e-mail : nous vous envoyons un lien pour en choisir un nouveau.</p>
-      <form method="post" class="cpt-card">
-        <input type="hidden" name="action" value="forgot"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><?= $nextField ?>
-        <label>E-mail<input type="email" name="email" required maxlength="120" autocomplete="email" inputmode="email" autofocus></label>
-        <button class="btn btn-primary" type="submit">Recevoir le lien</button>
-        <p class="cpt-links"><a href="/compte.php">Retour à la connexion</a></p>
-      </form>
+      <p class="lede">Indiquez votre identifiant, votre nom ou votre e-mail : recevez un lien par e-mail ou un code par SMS.</p>
+      <?= login_forgot_form_html([
+        'id' => 'customer-forgot',
+        'identifier_name' => 'email',
+        'identifier_label' => 'Identifiant, nom ou e-mail',
+        'hidden' => ['action' => 'forgot', 'csrf' => $csrf, 'next' => $next === '/cart.php' ? 'cart' : ''],
+        'sms' => login_otp_sms_available(),
+        'note' => 'Le code par SMS n\'est proposé que si un numéro est enregistré sur votre compte.',
+      ]) ?>
+      <p class="cpt-links"><a href="/compte.php<?= $next === '/cart.php' ? '?next=cart' : '' ?>">Retour à la connexion</a></p>
+
+    <?php elseif ($view === 'otp' && !empty($_SESSION['customer_otp'])): ?>
+      <h1 style="font-size:2rem;margin:12px 0 8px;">Code par SMS</h1>
+      <p class="lede">Saisissez le code reçu au <?= h((string) $_SESSION['customer_otp']['phone']) ?> et choisissez un nouveau mot de passe.</p>
+      <?= login_otp_form_html([
+        'id' => 'customer-otp',
+        'identifier_name' => 'email',
+        'identifier_value' => (string) $_SESSION['customer_otp']['login'],
+        'hidden' => ['action' => 'otp', 'csrf' => $csrf, 'next' => $next === '/cart.php' ? 'cart' : ''],
+        'minlength' => ACCOUNT_PASSWORD_MIN,
+      ]) ?>
+      <p class="cpt-links"><a href="/compte.php?oubli=1<?= $next === '/cart.php' ? '&amp;next=cart' : '' ?>">Recevoir un nouveau code ou un lien e-mail</a></p>
 
     <?php else: ?>
       <h1 style="font-size:2rem;margin:12px 0 8px;">Connexion</h1>
       <p class="lede">Connectez-vous pour retrouver vos commandes et commander plus vite.</p>
-      <form method="post" class="cpt-card">
-        <input type="hidden" name="action" value="login"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><?= $nextField ?>
-        <label>E-mail<input type="email" name="email" required maxlength="120" autocomplete="username" inputmode="email"></label>
-        <label>Mot de passe<input type="password" name="password" required autocomplete="current-password"></label>
-        <button class="btn btn-primary" type="submit">Me connecter</button>
-        <p class="cpt-links"><a href="/compte.php?creer=1<?= $next === '/cart.php' ? '&amp;next=cart' : '' ?>">Créer mon compte</a><a href="/compte.php?oubli=1<?= $next === '/cart.php' ? '&amp;next=cart' : '' ?>">Mot de passe oublié ?</a></p>
-        <p class="cpt-links"><small>Vous êtes le/la commerçant·e de cette boutique ? <a href="/admin/login.php">Connexion à l’administration</a> (<a href="/admin/mot-de-passe-oublie.php">mot de passe d’administration oublié</a>).</small></p>
-      </form>
-      <?php if ($buttons = oauth_buttons_html('customer', ['next' => $next])): ?>
-        <div class="cpt-card">
-          <div class="oauth-sep"><span>ou</span></div>
-          <?= $buttons ?>
-          <p class="oauth-note">Avec un réseau social, nous ne recevons que votre nom et votre adresse e-mail.</p>
-        </div>
-      <?php endif; ?>
+      <?= login_form_html([
+        'id' => 'customer-login',
+        'identifier_name' => 'email',
+        'social' => oauth_buttons_html('customer', ['next' => $next]),
+        'forgot_url' => '/compte.php?oubli=1' . ($next === '/cart.php' ? '&next=cart' : ''),
+        'submit' => 'Me connecter',
+        'hidden' => ['action' => 'login', 'csrf' => $csrf, 'next' => $next === '/cart.php' ? 'cart' : ''],
+        'links' => [
+          ['url' => '/compte.php?creer=1' . ($next === '/cart.php' ? '&next=cart' : ''), 'label' => 'Créer mon compte'],
+          ['url' => '/admin/login.php', 'label' => 'Connexion à l’administration'],
+        ],
+        'note' => 'Avec un réseau social, nous ne recevons que votre nom et votre adresse e-mail.',
+      ]) ?>
     <?php endif; ?>
   </div>
 </section>

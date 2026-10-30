@@ -163,9 +163,16 @@ function portail_login_page(): never
         http_response_code(403);
         exit('Portail fermé : aucun compte configuré (.secrets/portail.json, créé par ./deploy-brocante.sh --portail).');
     }
+    require_once __DIR__ . '/../includes/login-ui.php';
     $error = null;
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'portail_login') {
-        $userOk = hash_equals(mb_strtolower($account['user']), mb_strtolower(trim((string) ($_POST['username'] ?? ''))));
+        $typed = mb_strtolower(trim((string) ($_POST['username'] ?? '')));
+        $aliases = [$account['user'], $account['name'] ?? '', $account['email'] ?? ''];
+        $userOk = false;
+        foreach ($aliases as $alias) {
+            $alias = mb_strtolower(trim((string) $alias));
+            if ($alias !== '' && hash_equals($alias, $typed)) { $userOk = true; break; }
+        }
         if ($userOk && password_verify((string) ($_POST['password'] ?? ''), $account['password_hash'])) {
             session_regenerate_id(true);
             $_SESSION['portail_user'] = $account['user'];
@@ -174,7 +181,7 @@ function portail_login_page(): never
             exit;
         }
         sleep(1); // freine les essais en série
-        $error = 'Identifiant ou mot de passe incorrect.';
+        $error = 'Identifiant, nom ou e-mail incorrect.';
     }
     http_response_code($error ? 401 : 200);
     ?><!DOCTYPE html>
@@ -187,6 +194,7 @@ function portail_login_page(): never
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
+<link rel="stylesheet" href="/assets/login.css">
 </head>
 <body class="login-body">
 <main class="login-card">
@@ -197,14 +205,12 @@ function portail_login_page(): never
   <h1>Connexion</h1>
   <p class="hint">Connectez-vous pour gérer les commerces, les galeries et les inscriptions.</p>
   <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= e($error) ?></p><?php endif; ?>
-  <form class="login-form" method="post" autocomplete="on">
-    <input type="hidden" name="action" value="portail_login">
-    <label class="field">Identifiant<input type="text" name="username" autocomplete="username" autocapitalize="none" required autofocus></label>
-    <label class="field">Mot de passe
-      <input type="password" name="password" id="pp" autocomplete="current-password" required>
-    </label>
-    <button class="btn btn-primary" type="submit">Se connecter</button>
-  </form>
+  <?= login_form_html([
+    'id' => 'portail-login',
+    'identifier_name' => 'username',
+    'submit' => 'Se connecter',
+    'hidden' => ['action' => 'portail_login'],
+  ]) ?>
   <p class="login-foot">Accès réservé à l’exploitant de la plateforme.</p>
 </main>
 <script src="/assets/pwd-toggle.js" defer></script>

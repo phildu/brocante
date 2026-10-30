@@ -75,6 +75,7 @@ $itemWord = static fn (int $n): string => tenant_text($n === 1 ? 'item_singular'
     <?php endif; ?>
   </div>
 </section>
+<?= plugin_render('boutique_bottom') ?>
 <script>
   (function () {
     var d = document.querySelector('.mk-filters');

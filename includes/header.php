@@ -81,6 +81,7 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
   </div>
 </header>
 <?php endif; ?>
+<?= shop_hours_notice_html() ?>
 <div class="nav-overlay" id="nav-overlay"></div>
 <main>
 <?php $flash = flash_get(); if ($flash): ?>

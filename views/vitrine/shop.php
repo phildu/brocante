@@ -79,6 +79,7 @@ if ($nature !== '' && $sous !== '') $active[] = [$natures[$nature]['subs'][$sous
     </div>
   </div>
 </section>
+<?= plugin_render('boutique_bottom') ?>
 <script>
   (function () {
     var d = document.querySelector('.vt-filters details');

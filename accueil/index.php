@@ -5,8 +5,16 @@ require_once __DIR__ . '/../includes/saas.php';
 require_once __DIR__ . '/../includes/gallery-types.php';
 require_once __DIR__ . '/../includes/gallery-booking.php';
 require_once __DIR__ . '/../includes/addons.php';
+require_once __DIR__ . '/../includes/banner-slides.php';
 
 $cfg = saas_config();
+$home = $cfg['home'];
+$homeBanners = saas_home_banners($cfg);
+$nameToken = static fn (string $s): string => str_replace(['{nom}', '{name}'], $cfg['name'], $s);
+$homeEyebrow = $home['eyebrow'] !== '' ? $nameToken($home['eyebrow']) : 'Boutiques · galeries · marchés aux puces · vides-greniers';
+$homeTitle = $home['title'] !== '' ? $nameToken($home['title']) : 'Vendez, réunissez, organisez avec ' . $cfg['name'];
+$homeLede = $home['lede'] !== '' ? $nameToken($home['lede'])
+    : $cfg['tagline'] . " Une boutique en ligne pour vendre, ou un lieu à gérer : galerie marchande, marché aux puces, vide-grenier, quartier. Photos et fiches préparées par l'IA, paiement par carte, plan interactif.";
 $shops = saas_directory();
 $pieces = array_sum(array_column($shops, 'count'));
 $live = array_values(array_filter(gallery_list(), static fn (array $g): bool => go_is_live($g)));
@@ -62,14 +70,27 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
   .login-band a { font-weight: 600; }
   .tagt { font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); margin-left: 6px; vertical-align: middle; }
   .hero .actions .btn.ghost { background: color-mix(in srgb, var(--accent-ink) 10%, transparent); }
+  .hero-media { position: absolute; inset: 0; z-index: 0; }
+  .hero-media > i { position: absolute; inset: 0; background-size: cover; opacity: 0; transition: opacity 1.2s ease; }
+  .hero-media > i.is-on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .hero-media > i { transition: none; } }
+  .hero-shade { position: absolute; inset: 0; z-index: 1; }
+  .hero > .wrap { position: relative; z-index: 2; }
+  .hero.has-banner { color: #fff; }
+  .hero.has-banner::after { display: none; }
+  .hero.has-banner .actions .btn.ghost { color: #fff; border-color: rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .10); }
+  .hero.has-banner .actions .btn.ghost:hover { background: rgba(255, 255, 255, .2); }
+  .hero.has-banner .actions .btn.light { color: #1c1a17; }
   section[id] { scroll-margin-top: 120px; }
   @media (max-width: 700px) { .band-nav { position: static; } section[id] { scroll-margin-top: 90px; } }
 </style>
 
-<section class="hero"><div class="wrap">
-  <p class="eyebrow">Boutiques · galeries · marchés aux puces · vides-greniers</p>
-  <h1>Vendez, réunissez, organisez avec <?= $e($cfg['name']) ?></h1>
-  <p class="lede"><?= $e($cfg['tagline']) ?> Une boutique en ligne pour vendre, ou un lieu à gérer : galerie marchande, marché aux puces, vide-grenier, quartier. Photos et fiches préparées par l'IA, paiement par carte, plan interactif.</p>
+<section class="hero<?= $homeBanners ? ' has-banner' : '' ?>">
+  <?= banner_slides_html($homeBanners, (int) $home['overlay'], 'center', (bool) $home['slideshow']) ?>
+  <div class="wrap">
+  <p class="eyebrow"><?= $e($homeEyebrow) ?></p>
+  <h1><?= $e($homeTitle) ?></h1>
+  <p class="lede"><?= $e($homeLede) ?></p>
   <div class="actions">
     <a class="btn light" href="/inscription/">Créer ma boutique</a>
     <a class="btn ghost" href="/galerie/creer.php">Organiser un marché ou une galerie</a>
@@ -233,4 +254,5 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
     <a class="btn" href="/inscription/">Créer ma boutique</a> <a class="btn ghost" style="border-color:var(--accent);color:var(--accent)" href="/galerie/creer.php">Organiser un marché ou une galerie</a>
   </div>
 </div>
+<?= banner_slides_script() ?>
 <?php saas_page_end(); ?>

@@ -352,9 +352,10 @@ switch ($action) {
             if ($p['type'] === 'photo') $photos[] = ['path' => $p['path'], 'label' => $p['label']];
         }
         $job = studio_job_get($product['ref']);
+        $condition = product_condition((string) ($product['etat'] ?? ''));
         quick_add_reply(['ok' => true, 'product' => [
-            'ref' => $product['ref'], 'name' => $product['name'], 'price' => $product['price'], 'cat' => $product['cat'],
-            'description' => $product['description'], 'materials' => (string) $product['materials'], 'colors' => (string) ($product['colors'] ?? ''), 'brand' => (string) ($product['brand'] ?? ''), 'distributor' => (string) ($product['distributor'] ?? ''), 'etat' => (string) ($product['etat'] ?? ''), 'nature' => (string) ($product['nature'] ?? ''), 'sous_categorie' => (string) ($product['sous_categorie'] ?? ''), 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'], 'size_text' => (string) ($product['size_text'] ?? ''),
+            'ref' => $product['ref'], 'name' => $product['name'], 'price' => $product['price'], 'new_price' => (string) ($product['new_price'] ?? ''), 'cat' => $product['cat'],
+            'description' => $product['description'], 'materials' => (string) $product['materials'], 'colors' => (string) ($product['colors'] ?? ''), 'brand' => (string) ($product['brand'] ?? ''), 'distributor' => (string) ($product['distributor'] ?? ''), 'etat' => (string) ($product['etat'] ?? ''), 'etat_label' => $condition[0] ?? '', 'nature' => (string) ($product['nature'] ?? ''), 'sous_categorie' => (string) ($product['sous_categorie'] ?? ''), 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'], 'size_text' => (string) ($product['size_text'] ?? ''), 'barcode' => (string) ($product['barcode'] ?? ''),
             'hidden' => (bool) $product['is_hidden'],
         ], 'photos' => $photos, 'status' => $job['status'] ?? 'reviewed', 'note' => $job['note'] ?? '']);
     }

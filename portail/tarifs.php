@@ -128,7 +128,7 @@ $signup = $origin . '/inscription/?mode=' . rawurlencode($mode) . ($scope === 'd
 <title>Tarifs — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 <link rel="stylesheet" href="/assets/pricing.css">
 <style>
   .twrap { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; max-width: 1180px; margin: 0 auto; padding: 0 16px 56px; align-items: start; }

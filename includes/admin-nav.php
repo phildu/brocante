@@ -15,6 +15,7 @@
  * aperçu dans Réglages → Menu latéral, admin/menu.php).
  */
 require_once __DIR__ . '/admin-menu.php';
+require_once __DIR__ . '/feedback.php';
 
 // Entrées disponibles (pages de la plateforme et des plugins actifs) puis
 // application des catégories et de l'ordre enregistrés par le portail.
@@ -43,7 +44,7 @@ $adminIcon = static fn (string $name): string => admin_menu_icon_svg($name);
 <?= plugin_admin_assets_html(admin_role()) ?>
 <header class="admin-topbar">
   <button type="button" class="admin-topbar-btn" id="admin-sidebar-open" aria-controls="admin-sidebar" aria-expanded="false" aria-label="Ouvrir le menu d'administration"><?= $adminIcon('menu') ?></button>
-  <a class="wordmark" href="/admin/dashboard.php"><img src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo"></a>
+  <a class="wordmark" href="<?= h(admin_home_for_role(admin_role())) ?>"><img src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo"></a>
 </header>
 <div class="admin-sidebar-overlay" id="admin-sidebar-overlay"></div>
 <aside class="admin-sidebar" id="admin-sidebar" aria-label="Administration">
@@ -248,3 +249,4 @@ $adminIcon = static fn (string $name): string => admin_menu_icon_svg($name);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
 })();
 </script>
+<?= feedback_widget_html() ?>

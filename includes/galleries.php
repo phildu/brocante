@@ -143,9 +143,18 @@ function gallery_style_normalize(array $s): array
     $choice = static fn (string $key, $v, string $default): string => isset(GALLERY_STYLE_CHOICES[$key][(string) $v]) ? (string) $v : $default;
     $image = static fn ($v): string => preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*\.(?:jpg|png|webp)$#', (string) $v) ? (string) $v : '';
     $text = static fn ($v, int $max): string => mb_substr(trim((string) $v), 0, $max);
+    // Bannières : liste sans doublon (six au plus) ; les galeries enregistrées avant le diaporama n'ont que « banner ».
+    $banners = [];
+    foreach ((array) ($s['banners'] ?? []) as $b) {
+        $path = $image($b);
+        if ($path !== '' && !in_array($path, $banners, true)) $banners[] = $path;
+        if (count($banners) >= 6) break;
+    }
+    if (!$banners && ($legacy = $image($s['banner'] ?? '')) !== '') $banners[] = $legacy;
     return [
         'bg' => $color($s['bg'] ?? ''), 'ink' => $color($s['ink'] ?? ''), 'hero_color' => $color($s['hero_color'] ?? ''),
-        'banner' => $image($s['banner'] ?? ''), 'logo' => $image($s['logo'] ?? ''),
+        'banner' => $banners[0] ?? '', 'banners' => $banners, 'logo' => $image($s['logo'] ?? ''),
+        'banner_slideshow' => array_key_exists('banner_slideshow', $s) ? !empty($s['banner_slideshow']) : count($banners) > 1,
         'banner_overlay' => max(0, min(80, (int) ($s['banner_overlay'] ?? 35))),
         'banner_pos' => $choice('banner_pos', $s['banner_pos'] ?? '', 'center'),
         'hero_height' => $choice('hero_height', $s['hero_height'] ?? '', 'normal'),
@@ -164,6 +173,18 @@ function gallery_style_normalize(array $s): array
         'shops_title' => $text($s['shops_title'] ?? '', 60), 'shops_lede' => $text($s['shops_lede'] ?? '', 200), 'pieces_title' => $text($s['pieces_title'] ?? '', 60),
         'footer_text' => $text($s['footer_text'] ?? '', 300),
     ];
+}
+
+/** Bannières d'une galerie, dans l'ordre d'affichage (la première sert d'image de partage) ; six au plus. */
+function gallery_banner_images(array $style): array
+{
+    $valid = static fn ($v): bool => (bool) preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*\.(?:jpg|png|webp)$#', (string) $v);
+    $banners = [];
+    foreach ((array) ($style['banners'] ?? []) as $path) {
+        if ($valid($path) && !in_array($path, $banners, true)) $banners[] = (string) $path;
+    }
+    if (!$banners && $valid($style['banner'] ?? '')) $banners[] = (string) $style['banner'];
+    return array_slice($banners, 0, 6);
 }
 
 /**
@@ -250,9 +271,8 @@ function gallery_delete(string $slug): bool
     $gallery = gallery_load($slug);
     $file = galleries_dir() . '/' . $slug . '.json';
     if (!$gallery || !is_file($file)) return false;
-    foreach (['banner', 'logo'] as $kind) {
-        $relative = (string) ($gallery['style'][$kind] ?? '');
-        if ($relative === '' || !preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*$#', $relative)) continue;
+    foreach (array_unique(array_filter(array_merge(gallery_banner_images($gallery['style']), [(string) ($gallery['style']['logo'] ?? '')]))) as $relative) {
+        if (!preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*$#', $relative)) continue;
         $image = dirname(__DIR__) . '/' . $relative;
         if (is_file($image) && !@unlink($image)) return false;
     }
@@ -268,9 +288,13 @@ function gallery_export_payload(string $slug): ?array
     if (!$gallery) return null;
     $style = $gallery['style'];
     $assets = [];
-    foreach (['banner', 'logo'] as $kind) {
-        $relative = (string) ($style[$kind] ?? '');
-        $style[$kind] = '';
+    $files = [];
+    foreach (gallery_banner_images($style) as $i => $path) $files[$i === 0 ? 'banner' : 'banner' . ($i + 1)] = $path;
+    $files['logo'] = (string) ($style['logo'] ?? '');
+    $style['banner'] = '';
+    $style['banners'] = [];
+    $style['logo'] = '';
+    foreach ($files as $kind => $relative) {
         if ($relative === '') continue;
         if (!preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*$#', $relative)) {
             throw new RuntimeException('Chemin d’image de galerie non valide.');
@@ -295,9 +319,9 @@ function gallery_import_assets(array $assets, string $slug): array
 {
     $paths = [];
     try {
-        foreach (['banner' => 2000, 'logo' => 500] as $kind => $maxW) {
-            if (!isset($assets[$kind])) continue;
-            $asset = $assets[$kind];
+        foreach ($assets as $kind => $asset) {
+            if (!preg_match('/^(?:banner|banner[2-6]|logo)$/', (string) $kind)) continue;
+            $maxW = $kind === 'logo' ? 500 : 2000;
             if (!is_array($asset) || !is_string($asset['data'] ?? null) || strlen($asset['data']) > 18 * 1024 * 1024) {
                 throw new InvalidArgumentException('Données d’image invalides dans le fichier importé.');
             }
@@ -340,6 +364,7 @@ function gallery_import_payload(array $payload, string $slug, ?array $existing =
     $source = $payload['gallery'];
     $style = (array) ($source['style'] ?? []);
     $style['banner'] = '';
+    $style['banners'] = [];
     $style['logo'] = '';
     $data = $source;
     $data['slug'] = $slug;
@@ -353,15 +378,24 @@ function gallery_import_payload(array $payload, string $slug, ?array $existing =
     }
     $gallery = gallery_normalize($slug, $data);
     $assetPaths = gallery_import_assets((array) ($payload['assets'] ?? []), $slug);
-    foreach ($assetPaths as $kind => $path) $gallery['style'][$kind] = $path;
+    $banners = [];
+    foreach ($assetPaths as $kind => $path) {
+        if ($kind === 'logo') $gallery['style']['logo'] = $path;
+        else $banners[] = $path;
+    }
+    if ($banners) {
+        $gallery['style']['banners'] = array_slice($banners, 0, 6);
+        $gallery['style']['banner'] = $banners[0];
+    }
     if (!gallery_save($gallery)) {
         foreach ($assetPaths as $path) gallery_image_delete($path);
         throw new RuntimeException('Impossible d’enregistrer la galerie importée.');
     }
     if ($existing !== null) {
-        foreach (['banner', 'logo'] as $kind) {
-            $oldPath = (string) ($existing['style'][$kind] ?? '');
-            if ($oldPath !== '' && $oldPath !== ($gallery['style'][$kind] ?? '')) gallery_image_delete($oldPath);
+        $oldImages = array_merge(gallery_banner_images($existing['style']), [(string) ($existing['style']['logo'] ?? '')]);
+        $newImages = array_merge(gallery_banner_images($gallery['style']), [(string) ($gallery['style']['logo'] ?? '')]);
+        foreach (array_unique(array_filter($oldImages)) as $oldPath) {
+            if (!in_array($oldPath, $newImages, true)) gallery_image_delete($oldPath);
         }
     }
     return $gallery;

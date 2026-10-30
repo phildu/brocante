@@ -43,6 +43,7 @@ $flName = $siteName ?? tenant('name');
       <?php if (!empty($_GET['inscrit'])): ?><p class="form-note">Inscription enregistrée — merci !</p><?php endif; ?>
     </div>
   </div>
+  <?php if (($footerNote = shop_footer_note()) !== ''): ?><p class="footer-note"><?= h($footerNote) ?></p><?php endif; ?>
   <div class="fl-foot-bottom">
     <p class="fl-colophon">Édité par <?= h($flName) ?> — <?= date('Y') ?>. Pièces uniques, photographiées et décrites une à une.</p>
     <span><?= share_button_html(shop_abs_url('/'), (string) $flName, (string) ($siteTagline ?? ''), '', 'share-link') ?></span>

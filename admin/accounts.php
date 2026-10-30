@@ -248,7 +248,7 @@ $renderFields = static function (array $a, string $prefix) {
 </main>
 <script>
 (function () {
-  var STAFF = ['admin', 'community_manager'];
+  var STAFF = ['admin', 'community_manager', 'photographe'];
   // Identifiant et mot de passe : seulement pour les rôles qui se connectent.
   document.querySelectorAll('[data-role-select]').forEach(function (select) {
     var form = select.closest('form');

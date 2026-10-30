@@ -147,7 +147,7 @@ function admin_menu_core_items(): array
         'univers' => ['/admin/universes.php', 'Univers', 'folder'],
         'etiquettes' => ['/admin/labels.php', 'Étiquettes (impression)', 'receipt'],
         'prise' => ['/admin/quick-add.php', 'Nouvelle pièce (photo)', 'camera'],
-        'assistant' => ['/admin/shooting-assistant.php', 'Assistant de shooting', 'camera'],
+        'assistant' => ['/admin/shooting-assistant.php', 'Shooting', 'camera'],
         'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
         'promos' => ['/admin/promos.php', 'Mises en avant (promos)', 'banner'],
         'offres' => ['/admin/offers.php', 'Offres de prix', 'receipt'],
@@ -183,10 +183,24 @@ function admin_menu_core_items(): array
 function admin_menu_items(string $role): array
 {
     $items = admin_menu_core_items();
+    // Un seul écran « Shooting » : le parcours des pièces (assistant) ou celui
+    // du lieu (boutique, stand). Les deux se rejoignent par des onglets ; le
+    // photographe, qui n'a pas les pièces, arrive directement sur le lieu.
+    if (!admin_role_can_access($role, '/admin/shooting-assistant.php')) {
+        $items['assistant'] = ['/admin/shop-shooting.php', 'Shooting boutique / stand', 'camera'];
+    }
     // Offres de prix à traiter, en regard du menu.
     try {
         if ($pendingOffers = (int) db()->query("SELECT COUNT(*) FROM price_offers WHERE status = 'new'")->fetchColumn()) {
             $items['offres'][1] .= ' (' . $pendingOffers . ')';
+        }
+    } catch (Throwable $e) {
+    }
+    // Photos du lieu envoyées par un photographe et encore à valider (table créée
+    // au premier envoi : avant cela, la requête échoue et le compteur reste absent).
+    try {
+        if ($role === 'admin' && ($waitingShoots = (int) db()->query("SELECT COUNT(*) FROM shooting_requests WHERE status = 'pending'")->fetchColumn())) {
+            $items['assistant'][1] .= ' (' . $waitingShoots . ')';
         }
     } catch (Throwable $e) {
     }

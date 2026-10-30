@@ -128,6 +128,27 @@ function shooting_nature_resolve(?string $nature, ?string $sub = null): array
     return ['nature' => $natureKey, 'sous_categorie' => $subKey];
 }
 
+/** États proposés à la validation vocale : les plus courants, du neuf au rebut. */
+function shooting_voice_conditions(): array
+{
+    $out = [];
+    foreach (['neuf', 'comme_neuf', 'tres_bon', 'bon', 'correct', 'use', 'restaurer', 'pieces'] as $key) {
+        $condition = product_condition($key);
+        if ($condition) $out[] = ['key' => $key, 'label' => $condition[0], 'hint' => $condition[1]];
+    }
+    return $out;
+}
+
+/** Toutes les clés d'état → libellé : la validation vocale nomme l'état proposé par l'IA. */
+function shooting_condition_labels(): array
+{
+    $labels = [];
+    foreach (product_condition_options() as $group) {
+        foreach ($group as $key => [$label]) $labels[$key] = $label;
+    }
+    return $labels;
+}
+
 /** Conseils généraux affichés dans le programme (audio et texte). */
 function shooting_general_tips(): array
 {

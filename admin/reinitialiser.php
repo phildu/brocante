@@ -2,6 +2,7 @@
 // Choix d'un nouveau mot de passe depuis le lien reçu par e-mail (voir includes/password-reset.php).
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/login-ui.php';
 
 $token = (string) ($_GET['token'] ?? $_POST['token'] ?? '');
 $from = (string) ($_GET['from'] ?? $_POST['from'] ?? '') === 'studio' ? 'studio' : '';
@@ -35,23 +36,13 @@ ob_start();
     <h1>Nouveau mot de passe</h1>
     <p class="lede">Choisissez un mot de passe d'au moins <?= (int) ACCOUNT_PASSWORD_MIN ?> caractères.</p>
     <?php if ($error): ?><p class="login-error" role="alert"><?= h($error) ?></p><?php endif; ?>
-    <form method="post">
+    <form method="post" class="login-unified-form">
       <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
       <input type="hidden" name="token" value="<?= h($token) ?>">
       <input type="hidden" name="from" value="<?= h($from) ?>">
-      <label class="lbl" for="pw1">Nouveau mot de passe</label>
-      <input type="password" name="password" id="pw1" autocomplete="new-password" minlength="<?= (int) ACCOUNT_PASSWORD_MIN ?>" maxlength="200" required autofocus>
-      <label class="lbl" for="pw2">Confirmer le mot de passe</label>
-      <input type="password" name="confirm" id="pw2" autocomplete="new-password" minlength="<?= (int) ACCOUNT_PASSWORD_MIN ?>" maxlength="200" required>
-      <label class="showpw"><input type="checkbox" id="showpw"> Afficher les mots de passe</label>
-      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Enregistrer</button>
+      <?= login_password_field_html(['name' => 'password', 'id' => 'pw1', 'label' => 'Nouveau mot de passe', 'autocomplete' => 'new-password', 'minlength' => ACCOUNT_PASSWORD_MIN, 'maxlength' => 200, 'autofocus' => true]) ?>
+      <?= login_password_field_html(['name' => 'confirm', 'id' => 'pw2', 'label' => 'Confirmer le mot de passe', 'autocomplete' => 'new-password', 'minlength' => ACCOUNT_PASSWORD_MIN, 'maxlength' => 200]) ?>
+      <button class="btn btn-primary login-submit" type="submit">Enregistrer</button>
     </form>
-    <script>
-      (function () {
-        var cb = document.getElementById('showpw'), a = document.getElementById('pw1'), b = document.getElementById('pw2');
-        cb.addEventListener('change', function () { a.type = b.type = cb.checked ? 'text' : 'password'; });
-        a.form.addEventListener('submit', function () { a.type = b.type = 'password'; });
-      })();
-    </script>
 <?php endif; ?>
 <?php password_reset_page('Nouveau mot de passe', (string) ob_get_clean());

@@ -53,6 +53,23 @@ function ga_admin_find(array $gallery, string $email): ?array
     return null;
 }
 
+/**
+ * Administrateur d'une galerie à partir de l'identifiant saisi : e-mail ou nom.
+ * Le nom n'est accepté que s'il désigne un seul administrateur dans la galerie.
+ */
+function ga_admin_find_by_login(array $gallery, string $login): ?array
+{
+    $login = mb_strtolower(trim($login));
+    if ($login === '') return null;
+    $byEmail = ga_admin_find($gallery, $login);
+    if ($byEmail) return $byEmail;
+    $matches = [];
+    foreach ($gallery['admins'] ?? [] as $a) {
+        if (mb_strtolower(trim((string) ($a['name'] ?? ''))) === $login) $matches[] = $a;
+    }
+    return count($matches) === 1 ? $matches[0] : null;
+}
+
 /** Ajoute un administrateur (ou lui renouvelle son mot de passe). -> [message d'erreur ou null, mot de passe provisoire]. */
 function ga_admin_add(string $slug, string $email, string $name): array
 {
@@ -115,25 +132,30 @@ function ga_login_attempt_note(): void
 }
 
 /** Connexion : -> [message d'erreur ou null]. La session retient les galeries de cette adresse (une adresse peut en administrer plusieurs). */
-function ga_login(string $email, string $password): ?string
+function ga_login(string $login, string $password): ?string
 {
-    $email = mb_strtolower(trim($email));
+    $login = mb_strtolower(trim($login));
     if (!ga_login_attempts_ok()) return 'Trop d\'essais : réessayez dans un quart d\'heure.';
-    $slugs = [];
+    $emails = [];   // slug => adresse de l'administrateur qui vient de s'authentifier
     foreach (gallery_list() as $g) {
-        $a = ga_admin_find($g, $email);
-        if ($a && password_verify($password, $a['hash'])) $slugs[] = $g['slug'];
+        $a = ga_admin_find_by_login($g, $login);
+        if ($a && password_verify($password, $a['hash'])) $emails[$g['slug']] = mb_strtolower((string) $a['email']);
     }
-    if (!$slugs) {
+    if (!$emails) {
         ga_login_attempt_note();
         sleep(1);
-        return 'Adresse e-mail ou mot de passe incorrect.';
+        return 'Identifiant, nom ou e-mail incorrect.';
     }
+    // La session est liée à une adresse : un même nom peut désigner des adresses
+    // différentes selon les galeries, on ne garde que celles de la première.
+    $email = $emails[array_key_first($emails)];
+    $slugs = [];
+    foreach ($emails as $s => $mail) if ($mail === $email) $slugs[] = $s;
     session_regenerate_id(true);
     $_SESSION['gallery_admin'] = ['email' => $email, 'slugs' => $slugs, 'slug' => $slugs[0], 'at' => time()];
     foreach ($slugs as $s) {
         $g = gallery_load($s);
-        foreach ($g['admins'] as &$a) if ($a['email'] === $email) $a['last_login'] = time();
+        foreach ($g['admins'] as &$a) if (mb_strtolower((string) $a['email']) === $email) $a['last_login'] = time();
         unset($a);
         gallery_save($g);
     }
@@ -190,19 +212,22 @@ function ga_reset_sig(string $email, int $exp): string
     return hash_hmac('sha256', 'ga-reset|' . $email . '|' . $exp . '|' . $state, $salt);
 }
 
-/** Envoie le lien si l'adresse administre une galerie ; ne révèle jamais si elle existe. */
-function ga_reset_request(string $email): void
+/** Envoie le lien si l'identifiant (e-mail, nom ou identifiant) administre une galerie ; ne révèle jamais si le compte existe. */
+function ga_reset_request(string $login): void
 {
-    $email = mb_strtolower(trim($email));
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || !ga_login_attempts_ok()) return;
+    $login = mb_strtolower(trim($login));
+    if ($login === '' || !ga_login_attempts_ok()) return;
     ga_login_attempt_note();
+    $emails = [];
     foreach (gallery_list() as $g) {
-        if (!ga_admin_find($g, $email)) continue;
+        $a = ga_admin_find_by_login($g, $login);
+        if ($a && filter_var($a['email'], FILTER_VALIDATE_EMAIL)) $emails[mb_strtolower((string) $a['email'])] = true;
+    }
+    foreach (array_keys($emails) as $email) {
         $exp = time() + GA_RESET_TTL;
         $url = ga_public_url('/galerie/mot-de-passe.php?' . http_build_query(['e' => $email, 'x' => $exp, 't' => ga_reset_sig($email, $exp)]));
         ga_mail($email, 'Réinitialisation de votre mot de passe (administration de galerie)',
             "Bonjour,\n\nPour choisir un nouveau mot de passe d'administrateur de galerie, ouvrez ce lien (valable 1 heure, à usage unique) :\n\n$url\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe reste inchangé.\n");
-        return;
     }
 }
 

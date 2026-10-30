@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/shooting-assistant.php';
+require_once __DIR__ . '/../includes/shooting-tabs.php';
 require_admin();
 
 $content = get_content();
@@ -13,6 +14,8 @@ $dataJson = json_encode([
     'manualPrograms' => shooting_manual_program_map(),
     'generalTips' => shooting_general_tips(),
     'issueLabels' => shooting_issue_labels(),
+    'voiceConditions' => shooting_voice_conditions(),
+    'conditionLabels' => shooting_condition_labels(),
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 ?><!DOCTYPE html>
 <html lang="fr">
@@ -26,6 +29,7 @@ $dataJson = json_encode([
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/shooting-tabs.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/shooting-tabs.css') ?>">
 <link rel="stylesheet" href="/assets/object-picker.css">
 <link rel="stylesheet" href="/assets/shooting-assistant.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/shooting-assistant.css') ?>">
 </head>
@@ -34,6 +38,7 @@ $dataJson = json_encode([
 <?php $adminNav = 'assistant'; include __DIR__ . '/../includes/admin-nav.php'; ?>
 <main class="sa-main">
   <div class="sa qa" data-action="/admin/shooting-assistant-action.php" data-qa="/admin/quick-add-action.php" data-ai="<?= $aiReady ? '1' : '0' ?>" data-catalog="/admin/catalog.php#produit-">
+    <?= shooting_tabs_html(admin_role(), 'assistant') ?>
 
     <header class="sa-head">
       <p class="eyebrow">Nouvelle pièce · parcours guidé</p>
@@ -232,9 +237,44 @@ $dataJson = json_encode([
           <label class="sa-field">Nom <input type="text" id="sa-f-name" maxlength="120"></label>
           <div class="sa-two">
             <label class="sa-field">Prix affiché (€) <input type="number" id="sa-f-price" min="0" step="0.01" inputmode="decimal"></label>
-            <label class="sa-field">Poids (g) <input type="number" id="sa-f-weight" min="0" step="10" inputmode="numeric"></label>
+            <label class="sa-field">Prix du neuf (€) <input type="number" id="sa-f-new-price" min="0" step="0.01" inputmode="decimal"></label>
           </div>
+          <label class="sa-field">Poids (g) <input type="number" id="sa-f-weight" min="0" step="10" inputmode="numeric"></label>
           <label class="sa-field">Description <textarea id="sa-f-desc" rows="4" maxlength="1200"></textarea></label>
+
+          <div class="sa-voice" id="sa-voice" hidden>
+            <div class="sa-voice-intro" id="sa-voice-intro">
+              <p class="sa-kicker">Validation vocale</p>
+              <h3>Vérifier la fiche à la voix</h3>
+              <p class="sa-note">L'assistant pose une question, écoute votre réponse et n'enregistre que ce que vous corrigez. « Je ne sais pas » laisse la fiche telle quelle.</p>
+              <p class="sa-note" id="sa-voice-support"></p>
+              <div class="sa-actions">
+                <button type="button" class="btn btn-primary" id="sa-voice-start">🎙 Vérifier à la voix</button>
+              </div>
+            </div>
+            <div class="sa-voice-panel" id="sa-voice-panel" hidden>
+              <p class="sa-voice-count" id="sa-voice-count"></p>
+              <p class="sa-voice-question" id="sa-voice-question" aria-live="polite"></p>
+              <p class="sa-voice-hint" id="sa-voice-hint"></p>
+              <p class="sa-voice-heard" id="sa-voice-heard" aria-live="polite"></p>
+              <div class="sa-voice-answers" id="sa-voice-answers"></div>
+              <div class="sa-field sa-voice-input" id="sa-voice-input-wrap" hidden>
+                <span id="sa-voice-input-label">Votre réponse</span>
+                <div class="sa-voice-input-row">
+                  <input type="text" id="sa-voice-input" autocomplete="off" enterkeyhint="done">
+                  <button type="button" class="btn-small" id="sa-voice-send">Valider</button>
+                </div>
+              </div>
+              <div class="sa-voice-bar">
+                <button type="button" class="btn btn-ghost" id="sa-voice-mic">🎤 Répondre</button>
+                <button type="button" class="btn btn-ghost" id="sa-voice-repeat">🔊 Répéter</button>
+                <button type="button" class="btn btn-ghost" id="sa-voice-unknown">Je ne sais pas</button>
+                <button type="button" class="btn btn-ghost" id="sa-voice-stop">⏹ Arrêter</button>
+              </div>
+              <ul class="sa-voice-summary" id="sa-voice-summary" hidden></ul>
+            </div>
+          </div>
+
           <label class="sa-switch"><input type="checkbox" id="sa-f-publish"> <span>Publier la fiche<br><small>Sans cette case, elle reste masquée dans le catalogue pour relecture.</small></span></label>
           <div class="sa-actions">
             <button type="button" class="btn btn-primary" id="sa-save">Enregistrer</button>

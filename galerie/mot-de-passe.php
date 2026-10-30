@@ -1,7 +1,9 @@
 <?php
-// Mot de passe oublié d'un administrateur de galerie : demande du lien par e-mail, puis choix du nouveau mot de passe.
+// Mot de passe oublié d'un administrateur de galerie : lien par e-mail ou code par SMS, puis choix du nouveau mot de passe.
 session_start();
 require_once __DIR__ . '/../includes/gallery-admin.php';
+require_once __DIR__ . '/../includes/login-ui.php';
+require_once __DIR__ . '/../includes/login-otp.php';
 
 function ga_e($s): string
 {
@@ -15,6 +17,8 @@ $sig = (string) ($_GET['t'] ?? $_POST['t'] ?? '');
 $resetMode = $sig !== '';
 $error = null;
 $sent = false;
+if (isset($_GET['reset'])) unset($_SESSION['ga_otp']);
+$otp = $_SESSION['ga_otp'] ?? null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals($_SESSION['ga_csrf'], (string) ($_POST['csrf'] ?? ''))) {
@@ -25,6 +29,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['ga_notice'] = 'Mot de passe modifié : connectez-vous avec le nouveau.';
             header('Location: /galerie/admin.php');
             exit;
+        }
+    } elseif (($_POST['action'] ?? '') === 'otp') {
+        if (!is_array($otp) || empty($otp['login'])) {
+            $error = 'Demandez d\'abord un code par SMS.';
+        } else {
+            $error = (string) login_otp_apply('gallery', (string) $otp['login'], (string) ($_POST['code'] ?? ''), (string) ($_POST['password'] ?? ''), (string) ($_POST['confirm'] ?? ''));
+            if ($error === '') {
+                unset($_SESSION['ga_otp']);
+                $_SESSION['ga_notice'] = 'Mot de passe modifié : connectez-vous avec le nouveau.';
+                header('Location: /galerie/admin.php');
+                exit;
+            }
+        }
+    } elseif (($_POST['method'] ?? 'email') === 'sms') {
+        $res = login_otp_request('gallery', (string) ($_POST['email'] ?? ''));
+        if ($res['sent']) {
+            $otp = ['login' => (string) ($_POST['email'] ?? ''), 'phone' => $res['phone']];
+            $_SESSION['ga_otp'] = $otp;
+        } else {
+            $error = (string) $res['error'];
         }
     } else {
         ga_reset_request((string) ($_POST['email'] ?? ''));
@@ -40,46 +64,63 @@ http_response_code($error ? 400 : 200);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Administration de galerie — Mot de passe oublié</title>
-<style>
-  body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: #f4f0e8; color: #221f1a; margin: 0; }
-  main { max-width: 380px; margin: 12vh auto 0; padding: 0 18px; }
-  form, .box { background: #fff; border: 1px solid #ddd5c6; border-radius: 10px; padding: 22px; display: grid; gap: 12px; }
-  h1 { font-size: 1.3rem; margin: 0; }
-  label { display: grid; gap: 4px; font-size: .85rem; font-weight: 600; }
-  input { padding: 10px; border: 1px solid #cfc6b4; border-radius: 8px; font: inherit; }
-  button { padding: 11px; border: 0; border-radius: 8px; background: #221f1a; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
-  .err { color: #a4361b; margin: 0; } .ok { color: #1e6b3a; margin: 0; } small, a { color: #6b6457; }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
+<link rel="stylesheet" href="/assets/login.css">
 </head>
-<body>
-<main>
+<body class="login-body">
+<main class="login-card">
+  <div class="login-brand">
+    <span class="mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></span>
+    <div><b>brocs</b><small>Espace galerie</small></div>
+  </div>
 <?php if ($resetMode && !$linkOk && !$error): ?>
-  <div class="box"><h1>Lien non valable</h1><p class="err">Ce lien a expiré ou a déjà servi (valable 1 heure, à usage unique).</p><a href="/galerie/mot-de-passe.php">Redemander un lien</a></div>
+  <h1>Lien non valable</h1>
+  <p class="flash" data-kind="error" role="alert">Ce lien a expiré ou a déjà servi (valable 1 heure, à usage unique).</p>
+  <p class="login-foot"><a href="/galerie/mot-de-passe.php">Redemander un lien</a></p>
 <?php elseif ($resetMode): ?>
-  <form method="post">
-    <h1>Nouveau mot de passe</h1>
-    <?php if ($error): ?><p class="err" role="alert"><?= ga_e($error) ?></p><?php endif; ?>
+  <h1>Nouveau mot de passe</h1>
+  <p class="hint">Choisissez un mot de passe de 10 caractères au moins.</p>
+  <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= ga_e($error) ?></p><?php endif; ?>
+  <form class="login-unified-form" method="post">
     <input type="hidden" name="csrf" value="<?= ga_e($_SESSION['ga_csrf']) ?>">
     <input type="hidden" name="e" value="<?= ga_e($email) ?>"><input type="hidden" name="x" value="<?= (int) $exp ?>"><input type="hidden" name="t" value="<?= ga_e($sig) ?>">
-    <label>Nouveau mot de passe<input type="password" name="password" autocomplete="new-password" minlength="10" required autofocus></label>
-    <label>Confirmer<input type="password" name="confirm" autocomplete="new-password" minlength="10" required></label>
-    <small>10 caractères au moins.</small>
-    <button type="submit">Enregistrer</button>
+    <?= login_password_field_html(['name' => 'password', 'label' => 'Nouveau mot de passe', 'autocomplete' => 'new-password', 'minlength' => 10, 'autofocus' => true]) ?>
+    <?= login_password_field_html(['name' => 'confirm', 'label' => 'Confirmer', 'autocomplete' => 'new-password', 'minlength' => 10]) ?>
+    <button class="btn btn-primary login-submit" type="submit">Enregistrer</button>
   </form>
+  <p class="login-foot"><a href="/galerie/admin.php">← Retour à la connexion</a></p>
+<?php elseif ($otp): ?>
+  <h1>Code par SMS</h1>
+  <p class="hint">Saisissez le code reçu au <?= ga_e((string) ($otp['phone'] ?? '')) ?> et choisissez un nouveau mot de passe (10 minutes).</p>
+  <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= ga_e($error) ?></p><?php endif; ?>
+  <?= login_otp_form_html([
+    'id' => 'gallery-otp',
+    'identifier_name' => 'email',
+    'identifier_value' => (string) ($otp['login'] ?? ''),
+    'hidden' => ['csrf' => $_SESSION['ga_csrf'], 'action' => 'otp'],
+    'minlength' => 10,
+  ]) ?>
+  <p class="login-foot"><a href="?reset=1">Recevoir un nouveau code ou un lien e-mail</a> · <a href="/galerie/admin.php">← Retour à la connexion</a></p>
 <?php elseif ($sent): ?>
-  <div class="box"><h1>Mot de passe oublié</h1>
-    <p class="ok" role="status">Si cette adresse administre une galerie, un e-mail avec un lien (valable 1 heure) vient de lui être envoyé. Pensez à vérifier vos courriers indésirables.</p>
-    <a href="/galerie/admin.php">← Retour à la connexion</a></div>
+  <h1>Mot de passe oublié</h1>
+  <p class="hint">Si cette adresse administre une galerie, un e-mail avec un lien (valable 1 heure) vient de lui être envoyé. Pensez à vérifier vos courriers indésirables.</p>
+  <p class="login-foot"><a href="/galerie/admin.php">← Retour à la connexion</a></p>
 <?php else: ?>
-  <form method="post">
-    <h1>Mot de passe oublié</h1>
-    <?php if ($error): ?><p class="err" role="alert"><?= ga_e($error) ?></p><?php endif; ?>
-    <input type="hidden" name="csrf" value="<?= ga_e($_SESSION['ga_csrf']) ?>">
-    <label>Adresse e-mail de votre compte<input type="email" name="email" autocomplete="username" required autofocus></label>
-    <button type="submit">Envoyer le lien</button>
-    <small><a href="/galerie/admin.php">← Retour à la connexion</a></small>
-  </form>
+  <h1>Mot de passe oublié</h1>
+  <p class="hint">Indiquez votre identifiant, votre nom ou votre e-mail : recevez un lien par e-mail ou un code par SMS.</p>
+  <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= ga_e($error) ?></p><?php endif; ?>
+  <?= login_forgot_form_html([
+    'id' => 'gallery-forgot',
+    'identifier_name' => 'email',
+    'hidden' => ['csrf' => $_SESSION['ga_csrf']],
+    'sms' => login_otp_sms_available(),
+    'note' => 'Le code par SMS n\'est proposé que si un numéro est enregistré sur votre compte.',
+  ]) ?>
+  <p class="login-foot"><a href="/galerie/admin.php">← Retour à la connexion</a></p>
 <?php endif; ?>
 </main>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

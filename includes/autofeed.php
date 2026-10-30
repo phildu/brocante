@@ -457,7 +457,7 @@ function banner_library_reserve(string $file): bool
  * retenu pour la page : il pourra resservir sur une autre page ou un autre
  * site. -> nom de fichier partagé.
  */
-function banner_library_store(string $absPath, string $prompt, string $pageKey = ''): ?string
+function banner_library_store(string $absPath, string $prompt, string $pageKey = '', ?string $site = null): ?string
 {
     if (!is_file($absPath) || @getimagesize($absPath) === false) return null;
     $dir = banner_library_dir();
@@ -470,7 +470,7 @@ function banner_library_store(string $absPath, string $prompt, string $pageKey =
         'file' => $file,
         'page' => $pageKey,
         'prompt' => mb_substr($prompt, 0, 500),
-        'site' => tenant_slug(),
+        'site' => $site ?? tenant_slug(),
         'at' => gmdate('c'),
     ]);
     while (count($list) > BANNER_LIBRARY_MAX) {

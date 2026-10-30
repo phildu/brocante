@@ -80,6 +80,7 @@ if ($q !== '') $active[] = ['« ' . $q . ' »', shop_url_with(['q' => null])];
     </div>
   </div>
 </section>
+<?= plugin_render('boutique_bottom') ?>
 <script>
   // Les filtres sont ouverts sur ordinateur, repliés sous « Filtrer et trier » sur smartphone.
   (function () {

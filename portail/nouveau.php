@@ -53,7 +53,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
 <title>Nouveau commerce — Portail</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
-<link rel="stylesheet" href="/portail/admin.css?v=1">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
   .new-layout { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 18px; align-items: start; }
   @media (max-width: 1050px) { .new-layout { grid-template-columns: 1fr; } }

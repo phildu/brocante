@@ -1,0 +1,20 @@
+{
+  "id": "actions-commerciales",
+  "name": "Actions commerciales",
+  "version": "1.1.0",
+  "description": "Module payant (essai gratuit) : braderie, foire ou période de soldes. Sélectionnez les pièces et les catégories, fixez la remise, les prix changent et reviennent seuls à la fin. Étiquettes à imprimer pour le stand, bandeau sur la boutique et bilan chiffré des ventes. Prévenez les visiteurs par e-mail (membres de la web app, abonnés aux alertes chineur, prospects de la newsletter) avec un lien de désinscription. Les pièces restent visibles avec leur prix réduit dans les galeries commerciales dont la boutique est membre.",
+  "table_prefix": "aco_",
+  "pages": [
+    { "id": "index", "label": "Actions commerciales", "icon": "banner", "file": "pages/index.php", "roles": ["admin", "community_manager"] },
+    { "id": "etiquettes", "label": "Étiquettes de l'opération", "icon": "receipt", "file": "pages/etiquettes.php", "roles": ["admin", "community_manager"], "menu": false },
+    { "id": "bilan", "label": "Bilan de l'opération", "icon": "gauge", "file": "pages/bilan.php", "roles": ["admin", "community_manager"], "menu": false }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "operations", "file": "api/operations.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
+    { "id": "export", "file": "api/export.php", "methods": ["GET"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/braderie", "file": "api/public.php" }
+  ]
+}
