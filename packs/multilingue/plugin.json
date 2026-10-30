@@ -1,0 +1,14 @@
+{
+  "id": "multilingue",
+  "name": "Version multilingue",
+  "version": "1.0.0",
+  "description": "Module payant (essai gratuit) : l'IA traduit une fois tout le texte public de la boutique (accueil, boutique, fiches, mentions légales) et l'écrit dans un fichier propre à chaque langue. Le site sert ensuite cette version figée — aucune traduction n'est demandée à la visite — avec un sélecteur de langue. À relancer quand le catalogue change.",
+  "table_prefix": "ml_",
+  "pages": [
+    { "id": "index", "label": "Version multilingue", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["POST"], "roles": ["admin"] },
+    { "id": "languages", "file": "api/languages.php", "methods": ["GET", "POST"], "roles": ["admin"] }
+  ]
+}

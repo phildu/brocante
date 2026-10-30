@@ -8,6 +8,7 @@ require_once __DIR__ . '/../includes/gallery-loyalty.php';
 require_once __DIR__ . '/../includes/gallery-booking.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/promo.php';
+require_once __DIR__ . '/../includes/banner-slides.php';
 
 function e($s): string
 {
@@ -77,6 +78,7 @@ $ink = gal_ink_on($accent);
 // Habillage choisi dans le portail (palette, polices, bannière, logo, présentation) ; sans galerie (liste), l'habillage d'origine.
 $theme = $gallery ? gallery_theme($gallery) : null;
 $st = $gallery['style'] ?? gallery_style_normalize([]);
+$bannerImages = $gallery ? gallery_banner_images($st) : [];
 
 // ── Filtres (galerie) ──
 $data = ['shops' => [], 'products' => [], 'skipped' => []];
@@ -184,7 +186,11 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 
   .hero { background: var(--hero-bg, var(--accent)); color: var(--hero-ink, var(--accent-ink)); padding: clamp(32px, 6vw, 72px) 0 clamp(28px, 5vw, 56px); position: relative; overflow: hidden; }
   .hero > .wrap { position: relative; z-index: 2; }
-  .hero-media { position: absolute; inset: 0; background-size: cover; z-index: 0; } .hero-shade { position: absolute; inset: 0; z-index: 1; }
+  .hero-media { position: absolute; inset: 0; z-index: 0; }
+  .hero-media > i { position: absolute; inset: 0; background-size: cover; opacity: 0; transition: opacity 1.2s ease; }
+  .hero-media > i.is-on { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .hero-media > i { transition: none; } }
+  .hero-shade { position: absolute; inset: 0; z-index: 1; }
   .hero.has-banner::after { display: none; }
   .hero.h-compact { padding: clamp(20px, 3vw, 36px) 0 clamp(18px, 3vw, 30px); } .hero.h-tall { padding: clamp(64px, 12vw, 150px) 0 clamp(40px, 7vw, 90px); min-height: min(68vh, 560px); display: flex; align-items: flex-end; } .hero.h-tall > .wrap { width: min(1200px, 100% - 32px); }
   .hero.a-center { text-align: center; } .hero.a-center h1, .hero.a-center .tagline, .hero.a-center .intro { margin-inline: auto; } .hero.a-center .stats, .hero.a-center .hero-cta { justify-content: center; }
@@ -328,8 +334,8 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 
 <?php else: ?>
   <p class="gl-login"><a href="/galerie/admin.php" rel="nofollow">Se connecter</a></p>
-  <header class="hero<?= $st['banner'] !== '' ? ' has-banner' : '' ?> h-<?= e($st['hero_height']) ?> a-<?= e($st['hero_align']) ?>">
-    <?php if ($st['banner'] !== ''): ?><div class="hero-media" style="background-image:url('/<?= e($st['banner']) ?>');background-position:center <?= e($st['banner_pos']) ?>"></div><div class="hero-shade" style="background:rgba(0,0,0,<?= round($st['banner_overlay'] / 100, 2) ?>)"></div><?php endif; ?>
+  <header class="hero<?= $bannerImages ? ' has-banner' : '' ?> h-<?= e($st['hero_height']) ?> a-<?= e($st['hero_align']) ?>">
+    <?= banner_slides_html($bannerImages, (int) $st['banner_overlay'], (string) $st['banner_pos'], (bool) $st['banner_slideshow']) ?>
     <div class="wrap">
     <?php if ($st['logo'] !== ''): ?><img class="hero-logo" src="/<?= e($st['logo']) ?>" alt="<?= e($gallery['name']) ?>"><?php endif; ?>
     <p class="eyebrow"><?= e(ucfirst($vocab['gallery'] ?? 'galerie commerciale')) ?> · <?= e(business_presence_label($gallery['presence_mode'])) ?><?= $gallery['published'] ? '' : ' · aperçu non publié' ?></p>
@@ -815,5 +821,6 @@ fetch('/galerie/contact.php',{method:'POST',headers:{Accept:'application/json'},
   <?php if ($slug !== ''): ?><a href="/galerie/">← Toutes les galeries</a> · <?php endif; ?><?= e($st['footer_text'] !== '' && $slug !== '' ? $st['footer_text'] : 'Les pièces sont vendues et expédiées par les commerces eux-mêmes.') ?>
   · <a href="/galerie/admin.php" rel="nofollow">Gérer ma galerie</a>
 </div></footer>
+<?= banner_slides_script() ?>
 </body>
 </html>

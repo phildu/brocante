@@ -141,8 +141,9 @@ function portail_account(): ?array
 // Administrateur d'une galerie (connecté via /galerie/admin.php) : accès restreint à SA galerie, aux seules pages ci-dessous (voir includes/gallery-admin.php).
 // L'exploitant, connecté au portail, garde l'accès complet ; en local, une connexion d'administrateur de galerie fait passer en mode restreint.
 require_once __DIR__ . '/../includes/gallery-admin.php';
-const GA_PAGES = ['galeries.php', 'galerie-tableau.php', 'galerie-prospects.php', 'galerie-compte.php', 'galerie-offre.php', 'galerie-plan.php', 'galerie-exposants.php', 'galerie-exposant.php', 'galerie-attente.php', 'galerie-cni.php', 'galerie-import.php', 'addons.php'];
-$portailLoginRoute = basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'login.php';
+const GA_PAGES = ['galeries.php', 'galerie-tableau.php', 'galerie-prospects.php', 'galerie-compte.php', 'galerie-offre.php', 'galerie-plan.php', 'galerie-exposants.php', 'galerie-exposant.php', 'galerie-attente.php', 'galerie-cni.php', 'galerie-import.php', 'galerie-assistant.php', 'addons.php'];
+$portailLoginRoute = basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'login.php'
+    || (defined('PORTAIL_PUBLIC_ROUTE') && PORTAIL_PUBLIC_ROUTE === true);
 if (!$portailLoginRoute && empty($_SESSION['portail_user']) && ($gaAdmin = ga_current())) {
     $gaScript = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
     if (!in_array($gaScript, GA_PAGES, true)) { header('Location: /portail/galerie-tableau.php'); exit; }
@@ -185,24 +186,27 @@ function portail_login_page(): never
 <title>Connexion — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
+<link rel="stylesheet" href="/portail/admin.css?v=2">
 </head>
-<body>
-<div class="app" style="max-width:380px;padding-top:14vh;">
-  <form class="send" method="post" autocomplete="on">
-    <h2>Portail des commerces</h2>
-    <p class="hint">Connectez-vous pour gérer les commerces.</p>
-    <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= e($error) ?></p><?php endif; ?>
+<body class="login-body">
+<main class="login-card">
+  <div class="login-brand">
+    <span class="mark" aria-hidden="true"><?= function_exists('portail_icon') ? portail_icon('store', 22) : 'B' ?></span>
+    <div><b>brocs</b><small>Administration</small></div>
+  </div>
+  <h1>Connexion</h1>
+  <p class="hint">Connectez-vous pour gérer les commerces, les galeries et les inscriptions.</p>
+  <?php if ($error): ?><p class="flash" data-kind="error" role="alert"><?= e($error) ?></p><?php endif; ?>
+  <form class="login-form" method="post" autocomplete="on">
     <input type="hidden" name="action" value="portail_login">
-    <label class="field">Identifiant<input name="username" autocomplete="username" autocapitalize="none" required autofocus></label>
+    <label class="field">Identifiant<input type="text" name="username" autocomplete="username" autocapitalize="none" required autofocus></label>
     <label class="field">Mot de passe
-      <span class="password-field">
-        <input type="password" name="password" id="pp" autocomplete="current-password" required>
-        <button type="button" class="password-toggle" onclick="var i=document.getElementById('pp');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'Afficher':'Masquer';">Afficher</button>
-      </span>
+      <input type="password" name="password" id="pp" autocomplete="current-password" required>
     </label>
-    <div class="send-actions"><button class="btn btn-primary" type="submit">Se connecter</button></div>
+    <button class="btn btn-primary" type="submit">Se connecter</button>
   </form>
-</div>
+  <p class="login-foot">Accès réservé à l’exploitant de la plateforme.</p>
+</main>
 <script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

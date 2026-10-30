@@ -6,7 +6,6 @@ $here = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
 $navBtn = static function (string $file, string $label) use ($q, $here): void {
     echo '<a class="btn' . ($here === $file ? ' btn-primary' : '') . '" href="/portail/' . $file . $q . '">' . e($label) . '</a>';
 };
-if (!$limited) echo '<a class="btn" href="/portail/galeries.php">← Toutes les galeries</a>';
 $navBtn('galeries.php', 'Présentation et commerces');
 $navG = $gaGallery ?? ($edit ?? null);
 $navOn = static fn (string $f): bool => !$navG || gt_feature($navG, $f);        // fonctionnalités du type de galerie (Types de galerie, portail)
@@ -22,6 +21,7 @@ if ($navG && $navMod('attente') && $navOn('exposants')) $navBtn('galerie-attente
 if ($navOn('tableau')) $navBtn('galerie-tableau.php', 'Tableau de bord');
 if ($navOn('prospects')) $navBtn('galerie-prospects.php', 'Prospects');
 if ($navOn('fidelite')) $navBtn('galerie-fidelite.php', 'Fidélité visiteurs');
+$navBtn('galerie-assistant.php', 'Assistant');
 $navBtn('galerie-offre.php', 'Mon offre');
 if ($navG && function_exists('gm_modules')) $navBtn('galerie-modules.php', 'Options');
 if ($limited) {
