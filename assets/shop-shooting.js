@@ -584,71 +584,7 @@
     }
   }
 
-  // ── Partage : lien d'invitation d'un photographe ─────────────────────────
-  function inviteDate(iso) {
-    var date = new Date(iso);
-    if (isNaN(date.getTime())) return iso;
-    return date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  }
-
-  function renderInvites(rows) {
-    var list = $('ss-invites');
-    if (!list) return;
-    list.textContent = '';
-    rows.forEach(function (invite) {
-      var li = el('li');
-      li.dataset.invite = invite.id;
-      li.appendChild(el('span', null, 'Créé le ' + inviteDate(invite.created_at) + ' · expire le ' + inviteDate(invite.expires_at)));
-      var button = el('button', 'btn-small ss-ghost', 'Révoquer');
-      button.type = 'button';
-      button.dataset.revoke = '';
-      li.appendChild(button);
-      list.appendChild(li);
-    });
-    list.hidden = rows.length === 0;
-    var wrap = $('ss-invites-wrap');
-    if (wrap) wrap.hidden = rows.length === 0;
-  }
-
-  function refreshInvites() {
-    if (!$('ss-invites')) return;
-    var fd = new FormData();
-    fd.append('action', 'invites');
-    post(ACTION, fd).then(function (res) {
-      if (res.ok && res.invites) renderInvites(res.invites);
-    });
-  }
-
-  function shareNote(text) {
-    var box = $('ss-share-note');
-    if (!box) return;
-    box.hidden = !text;
-    box.textContent = text || '';
-  }
-
-  function shareLink() {
-    var button = $('ss-share');
-    button.disabled = true;
-    shareNote('Création du lien…');
-    var fd = new FormData();
-    fd.append('action', 'share');
-    post(ACTION, fd).then(function (res) {
-      button.disabled = false;
-      if (!res.ok) { shareNote(res.error || "Le lien n'a pas pu être créé."); return; }
-      shareNote('');
-      $('ss-share-result').hidden = false;
-      $('ss-share-url').value = res.url;
-      $('ss-share-expires').textContent = 'Valable une seule fois, jusqu\'au ' + inviteDate(res.expires_at) + '.';
-      // La fenêtre de partage (réseaux + code QR, assets/share.js) part du lien
-      // qui vient d'être créé, et non de l'adresse de la page.
-      var shareButtons = document.querySelectorAll('#ss-share-result [data-share-open]');
-      for (var i = 0; i < shareButtons.length; i++) shareButtons[i].dataset.shareUrl = res.url;
-      $('ss-share-url').focus();
-      $('ss-share-url').select();
-      refreshInvites();
-    });
-  }
-
+  // ── Partage : lien de connexion du photographe ───────────────────────────
   function copyShare() {
     var input = $('ss-share-url');
     var button = $('ss-share-copy');
@@ -670,26 +606,8 @@
     }
   }
 
-  var shareButton = $('ss-share');
-  if (shareButton) {
-    shareButton.addEventListener('click', shareLink);
-    $('ss-share-copy').addEventListener('click', copyShare);
-    $('ss-invites').addEventListener('click', function (event) {
-      var button = event.target.closest('[data-revoke]');
-      if (!button) return;
-      var row = button.closest('li[data-invite]');
-      if (!row) return;
-      button.disabled = true;
-      var fd = new FormData();
-      fd.append('action', 'revoke');
-      fd.append('id', row.dataset.invite);
-      post(ACTION, fd).then(function (res) {
-        if (!res.ok) { button.disabled = false; shareNote(res.error || 'Le lien n\'a pas pu être révoqué.'); return; }
-        if (res.invites) renderInvites(res.invites);
-        shareNote('Lien révoqué : il ne peut plus servir.');
-      });
-    });
-  }
+  var copyButton = $('ss-share-copy');
+  if (copyButton) copyButton.addEventListener('click', copyShare);
 
   function setBusy(busy) {
     ['ss-shot-publish', 'ss-shot-review', 'ss-shot-enhance', 'ss-shot-again', 'ss-shot-skip'].forEach(function (id) {

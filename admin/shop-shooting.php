@@ -17,7 +17,7 @@ $isAdmin = $role === 'admin';
 $canPublishLive = shop_shooting_can_publish_live();
 $pendingRows = $isAdmin ? shop_shooting_requests_pending() : [];
 $myRows = !$isAdmin && ($session['id'] ?? null) !== null ? shop_shooting_requests_mine((int) $session['id']) : [];
-$activeInvites = $isAdmin ? shop_shooting_invites_active() : [];
+$loginUrl = tenant_site_url() . '/admin/login.php';
 $dataJson = json_encode([
     'places' => shop_shooting_places(),
     'targets' => $targets,
@@ -45,16 +45,6 @@ $requestTargets = static function (array $row): string {
 };
 $requestStatus = static function (string $status): string {
     return ['pending' => 'En attente', 'published' => 'Publiée', 'rejected' => 'Refusée'][$status] ?? $status;
-};
-/** Les dates d'invitation sont stockées en UTC : on les affiche à l'heure du lieu. */
-$inviteDate = static function (string $utc): string {
-    try {
-        $date = new DateTime($utc, new DateTimeZone('UTC'));
-        $date->setTimezone(new DateTimeZone('Europe/Paris'));
-        return $date->format('d/m/Y à H:i');
-    } catch (Throwable $e) {
-        return $utc;
-    }
 };
 ?><!DOCTYPE html>
 <html lang="fr">
@@ -213,40 +203,15 @@ $inviteDate = static function (string $utc): string {
 
       <?php if ($isAdmin): ?>
       <div class="ss-card" id="ss-share-card">
-        <h2>Partager l'accès au shooting</h2>
-        <p class="ss-note">Envoyez ce lien à un photographe : il crée son compte « photographe » et arrive directement sur ce parcours. Il peut préparer les photos, mais seul un administrateur les met en ligne. Le lien ne sert qu'une fois et expire au bout de 7 jours.</p>
+        <h2>Accès du photographe</h2>
+        <p class="ss-note">Le compte se crée dans <a href="/admin/accounts.php">Comptes</a>, avec le rôle « Photographe ». Transmettez ensuite ce lien de connexion : la personne se connecte et arrive directement sur ce parcours. Elle peut préparer les photos, mais seul un administrateur les met en ligne.</p>
+        <label class="ss-field">Lien de connexion
+          <input type="text" id="ss-share-url" readonly value="<?= h($loginUrl) ?>">
+        </label>
         <div class="ss-actions">
-          <button type="button" class="btn btn-primary" id="ss-share">Créer un lien de partage</button>
+          <button type="button" class="btn btn-ghost" id="ss-share-copy">Copier le lien</button>
+          <?= share_button_html($loginUrl, 'Shooting boutique / stand — ' . $siteName, 'Connectez-vous pour photographier la boutique :', '', 'ss-share-open', true, true) ?>
         </div>
-        <p class="ss-note" id="ss-share-note" role="status" aria-live="polite" hidden></p>
-        <div class="ss-share-result" id="ss-share-result" hidden>
-          <label class="ss-field">Lien à transmettre
-            <input type="text" id="ss-share-url" readonly>
-          </label>
-          <p class="ss-note" id="ss-share-expires"></p>
-          <div class="ss-actions">
-            <button type="button" class="btn btn-ghost" id="ss-share-copy">Copier le lien</button>
-            <?= share_button_html('', 'Shooting boutique / stand — ' . $siteName, 'Prenez les photos de la boutique avec ce lien :', '', 'ss-share-open', true, true) ?>
-          </div>
-        </div>
-        <?php if ($activeInvites): ?>
-          <div id="ss-invites-wrap">
-            <p class="ss-kicker">Liens encore valables</p>
-            <ul class="ss-invites" id="ss-invites">
-              <?php foreach ($activeInvites as $invite): ?>
-                <li data-invite="<?= (int) $invite['id'] ?>">
-                  <span>Créé le <?= h($inviteDate((string) $invite['created_at'])) ?> · expire le <?= h($inviteDate((string) $invite['expires_at'])) ?></span>
-                  <button type="button" class="btn-small ss-ghost" data-revoke>Révoquer</button>
-                </li>
-              <?php endforeach; ?>
-            </ul>
-          </div>
-        <?php else: ?>
-          <div id="ss-invites-wrap" hidden>
-            <p class="ss-kicker">Liens encore valables</p>
-            <ul class="ss-invites" id="ss-invites"></ul>
-          </div>
-        <?php endif; ?>
       </div>
       <?php endif; ?>
 

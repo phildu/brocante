@@ -7,7 +7,6 @@
 //             (un photographe ne publie pas : sa photo part en validation)
 //   finish  → fin de séance : les administrateurs sont prévenus des photos à valider
 //   pending / decide → file de validation, réservée aux administrateurs
-//   share / invites / revoke → lien d'invitation d'un photographe, réservé aux administrateurs
 //   state   → ce qui est déjà en place sur le site
 // Les photos publiées restent modifiables dans les écrans existants (admin/hero.php,
 // admin/slideshow.php, admin/banners.php, Réglages → Contenu des pages).
@@ -67,16 +66,6 @@ function ss_request_out(array $row): array
         'author' => (string) $row['author_name'],
         'status' => (string) $row['status'],
         'created_at' => (string) $row['created_at'],
-    ];
-}
-
-/** Lien d'invitation présenté au navigateur (dates en ISO 8601, heure locale côté client). */
-function ss_invite_out(array $row): array
-{
-    return [
-        'id' => (int) $row['id'],
-        'created_at' => str_replace(' ', 'T', (string) $row['created_at']) . 'Z',
-        'expires_at' => str_replace(' ', 'T', (string) $row['expires_at']) . 'Z',
     ];
 }
 
@@ -337,26 +326,6 @@ switch ($action) {
         ]);
     }
 
-    case 'share': {
-        $adminOnly();
-        $invite = shop_shooting_invite_create(7);
-        ss_reply([
-            'ok' => true,
-            'url' => shop_shooting_invite_url($invite['token']),
-            'expires_at' => str_replace(' ', 'T', $invite['expires_at']) . 'Z',
-        ]);
-    }
-
-    case 'invites': {
-        $adminOnly();
-        ss_reply(['ok' => true, 'invites' => array_map('ss_invite_out', shop_shooting_invites_active())]);
-    }
-
-    case 'revoke': {
-        $adminOnly();
-        shop_shooting_invite_revoke((int) ($_POST['id'] ?? 0));
-        ss_reply(['ok' => true, 'invites' => array_map('ss_invite_out', shop_shooting_invites_active())]);
-    }
 }
 
 ss_reply(['ok' => false, 'error' => 'Action inconnue.'], 400);

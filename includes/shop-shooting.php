@@ -520,17 +520,6 @@ CREATE TABLE IF NOT EXISTS shooting_requests (
 )
 SQL);
     db()->exec('CREATE INDEX IF NOT EXISTS idx_shooting_requests_status ON shooting_requests(status)');
-    db()->exec(<<<'SQL'
-CREATE TABLE IF NOT EXISTS shooting_invites (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  token_hash TEXT NOT NULL UNIQUE,
-  created_by TEXT NOT NULL DEFAULT '',
-  expires_at TEXT NOT NULL,
-  used_at TEXT,
-  used_account_id INTEGER,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-)
-SQL);
 }
 
 /**
@@ -708,51 +697,3 @@ function shop_shooting_notify_admins(array $rows): int
     return count($ids);
 }
 
-// ── Partage : lien d'invitation pour un photographe ────────────────────────
-// Le jeton n'est jamais stocké en clair : seule son empreinte reste en base, et
-// le lien ne sert qu'une fois, dans la limite de sa date d'expiration.
-function shop_shooting_invite_create(int $days = 7): array
-{
-    shop_shooting_ensure_schema();
-    $token = bin2hex(random_bytes(24));
-    $expires = gmdate('Y-m-d H:i:s', time() + max(1, min(30, $days)) * 86400);
-    db()->prepare('INSERT INTO shooting_invites (token_hash, created_by, expires_at) VALUES (?, ?, ?)')
-        ->execute([hash('sha256', $token), admin_role(), $expires]);
-    return ['token' => $token, 'expires_at' => $expires];
-}
-
-/** Invitation encore valable pour ce jeton, ou null. */
-function shop_shooting_invite_find(string $token): ?array
-{
-    if (!preg_match('/^[a-f0-9]{48}$/', $token)) return null;
-    shop_shooting_ensure_schema();
-    $stmt = db()->prepare("SELECT * FROM shooting_invites WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now') LIMIT 1");
-    $stmt->execute([hash('sha256', $token)]);
-    return $stmt->fetch() ?: null;
-}
-
-function shop_shooting_invite_consume(int $id, int $accountId): void
-{
-    db()->prepare('UPDATE shooting_invites SET used_at = CURRENT_TIMESTAMP, used_account_id = ? WHERE id = ? AND used_at IS NULL')
-        ->execute([$accountId, $id]);
-}
-
-/** Liens encore utilisables, pour l'écran de partage. */
-function shop_shooting_invites_active(): array
-{
-    shop_shooting_ensure_schema();
-    return db()->query("SELECT id, created_by, expires_at, created_at FROM shooting_invites
-        WHERE used_at IS NULL AND expires_at > datetime('now') ORDER BY id DESC")->fetchAll();
-}
-
-function shop_shooting_invite_revoke(int $id): void
-{
-    shop_shooting_ensure_schema();
-    db()->prepare('UPDATE shooting_invites SET used_at = COALESCE(used_at, CURRENT_TIMESTAMP) WHERE id = ?')->execute([$id]);
-}
-
-/** Adresse publique du lien d'invitation (le jeton n'existe qu'en clair côté client). */
-function shop_shooting_invite_url(string $token): string
-{
-    return tenant_site_url() . '/admin/shooting-invite.php?t=' . $token;
-}
