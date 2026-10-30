@@ -1,10 +1,12 @@
 <?php
 
 // Modules (plugins) partagés des galeries : une fonctionnalité est proposée par type de galerie, puis activée galerie par galerie.
-// Deux modules livrés :
+// Trois modules livrés :
 //   carte         Carte interactive : plan IGN, zones, emplacements numérotés, choix de l'emplacement par les exposants ;
 //   organisateur  Espace organisateur : événement (date, lieu, places ou mètres), numérotation automatique des places, tableau de bord
-//                 des inscriptions et registre de police (Excel / PDF).
+//                 des inscriptions et registre de police (Excel / PDF) ;
+//   attente       File d'attente des exposants et alertes de voisinage : prévenir les inscrits dès qu'une place se libère, proposer
+//                 une place vide à côté d'un stand à prix réduit pour l'agrandir (voir includes/gallery-waitlist.php).
 //
 // Un type règle chaque module : inclus dans son offre, option payante, ou non proposé (data/saas/galeries-types.json, clé « modules »).
 // L'état d'un module pour une galerie est conservé dans la clé « modules » de data/galeries/<id>.json ; une option payante s'active par
@@ -39,6 +41,13 @@ function gm_defaults(): array
             'types' => ['vide-grenier', 'puces'],
             'default_mode' => 'included',
             'month_cents' => 1900, 'year_cents' => 19000, 'trial_days' => 14,
+        ],
+        'attente' => [
+            'name' => "File d'attente et places voisines", 'emoji' => '🕒', 'active' => true, 'order' => 3,
+            'description' => "File d'attente des exposants, prévenus par e-mail dès qu'une place se libère (désistement, absence le jour même), et alerte aux voisins : une place vide à côté d'un stand est proposée à prix réduit pour l'agrandir.",
+            'types' => ['vide-grenier', 'puces'],
+            'default_mode' => 'included',
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 0,
         ],
     ];
 }

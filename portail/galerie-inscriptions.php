@@ -3,6 +3,7 @@
 // avec mise à jour automatique (toutes les 12 s) et les mêmes actions que la page Exposants (accepter, refuser, libérer).
 require __DIR__ . '/_galerie-layout.php';
 require_once PORTAIL_ROOT . '/includes/gallery-booking.php';
+require_once PORTAIL_ROOT . '/includes/gallery-waitlist.php';
 require_once PORTAIL_ROOT . '/includes/gallery-event.php';
 
 $self = '/portail/galerie-inscriptions.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
@@ -16,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $slot = (string) ($_POST['slot'] ?? '');
     $actor = (string) (($_SESSION['gallery_admin']['email'] ?? '') ?: 'exploitant');
     $err = gb_decide($gaGallery, $slot, $action, $actor);
+    if (!$err && in_array($action, ['refuse', 'release'], true)) gwl_on_release($gaGallery, $slot, $actor);
     $labels = ['accept' => 'Demande acceptée : l\'exposant est prévenu.', 'refuse' => 'Demande refusée : la place est libre et l\'exposant est prévenu.', 'release' => 'Place libérée : l\'exposant est prévenu.'];
     portail_flash($err ?? ($labels[$action] ?? 'Fait.'), $err ? 'error' : 'ok');
     $filter = (string) ($_POST['etat'] ?? '');

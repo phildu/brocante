@@ -3,6 +3,7 @@
 // vérification des copies de pièce d'identité et registre des vendeurs (impression, export).
 require __DIR__ . '/_galerie-layout.php';
 require_once PORTAIL_ROOT . '/includes/gallery-booking.php';
+require_once PORTAIL_ROOT . '/includes/gallery-waitlist.php';
 require_once PORTAIL_ROOT . '/includes/client-types.php';
 
 $actor = (string) (($_SESSION['gallery_admin']['email'] ?? '') ?: 'exploitant');
@@ -11,9 +12,12 @@ $detailBase = '/portail/galerie-exposant.php' . ($limited ? '?' : '?g=' . urlenc
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    $err = gb_decide($gaGallery, (string) ($_POST['slot'] ?? ''), (string) ($_POST['action'] ?? ''), $actor);
+    $action = (string) ($_POST['action'] ?? '');
+    $slot = (string) ($_POST['slot'] ?? '');
+    $err = gb_decide($gaGallery, $slot, $action, $actor);
+    if (!$err && in_array($action, ['refuse', 'release'], true)) gwl_on_release($gaGallery, $slot, $actor);
     $labels = ['accept' => 'Demande acceptée : l\'exposant est prévenu.', 'refuse' => 'Demande refusée : l\'emplacement est libre et l\'exposant est prévenu.', 'release' => 'Emplacement libéré : l\'exposant est prévenu.'];
-    portail_flash($err ?? ($labels[(string) $_POST['action']] ?? 'Fait.'), $err ? 'error' : 'ok');
+    portail_flash($err ?? ($labels[$action] ?? 'Fait.'), $err ? 'error' : 'ok');
     header('Location: ' . $self);
     exit;
 }

@@ -405,6 +405,8 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       if ($orgOn && $galleryEvent && !empty($galleryEvent['published'])) $evPlaces = ge_places($galleryEvent);
       if ($evPlaces && $galleryBooking['source'] === 'event') $evStates = gb_states($gallery);
       $hasEventSection = $orgOn && $galleryEvent && !empty($galleryEvent['published']);
+      $waitlistLink = function_exists('gm_enabled') && gm_enabled($gallery, 'attente') && gt_feature($gallery, 'exposants') && !empty($galleryBooking['enabled'])
+          ? '/galerie/attente.php?g=' . rawurlencode($gallery['slug']) : '';
     ?>
     <?php if ($hasEventSection): ?>
     <section id="evenement" aria-labelledby="h-evenement">
@@ -471,6 +473,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           </script>
         <?php endif; ?>
       <?php endif; ?>
+      <?php if ($waitlistLink !== ''): ?><p class="lede">Une place vous intéresse mais elle est déjà prise ? <a href="<?= e($waitlistLink) ?>">Inscrivez-vous à la file d'attente</a> : vous serez prévenu par e-mail dès qu'une place se libère.</p><?php endif; ?>
     </section>
     <?php endif; ?>
 
@@ -509,6 +512,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       <?php if (!empty($planData['booking'])): ?>
       <p style="margin:0 0 10px;"><button type="button" class="btn-cta" id="plan-book" style="font-size:.95rem;padding:10px 18px;">Je suis exposant : choisir mon emplacement</button>
         <?php if ($planData['booking']['intro'] !== ''): ?><span class="lede" style="display:block;margin:6px 0 0;"><?= e($planData['booking']['intro']) ?></span><?php endif; ?></p>
+      <?php if ($waitlistLink !== ''): ?><p style="margin:0 0 10px;"><a href="<?= e($waitlistLink) ?>">File d'attente des exposants</a> : soyez prévenu dès qu'un emplacement se libère.</p><?php endif; ?>
       <?php endif; ?>
       <div id="plan-box" style="position:relative;height:min(70vh,520px);min-height:300px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2);">
         <button type="button" id="plan-show" style="position:absolute;inset:0;width:100%;border:0;background:transparent;color:var(--ink);font:inherit;font-weight:600;cursor:pointer;">Afficher le plan<br><small style="font-weight:400;color:var(--ink-soft)">La carte est fournie par l'IGN : elle ne se charge qu'à votre demande.</small></button>

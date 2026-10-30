@@ -57,6 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $type = gt_of($gaGallery);
 $stripeOn = saas_stripe_configured();
+$openUrl = static fn (string $key): string => '/portail/' . ($key === 'carte' ? 'galerie-plan.php' : ($key === 'attente' ? 'galerie-attente.php' : 'galerie-evenement.php'))
+    . ($limited ? '' : '?g=' . urlencode($gaSlug));
 ga_head('Options');
 ?>
     <section class="gcard">
@@ -77,7 +79,7 @@ ga_head('Options');
         <p class="meta" style="margin:0;">Ce module n'est pas proposé pour le type « <?= e($type['name']) ?> ». L'exploitant peut le proposer depuis <a href="/portail/offres-galerie.php#t-<?= e($type['key']) ?>">Types de galerie</a>.</p>
       <?php elseif ($st['mode'] === 'included'): ?>
         <p class="meta" style="margin:0;">Inclus dans l'offre de ce type de galerie : aucune démarche n'est nécessaire.</p>
-        <div class="row"><a class="btn" href="<?= $key === 'carte' ? '/portail/galerie-plan.php' . ($limited ? '' : '?g=' . e(urlencode($gaSlug))) : '/portail/galerie-evenement.php' . ($limited ? '' : '?g=' . e(urlencode($gaSlug))) ?>">Ouvrir <?= e($m['name']) ?></a></div>
+        <div class="row"><a class="btn" href="<?= e($openUrl($key)) ?>">Ouvrir <?= e($m['name']) ?></a></div>
       <?php elseif ($status === 'trial' && $st['enabled']): ?>
         <p class="meta" style="margin:0;">Essai en cours jusqu'au <?= e(date('d/m/Y', $st['until'])) ?>. Souscrivez pour continuer sans interruption.</p>
         <div class="row">
@@ -90,7 +92,7 @@ ga_head('Options');
         <div class="row"><form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="cancel"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn" type="submit" onclick="return confirm('Résilier cette option ?');">Résilier</button></form></div>
       <?php elseif ($status === 'complimentary' && $st['enabled']): ?>
         <p class="meta" style="margin:0;">Accès offert par l'exploitant de la plateforme.</p>
-        <div class="row"><a class="btn" href="<?= $key === 'carte' ? '/portail/galerie-plan.php' . ($limited ? '' : '?g=' . e(urlencode($gaSlug))) : '/portail/galerie-evenement.php' . ($limited ? '' : '?g=' . e(urlencode($gaSlug))) ?>">Ouvrir <?= e($m['name']) ?></a></div>
+        <div class="row"><a class="btn" href="<?= e($openUrl($key)) ?>">Ouvrir <?= e($m['name']) ?></a></div>
       <?php else: ?>
         <p class="meta" style="margin:0;"><?= $status === 'expired' ? "L'essai est terminé." : ($status === 'canceled' ? 'Option résiliée.' : 'Option non activée.') ?></p>
         <div class="row">

@@ -18,6 +18,7 @@ if ($navG && $navMod('organisateur') && $navOn('exposants')) {
     $navBtn('galerie-inscriptions.php', 'Inscriptions');
     $navBtn('galerie-registre.php', 'Registre');
 }
+if ($navG && $navMod('attente') && $navOn('exposants')) $navBtn('galerie-attente.php', "File d'attente");
 if ($navOn('tableau')) $navBtn('galerie-tableau.php', 'Tableau de bord');
 if ($navOn('prospects')) $navBtn('galerie-prospects.php', 'Prospects');
 if ($navOn('fidelite')) $navBtn('galerie-fidelite.php', 'Fidélité visiteurs');

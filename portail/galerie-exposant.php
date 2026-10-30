@@ -3,6 +3,7 @@
 // correction par l'organisateur, décision sur l'emplacement et journal des actions.
 require __DIR__ . '/_galerie-layout.php';
 require_once PORTAIL_ROOT . '/includes/gallery-booking.php';
+require_once PORTAIL_ROOT . '/includes/gallery-waitlist.php';
 require_once PORTAIL_ROOT . '/includes/client-types.php';
 
 $actor = (string) (($_SESSION['gallery_admin']['email'] ?? '') ?: 'exploitant');
@@ -26,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         portail_flash($err ?? 'Fiche exposant enregistrée.', $err ? 'error' : 'ok');
     } elseif (in_array($action, ['accept', 'refuse', 'release'], true)) {
         $err = gb_decide($gaGallery, $slotId, $action, $actor);
+        if (!$err && in_array($action, ['refuse', 'release'], true)) gwl_on_release($gaGallery, $slotId, $actor);
         portail_flash($err ?? 'Décision enregistrée.', $err ? 'error' : 'ok');
         if (!$err) { header('Location: ' . $list); exit; }
     } elseif (in_array($action, ['cni_verified', 'cni_rejected', 'cni_pending'], true)) {

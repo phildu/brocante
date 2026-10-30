@@ -25,6 +25,7 @@ const GB_CNI_SIDES = ['recto' => 'Recto', 'verso' => 'Verso'];
 const GB_AUDIT_LABELS = [
     'request' => 'Demande déposée', 'accept' => 'Demande acceptée', 'refuse' => 'Demande refusée', 'release' => 'Emplacement libéré',
     'cancel' => 'Demande annulée', 'client_update' => 'Fiche exposant modifiée',
+    'waitlist_claim' => 'Place voisine acceptée (file d\'attente)', 'no_show' => 'Absence constatée le jour même',
     'cni_upload' => 'Copie de pièce déposée', 'cni_verified' => 'Pièce vérifiée', 'cni_rejected' => 'Pièce refusée',
     'cni_delete' => 'Copie supprimée', 'cni_purged' => 'Copie purgée automatiquement', 'cni_view' => 'Copie consultée',
 ];
@@ -277,8 +278,8 @@ function gb_decide(array $gallery, string $slotId, string $action, string $actor
     return null;
 }
 
-/** Annulation par l'exposant lui-même (lien de son e-mail). */
-function gb_cancel(string $slug, string $token): bool
+/** Annulation par l'exposant lui-même (lien de son e-mail). $removedSlotId reçoit l'emplacement libéré. */
+function gb_cancel(string $slug, string $token, ?string &$removedSlotId = null): bool
 {
     if (!preg_match('/^[a-f0-9]{32}$/', $token)) return false;
     $removed = null;
@@ -296,6 +297,7 @@ function gb_cancel(string $slug, string $token): bool
         }
         gb_audit($slug, 'cancel', ['slot' => $removedId, 'email' => (string) ($removed['email'] ?? '')]);
     }
+    if ($ok) $removedSlotId = $removedId;
     return $ok;
 }
 

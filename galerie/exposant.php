@@ -3,6 +3,7 @@
 // Voir includes/gallery-booking.php.
 require_once __DIR__ . '/../includes/gallery-offers.php';
 require_once __DIR__ . '/../includes/gallery-booking.php';
+require_once __DIR__ . '/../includes/gallery-waitlist.php';
 
 function gx_page(string $title, string $html): never
 {
@@ -22,7 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && str_starts_with(strtolower((string)
 $gallery = gallery_slug_valid($slug) ? gallery_load($slug) : null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($in['action'] ?? '') === 'cancel') {          // confirmation de l'annulation
-    $ok = $gallery && gb_cancel($slug, (string) ($in['t'] ?? ''));
+    $cancelSlot = '';
+    $ok = $gallery && gb_cancel($slug, (string) ($in['t'] ?? ''), $cancelSlot);
+    if ($ok && $gallery && $cancelSlot !== '') gwl_on_release($gallery, $cancelSlot, 'exposant');
     gx_page($ok ? 'Demande annulée' : 'Lien invalide', '<p>' . ($ok ? "Votre demande est annulée : l'emplacement est de nouveau libre." : "Ce lien n'est plus valide (demande déjà traitée ou annulée).") . '</p>');
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
