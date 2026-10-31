@@ -207,7 +207,7 @@ function wd_alert_email(): string
         $value = trim((string) @file_get_contents($file));
         if (filter_var($value, FILTER_VALIDATE_EMAIL)) return $value;
     }
-    $cfg = wd_json_read(wd_root() . '/data/saas/saas.json');
+    $cfg = wd_json_read(wd_root() . '/data/saas.json');
     $value = (string) ($cfg['contact'] ?? '');
     return filter_var($value, FILTER_VALIDATE_EMAIL) ? $value : '';
 }
