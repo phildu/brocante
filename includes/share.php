@@ -56,12 +56,14 @@ function share_og_html(string $title, string $description, string $url, string $
         . ($url !== '' ? '<link rel="canonical" href="' . share_h($url) . '">' . "\n" : '');
 }
 
-/** Adresse de la page courante sans les paramètres d'aperçu (?modele=…), filtres conservés : on partage ce que le visiteur voit. */
+/** Adresse de la page courante sans les paramètres d'aperçu (?modele=…), filtres conservés : on partage ce que le visiteur voit.
+ *  Le repère from=share permet à la page d'accueil de proposer l'installation de l'appli dès l'arrivée par un lien. */
 function share_page_url(): string
 {
     $q = $_GET;
     unset($q['modele']);
-    return share_origin() . (strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?') ?: '/') . ($q ? '?' . http_build_query($q) : '');
+    $q['from'] = 'share';
+    return share_origin() . (strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?') ?: '/') . '?' . http_build_query($q);
 }
 
 /** Boutons « Partager » + « QR code » de la page courante (accueil, boutique, listes…). $title : titre partagé ; $text : phrase d'accompagnement. */

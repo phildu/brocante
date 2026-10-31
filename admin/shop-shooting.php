@@ -60,6 +60,7 @@ $requestStatus = static function (string $status): string {
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa-icon.php?s=32">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa-icon.php?s=16">
 <link rel="manifest" href="/admin/shooting-manifest.php">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto data-delay="1800" data-key="shooting" data-name="<?= h($siteName . ' — shooting') ?>" data-icon="/pwa-icon.php?s=192" data-sw="/pwa-sw.php" data-scope="<?= h(tenant_base_path() . '/') ?>"></script>
 <link rel="apple-touch-icon" href="/pwa-icon.php?s=180">
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="/assets/shooting-tabs.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/shooting-tabs.css') ?>">
@@ -77,6 +78,7 @@ $requestStatus = static function (string $status): string {
       <p class="eyebrow">Photos du lieu · parcours guidé</p>
       <h1>Shooting boutique / stand</h1>
       <p class="ss-lede">Un programme de prise de vue pour photographier votre boutique, votre stand ou votre atelier, puis publier chaque photo au bon endroit du site : accueil, « Notre histoire », écran en magasin et bandeaux de page.</p>
+      <p class="ss-note"><button type="button" class="btn-small" data-pwa-install>📲 Installer l'appli sur ce téléphone</button></p>
       <?php if (!$canPublishLive): ?>
         <p class="ss-notice"><b>Accès photographe.</b> Vos photos ne partent pas directement sur le site : vous préparez les supports et la légende, l'administrateur valide la mise en ligne. Il est prévenu dès que vous terminez la séance.</p>
       <?php endif; ?>

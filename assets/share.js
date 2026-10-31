@@ -15,6 +15,10 @@
     });
   }
   function qrFor(url) { var q = window.qrcode(0, 'M'); q.addData(url); q.make(); return q; }
+  // Le code QR porte from=qr : à l'ouverture sur le téléphone, la page sait qu'elle a été scannée et propose d'installer l'appli.
+  function qrUrl(url) {
+    try { var u = new URL(url, location.href); u.searchParams.set('from', 'qr'); return u.href; } catch (e) { return url; }
+  }
 
   function networks(d) {
     var u = enc(d.url), t = enc(d.title), x = enc(d.text || d.title);
@@ -52,9 +56,10 @@
   function renderQr() {
     var box = dialog.querySelector('.share-qr-img');
     return loadQr().then(function () {
-      var q = qrFor(current.url);
-      box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 4, scalable: true, alt: 'Code QR : ' + current.url });
+      var target = qrUrl(current.url), q = qrFor(target);
+      box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 4, scalable: true, alt: 'Code QR : ' + target });
       dialog._qr = q;
+      dialog._qrUrl = target;
     }, function () { box.textContent = 'Code QR indisponible.'; });
   }
 
@@ -99,7 +104,7 @@
     var w = window.open('', '_blank', 'width=640,height=760'); if (!w) { toast('Autorisez les fenêtres pour imprimer.'); return; }
     var svg = dialog._qr.createSvgTag({ cellSize: 8, margin: 32, scalable: true });
     w.document.write('<!doctype html><meta charset="utf-8"><title>Code QR</title><style>body{font-family:sans-serif;text-align:center;margin:30px}svg{width:420px;height:420px}h1{font-size:22px;margin:0 0 6px}p{color:#555;word-break:break-all}</style><h1>'
-      + current.title.replace(/</g, '&lt;') + '</h1>' + svg + '<p>' + current.url.replace(/</g, '&lt;') + '</p><script>window.onload=function(){window.print()}<\/script>');
+      + current.title.replace(/</g, '&lt;') + '</h1>' + svg + '<p>' + (dialog._qrUrl || current.url).replace(/</g, '&lt;') + '</p><script>window.onload=function(){window.print()}<\/script>');
     w.document.close();
   }
 

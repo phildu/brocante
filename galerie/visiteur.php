@@ -79,6 +79,8 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="<?= $h($accent) ?>">
 <link rel="manifest" href="/galerie/visiteur.php?g=<?= $h($slug) ?>&manifest=1">
+<?php $pwaLogo = (string) ($gallery['style']['logo'] ?? ''); ?>
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto data-delay="2200" data-key="gl-visiteur-<?= $h($slug) ?>" data-name="<?= $h($s['program_name'] . ' — ' . $gallery['name']) ?>"<?php if ($pwaLogo !== ''): ?> data-icon="<?= $h('/' . ltrim($pwaLogo, '/')) ?>"<?php endif; ?> data-accent="<?= $h($accent) ?>" data-sw="/galerie/pwa-sw.php" data-scope="/galerie/"></script>
 <title><?= $h($s['program_name']) ?> — <?= $h($gallery['name']) ?></title>
 <link rel="stylesheet" href="/assets/oauth.css">
 <style>
@@ -198,6 +200,11 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
   // Installation sur l'écran d'accueil
   (function () {
     var box = $('install'), btn = $('install-btn'), help = $('install-help'), ev = null;
+    if (window.PwaSave) {                                   // feuille commune : étapes adaptées au navigateur
+      if (box && !window.PwaSave.isStandalone()) box.hidden = false;
+      if (btn) btn.addEventListener('click', function () { window.PwaSave.open(); });
+      return;
+    }
     if ((window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone) return;
     var ios = /iphone|ipad|ipod/i.test(navigator.userAgent); box.hidden = false;
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); ev = e; });

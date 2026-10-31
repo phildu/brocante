@@ -39,6 +39,8 @@ unset($_SESSION['ev_oauth_error']);
   .ev-code { font: 600 1.05rem ui-monospace, monospace; letter-spacing: .06em; padding: 4px 8px; border: 1px dashed var(--line); border-radius: 6px; }
   .ev [hidden] { display: none !important; } .ev-msg { min-height: 1.2em; margin: 0; } .ev video { width: 100%; max-height: 60vh; border-radius: 10px; background: #000; }
 </style>
+<?php $evSite = trim((string) (get_content()['site_name'] ?? '')) ?: (string) tenant('name'); $evLogo = ltrim((string) logo_url('square'), '/'); ?>
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../../../assets/pwa-save.js') ?>" data-auto data-delay="2200" data-key="ev-visiteur" data-name="<?= $h($evSite) ?>"<?php if ($evLogo !== ''): ?> data-icon="/<?= $h($evLogo) ?>"<?php endif; ?> data-manifest="/visiteur-manifest.php" data-sw="/pwa-sw.php" data-scope="<?= $h(tenant_base_path() . '/') ?>"></script>
 <main class="ev" id="ev" data-cfg="<?= $h(json_encode($cfg, JSON_UNESCAPED_SLASHES)) ?>" aria-labelledby="ev-title">
   <div><p class="eyebrow">Espace visiteur</p><h1 id="ev-title">Mon espace</h1></div>
   <section class="ev-card" id="ev-install" hidden>
@@ -140,7 +142,13 @@ unset($_SESSION['ev_oauth_error']);
   // Installation sur l'écran d'accueil : invite du navigateur quand elle existe, sinon la marche à suivre (iPhone, autres navigateurs)
   (function () {
     var box = document.getElementById('ev-install'), btn = document.getElementById('ev-install-btn'), help = document.getElementById('ev-install-help'), ev = null;
-    if (!box || (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone) return;
+    if (!box) return;
+    if (window.PwaSave) {                                   // feuille commune : étapes adaptées au navigateur
+      if (!window.PwaSave.isStandalone()) box.hidden = false;
+      btn.addEventListener('click', function () { window.PwaSave.open(); });
+      return;
+    }
+    if ((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone) return;
     var l = document.createElement('link'); l.rel = 'manifest'; l.href = '/visiteur-manifest.php'; document.head.appendChild(l);
     var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
     box.hidden = false;

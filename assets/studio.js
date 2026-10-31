@@ -873,20 +873,26 @@
 
   // ── Installation sur l'écran d'accueil ────────────────────────────────────
   var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  var deferredInstall = null;
-  window.addEventListener('beforeinstallprompt', function (e) {
-    e.preventDefault(); deferredInstall = e;
+  // PwaSave fournit la marche à suivre adaptée au navigateur (Safari, Chrome, Samsung…) : on lui laisse la main.
+  if (window.PwaSave) {
     if (!standalone) $('st-install').hidden = false;
-  });
-  $('st-install').addEventListener('click', function () {
-    if (!deferredInstall) return;
-    deferredInstall.prompt(); deferredInstall = null; this.hidden = true;
-  });
-  try {
-    if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone && !localStorage.getItem('studio-ios-hint')) $('st-ios').hidden = false;
-  } catch (e) {}
+    $('st-install').addEventListener('click', function () { window.PwaSave.open(); });
+  } else {
+    var deferredInstall = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault(); deferredInstall = e;
+      if (!standalone) $('st-install').hidden = false;
+    });
+    $('st-install').addEventListener('click', function () {
+      if (!deferredInstall) return;
+      deferredInstall.prompt(); deferredInstall = null; this.hidden = true;
+    });
+    try {
+      if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone && !localStorage.getItem('studio-ios-hint')) $('st-ios').hidden = false;
+    } catch (e) {}
+  }
   $('st-ios-close').addEventListener('click', function () { $('st-ios').hidden = true; try { localStorage.setItem('studio-ios-hint', '1'); } catch (e) {} });
-  if ('serviceWorker' in navigator && script.dataset.sw) navigator.serviceWorker.register(script.dataset.sw).catch(function () {});
+  if ('serviceWorker' in navigator && script.dataset.sw && !window.PwaSave) navigator.serviceWorker.register(script.dataset.sw).catch(function () {});
 
   // ── Démarrage ─────────────────────────────────────────────────────────────
   try { if (sessionStorage.getItem('studio-queued')) { sessionStorage.removeItem('studio-queued'); toast('Pièce enregistrée : à traiter plus tard. Photographiez la suivante.'); } } catch (e) {}

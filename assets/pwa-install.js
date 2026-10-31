@@ -5,16 +5,19 @@
   var LS = { views: 'pwa_views', snooze: 'pwa_snooze', done: 'pwa_done' }, DAY = 86400000;
   function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
   if (standalone) return;                                            // déjà installée : rien à proposer
   var ua = navigator.userAgent || '', ios = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   var inApp = /FBAN|FBAV|Instagram|Line\/|Snapchat|TikTok|MicroMessenger/i.test(ua);
-  var touch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
+  var touch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
   var name = cfg.name || document.title, evt = null, banner = null, sheet = null;
 
   if ('serviceWorker' in navigator && cfg.sw) { try { navigator.serviceWorker.register(cfg.sw, { scope: cfg.scope || '/' }).catch(function () {}); } catch (e) {} }
   window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); evt = e; });
   window.addEventListener('appinstalled', function () { set(LS.done, '1'); hide(); closeSheet(); var l = document.getElementById('pwa-link'); if (l) l.remove(); });
+  document.addEventListener('pwasave:never', function () { set(LS.done, '1'); hide(); var l = document.getElementById('pwa-link'); if (l) l.remove(); });
+  document.addEventListener('pwasave:snooze', function () { set(LS.snooze, String(Date.now() + 14 * DAY)); hide(); });
+  document.addEventListener('pwasave:installed', function () { set(LS.done, '1'); hide(); var l = document.getElementById('pwa-link'); if (l) l.remove(); });
   if (get(LS.done) === '1') return;
 
   var css = document.createElement('style');
@@ -45,6 +48,7 @@
   }
   function closeSheet() { if (sheet) { sheet.remove(); sheet = null; } }
   function openSheet() {
+    if (window.PwaSave && window.PwaSave.open) { window.PwaSave.open(); return; }   // marche à suivre commune, adaptée au navigateur
     closeSheet();
     var s = steps(), over = el('div', 'pwa-over'), box = el('div', 'pwa-sheet');
     box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', s.title);
@@ -85,11 +89,21 @@
   }
   footerLink();
 
-  // Au bon moment : à partir de la 2e page vue, ou 20 s sur une fiche pièce ; jamais dans le tunnel d'achat ni dans un navigateur intégré.
+  // Au bon moment : code QR (from=qr) ou lien partagé (from=share) dès l'ouverture, sinon à partir de la 2e page vue ;
+  // jamais dans le tunnel d'achat ni dans un navigateur intégré.
   var n = (parseInt(get(LS.views), 10) || 0) + 1; set(LS.views, String(n));
   var snoozed = parseInt(get(LS.snooze), 10) || 0;
   var quiet = /\/(cart|checkout|checkout-success|compte|offre|inscription)\.php|\/admin\//.test(location.pathname);
   if (!touch || inApp || quiet || snoozed > Date.now()) return;
-  var delay = n >= 2 ? 4000 : (/produit\.php/.test(location.pathname) ? 20000 : 0);
+  var search = location.search || '';
+  var fromQr = /[?&]from=qr(?:&|$)/.test(search);
+  var fromShare = /[?&]from=share(?:&|$)/.test(search);
+  var external = !!document.referrer && document.referrer.indexOf(location.origin) !== 0;
+  var delay;
+  if (fromQr) delay = 1200;
+  else if (n >= 2) delay = 4000;
+  else if (/produit\.php/.test(location.pathname)) delay = fromShare ? 3000 : 20000;
+  else if (fromShare || external) delay = 3500;
+  else delay = 0;
   if (delay) setTimeout(show, delay);
 })();

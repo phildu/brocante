@@ -79,6 +79,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="/studio-manifest.php">
 <link rel="apple-touch-icon" href="/studio-icon.php?s=180">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pwa-save.js') ?>" data-auto data-delay="2000" data-key="studio" data-name="Studio — <?= h($siteName) ?>" data-icon="/studio-icon.php?s=192" data-sw="/studio-sw.php" data-scope="<?= h(tenant_base_path() . '/') ?>"></script>
 <title>Studio — <?= h($siteName) ?></title>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">

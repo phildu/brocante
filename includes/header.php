@@ -33,6 +33,7 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="<?= h(mb_substr($siteName, 0, 14)) ?>">
 <link rel="apple-touch-icon" href="/pwa-icon.php?s=180">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto="0" data-no-prompt="1" data-name="<?= h($siteName) ?>" data-icon="/pwa-icon.php?s=192" data-done-key="pwa_done" data-snooze-key="pwa_snooze"></script>
 <script src="/assets/pwa-install.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-install.js') ?>" defer data-sw="/pwa-sw.php" data-scope="<?= h(tenant_base_path() . '/') ?>" data-name="<?= h($siteName) ?>" data-icon="/pwa-icon.php?s=192"></script>
 <?php endif; ?>
 <link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.css') ?>">
