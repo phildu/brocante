@@ -4,6 +4,7 @@
 require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas-events.php';
 require_once PORTAIL_ROOT . '/includes/gallery-offers.php';
+require_once PORTAIL_ROOT . '/includes/addons.php';
 
 if (defined('GA_LIMITED')) { header('Location: /portail/galerie-offre.php'); exit; }
 
@@ -118,6 +119,38 @@ $origin = saas_origin();
           <?php foreach (GT_FEATURES as $fk => $fl): ?><label><input type="checkbox" name="t[features][<?= e($fk) ?>]" value="1"<?= $t['features'][$fk] ? ' checked' : '' ?>> <?= e($fl) ?></label><?php endforeach; ?>
         </div>
 
+        <h3>Lieux de vente</h3>
+        <p class="meta" style="margin:0;">Les types de lieux proposés sur le plan (boutique, stand, emplacement…). La <strong>clé</strong> (lettres minuscules, chiffres, tirets) identifie le lieu dans les plans ; le <strong>libellé</strong> est affiché aux visiteurs. Le tarif indicatif préremplit l'éditeur de plan.</p>
+        <div class="locrows" data-locrows>
+          <?php foreach ($t['locations'] as $loc): ?>
+            <div class="locrow row">
+              <input type="text" name="t[locations][][key]" value="<?= e($loc['key']) ?>" maxlength="24" pattern="[a-z0-9][a-z0-9_-]{0,23}" placeholder="cle" aria-label="Clé du lieu" style="width:120px">
+              <input type="text" name="t[locations][][label]" value="<?= e($loc['label']) ?>" maxlength="40" placeholder="Libellé (ex. Boutique)" aria-label="Libellé du lieu" style="flex:1;min-width:140px">
+              <select name="t[locations][][unit]" aria-label="Unité de tarification"><?php foreach (GT_LOCATION_UNITS as $uk => $ul): ?><option value="<?= e($uk) ?>"<?= $loc['unit'] === $uk ? ' selected' : '' ?>><?= e($ul) ?></option><?php endforeach; ?></select>
+              <input type="text" inputmode="decimal" name="t[locations][][price_cents_eur]" value="<?= $loc['price_cents'] > 0 ? e(number_format($loc['price_cents'] / 100, 2, ',', '')) : '' ?>" placeholder="Tarif €" aria-label="Tarif indicatif" style="width:90px">
+            </div>
+          <?php endforeach; ?>
+          <?php for ($i = 0; $i < 2; $i++): ?>
+            <div class="locrow row">
+              <input type="text" name="t[locations][][key]" maxlength="24" pattern="[a-z0-9][a-z0-9_-]{0,23}" placeholder="cle" aria-label="Clé du lieu" style="width:120px">
+              <input type="text" name="t[locations][][label]" maxlength="40" placeholder="Libellé (ex. Boutique)" aria-label="Libellé du lieu" style="flex:1;min-width:140px">
+              <select name="t[locations][][unit]" aria-label="Unité de tarification"><?php foreach (GT_LOCATION_UNITS as $uk => $ul): ?><option value="<?= e($uk) ?>"><?= e($ul) ?></option><?php endforeach; ?></select>
+              <input type="text" inputmode="decimal" name="t[locations][][price_cents_eur]" placeholder="Tarif €" aria-label="Tarif indicatif" style="width:90px">
+            </div>
+          <?php endfor; ?>
+        </div>
+        <p><button class="btn small" type="button" data-locadd>Ajouter un lieu</button></p>
+
+        <h3>Plugins proposés aux vendeurs</h3>
+        <p class="meta" style="margin:0;">Chaque plugin payant peut être hérité du réglage de la plateforme, proposé à la vente, inclus gratuitement ou masqué pour les boutiques de ce type de galerie. Ce choix prime sur le ciblage global du plugin.</p>
+        <div class="cols">
+          <?php foreach (addon_defaults() as $ak => $ad): $vmode = (string) ($t['vendor_plugins'][$ak] ?? 'inherit'); ?>
+            <label class="f2"><?= e($ad['name']) ?>
+              <select name="t[vendor_plugins][<?= e($ak) ?>]"><?php foreach (GT_VENDOR_PLUGIN_MODES as $vm => $vl): ?><option value="<?= e($vm) ?>"<?= $vmode === $vm ? ' selected' : '' ?>><?= e($vl) ?></option><?php endforeach; ?></select>
+            </label>
+          <?php endforeach; ?>
+        </div>
+
         <h3>Modules (plugins partagés)</h3>
         <p class="meta" style="margin:0;">Un module est une fonctionnalité proposée par ce type : inclus dans l'offre, option payante (essai puis abonnement Stripe) ou non proposé. Les galeries de ce type le retrouvent dans leurs Options.</p>
         <div class="cols">
@@ -174,5 +207,20 @@ $origin = saas_origin();
     </section>
   </div>
 </div>
+<script>
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-locadd]');
+    if (!btn) return;
+    var box = btn.closest('form').querySelector('[data-locrows]');
+    var row = box && box.querySelector('.locrow');
+    if (!row) return;
+    var copy = row.cloneNode(true);
+    copy.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+    copy.querySelectorAll('select').forEach(function (s) { s.selectedIndex = 0; });
+    box.appendChild(copy);
+    var first = copy.querySelector('input');
+    if (first) first.focus();
+  });
+</script>
 </body>
 </html>

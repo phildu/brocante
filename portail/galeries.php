@@ -10,7 +10,7 @@ require_once PORTAIL_ROOT . '/includes/banner-ai.php';
 
 // Mode restreint : administrateur d'une galerie (voir _bootstrap.php) — sa galerie seulement, ni création ni suppression, pas de gestion des comptes.
 $limited = defined('GA_LIMITED') ? GA_LIMITED : null;
-const GA_LIMITED_ACTIONS = ['save', 'style', 'style_reset', 'add_remote', 'remove_remote', 'refresh', 'pause', 'export'];
+const GA_LIMITED_ACTIONS = ['save', 'places', 'style', 'style_reset', 'add_remote', 'remove_remote', 'refresh', 'pause', 'export'];
 
 $shops = tenant_list();
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -129,16 +129,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 portail_flash('Votre offre permet ' . $limit . ' commerce' . ($limit > 1 ? 's' : '') . ' au plus (vous en avez coché ' . (count($local) + count($members)) . ') : décochez-en ou passez à une offre supérieure.', 'error');
                 break;
             }
+            $domainRaw = trim((string) ($_POST['domain'] ?? ''));
+            $domain = gallery_domain_normalize($domainRaw);
+            if ($domainRaw !== '' && $domain === '') { portail_flash('Nom de domaine non valide : indiquez un domaine public, par exemple galerie-exemple.fr (sans http ni chemin).', 'error'); break; }
+            if ($domain !== '') {
+                $owner = gallery_domain_owner($domain, (string) $gallery['slug']);
+                if ($owner !== null) {
+                    $ownerName = (string) (gallery_load($owner)['name'] ?? $owner);
+                    portail_flash('Ce nom de domaine est déjà attribué à la galerie « ' . $ownerName . ' ».', 'error');
+                    break;
+                }
+            }
             $gallery = array_merge($gallery, [
                 'name' => trim((string) ($_POST['name'] ?? '')) ?: $gallery['name'],
                 'tagline' => (string) ($_POST['tagline'] ?? ''),
                 'description' => (string) ($_POST['description'] ?? ''),
                 'presence_mode' => business_presence_mode($_POST['presence_mode'] ?? $gallery['presence_mode'], $gallery['presence_mode']),
                 'published' => !empty($_POST['published']),
+                'domain' => $domain,
                 'members' => array_merge($local, $members),
             ]);
             $ok = gallery_save($gallery);
             portail_flash($ok ? 'Galerie enregistrée.' : "Impossible d'écrire la galerie (droits du dossier data/galeries).", $ok ? 'ok' : 'error');
+            break;
+
+        case 'places':
+            if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            // Localisation de la marchandise de chaque commerce membre : elle alimente le champ « adresse du bien » des plateformes.
+            // Le plan peut avoir été enregistré entre-temps : on repart de sa valeur courante et on ne remplace que « places ».
+            $places = [];
+            foreach ((array) ($_POST['place'] ?? []) as $key => $pl) {
+                if (!is_array($pl)) continue;
+                $entry = [];
+                foreach (['street' => 120, 'postcode' => 10, 'city' => 60, 'stand' => 12, 'note' => 200] as $field => $max) {
+                    $entry[$field] = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($pl[$field] ?? ''))), 0, $max);
+                }
+                if (array_filter($entry)) $places[(string) $key] = $entry;
+            }
+            $gallery['map'] = gallery_map_normalize(['places' => $places] + (array) ($gallery['map'] ?? []), array_map('gallery_member_key', $gallery['members']), gt_locations($gallery));
+            $ok = gallery_save($gallery);
+            portail_flash($ok ? 'Localisations de la marchandise enregistrées.' : "Impossible d'enregistrer les localisations (droits du dossier data/galeries).", $ok ? 'ok' : 'error');
             break;
 
         case 'style':
@@ -173,26 +203,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $libraryPick = trim((string) ($_POST['library_banner'] ?? ''));
             if ($libraryPick !== '') {
                 $item = banner_library_find($libraryPick);
-                $libAbs = banner_library_abs($libraryPick);
-                $same = false;
-                if ($libAbs !== null) {
-                    foreach ($banners as $existing) {
-                        $existingAbs = dirname(__DIR__) . '/' . $existing;
-                        if (is_file($existingAbs) && md5_file($existingAbs) === md5_file($libAbs)) { $same = true; break; }
-                    }
-                }
-                if ($item === null || $libAbs === null || !empty($item['exclusive'])) {
+                if ($item === null || !empty($item['exclusive'])) {
                     $errors[] = 'Bandeau de la médiathèque introuvable ou réservé à un commerce.';
-                } elseif ($same) {
-                    $errors[] = 'Ce bandeau de la médiathèque est déjà utilisé par la galerie.';
                 } elseif (count($banners) >= 6) {
                     $errors[] = 'Six images au maximum : retirez-en une avant d’ajouter un bandeau de la médiathèque.';
                 } else {
                     try {
                         $path = banner_ai_adopt_library($libraryPick, $slug);
-                        $banners = array_values(array_diff($banners, [$path]));
-                        array_unshift($banners, $path);
-                        $added[] = $path;
+                        if (in_array($path, $banners, true)) {
+                            $errors[] = 'Ce bandeau de la médiathèque est déjà utilisé par la galerie.';
+                        } else {
+                            array_unshift($banners, $path);
+                            $added[] = $path;
+                        }
                     } catch (Throwable $ex) {
                         $errors[] = 'Bandeau de la médiathèque : ' . $ex->getMessage();
                     }
@@ -375,6 +398,9 @@ $confirmDelete = !$limited && $edit && ($_GET['supprimer'] ?? '') === '1';
 <style>
   .member { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
   .member .name { flex: 1; } .member small { opacity: .7; }
+  .place-row { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 10px; display: grid; gap: 8px; min-width: 0; }
+  .place-row legend { font-weight: 700; padding: 0 6px; }
+  .place-row .row { gap: 8px; }
   .swatch-in { width: 44px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
   .gl { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
   .gl:first-child { border-top: 0; }
@@ -390,6 +416,10 @@ $confirmDelete = !$limited && $edit && ($_GET['supprimer'] ?? '') === '1';
   .thumb { width: 84px; height: 48px; border-radius: 6px; border: 1px solid var(--line); background-size: cover; background-position: center; display: inline-block; } .thumb.logo { background-size: contain; background-repeat: no-repeat; background-color: #fff; }
   .shots { display: flex; flex-wrap: wrap; gap: 10px; } .shots label { display: grid; gap: 3px; font-size: .76rem; }
   .shots .thumb { width: 132px; height: 74px; } .shots .first .thumb { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .shots.library { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+  .shots.library .thumb { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+  .shots label.pick { padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+  .shots label.pick:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .style-preview { position: sticky; top: 12px; } .pv { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--f-body, inherit); }
   .pv-hero { position: relative; background: var(--hero-bg); color: var(--hero-ink); padding: 22px 16px; overflow: hidden; } .pv-hero.h-compact { padding: 12px 16px; } .pv-hero.h-tall { padding: 44px 16px 24px; }
   .pv-media, .pv-shade { position: absolute; inset: 0; background-size: cover; } .pv-in { position: relative; } .pv-hero.a-center { text-align: center; } .pv-hero.a-center .pv-in img { margin-inline: auto; }
@@ -433,7 +463,7 @@ portail_page_start([
     <section class="gcard">
       <h2>Mes galeries</h2>
       <?php if (!$galleries): ?><p class="meta">Aucune galerie pour le moment : créez la première ci-dessous.</p><?php endif; ?>
-      <?php foreach ($galleries as $g): $url = $origin . '/galerie/' . $g['slug'] . '/'; ?>
+      <?php foreach ($galleries as $g): $url = gallery_public_url($g, $origin); ?>
         <div class="gl">
           <div>
             <strong><?= e($g['name']) ?></strong>
@@ -480,7 +510,7 @@ portail_page_start([
       <p><button class="btn btn-primary" type="submit">Créer la galerie</button></p>
     </form>
 
-  <?php else: $g = $edit; $url = $origin . '/galerie/' . $g['slug'] . '/'; $remoteIndex = []; foreach ($g['members'] as $i => $m) if ($m['type'] === 'remote') $remoteIndex[$i] = $m; ?>
+  <?php else: $g = $edit; $url = gallery_public_url($g, $origin); $remoteIndex = []; foreach ($g['members'] as $i => $m) if ($m['type'] === 'remote') $remoteIndex[$i] = $m; ?>
     <?php if ($limited && ($st = go_status($g)) !== 'manual'): $lim = go_member_limit($g); ?>
       <p class="flash" data-kind="<?= in_array($st, ['expired', 'canceled'], true) ? 'error' : 'ok' ?>" role="status">Offre « <?= e(go_offer($g['plan']['offer'], gt_of($g)['key'])['name'] ?? $g['plan']['offer']) ?> » — <?= e(GO_PLAN_STATUS[$st] ?? $st) ?><?= $st === 'trial' ? ' jusqu\'au ' . e(date('d/m/Y', $g['plan']['trial_until'])) : '' ?> · <?= count($g['members']) ?>/<?= (int) $lim ?> commerces.
         <?php if (in_array($st, ['expired', 'canceled'], true)): ?>Votre galerie n'est plus visible du public. <?php endif; ?><a href="/portail/galerie-offre.php">Voir mon offre</a></p>
@@ -562,11 +592,100 @@ portail_page_start([
 
       <h2 style="margin-top:8px;">Publication</h2>
       <label class="member"><input type="checkbox" name="published" value="1"<?= $g['published'] ? ' checked' : '' ?>> <span class="name"><strong>Publier la galerie</strong> <small>— visible de tous à l'adresse publique et dans la liste des galeries</small></span></label>
+      <label class="f" style="margin-top:8px;">Nom de domaine propre (facultatif)
+        <input type="text" name="domain" maxlength="253" value="<?= e($g['domain'] ?? '') ?>" placeholder="galerie-exemple.fr">
+        <span class="meta" style="font-weight:400;">Le domaine doit pointer vers ce serveur (enregistrement DNS) et disposer d'un certificat HTTPS. Laissez vide pour garder l'adresse <code class="url"><?= e($origin) ?>/galerie/<?= e($g['slug']) ?>/</code>.</span>
+      </label>
       <p><button class="btn btn-primary" type="submit">Enregistrer</button></p>
     </form>
     <?php foreach ($remoteIndex as $i => $m): ?>
       <form id="rm-<?= (int) $i ?>" method="post" hidden><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="remove_remote"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>"><input type="hidden" name="index" value="<?= (int) $i ?>"></form>
     <?php endforeach; ?>
+
+    <?php
+      // Localisation de la marchandise : une adresse par commerce membre, reprise par le champ « adresse du bien » des plateformes.
+      // Les coordonnées éventuelles viennent du plan (repère ou centre de l'emplacement du commerce) pour retrouver l'adresse d'un clic.
+      $placeRows = [];
+      foreach ($g['members'] as $m) {
+          $key = gallery_member_key($m);
+          $placeRows[$key] = ['key' => $key, 'remote' => $m['type'] === 'remote',
+            'name' => $m['type'] === 'local' ? (string) ($shops[$m['slug']]['name'] ?? $m['slug']) : ($m['name'] !== '' ? $m['name'] : $m['url'])];
+      }
+      $placeSpots = [];
+      foreach (($g['map']['items'] ?? []) as $it) {
+          $k = (string) ($it['shop'] ?? '');
+          if ($k === '' || !isset($placeRows[$k]) || in_array($it['role'] ?? '', ['zone', 'territoire'], true)) continue;
+          [$plat, $plng] = gallery_map_centroid($it['pts']);
+          if (!isset($placeSpots[$k]) || $it['kind'] === 'marker') $placeSpots[$k] = [round($plat, 7), round($plng, 7)];
+      }
+      $placeValues = (array) ($g['map']['places'] ?? []);
+    ?>
+    <section class="gcard" id="placesCard">
+      <h2>Localisation de la marchandise</h2>
+      <p class="meta">Où se trouve la marchandise de chaque commerce ? Cette adresse alimente le champ « adresse du bien » des plateformes de vente (Leboncoin, Vinted…). Chaque boutique peut aussi la renseigner depuis son espace « Mes galeries ».</p>
+      <?php if (!$placeRows): ?>
+        <p class="meta">Ajoutez d'abord des commerces membres dans « Présentation ».</p>
+      <?php else: ?>
+      <form method="post" autocomplete="off">
+        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="places"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
+        <?php foreach ($placeRows as $r): $pl = $placeValues[$r['key']] ?? []; $id = 'pl-' . $r['key']; ?>
+          <fieldset class="place-row">
+            <legend><?= e($r['name']) ?><?= $r['remote'] ? ' — commerce d\'ailleurs' : '' ?></legend>
+            <div class="row">
+              <label class="f">Rue et numéro<input type="text" id="<?= e($id) ?>-street" name="place[<?= e($r['key']) ?>][street]" maxlength="120" value="<?= e($pl['street'] ?? '') ?>" placeholder="12 rue des Fleurs"></label>
+              <label class="f">Code postal<input type="text" id="<?= e($id) ?>-postcode" name="place[<?= e($r['key']) ?>][postcode]" maxlength="10" inputmode="numeric" value="<?= e($pl['postcode'] ?? '') ?>" placeholder="75011"></label>
+              <label class="f">Ville<input type="text" id="<?= e($id) ?>-city" name="place[<?= e($r['key']) ?>][city]" maxlength="60" value="<?= e($pl['city'] ?? '') ?>" placeholder="Paris"></label>
+              <label class="f">Stand (facultatif)<input type="text" name="place[<?= e($r['key']) ?>][stand]" maxlength="12" value="<?= e($pl['stand'] ?? '') ?>" placeholder="A12"></label>
+            </div>
+            <label class="f">Précision (facultatif)<input type="text" name="place[<?= e($r['key']) ?>][note]" maxlength="200" value="<?= e($pl['note'] ?? '') ?>" placeholder="Derrière la halle, entrée par la cour…"></label>
+            <?php if (!empty($placeSpots[$r['key']])): ?>
+              <p class="meta" style="margin:0;"><button class="btn small" type="button" data-place-from="<?= e($id) ?>" data-lat="<?= e((string) $placeSpots[$r['key']][0]) ?>" data-lng="<?= e((string) $placeSpots[$r['key']][1]) ?>">Reprendre l'adresse du repère sur le plan</button></p>
+            <?php endif; ?>
+          </fieldset>
+        <?php endforeach; ?>
+        <p><button class="btn btn-primary" type="submit">Enregistrer les localisations</button></p>
+      </form>
+      <?php endif; ?>
+    </section>
+    <script>
+    (function () {
+      // Adresse à partir des coordonnées du plan : IGN (France), puis Photon en secours hors de France.
+      function fill(id, p) {
+        var num = p.housenumber ? String(p.housenumber) + ' ' : '';
+        var street = p.street || p.name || p.locality || '';
+        var s = document.getElementById(id + '-street'), pc = document.getElementById(id + '-postcode'), c = document.getElementById(id + '-city');
+        if (s) s.value = (num + street).trim();
+        if (pc) pc.value = p.postcode || '';
+        if (c) c.value = p.city || p.town || p.village || p.municipality || '';
+        return !!(street || pc.value || c.value);
+      }
+      document.querySelectorAll('[data-place-from]').forEach(function (b) {
+        var label = b.textContent;
+        function done(text) {
+          b.textContent = text;
+          b.disabled = false;
+          if (text !== label) setTimeout(function () { b.textContent = label; }, 2500);
+        }
+        b.addEventListener('click', function () {
+          var lat = encodeURIComponent(b.dataset.lat), lng = encodeURIComponent(b.dataset.lng), id = b.dataset.placeFrom;
+          b.disabled = true; b.textContent = 'Recherche de l\'adresse…';
+          fetch('https://data.geopf.fr/geocodage/reverse?index=address&limit=1&lat=' + lat + '&lon=' + lng)
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+              var f = j && j.features && j.features[0];
+              if (f && f.properties && fill(id, f.properties)) { done('Adresse reprise du repère'); return; }
+              return fetch('https://photon.komoot.io/reverse?lang=fr&limit=1&lat=' + lat + '&lon=' + lng)
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (q) {
+                  var g = q && q.features && q.features[0];
+                  done(g && g.properties && fill(id, g.properties) ? 'Adresse reprise du repère' : 'Adresse introuvable : saisissez-la');
+                });
+            })
+            .catch(function () { done('Recherche indisponible : saisissez l\'adresse'); });
+        });
+      });
+    })();
+    </script>
 
     <?php
       $st = $g['style'];
@@ -611,7 +730,7 @@ portail_page_start([
             <?php if ($banners): ?>
               <div class="shots">
                 <?php foreach ($banners as $i => $path): ?>
-                  <label class="<?= $i === 0 ? 'first' : '' ?>"><span class="thumb" style="background-image:url('/<?= e($path) ?>')"></span>
+                  <label class="<?= $i === 0 ? 'first' : '' ?>" data-src="/<?= e($path) ?>"><span class="thumb" style="background-image:url('/<?= e($path) ?>')"></span>
                     <span><input type="radio" name="banner_main" value="<?= (int) $i ?>"<?= $i === 0 ? ' checked' : '' ?>> Image principale</span>
                     <span><input type="checkbox" name="remove_banners[]" value="<?= (int) $i ?>"> Retirer<?= $i === 0 ? ' (1re)' : '' ?></span></label>
                 <?php endforeach; ?>
@@ -693,6 +812,11 @@ portail_page_start([
         var accent = val('accent').value, useBg = val('use_bg').checked, useInk = val('use_ink').checked, useHero = val('use_hero').checked;
         var bg = useBg ? val('bg').value : '#f7f3ec', ink = useInk ? val('ink').value : '#221f1a', hero = useHero ? val('hero_color').value : accent;
         var banner = val('banners') && val('banners').files[0] ? URL.createObjectURL(val('banners').files[0]) : current.banner;
+        var mainRadio = f.querySelector('input[name=banner_main]:checked');
+        var mainShots = f.querySelectorAll('.shots:not(.library) > label[data-src]');
+        if (!(val('banners') && val('banners').files[0]) && mainRadio && mainShots[+mainRadio.value]) banner = mainShots[+mainRadio.value].dataset.src;
+        var libPick = f.querySelector('input[name=library_banner]:checked');
+        if (!(val('banners') && val('banners').files[0]) && libPick && libPick.value) banner = '/uploads/banner-library/' + libPick.value;
         var logo = val('remove_logo') && val('remove_logo').checked ? '' : (val('logo').files[0] ? URL.createObjectURL(val('logo').files[0]) : current.logo);
         var s = pv.style;
         s.setProperty('--bg', bg); s.setProperty('--ink', ink); s.setProperty('--accent', accent); s.setProperty('--accent-ink', on(accent));
@@ -724,7 +848,7 @@ portail_page_start([
     <?php if (!$limited): $bannerAiOk = banner_ai_available(); ?>
     <section class="gcard">
       <h2>Bannière par l'IA</h2>
-      <p class="meta">L'IA ajoute une image panoramique 16:9 à la fin des bannières (six au maximum), que vous pouvez retirer dans l'apparence. Coût estimé ≈ <?= e(ai_format_eur(ai_eur(AI_PRICING_DEFAULTS['image']))) ?> par image, sur la clé Gemini de la plateforme.</p>
+      <p class="meta">L'IA ajoute une image panoramique 16:9 à la fin des bannières (six au maximum). Chaque image générée rejoint aussi la médiathèque commune : elle pourra être réutilisée par les autres galeries et boutiques sans nouveau crédit. Choisissez ensuite l'image principale dans l'apparence. Coût estimé ≈ <?= e(ai_format_eur(ai_eur(AI_PRICING_DEFAULTS['image']))) ?> par image, sur la clé Gemini de la plateforme.</p>
       <?php if (!$bannerAiOk): ?><p class="flash" data-kind="error" role="status">Génération indisponible : activez le fournisseur d'images Gemini et vérifiez sa clé dans <a href="/portail/ia-fournisseurs.php">Fournisseurs IA</a>.</p><?php endif; ?>
       <?= banner_ai_usage_html() ?>
       <form method="post" class="row" autocomplete="off">

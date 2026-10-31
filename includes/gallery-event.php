@@ -110,9 +110,9 @@ function ge_slot(array $event, string $id): ?array
         'price_cents' => ge_place_price($event), 'price_pro_cents' => ge_place_price($event, true)];
 }
 
-function ge_slot_name(array $slot): string
+function ge_slot_name(array $slot, string $placeWord = 'Place'): string
 {
-    return 'Place ' . (string) ($slot['num'] ?? '');
+    return ($placeWord !== '' ? $placeWord . ' ' : '') . (string) ($slot['num'] ?? '');
 }
 
 /** Date « 12 octobre 2026 » et éventuelle plage de dates. */

@@ -303,19 +303,27 @@ function saas_pricing_html(array $grid, string $id, callable $ctaUrl): string
             . '<input type="radio" name="' . $e($id) . '-m" id="' . $e($id) . '-mt"><label for="' . $e($id) . '-mt">Selon le nombre d\'articles</label></div>';
     }
     $html .= '<div class="plans">';
+    $ebName = (string) ($grid['eb']['label'] ?? 'Pionnier');
     foreach ($offers as $o) {
         $monthly = saas_price_text($o['monthly'], 'month');
         $yearly = $o['yearly_eff'] !== null ? saas_price_text($o['yearly_eff'], 'year') : null;
         $saving = saas_offer_saving_cents($o);
         $yearlyMonthly = $o['yearly_eff'] !== null ? (int) round($o['yearly_eff'] / 12) : 0;
         $limit = saas_offer_limit_label($o);
+        // Prix pionnier : le tarif habituel reste visible, barré, à côté du prix remisé.
+        $ebPct = (int) ($o['eb_discount_pct'] ?? 0);
+        $wasWas = static function ($list, $now) use ($e, $ebPct): string {
+            return $ebPct > 0 && $list !== null && $now !== null && (int) $list > (int) $now
+                ? ' <s class="eb-was" title="Tarif habituel">' . $e(saas_money((int) $list)) . '</s>' : '';
+        };
+        $ebFlag = $ebPct > 0 ? '<span class="eb-flag">' . $e($ebName . ' −' . $ebPct . ' %') . '</span>' : '';
         $html .= '<article class="plan plan-' . $e($o['model']) . ($o['featured'] ? ' is-featured' : '') . '">'
             . ($o['featured'] ? '<span class="tag">La plus choisie</span>' : '')
-            . '<h3>' . $e($o['name']) . '</h3>'
+            . '<h3>' . $e($o['name']) . $ebFlag . '</h3>'
             . ($limit !== '' && $o['model'] === 'plan' ? '<p class="plan-limit">' . $e($limit) . '</p>' : '')
             . (($aiLine = saas_ai_offer_line($o['ai_quota_eur'] ?? null)) !== '' ? '<p class="plan-ai">' . $e($aiLine) . '</p>' : '')
-            . '<p class="price pm">' . ($o['monthly'] === null ? 'Sur devis' : ($o['monthly'] === 0 ? 'Gratuit' : $e(saas_money($o['monthly'])) . ' <small>/ mois</small>')) . '</p>'
-            . ($yearly !== null ? '<p class="price py">' . ($o['yearly_eff'] === 0 ? 'Gratuit' : $e(saas_money($o['yearly_eff'])) . ' <small>/ an</small>') . ($o['yearly_eff'] > 0 ? ' <small>soit ' . $e(saas_money($yearlyMonthly)) . ' / mois</small>' : '') . ($saving > 0 ? ' <span class="save">Économie de ' . $e(saas_money($saving)) . ' / an</span>' : '') . '</p>' : '')
+            . '<p class="price pm">' . ($o['monthly'] === null ? 'Sur devis' : ($o['monthly'] === 0 ? 'Gratuit' : $e(saas_money($o['monthly'])) . ' <small>/ mois</small>')) . $wasWas($o['list_monthly'] ?? null, $o['monthly'] ?? null) . '</p>'
+            . ($yearly !== null ? '<p class="price py">' . ($o['yearly_eff'] === 0 ? 'Gratuit' : $e(saas_money($o['yearly_eff'])) . ' <small>/ an</small>') . $wasWas($o['list_yearly_eff'] ?? null, $o['yearly_eff']) . ($o['yearly_eff'] > 0 ? ' <small>soit ' . $e(saas_money($yearlyMonthly)) . ' / mois</small>' : '') . ($saving > 0 ? ' <span class="save">Économie de ' . $e(saas_money($saving)) . ' / an</span>' : '') . '</p>' : '')
             . ($o['features'] ? '<ul>' . implode('', array_map(static fn ($f) => '<li>' . saas_e($f) . '</li>', $o['features'])) . '</ul>' : '')
             . '<a class="btn pm' . ($o['featured'] ? '' : ' ghost') . '" href="' . $e($ctaUrl($o, 'month')) . '">Choisir</a>'
             . ($yearly !== null ? '<a class="btn py' . ($o['featured'] ? '' : ' ghost') . '" href="' . $e($ctaUrl($o, 'year')) . '">Choisir (annuel)</a>' : '')
@@ -350,10 +358,15 @@ function saas_offer_picker_html(array $grid, string $selected, string $billing):
         $limit = saas_offer_limit_label($o);
         $saving = saas_offer_saving_cents($o);
         $yearlyMonthly = $o['yearly_eff'] !== null ? saas_money((int) round($o['yearly_eff'] / 12)) : '';
+        $ebPct = (int) ($o['eb_discount_pct'] ?? 0);
+        $was = static function ($list, $now) use ($e, $ebPct): string {
+            return $ebPct > 0 && $list !== null && $now !== null && (int) $list > (int) $now
+                ? ' <s class="eb-was" title="Tarif habituel">' . $e(saas_money((int) $list)) . '</s>' : '';
+        };
         $html .= '<label class="offer offer-' . $e($o['model']) . '"><input type="radio" name="plan" value="' . $e($o['key']) . '" required' . ($o['key'] === $selected ? ' checked' : '') . '>'
-            . '<strong>' . $e($o['name']) . '</strong>'
-            . '<span class="op pm">' . $e(saas_price_text($o['monthly'], 'month')) . '</span>'
-            . ($o['yearly_eff'] !== null ? '<span class="op py">' . $e(saas_money((int) $o['yearly_eff'])) . ' / an <small>soit ' . $e($yearlyMonthly) . ' / mois</small>' . ($saving > 0 ? ' <b class="save">Économie de ' . $e(saas_money($saving)) . ' / an</b>' : '') . '</span>' : ($grid['yearly'] ? '<span class="op py">' . $e(saas_price_text($o['monthly'], 'month')) . '</span>' : ''))
+            . '<strong>' . $e($o['name']) . ($ebPct > 0 ? ' <span class="eb-flag">' . $e((string) ($grid['eb']['label'] ?? 'Pionnier') . ' −' . $ebPct . ' %') . '</span>' : '') . '</strong>'
+            . '<span class="op pm">' . $e(saas_price_text($o['monthly'], 'month')) . $was($o['list_monthly'] ?? null, $o['monthly'] ?? null) . '</span>'
+            . ($o['yearly_eff'] !== null ? '<span class="op py">' . $e(saas_money((int) $o['yearly_eff'])) . ' / an <small>soit ' . $e($yearlyMonthly) . ' / mois</small>' . $was($o['list_yearly_eff'] ?? null, $o['yearly_eff']) . ($saving > 0 ? ' <b class="save">Économie de ' . $e(saas_money($saving)) . ' / an</b>' : '') . '</span>' : ($grid['yearly'] ? '<span class="op py">' . $e(saas_price_text($o['monthly'], 'month')) . '</span>' : ''))
             . ($limit !== '' ? '<span class="lim">' . $e($limit) . '</span>' : '')
             . (($aiLine = saas_ai_offer_line($o['ai_quota_eur'] ?? null)) !== '' ? '<span class="lim ai">' . $e($aiLine) . '</span>' : '');
         foreach (array_slice($o['features'], 0, 3) as $f) $html .= '<span>✓ ' . $e($f) . '</span>';
@@ -367,10 +380,13 @@ function saas_offer_picker_html(array $grid, string $selected, string $billing):
     return $html . '</div>';
 }
 
-/** Libellé court de l'offre d'une demande : « Standard · annuel · galerie x ». */
+/** Libellé court de l'offre d'une demande : « Standard · annuel · galerie x · Pionnier −25 % · rang 12 ». */
 function saas_offer_badge(array $req): string
 {
     $o = saas_req_offer($req);
+    $earlybird = (array) ($req['earlybird'] ?? []);
     return (($o['mode'] ?? 'sales') === 'showcase' ? 'Vitrine · ' : 'Avec vente · ') . $o['name']
-        . ($o['billing'] === 'year' ? ' · annuel' : '') . (($o['gallery'] ?? '') !== '' ? ' · galerie ' . $o['gallery'] : '');
+        . ($o['billing'] === 'year' ? ' · annuel' : '') . (($o['gallery'] ?? '') !== '' ? ' · galerie ' . $o['gallery'] : '')
+        . (!empty($earlybird['discount_pct']) ? ' · ' . (string) ($earlybird['title'] ?? 'Pionnier') . ' −' . (int) $earlybird['discount_pct'] . ' %'
+            . (!empty($earlybird['rank']) ? ' · rang ' . (int) $earlybird['rank'] : '') : '');
 }

@@ -1,4 +1,14 @@
 <?php
+// Nom de domaine propre d'une galerie : le domaine pointe vers ce serveur, sa page publique est servie à la racine.
+if (!empty($_SERVER['HTTP_HOST'])) {
+    require_once __DIR__ . '/../includes/galleries.php';
+    $hostGallery = gallery_from_host((string) $_SERVER['HTTP_HOST']);
+    if ($hostGallery) {
+        $_GET['g'] = (string) $hostGallery['slug'];
+        require __DIR__ . '/../galerie/index.php';
+        exit;
+    }
+}
 // Page d'accueil de la plateforme (racine du domaine du portail) : quatre parcours (vendre, organiser, exposer, découvrir), les types de galerie
 // comparés, les options à la carte, les formules d'une boutique, les galeries, les commerces à la une.
 require_once __DIR__ . '/../includes/saas.php';
@@ -36,6 +46,11 @@ $fromPrice = static function (array $t): ?int {
 };
 $eur = static fn (int $c): string => rtrim(rtrim(number_format($c / 100, 2, ',', ' '), '0'), ',') . ' €';
 $addons = addon_defaults();
+
+// Campagne pionniers de la boutique seule : le palier du prochain inscrit remise les prix affichés tant qu'elle est ouverte.
+$ebCampaign = function_exists('eb_campaign_for_signup') ? eb_campaign_for_signup('') : null;
+$ebTier = $ebCampaign && $ebCampaign['progress']['open'] ? eb_tier_at($ebCampaign, $ebCampaign['progress']['next_rank']) : null;
+$homeGrid = $ebTier ? eb_discounted_grid(saas_grid(''), $ebTier) : saas_grid('');
 
 saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, galerie commerciale, marché aux puces, vide-grenier ou quartier marchand : créez, organisez, exposez ou découvrez. Photos et fiches par l\'IA, paiement par carte, plan interactif.');
 ?>
@@ -132,7 +147,8 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
   </div>
   <div class="sec-head" style="margin-top:44px"><h2 style="font-size:1.6rem">Les formules de la boutique</h2>
     <p class="lede">Une boutique seule ou réunie avec d'autres : le tarif ne dépend pas du lieu que vous rejoignez.</p></div>
-  <?= saas_pricing_html(saas_grid(''), 'home', static fn (array $o, string $billing): string => '/inscription/?formule=' . rawurlencode($o['key']) . ($billing === 'year' ? '&facturation=year' : '')) ?>
+  <?php if ($ebCampaign && $ebCampaign['enabled']): ?><?= eb_widget_html('') ?><?php endif; ?>
+  <?= saas_pricing_html($homeGrid, 'home', static fn (array $o, string $billing): string => '/inscription/?formule=' . rawurlencode($o['key']) . ($billing === 'year' ? '&facturation=year' : '')) ?>
   <?php $ownPricing = array_filter($galleries, static fn ($g) => isset(saas_pricing()['galleries'][$g['slug']])); if ($ownPricing): ?>
     <p class="lede" style="margin-top:18px">Certaines galeries ont leurs propres tarifs : <?= implode(', ', array_map(static fn ($g) => '<a href="/inscription/?galerie=' . saas_e($g['slug']) . '">' . saas_e($g['name']) . '</a>', $ownPricing)) ?>.</p>
   <?php endif; ?>

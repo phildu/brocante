@@ -114,16 +114,17 @@ function gb_zone_label(array $gallery, array $slot): string
 {
     if (($slot['kind'] ?? '') === 'event' || ($slot['zone'] ?? '') === '') return '';
     foreach ($gallery['map']['items'] ?? [] as $it) {
-        if ($it['role'] === 'zone' && $it['id'] === $slot['zone']) return gallery_zone_name($it);
+        if ($it['role'] === 'zone' && $it['id'] === $slot['zone']) return gallery_zone_name($it, function_exists('gt_locations') ? gt_locations($gallery) : null);
     }
     return '';
 }
 
 function gb_slot_name(array $gallery, array $slot): string
 {
-    if (($slot['kind'] ?? '') === 'event') return ge_slot_name($slot);
+    $word = function_exists('gt_word') ? (gt_word($gallery, 'place') ?: 'emplacement') : 'emplacement';
+    if (($slot['kind'] ?? '') === 'event') return ge_slot_name($slot, ucfirst($word));
     $zone = gb_zone_label($gallery, $slot);
-    return trim(($slot['num'] !== '' ? 'Emplacement ' . $slot['num'] : 'Emplacement') . ($slot['label'] !== '' ? ' (' . $slot['label'] . ')' : '') . ($zone !== '' ? ' — ' . $zone : ''));
+    return trim(($slot['num'] !== '' ? ucfirst($word) . ' ' . $slot['num'] : ucfirst($word)) . ($slot['label'] !== '' ? ' (' . $slot['label'] . ')' : '') . ($zone !== '' ? ' — ' . $zone : ''));
 }
 
 /** Tarif d'un emplacement : zone du plan, ou place numérotée de l'événement. */
@@ -185,6 +186,47 @@ function gb_row_normalize(string $slotId, array $e): array
     return $e + ['slot_id' => $slotId, 'kind' => $kind, 'client' => $client, 'register_missing' => $missing];
 }
 
+/** Demande par son jeton personnel (lien reçu par e-mail), ou null. */
+function gb_by_token(string $slug, string $token): ?array
+{
+    if (!preg_match('/^[a-f0-9]{32}$/', $token)) return null;
+    foreach (gb_read($slug)['slots'] as $id => $e) {
+        if (hash_equals((string) ($e['token'] ?? ''), $token)) return gb_row_normalize((string) $id, $e);
+    }
+    return null;
+}
+
+/** Code du pass de confirmation : distinct du jeton d'annulation, impossible à deviner, stable pour une demande. */
+function gb_pass_code(string $slug, string $token): string
+{
+    return preg_match('/^[a-f0-9]{32}$/', $token) ? ga_token($slug, 'pass', $token) : '';
+}
+
+/** Demande par le code du pass (QR présenté aux organisateurs ou à la sécurité), ou null. */
+function gb_by_pass(string $slug, string $pass): ?array
+{
+    if (!preg_match('/^[a-f0-9]{32}$/', $pass)) return null;
+    foreach (gb_read($slug)['slots'] as $id => $e) {
+        $token = (string) ($e['token'] ?? '');
+        if ($token !== '' && hash_equals(gb_pass_code($slug, $token), $pass)) return gb_row_normalize((string) $id, $e);
+    }
+    return null;
+}
+
+/** Adresse de l'application personnelle de l'exposant (sans ou avec le lien direct d'annulation). */
+function gb_app_url(array $gallery, array $row, bool $cancel = false): string
+{
+    $token = (string) ($row['token'] ?? '');
+    return $token === '' ? '' : ga_public_url('/galerie/exposant.php?g=' . rawurlencode((string) $gallery['slug']) . '&t=' . $token . ($cancel ? '&annuler=1' : ''));
+}
+
+/** Adresse du QR code de confirmation (vérification par un agent), ou ''. */
+function gb_pass_url(array $gallery, array $row): string
+{
+    $pass = gb_pass_code((string) $gallery['slug'], (string) ($row['token'] ?? ''));
+    return $pass === '' ? '' : ga_public_url('/galerie/exposant.php?g=' . rawurlencode((string) $gallery['slug']) . '&p=' . $pass);
+}
+
 /** Nouvelle demande d'un exposant. -> [demande, erreur]. Les copies CNI éventuelles sont validées avant l'enregistrement. */
 function gb_request(array $gallery, string $slotId, array $in, string $ip, array $files = []): array
 {
@@ -238,10 +280,11 @@ function gb_request(array $gallery, string $slotId, array $in, string $ip, array
     }
     gb_audit($gallery['slug'], 'request', ['slot' => $slotId, 'kind' => $kind, 'email' => $email, 'cni' => $hasCni ? 'deposited' : 'none']);
     $label = gb_slot_name($gallery, $slot);
-    $cancel = ga_public_url('/galerie/exposant.php?g=' . $gallery['slug'] . '&t=' . $entry['token']);
+    $app = gb_app_url($gallery, $entry);
+    $cancel = gb_app_url($gallery, $entry, true);
     $doc = ct_label($kind) . ($kind === 'particulier' ? '' : ' · représentant : ' . trim($client['rep_firstname'] . ' ' . $client['rep_lastname'])) . ' · pièce : ' . (CT_ID_DOC_TYPES[$client['id_doc_type']] ?? '') . ' n° ' . $client['id_doc_number'];
     ga_mail($email, 'Votre demande d\'emplacement — ' . $gallery['name'],
-        "Bonjour {$name},\n\nNous avons bien reçu votre demande pour : $label.\nTarif : " . gb_eur($price) . " (" . ct_label($kind) . ").\nProfil enregistré au registre des vendeurs : $doc.\n" . ($hasCni ? "La copie de votre pièce a été reçue : elle sert à la vérification et sera supprimée le " . date('d/m/Y', time() + GB_CNI_RETENTION_DAYS * 86400) . ".\n" : '') . "\nL'organisateur vous répond par e-mail. L'emplacement vous est retenu " . (int) ($hold / 86400) . " jour(s) en attendant.\nPour annuler votre demande : $cancel\n\n{$gallery['name']}\n");
+        "Bonjour {$name},\n\nNous avons bien reçu votre demande pour : $label.\nTarif : " . gb_eur($price) . " (" . ct_label($kind) . ").\nProfil enregistré au registre des vendeurs : $doc.\n" . ($hasCni ? "La copie de votre pièce a été reçue : elle sert à la vérification et sera supprimée le " . date('d/m/Y', time() + GB_CNI_RETENTION_DAYS * 86400) . ".\n" : '') . "\nL'organisateur vous répond par e-mail. L'emplacement vous est retenu " . (int) ($hold / 86400) . " jour(s) en attendant.\nVotre espace exposant (emplacement, plan et pass) : $app\nPour annuler votre demande : $cancel\n\n{$gallery['name']}\n");
     foreach ($gallery['admins'] as $a) {
         ga_mail($a['email'], 'Nouvelle demande d\'emplacement — ' . $gallery['name'],
             "$name ($email" . ($entry['phone'] !== '' ? ', ' . $entry['phone'] : '') . ") demande : $label.\nTarif : " . gb_eur($price) . " (" . ct_label($kind) . ").\n"
@@ -269,11 +312,17 @@ function gb_decide(array $gallery, string $slotId, string $action, string $actor
     if (!$entry) return 'Demande introuvable.';
     gb_audit($gallery['slug'], $action, ['slot' => $slotId, 'email' => (string) ($entry['email'] ?? ''), 'by' => $actor]);
     $label = $slot ? gb_slot_name($gallery, $slot) : 'votre emplacement';
+    $app = gb_app_url($gallery, $entry);
     $msg = match ($action) {
         'accept' => "Bonne nouvelle : votre demande est acceptée.\n$label vous est attribué. Tarif : " . gb_eur($entry['price_cents']) . ".\nL'organisateur vous précisera le règlement et les modalités d'installation.",
         'refuse' => "Votre demande pour $label n'a pas pu être retenue. L'emplacement est de nouveau libre : vous pouvez en choisir un autre sur le plan.",
         default => "$label n'est plus attribué à votre nom : il est de nouveau libre.",
     };
+    if ($app !== '') {
+        $msg .= $action === 'accept'
+            ? "\nVotre QR code de confirmation, à présenter aux organisateurs ou à la sécurité du site, se trouve dans votre espace exposant : $app"
+            : "\nVotre espace exposant : $app";
+    }
     ga_mail($entry['email'], 'Votre emplacement — ' . $gallery['name'], "Bonjour {$entry['name']},\n\n$msg\n\n{$gallery['name']}\n");
     return null;
 }

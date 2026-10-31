@@ -76,6 +76,10 @@ function gallery_normalize(string $slug, array $data): array
         }
     }
     $accent = (string) ($data['accent'] ?? '');
+    $type = preg_match('/^[a-z0-9][a-z0-9-]{1,23}$/', (string) ($data['type'] ?? '')) ? (string) $data['type'] : 'marchande';
+    // Les lieux de vente du type (boutique, stand…) bornent les types de zone acceptés dans le plan.
+    if (!function_exists('gt_type') && is_file(__DIR__ . '/gallery-types.php')) require_once __DIR__ . '/gallery-types.php';
+    $typeLocations = function_exists('gt_type') ? (gt_type($type)['locations'] ?? null) : null;
     return [
         'slug' => $slug,
         'name' => mb_substr(trim((string) ($data['name'] ?? $slug)), 0, 80) ?: $slug,
@@ -90,10 +94,11 @@ function gallery_normalize(string $slug, array $data): array
         'members' => $members,
         'admins' => gallery_admins_normalize((array) ($data['admins'] ?? [])),
         'plan' => gallery_plan_normalize((array) ($data['plan'] ?? [])),
-        'type' => preg_match('/^[a-z0-9][a-z0-9-]{1,23}$/', (string) ($data['type'] ?? '')) ? (string) $data['type'] : 'marchande',
+        'type' => $type,
+        'domain' => gallery_domain_normalize((string) ($data['domain'] ?? '')),
         'modules' => gallery_modules_normalize((array) ($data['modules'] ?? [])),
         'event' => gallery_event_normalize((array) ($data['event'] ?? [])),
-        'map' => gallery_map_normalize((array) ($data['map'] ?? []), array_map('gallery_member_key', $members)),
+        'map' => gallery_map_normalize((array) ($data['map'] ?? []), array_map('gallery_member_key', $members), $typeLocations),
     ];
 }
 
@@ -265,13 +270,60 @@ function gallery_save(array $gallery): bool
     return $ok;
 }
 
+/** Nom de domaine propre normalisé (« https://www.Exemple.fr/ » → « exemple.fr ») ; chaîne vide si ce n'est pas un domaine public. */
+function gallery_domain_normalize(string $host): string
+{
+    $host = mb_strtolower(trim($host));
+    $host = preg_replace('#^[a-z][a-z0-9+.-]*://#', '', $host);
+    $host = preg_replace('~[/:?#].*$~', '', (string) $host);
+    $host = rtrim((string) $host, '.');
+    if (str_starts_with($host, 'www.')) $host = substr($host, 4);
+    if (strlen($host) > 253) return '';
+    if (!preg_match('/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/', $host)) return '';
+    return $host;
+}
+
+/** Galerie qui a réservé ce nom de domaine (autre que $exceptSlug), ou null. */
+function gallery_domain_owner(string $host, string $exceptSlug = ''): ?string
+{
+    $host = gallery_domain_normalize($host);
+    if ($host === '') return null;
+    foreach (gallery_list() as $slug => $gallery) {
+        if ($slug !== $exceptSlug && ($gallery['domain'] ?? '') === $host) return (string) $slug;
+    }
+    return null;
+}
+
+/** Galerie servie sur ce nom de domaine, ou null. */
+function gallery_from_host(string $host): ?array
+{
+    static $cache = [];
+    $host = gallery_domain_normalize($host);
+    if ($host === '') return null;
+    if (array_key_exists($host, $cache)) return $cache[$host];
+    $cache[$host] = null;
+    foreach (gallery_list() as $gallery) {
+        if (($gallery['domain'] ?? '') === $host) { $cache[$host] = $gallery; break; }
+    }
+    return $cache[$host];
+}
+
+/** Adresse publique d'une galerie : son domaine propre s'il est réglé, sinon le chemin /galerie/<identifiant>/. */
+function gallery_public_url(array $gallery, string $origin = ''): string
+{
+    $domain = (string) ($gallery['domain'] ?? '');
+    if ($domain !== '') return 'https://' . $domain . '/';
+    $origin = $origin !== '' ? $origin : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return rtrim($origin, '/') . '/galerie/' . rawurlencode((string) ($gallery['slug'] ?? '')) . '/';
+}
+
 function gallery_delete(string $slug): bool
 {
     if (!gallery_slug_valid($slug)) return false;
     $gallery = gallery_load($slug);
     $file = galleries_dir() . '/' . $slug . '.json';
     if (!$gallery || !is_file($file)) return false;
-    foreach (array_unique(array_filter(array_merge(gallery_banner_images($gallery['style']), [(string) ($gallery['style']['logo'] ?? '')]))) as $relative) {
+    foreach (array_unique(array_filter(array_merge(gallery_banner_images($gallery['style']), [(string) ($gallery['style']['logo'] ?? ''), (string) ($gallery['map']['background']['path'] ?? '')]))) as $relative) {
         if (!preg_match('#^uploads/galeries/[a-z0-9][a-z0-9._-]*$#', $relative)) continue;
         $image = dirname(__DIR__) . '/' . $relative;
         if (is_file($image) && !@unlink($image)) return false;
@@ -309,7 +361,7 @@ function gallery_export_payload(string $slug): ?array
         }
         $assets[$kind] = ['mime' => $mime, 'data' => base64_encode($content)];
     }
-    unset($gallery['admins'], $gallery['plan'], $gallery['modules']);
+    unset($gallery['admins'], $gallery['plan'], $gallery['modules'], $gallery['domain']);
     $gallery['style'] = $style;
     return ['format' => 'brocante-gallery', 'version' => 1, 'gallery' => $gallery, 'assets' => $assets];
 }
@@ -371,6 +423,7 @@ function gallery_import_payload(array $payload, string $slug, ?array $existing =
     $data['style'] = $style;
     $data['admins'] = $existing['admins'] ?? [];
     $data['plan'] = $existing['plan'] ?? null;
+    $data['domain'] = $existing['domain'] ?? '';
     $data['created'] = $existing['created'] ?? time();
     if ($existing === null) {
         $data['published'] = false;
@@ -698,7 +751,7 @@ function shop_member_galleries(): array
         if (empty($g['published']) || !go_is_live($g)) continue;
         foreach ($g['members'] as $m) {
             if ($m['type'] === 'local' && $m['slug'] === $me) {
-                $cache[] = ['name' => $g['name'], 'url' => $origin . '/galerie/' . $slug . '/'];
+                $cache[] = ['name' => $g['name'], 'url' => gallery_public_url($g, $origin)];
                 break;
             }
         }

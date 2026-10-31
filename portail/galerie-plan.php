@@ -1,6 +1,7 @@
 <?php
 // Plan d'implantation d'une galerie : dessin des commerces (repères, zones, tracés) sur un fond IGN (plan ou orthophoto) ou sans fond,
-// avec un catalogue de surfaces, des emplacements numérotés, la division de zones et la localisation de la marchandise de chaque commerce.
+// avec un catalogue de surfaces, des emplacements numérotés et la division de zones. La localisation de la marchandise se règle dans
+// l'espace de la galerie (/portail/galeries.php) et dans celui de la boutique (/admin/ma-galerie.php).
 require __DIR__ . '/_galerie-layout.php';
 require_once PORTAIL_ROOT . '/includes/gallery-map.php';
 
@@ -16,10 +17,44 @@ if (!gm_enabled($gaGallery, 'carte')) {
 $memberKeys = array_map('gallery_member_key', $gaGallery['members']);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
+    if ((string) ($_POST['action'] ?? '') === 'bg') {   // import d'un fond de plan : stocké côté serveur, calé et enregistré ensuite avec le plan
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $path = gallery_image_store($_FILES['bg'] ?? ['error' => UPLOAD_ERR_NO_FILE], $gaSlug, 'fond', 3000);
+            echo json_encode(['ok' => true, 'path' => $path], JSON_UNESCAPED_SLASHES);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+    if ((string) ($_POST['action'] ?? '') === 'discover') {   // analyse du site : zones proposées d'après la BD TOPO IGN
+        header('Content-Type: application/json; charset=utf-8');
+        require_once PORTAIL_ROOT . '/includes/gallery-discovery.php';
+        @set_time_limit(45);
+        $territory = json_decode((string) ($_POST['territory'] ?? ''), true);
+        try {
+            $out = gallery_discover_site(is_array($territory) ? $territory : [], [
+                'min_area' => (float) ($_POST['min_area'] ?? 25),
+                'roads' => !empty($_POST['roads']), 'parking' => !empty($_POST['parking']), 'services' => !empty($_POST['services']),
+            ]);
+        } catch (Throwable $e) {
+            $out = ['ok' => false, 'error' => 'Analyse impossible : ' . $e->getMessage()];
+        }
+        echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
     if ((string) ($_POST['action'] ?? '') === 'save') {
+        $oldBg = (string) ($gaGallery['map']['background']['path'] ?? '');
         $raw = json_decode((string) ($_POST['map'] ?? ''), true);
-        $gaGallery['map'] = is_array($raw) ? gallery_map_normalize($raw, $memberKeys) : null;
-        if (gallery_save($gaGallery)) portail_flash($gaGallery['map'] ? 'Plan enregistré (' . count($gaGallery['map']['items']) . ' élément' . (count($gaGallery['map']['items']) > 1 ? 's' : '') . ').' : 'Plan vidé.');
+        // Le plan ne porte plus la localisation des marchandises : elle est gérée dans l'espace de la galerie et celui de la boutique.
+        // On réinjecte la valeur enregistrée pour que l'enregistrement du plan ne l'efface pas.
+        if (is_array($raw)) $raw['places'] = (array) ($gaGallery['map']['places'] ?? []);
+        $gaGallery['map'] = is_array($raw) ? gallery_map_normalize($raw, $memberKeys, gt_locations($gaGallery)) : null;
+        $newBg = (string) ($gaGallery['map']['background']['path'] ?? '');
+        if (gallery_save($gaGallery)) {
+            if ($oldBg !== '' && $oldBg !== $newBg) gallery_image_delete($oldBg);   // le fond remplacé (ou retiré) est supprimé du serveur
+            portail_flash($gaGallery['map'] ? 'Plan enregistré (' . count($gaGallery['map']['items']) . ' élément' . (count($gaGallery['map']['items']) > 1 ? 's' : '') . ').' : 'Plan vidé.');
+        }
         else portail_flash("Impossible d'enregistrer le plan (droits du dossier data).", 'error');
     }
     header('Location: ' . $self);
@@ -34,10 +69,19 @@ try {
 } catch (Throwable $e) {
 }
 $map = $gaGallery['map'];
-$payload = ['map' => $map, 'shops' => $names, 'zoneTypes' => GALLERY_ZONE_TYPES, 'features' => gt_of($gaGallery)['features'],
+// Types de lieux du type de galerie, puis les anciens types de zone (plans déjà dessinés) sans doublon.
+$zoneTypes = [];
+$locationDefaults = [];
+foreach (gt_locations($gaGallery) as $loc) {
+    $zoneTypes[(string) $loc['key']] = (string) $loc['label'];
+    $locationDefaults[(string) $loc['key']] = ['unit' => (string) $loc['unit'],
+        'price' => (int) ($loc['price_cents'] ?? 0) > 0 ? number_format($loc['price_cents'] / 100, 2, ',', '') : ''];
+}
+foreach (GALLERY_ZONE_TYPES as $zk => $zl) if (!isset($zoneTypes[$zk])) $zoneTypes[$zk] = $zl;
+$payload = ['map' => $map, 'shops' => $names, 'zoneTypes' => $zoneTypes, 'locationDefaults' => $locationDefaults, 'features' => gt_of($gaGallery)['features'],
+    'usages' => GALLERY_USAGES, 'flows' => GALLERY_FLOWS,
     'tiles' => ['osm' => GALLERY_MAP_TILE_PLAN, 'sat' => GALLERY_MAP_TILE_SAT]];
 $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
-$zoneTypes = GALLERY_ZONE_TYPES;
 $priceUnits = GALLERY_PRICE_UNITS;
 $publicUrl = '/galerie/' . $gaGallery['slug'] . '/' . ($gaGallery['published'] ? '' : '?apercu=' . gallery_preview_token($gaGallery)) . '#plan-commerces';
 ga_head('Plan des commerces');
@@ -62,12 +106,26 @@ ga_head('Plan des commerces');
       .plan-dot { display: block; width: 18px; height: 18px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.45), 0 2px 5px rgba(0,0,0,.35); }
       .plan-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); align-items: end; }
       .plan-grid[hidden], .plan-sub[hidden] { display: none; } .plan-grid input[type=color], .gcard input[type=color] { width: 100%; height: 38px; padding: 2px; }
+      /* Fiche de l'élément : panneau flottant à droite de la carte, pas sous la carte */
+      #sel { position: absolute; top: 10px; right: 10px; z-index: 1100; width: min(390px, calc(100% - 20px)); max-height: calc(100% - 20px); overflow: auto; grid-template-columns: 1fr; align-content: start; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 34px rgba(0,0,0,.28); }
+      #sel .selhead { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      #sel .selhead strong { font-size: .95rem; }
+      #selClose { border: 0; background: transparent; color: inherit; font-size: 1rem; line-height: 1; cursor: pointer; padding: 3px 7px; border-radius: 6px; }
+      #selClose:hover { background: rgba(0,0,0,.1); }
       .plan-sub { border: 1px dashed var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 8px; }
       .help { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; background: var(--panel); }
       .help summary { cursor: pointer; font-weight: 700; } .help ol, .help ul { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: .9rem; }
       .tip { font-size: .8rem; opacity: .75; margin: 0; }
       .mini { padding: 3px 8px; font-size: .8rem; } table.t input[type=text], table.t input[type=number] { min-width: 0; width: 100%; padding: 5px 7px; }
       .listplan { max-height: 240px; overflow: auto; } .listplan tr { cursor: pointer; } .listplan tr:hover { background: rgba(0,0,0,.05); }
+      .zdwrap { max-height: 300px; overflow: auto; margin: 6px 0 10px; border: 1px solid var(--line); border-radius: 8px; }
+      .zdwrap td { padding: 3px 4px; } .zdwrap td input[type=text], .zdwrap td select { min-width: 0; width: 100%; padding: 4px 6px; }
+      .zdwrap td:first-child, .zdwrap th:first-child { width: 28px; text-align: center; }
+      .zdlist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; font-size: .9rem; }
+      .zdlist li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .plan-arrow { display: block; width: 18px; height: 18px; transform: translate(-50%, -50%); }
+      .plan-arrow i { display: block; width: 18px; height: 18px; font: 800 13px/18px system-ui, sans-serif; text-align: center; color: #1d4ed8; background: rgba(255,255,255,.88); border: 1px solid rgba(29,78,216,.45); border-radius: 50%; transform-origin: 50% 50%; }
+      #plan.rotated .plan-arrow { rotate: calc(-1 * var(--bearing, 0deg)); }
       body.placing #plan { cursor: crosshair; }
       .plan-zone { display: inline-block; transform: translate(-50%, -100%); white-space: nowrap; font: 700 11px/1.3 system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase; color: #222; background: rgba(255,255,255,.88); border: 1px solid rgba(0,0,0,.3); border-radius: 4px; padding: 2px 7px; pointer-events: none; }
       .plan-zone small { font-weight: 500; opacity: .7; margin-right: 4px; }
@@ -84,14 +142,17 @@ ga_head('Plan des commerces');
       #planCard.fs #fsSide { position: absolute; top: 58px; right: 12px; bottom: 12px; width: 360px; z-index: 1250; overflow: auto; display: grid; gap: 10px; align-content: start; }
       #planCard.fs #fsSide > .gcard, #planCard.fs #fsSide > #saveBar { background: var(--panel); border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); padding: 10px 12px; margin: 0; }
       #planCard.fs #fsSide .gcard { min-width: 0; overflow-x: auto; }
-      #planCard.fs #fsSide .gcard > h2 { margin: 0; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-      #planCard.fs #fsSide .gcard > h2::after { content: '▾'; font-size: .75rem; opacity: .55; }
-      #planCard.fs #fsSide .gcard.collapsed > h2 { margin: 0; }
-      #planCard.fs #fsSide .gcard.collapsed > h2::after { content: '▸'; }
-      #planCard.fs #fsSide .gcard.collapsed > :not(h2) { display: none !important; }
+      /* Blocs repliables : les quatre cartes de gestion (hors de #planCard en page normale, dans #fsSide en plein écran) et la barre d'outils */
+      #catCard > h2, #numCard > h2, #bookCard > h2, #zoneCard > h2 { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      #catCard > h2::after, #numCard > h2::after, #bookCard > h2::after, #zoneCard > h2::after { content: '▾'; font-size: .75rem; opacity: .55; flex: none; }
+      #catCard.collapsed > h2::after, #numCard.collapsed > h2::after, #bookCard.collapsed > h2::after, #zoneCard.collapsed > h2::after { content: '▸'; }
+      #catCard.collapsed > :not(h2), #numCard.collapsed > :not(h2), #bookCard.collapsed > :not(h2), #zoneCard.collapsed > :not(h2) { display: none !important; }
+      #planCard.fs #fsSide .gcard > h2 { margin: 0; font-size: 1rem; }
+      #mapBarHead { justify-content: space-between; }
+      #mapBar.collapsed > .row:not(#mapBarHead) { display: none !important; }
       #planCard.fs #saveBar { position: sticky; top: 0; z-index: 3; }
       #planCard.fs #count { position: absolute; left: 12px; bottom: 12px; z-index: 1200; margin: 0; padding: 4px 12px; color: #fff; background: rgba(15,15,15,.62); border-radius: 999px; }
-      #planCard.fs #sel:not([hidden]) { position: absolute; left: 56px; bottom: 12px; width: min(660px, calc(100% - 440px)); max-height: 46vh; overflow: auto; z-index: 1210; padding: 12px; background: var(--panel); border-radius: 12px; box-shadow: 0 10px 34px rgba(0,0,0,.3); }
+      #planCard.fs #sel:not([hidden]) { top: 58px; right: 384px; left: auto; max-height: calc(100% - 120px); }
       /* le catalogue de surfaces passe en fiches empilées : plus rien ne déborde sur la carte */
       #fsSide table.t, #fsSide table.t tbody { display: block; width: 100%; } #fsSide table.t thead { display: none; }
       #fsSide #catBody tr { display: grid; grid-template-columns: 1fr 1fr 64px 1fr; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -102,7 +163,7 @@ ga_head('Plan des commerces');
       @media (max-width: 900px) {
         #planCard.fs #mapBar { left: 8px; right: 8px; }
         #planCard.fs #fsSide { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 44vh; }
-        #planCard.fs #sel:not([hidden]) { left: 8px; right: 8px; width: auto; bottom: calc(44vh + 16px); max-height: 30vh; }
+        #planCard.fs #sel:not([hidden]) { top: 58px; left: 8px; right: 8px; width: auto; max-height: 34vh; }
       }
     </style>
 
@@ -115,7 +176,7 @@ ga_head('Plan des commerces');
         <li><strong>Dessinez à la main</strong> avec les outils à gauche de la carte : repère (entrée, caisse, toilettes), rectangle ou zone libre (halle, cour), tracé (allée).</li>
         <li><strong>Numérotez</strong> : un numéro par emplacement dans sa fiche, ou « Numéroter tout » pour le faire d'un coup (de gauche à droite et de haut en bas, par exemple). Le compteur « prochain numéro » sert aussi à la pose et à la division.</li>
         <li><strong>Découpez une zone en parcelles</strong> : sélectionnez la zone (rue, hall) à 4 coins, choisissez le nombre de parcelles ou leurs dimensions, cochez « Allée au milieu » pour laisser un couloir entre deux rangées, puis « Découper ». L'aperçu donne la taille des parcelles ; chacune reçoit le numéro suivant.</li>
-        <li><strong>Reliez chaque emplacement à un commerce</strong> et notez en bas où se trouve sa marchandise : cette adresse alimente le champ « adresse du bien » des plateformes (Leboncoin…).</li>
+        <li><strong>Reliez chaque emplacement à un commerce</strong> pour que les visiteurs voient qui s'y trouve. L'adresse de la marchandise (rue, code postal, ville, stand) se règle dans « Présentation et commerces », et côté boutique dans « Mes galeries ».</li>
         <li>Pensez à <strong>Enregistrer le plan</strong> : rien n'est conservé avant.</li>
       </ol>
       <p class="tip" style="margin-top:8px;">Astuce : zoomez fort (jusqu'au niveau du mètre) avant de poser des surfaces ; l'échelle s'affiche en bas à gauche de la carte. Échap annule la pose en cours.</p>
@@ -127,6 +188,10 @@ ga_head('Plan des commerces');
         <button class="btn btn-primary" type="button" id="fsClose" hidden>✕ Fermer le plein écran</button></span></div>
       <div id="fsLayout"><div id="fsSide" hidden></div><div id="fsMain">
       <div id="mapBar">
+      <div class="row" id="mapBarHead">
+        <button class="btn mini" type="button" id="mapBarToggle" aria-expanded="true" title="Replier ou déplier les outils de la carte (recherche, fond, rotation)">Outils de la carte ▾</button>
+        <span class="meta" id="mode" role="status"></span>
+      </div>
       <div class="row">
         <input type="text" id="addr" placeholder="Rechercher une adresse, une rue, un lieu…" autocomplete="off"><button class="btn" type="button" id="addrGo">Centrer la carte</button>
         <span class="meta" id="addrMsg" role="status"></span>
@@ -135,7 +200,17 @@ ga_head('Plan des commerces');
         <label class="row" style="gap:6px;">Fond de carte
           <select id="baseSel" style="flex:none;min-width:0;"><option value="osm">Plan (IGN)</option><option value="sat">Satellite (IGN)</option></select></label>
         <label class="row" style="gap:6px;" title="N'affiche que votre dessin, sur une grille : utile pour un plan intérieur ou quand le fond gêne la lecture."><input type="checkbox" id="hideBase"> Masquer le fond de carte (plan seul)</label>
-        <span class="meta" id="mode" role="status"></span>
+      </div>
+      <div class="row" id="bgRow">
+        <span class="row" style="gap:6px;" title="Importez un plan masse, un plan de cadastre ou une photo : l'image est calée sur la carte à l'échelle, déplaçable, et enregistrée avec le plan.">
+          Fond importé
+          <input type="file" id="bgFile" accept="image/jpeg,image/png,image/webp" style="flex:none;max-width:230px;min-width:0;">
+          <button class="btn mini" type="button" id="bgGo">Importer</button>
+          <button class="btn mini danger" type="button" id="bgRemove" hidden>Retirer</button>
+        </span>
+        <label class="row" style="gap:6px;" title="Cochez, puis glissez l'image à la souris pour la caler sur le fond."><input type="checkbox" id="bgMove"> Déplacer l'image</label>
+        <label class="row" style="gap:6px;">Opacité <input type="range" id="bgOpacity" min="0.1" max="1" step="0.05" value="0.7" style="flex:1 1 110px;min-width:90px;max-width:190px;"></label>
+        <span class="meta" id="bgMsg" role="status"></span>
       </div>
       <div class="row">
         <label class="row" style="gap:6px;" title="Fait pivoter la carte et le dessin autour du centre : pratique pour aligner une allée ou une rue à l'écran. Le bouton Nord rétablit l'orientation ; la rotation n'est pas enregistrée avec le plan.">
@@ -146,13 +221,18 @@ ga_head('Plan des commerces');
         </label>
       </div>
       </div>
-      <div id="planWrap"><div id="plan" aria-label="Carte du plan d'implantation"></div><div id="planUi"></div></div>
+      <div id="planWrap"><div id="plan" aria-label="Carte du plan d'implantation"></div><div id="planUi"></div>
 
       <div class="plan-grid" id="sel" hidden>
+        <div class="selhead"><strong>Élément sélectionné</strong><button type="button" id="selClose" title="Fermer la fiche" aria-label="Fermer la fiche">✕</button></div>
         <label class="f">Nom affiché<input type="text" id="selLabel" maxlength="60" placeholder="Brocante de Paul, Entrée…"></label>
         <label class="f" title="Numéro d'emplacement affiché sur le plan (ex. 12 ou A3).">N° d'emplacement<input type="text" id="selNum" maxlength="12" placeholder="12"></label>
-        <label class="f" id="natureBox" title="Une zone regroupe des emplacements (rue, hall…) : elle porte un nom, un type et des tarifs.">Nature<select id="selRole"><option value="slot">Emplacement</option><option value="zone">Zone (rue, hall…)</option></select></label>
+        <label class="f" id="natureBox" title="Une zone regroupe des emplacements (rue, hall…) : elle porte un nom, un type et des tarifs. Un territoire cerne un quartier ou plusieurs rues et sert à y découvrir les emplacements potentiels.">Nature<select id="selRole"><option value="slot">Emplacement</option><option value="zone">Zone (rue, hall…)</option><option value="territoire">Territoire (quartier…)</option></select></label>
         <label class="f" id="ztypeBox" hidden>Type de zone<select id="selZtype"><?php foreach ($zoneTypes as $zk => $zl): ?><option value="<?= e($zk) ?>"><?= e($zl) ?></option><?php endforeach; ?></select></label>
+        <label class="f" id="usageBox" hidden>Affectation<select id="selUsage"></select></label>
+        <label class="f" id="flowBox" hidden>Sens de circulation<select id="selFlow"></select></label>
+        <label class="f" id="serviceBox" hidden>Service<input type="text" id="selService" maxlength="40" placeholder="Accueil, restauration, sanitaires…"></label>
+        <label class="row" id="indoorBox" hidden style="gap:6px;"><input type="checkbox" id="selIndoor"> À l'intérieur d'un bâtiment</label>
         <label class="f"><?= e(ucfirst(gt_word($gaGallery, 'member'))) ?> lié<select id="selShop"><option value="">— aucun —</option></select></label>
         <label class="f">Couleur<input type="color" id="selColor" value="#b5502e"></label>
         <label class="f">Précision (facultatif)<input type="text" id="selNote" maxlength="200" placeholder="Horaires, accès…"></label>
@@ -181,6 +261,28 @@ ga_head('Plan des commerces');
           </div>
           <p class="tip">Rotation autour du centre de l'élément ; ↻ tourne vers la droite (sens des aiguilles d'une montre), ↺ vers la gauche. Vous pouvez aussi tourner à la souris avec l'outil de rotation à gauche de la carte.</p>
         </div>
+        <div class="plan-sub" id="terrBox" hidden style="grid-column:1/-1;">
+          <strong>Découvrir les emplacements potentiels de ce territoire</strong>
+          <div class="row">
+            <label class="f" style="min-width:170px;" title="Surface du catalogue posée en grille à l'intérieur du territoire.">Surface<select id="terrSurf"></select></label>
+            <label class="f" style="min-width:100px;" title="Espace libre laissé entre deux emplacements.">Écart (m)<input type="number" id="terrGap" min="0" max="10" step="0.5" value="1"></label>
+            <label class="f" style="min-width:100px;" title="0 = grille alignée nord-sud / est-ouest ; tournez pour suivre l'orientation des rues du territoire.">Angle (°)<input type="number" id="terrAngle" min="-180" max="180" step="5" value="0"></label>
+            <label class="row" style="gap:6px;"><input type="checkbox" id="terrGhost" checked> Aperçu sur la carte</label>
+            <button class="btn btn-primary" type="button" id="terrApply">Créer les emplacements</button>
+            <button class="btn" type="button" id="terrZones" title="Analyse les bâtiments, voiries, parkings et services de ce territoire (BD TOPO IGN) dans l'assistant de zonage.">Analyser les zones du site</button>
+          </div>
+          <p class="tip" id="terrPreview"></p>
+          <p class="tip">Un quadrillage de la surface choisie est testé dans tout le territoire (cellules entièrement à l'intérieur). Création en un clic : chaque emplacement reçoit le numéro suivant si « numéroter automatiquement » est coché ; dessinez ensuite les zones (rues) à l'intérieur pour leur donner un tarif.</p>
+        </div>
+        <div class="plan-sub" id="subBox" hidden style="grid-column:1/-1;">
+          <strong>Diviser en sous-zones</strong>
+          <div class="row">
+            <label class="f" style="min-width:110px;">Nombre<input type="number" id="subN" min="2" max="20" value="2"></label>
+            <label class="f" style="min-width:190px;">Découpe<select id="subAxis"><option value="auto">le long du plus grand côté</option><option value="lat">nord → sud (bandes horizontales)</option><option value="lng">ouest → est (bandes verticales)</option></select></label>
+            <button class="btn" type="button" id="subGo">Diviser</button>
+          </div>
+          <p class="tip">Chaque partie devient une zone distincte et reprend l'affectation, le type, la couleur et l'état intérieur/extérieur de l'ensemble ; l'originale est remplacée. Pour les formes à 4 coins, « Découper en parcelles » reste plus précis.</p>
+        </div>
         <div class="plan-sub" id="splitBox" hidden style="grid-column:1/-1;">
           <strong id="splitTitle">Découper en parcelles</strong>
           <div class="row">
@@ -201,7 +303,7 @@ ga_head('Plan des commerces');
               <label class="f" style="min-width:130px;">Largeur de l'allée (m)<input type="number" id="splitAisleW" min="0.5" max="30" step="0.5" value="3"></label>
               <label class="row" style="gap:6px;"><input type="checkbox" id="splitAisleDraw" checked> Dessiner l'allée</label>
             </span>
-            <label class="row" style="gap:6px;"><input type="checkbox" id="splitGhost" checked> Aperçu sur la carte</label>
+            <label class="row" style="gap:6px;"><input type="checkbox" id="splitGhost"> Aperçu sur la carte</label>
           </div>
           <p class="tip" id="splitPreview"></p>
 
@@ -232,16 +334,47 @@ ga_head('Plan des commerces');
           <p class="tip" id="splitHelp">Une zone (rue, hall…) est conservée et reçoit les parcelles à l'intérieur ; un emplacement est remplacé par ses parcelles. Si « numéroter » est coché plus bas, chaque parcelle reçoit le numéro suivant. Disponible pour les formes à 4 coins (rectangle).</p>
         </div>
       </div>
+      </div>
 
       <p class="meta" id="count"></p>
       <div class="row" id="saveBar">
         <button class="btn btn-primary" type="submit" form="saveForm">Enregistrer le plan</button>
+        <button class="btn" type="button" id="undoBtn" disabled title="Annuler la dernière modification du plan (Ctrl+Z)">↩ Annuler</button>
         <a class="btn" href="<?= e($publicUrl) ?>" target="_blank" rel="noopener">Voir sur la page publique ↗</a>
       </div>
       </div></div>
     </section>
 
-    <section class="gcard" id="catCard">
+    <section class="gcard" id="zoneCard">
+      <h2>Assistant de zonage du site</h2>
+      <p class="meta">Après avoir dessiné un territoire, l'analyse des données IGN (BD TOPO) propose ses zones : bâtiments à l'intérieur desquels se tient l'événement, voiries avec leur sens de circulation, parkings, services et équipements, et les points d'entrée. Cochez ce qui sert au déballage, ajustez l'affectation, puis ajoutez au plan.</p>
+      <div class="row">
+        <label class="f" style="min-width:240px;">Territoire à analyser<select id="zdTerr"></select></label>
+        <label class="f" style="min-width:140px;" title="Les constructions plus petites (abri, kiosque…) ne sont pas proposées.">Surface mini (m²)<input type="number" id="zdMin" min="1" max="5000" step="1" value="25"></label>
+      </div>
+      <div class="row">
+        <label class="row" style="gap:6px;flex:none;white-space:nowrap;"><input type="checkbox" id="zdRoads" checked style="width:auto;flex:none;"> Voirie et sens de circulation</label>
+        <label class="row" style="gap:6px;flex:none;white-space:nowrap;"><input type="checkbox" id="zdParking" checked style="width:auto;flex:none;"> Parkings</label>
+        <label class="row" style="gap:6px;flex:none;white-space:nowrap;"><input type="checkbox" id="zdServices" checked style="width:auto;flex:none;"> Services et équipements</label>
+        <button class="btn btn-primary" type="button" id="zdGo">Analyser le site</button>
+      </div>
+      <p class="tip" id="zdMsg" role="status"></p>
+      <div id="zdResult" hidden>
+        <p class="meta" id="zdSummary"></p>
+        <div class="zdwrap">
+          <table class="t"><thead><tr><th><input type="checkbox" id="zdAll" checked title="Tout cocher ou décocher"></th><th style="min-width:300px;">Zone proposée</th><th style="min-width:150px;">Affectation</th><th class="num">Surface</th><th title="À l'intérieur d'un bâtiment">Int.</th><th style="width:120px;">Service</th></tr></thead><tbody id="zdBody"></tbody></table>
+        </div>
+        <div class="row">
+          <button class="btn btn-primary" type="button" id="zdAdd">Ajouter les zones cochées</button>
+          <button class="btn" type="button" id="zdClear">Effacer la proposition</button>
+        </div>
+        <p class="tip">Les zones ajoutées sont des zones du plan : elles portent l'affectation choisie, restent modifiables dans leur fiche et peuvent être découpées en sous-zones. « Exclu du déballage » signale un espace où aucun emplacement ne doit être installé (accès secours, zone technique…). Un emplacement dans une zone de circulation, de service, de parking ou exclue n'hérite d'aucun tarif.</p>
+        <div id="zdEntries" hidden>
+          <strong>Entrées / sorties détectées</strong>
+          <ul class="zdlist" id="zdEntryList"></ul>
+        </div>
+      </div>
+    </section>
       <h2>Catalogue de surfaces</h2>
       <p class="meta">Les tailles d'emplacement que vous proposez (en mètres). « Poser » dessine l'emplacement à l'échelle sur la carte, à l'endroit où vous cliquez.</p>
       <table class="t"><thead><tr><th>Nom</th><th style="width:90px">Larg. (m)</th><th style="width:90px">Prof. (m)</th><th style="width:70px">Couleur</th><th class="num" style="width:90px">Surface</th><th style="width:170px"></th></tr></thead><tbody id="catBody"></tbody></table>
@@ -266,7 +399,7 @@ ga_head('Plan des commerces');
         <button class="btn" type="button" id="numAll">Numéroter tout</button>
       </div>
       <p class="tip">Seules les zones (rectangles, polygones) sont numérotées par « Numéroter tout » ; les repères et tracés gardent un nom libre.</p>
-      <div class="listplan" id="listWrap" hidden><table class="t"><thead><tr><th>N°</th><th>Nom</th><th>Zone</th><th>Commerce</th><th class="num">m²</th><th class="num">Tarif</th></tr></thead><tbody id="listBody"></tbody></table></div>
+      <div class="listplan" id="listWrap" hidden><table class="t"><thead><tr><th>N°</th><th>Nom</th><th>Zone</th><th>Affectation</th><th>Commerce</th><th class="num">m²</th><th class="num">Tarif</th></tr></thead><tbody id="listBody"></tbody></table></div>
     </section>
 
     <section class="gcard" id="bookCard">
@@ -281,13 +414,6 @@ ga_head('Plan des commerces');
       <p class="tip">Seuls les emplacements (rectangles, polygones) sont réservables ; ceux déjà liés à un commerce ou attribués ne le sont plus. Les emplacements hors de toute zone n'ont pas de tarif affiché.</p>
     </section>
 
-    <section class="gcard" id="placesCard">
-      <h2>Localisation de la marchandise</h2>
-      <p class="meta">Où se trouve physiquement la marchandise de chaque commerce. Cette adresse alimente automatiquement le champ « adresse du bien » des formulaires des plateformes (le bot Leboncoin l'utilise à la place de l'adresse du profil) pour les commerces de ce serveur.</p>
-      <?php if (!$gaGallery['members']): ?><p class="meta">Ajoutez d'abord des commerces à la galerie (page « Présentation et commerces »).</p><?php endif; ?>
-      <div id="places" style="display:grid;gap:10px;"></div>
-    </section>
-
     <form method="post" id="saveForm" class="row">
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><?= $limited ? '' : '<input type="hidden" name="g" value="' . e($gaSlug) . '">' ?>
       <input type="hidden" name="action" value="save"><input type="hidden" name="map" id="mapJson">
@@ -300,7 +426,7 @@ ga_head('Plan des commerces');
     <script>
     (function () {
       var data = <?= json_encode($payload, $flags) ?>;
-      var saved = data.map || { center: null, zoom: 17, base: 'osm', items: [], catalog: [], places: {} };
+      var saved = data.map || { center: null, zoom: 17, base: 'osm', items: [], catalog: [] };
       var $ = function (id) { return document.getElementById(id); };
       var planEl = $('plan'), planWrap = $('planWrap');
       var map = L.map('plan', { zoomControl: true, maxZoom: 22 }).setView(saved.center || [46.6, 2.4], saved.center ? saved.zoom : 6);
@@ -334,6 +460,66 @@ ga_head('Plan des commerces');
       $('baseSel').addEventListener('change', function () { baseKind = this.value; applyBase(); });
       $('hideBase').addEventListener('change', function () { hidden = this.checked; applyBase(); });
       applyBase();
+
+      // --- Fond importé (plan masse, cadastre, photo aérienne…) : image calée sur la carte à l'échelle, déplaçable, enregistrée avec le plan ---
+      var CSRF = <?= json_encode(csrf_token()) ?>;
+      var bg = saved.background && saved.background.path ? { path: saved.background.path, bounds: saved.background.bounds, opacity: saved.background.opacity || 0.7 } : null;
+      var bgLayer = null, bgPaneName = 'planBgPane';
+      map.createPane(bgPaneName).style.zIndex = 350;   // sous le dessin (overlayPane = 400), au-dessus des tuiles (200)
+      function bgBoundsArr(b) { return [[b.getNorth(), b.getWest()], [b.getSouth(), b.getEast()]]; }
+      function renderBg() {
+        if (bgLayer) { map.removeLayer(bgLayer); bgLayer = null; }
+        $('bgRemove').hidden = !bg;
+        if (!bg) return;
+        $('bgOpacity').value = bg.opacity;
+        bgLayer = L.imageOverlay('/' + bg.path, L.latLngBounds(bg.bounds), { pane: bgPaneName, opacity: bg.opacity, interactive: $('bgMove').checked });
+        bgLayer.addTo(map);
+        if ($('bgMove').checked) bgEnableDrag();
+      }
+      function bgEnableDrag() {
+        if (!bgLayer) return;
+        bgLayer.on('mousedown touchstart', function (e) {
+          if (!$('bgMove').checked || !bg) return;
+          L.DomEvent.stop(e.originalEvent);
+          map.dragging.disable();
+          var ev0 = e.originalEvent.touches ? e.originalEvent.touches[0] : e.originalEvent;
+          var startPt = map.mouseEventToContainerPoint(ev0);
+          var b0 = bgLayer.getBounds(), nw0 = map.latLngToContainerPoint(b0.getNorthWest()), se0 = map.latLngToContainerPoint(b0.getSouthEast());
+          function mv(ev) { var t = ev.touches ? ev.touches[0] : ev; var pt = map.mouseEventToContainerPoint(t); var d = pt.subtract(startPt); bgLayer.setBounds(L.latLngBounds(map.containerPointToLatLng(nw0.add(d)), map.containerPointToLatLng(se0.add(d)))); }
+          function up() { map.off('mousemove touchmove', mv); map.off('mouseup touchend', up); map.dragging.enable(); if (bg) bg.bounds = bgBoundsArr(bgLayer.getBounds()); }
+          map.on('mousemove touchmove', mv); map.on('mouseup touchend', up);
+        });
+      }
+      $('bgGo').addEventListener('click', function () {
+        var f = $('bgFile').files[0];
+        if (!f) { $('bgMsg').textContent = 'Choisissez une image (JPEG, PNG ou WebP, 12 Mo au plus).'; return; }
+        $('bgMsg').textContent = 'Envoi…';
+        var fd = new FormData();
+        fd.append('csrf', CSRF); fd.append('action', 'bg'); fd.append('bg', f);
+        fetch(location.pathname + location.search, { method: 'POST', body: fd, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!j.ok) { $('bgMsg').textContent = j.error || 'Import impossible.'; return; }
+            var img = new Image();
+            img.onload = function () {     // calage initial : l'image tient à 90 % de la vue courante, aux bonnes proportions
+              var r = img.naturalWidth / img.naturalHeight, s = map.getSize();
+              var wPx = s.x * 0.9, hPx = wPx / r;
+              if (hPx > s.y * 0.9) { hPx = s.y * 0.9; wPx = hPx * r; }
+              var cPt = map.latLngToContainerPoint(map.getCenter());
+              var nw = map.containerPointToLatLng(cPt.subtract([wPx / 2, hPx / 2])), se = map.containerPointToLatLng(cPt.add([wPx / 2, hPx / 2]));
+              bg = { path: j.path, bounds: [[nw.lat, nw.lng], [se.lat, se.lng]], opacity: parseFloat($('bgOpacity').value) || 0.7 };
+              renderBg();
+              $('bgMsg').textContent = 'Image calée au centre de la vue : cochez « Déplacer l\'image » pour l\'aligner sur le fond, puis enregistrez le plan.';
+            };
+            img.onerror = function () { $('bgMsg').textContent = 'Image reçue mais illisible.'; };
+            img.src = '/' + j.path;
+          })
+          .catch(function () { $('bgMsg').textContent = 'Envoi impossible (réseau).' });
+      });
+      $('bgRemove').addEventListener('click', function () { bg = null; renderBg(); $('bgMsg').textContent = 'Fond retiré du plan (l\'image reste sur le serveur jusqu\'au prochain enregistrement).'; });
+      $('bgOpacity').addEventListener('input', function () { if (bg) { bg.opacity = parseFloat(this.value); if (bgLayer) bgLayer.setOpacity(bg.opacity); } });
+      $('bgMove').addEventListener('change', renderBg);
+      renderBg();
 
       // --- Rotation du fond de carte ---
       // La carte pivote autour de son centre ; pour qu'aucun coin ne reste vide, le cadre prend la taille de la diagonale.
@@ -373,11 +559,18 @@ ga_head('Plan des commerces');
       $('bearingReset').addEventListener('click', function () { setBearing(0); });
 
       // --- Éléments du plan ---
-      var group = L.featureGroup().addTo(map), selected = null, placing = null;
+      var group = L.featureGroup().addTo(map), selected = null, placing = null, loading = true;
       var catalog = (saved.catalog || []).map(function (c) { return { id: c.id, name: c.name, w: c.w, d: c.d, color: c.color }; });
-      var places = (saved.places && !Array.isArray(saved.places)) ? JSON.parse(JSON.stringify(saved.places)) : {};   // PHP envoie [] quand il n'y en a pas : ce serait un tableau, qui perd ses clés à l'enregistrement
       var shopSel = $('selShop');
       Object.keys(data.shops).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = data.shops[k]; shopSel.appendChild(o); });
+      function fillSelect(sel, map, first) {
+        sel.textContent = '';
+        if (first) { var o0 = document.createElement('option'); o0.value = ''; o0.textContent = first; sel.appendChild(o0); }
+        Object.keys(map).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = map[k]; sel.appendChild(o); });
+      }
+      fillSelect($('selUsage'), data.usages, '— non précisé —');
+      fillSelect($('selFlow'), data.flows, '— non précisé —');
+      var UCOL = { vente: '#b5502e', circulation: '#1d4ed8', service: '#0f766e', parking: '#6b7280', exclu: '#b42318', acces: '#7c3aed' };
 
       function uid() { return Math.random().toString(36).slice(2, 10).padEnd(8, '0'); }
       function text(t) { var n = document.createElement('span'); n.textContent = t; return n; }   // Leaflet interprète une chaîne comme du HTML : on passe un nœud texte
@@ -385,22 +578,46 @@ ga_head('Plan des commerces');
       function tip(m) { return [m.num, m.label].filter(Boolean).join(' · '); }
       var zoneLabels = L.layerGroup().addTo(map);
       function isZone(l) { return l instanceof L.Polygon && l._plan && l._plan.role === 'zone'; }
+      function isTerr(l) { return l instanceof L.Polygon && l._plan && l._plan.role === 'territoire'; }
       function look(layer) {
         var m = layer._plan;
+        // L'affectation règle le remplissage et le trait ; la couleur reste celle de l'élément (modifiable dans sa fiche).
+        var uo = { vente: { fill: 0.3, dash: null, w: 2 }, circulation: { fill: 0.14, dash: null, w: 2 }, service: { fill: 0.14, dash: null, w: 2 },
+          parking: { fill: 0.16, dash: '6 4', w: 2 }, exclu: { fill: 0.1, dash: '3 4', w: 2 }, acces: { fill: 0.12, dash: null, w: 2.5 } }[m.usage];
         if (layer instanceof L.Marker) layer.setIcon(dot(m.color));
+        else if (isTerr(layer)) layer.setStyle({ color: m.color, weight: 2.5, dashArray: '2 6', fillColor: m.color, fillOpacity: 0.04 });
+        else if (uo) layer.setStyle({ color: m.color, weight: uo.w, dashArray: uo.dash, fillColor: m.color, fillOpacity: layer instanceof L.Polygon ? uo.fill : 0 });
         else if (isZone(layer)) layer.setStyle({ color: m.color, weight: 2, dashArray: '8 6', fillColor: m.color, fillOpacity: 0.07 });
         else layer.setStyle({ color: m.color, weight: 2, dashArray: null, fillColor: m.color, fillOpacity: layer instanceof L.Polygon ? 0.3 : 0 });
         layer.unbindTooltip();
-        if (!isZone(layer) && tip(m)) layer.bindTooltip(text(tip(m)), layer instanceof L.Marker ? { permanent: true, direction: 'top', offset: [0, -10], className: 'plan-label' } : { permanent: true, direction: 'center', className: 'plan-label' });
-        if (isZone(layer) && layer.bringToBack) layer.bringToBack();
+        if (!isZone(layer) && !isTerr(layer) && tip(m)) layer.bindTooltip(text(tip(m)), layer instanceof L.Marker ? { permanent: true, direction: 'top', offset: [0, -10], className: 'plan-label' } : { permanent: true, direction: 'center', className: 'plan-label' });
       }
-      // Étiquettes des zones (« RUE · Rue des Fleurs ») posées au milieu du bord nord, hors du fichier enregistré
+      // Zones et territoires restent sous les emplacements ; la dernière zone dessinée passe devant les précédentes, pour qu'un clic
+      // dans un recouvrement sélectionne bien la zone qu'on vient de créer et non celle d'en dessous.
+      function restack() {
+        var zones = [], terrs = [];
+        group.getLayers().forEach(function (l) { if (isTerr(l)) terrs.push(l); else if (isZone(l)) zones.push(l); });
+        zones.slice().reverse().forEach(function (l) { l.bringToBack(); });
+        terrs.slice().reverse().forEach(function (l) { l.bringToBack(); });
+      }
+      // Étiquettes des zones (« RUE · Rue des Fleurs ») et territoires (« ⬡ Quartier… ») posées au milieu du bord nord, hors du fichier enregistré
       function refreshZoneLabels() {
         zoneLabels.clearLayers();
-        polygons().filter(isZone).forEach(function (z) {
+        polygons().filter(function (l) { return isZone(l) || isTerr(l); }).forEach(function (z) {
           var b = z.getBounds(), n = document.createElement('span'); n.className = 'plan-zone';
-          var zt = data.zoneTypes[z._plan.ztype] || '', zl = z._plan.label || '(zone sans nom)'; if (zt && zl.toLowerCase().indexOf(zt.toLowerCase()) !== 0 && z._plan.ztype !== 'autre') { var t = document.createElement('small'); t.textContent = zt; n.appendChild(t); } n.appendChild(document.createTextNode(zl));
-          zoneLabels.addLayer(L.marker(z._plan.ztype === 'allee' ? b.getCenter() : [b.getNorth(), b.getCenter().lng], { icon: L.divIcon({ className: '', html: n, iconSize: [0, 0] }), interactive: false, keyboard: false }));
+          if (isTerr(z)) { var q = document.createElement('small'); q.textContent = '⬡'; n.appendChild(q); }
+          var use = z._plan.usage && z._plan.usage !== 'vente' ? (data.usages[z._plan.usage] || '') : '';
+          var zt = use || data.zoneTypes[z._plan.ztype] || '', zl = z._plan.label || (isTerr(z) ? '(territoire sans nom)' : '(zone sans nom)'); if (zt && zl.toLowerCase().indexOf(zt.toLowerCase()) !== 0 && (use || z._plan.ztype !== 'autre')) { var t = document.createElement('small'); t.textContent = zt; n.appendChild(t); } n.appendChild(document.createTextNode(zl));
+          zoneLabels.addLayer(L.marker(z._plan.ztype === 'allee' || z._plan.usage === 'circulation' ? b.getCenter() : [b.getNorth(), b.getCenter().lng], { icon: L.divIcon({ className: '', html: n, iconSize: [0, 0] }), interactive: false, keyboard: false }));
+        });
+        // Sens de circulation : une flèche au centre des zones de voirie (double sens = flèche à deux têtes)
+        polygons().filter(function (l) { return l._plan.usage === 'circulation' && l._plan.flow; }).forEach(function (z) {
+          var p = points(z);
+          if (p.length < 2) return;
+          var a = Math.atan2((p[1][1] - p[0][1]) * Math.cos(p[0][0] * Math.PI / 180), p[1][0] - p[0][0]) * 180 / Math.PI;
+          if (z._plan.flow === 'inverse') a += 180;
+          var glyph = z._plan.flow === 'double' ? '↕' : '↑';
+          zoneLabels.addLayer(L.marker(centroid(z), { icon: L.divIcon({ className: '', html: '<span class="plan-arrow"><i style="transform:rotate(' + a.toFixed(1) + 'deg)">' + glyph + '</i></span>', iconSize: [0, 0] }), interactive: false, keyboard: false }));
         });
       }
       function pointIn(poly, lat, lng) {
@@ -411,11 +628,17 @@ ga_head('Plan des commerces');
         }
         return inside;
       }
-      // Zone qui contient l'emplacement (la plus petite si elles se recouvrent)
+      // Zone qui contient l'emplacement (la plus petite si elles se recouvrent) ; un territoire ne tarife pas
       function zoneOf(layer) {
-        if (!(layer instanceof L.Polygon) || isZone(layer)) return null;
+        if (!(layer instanceof L.Polygon) || isZone(layer) || isTerr(layer)) return null;
         var c = centroid(layer), best = null, bestArea = Infinity;
         polygons().filter(isZone).forEach(function (z) { var pz = points(z); if (pointIn(pz, c[0], c[1])) { var a = areaM2(pz); if (a < bestArea) { best = z; bestArea = a; } } });
+        return best;
+      }
+      // Territoire qui contient l'élément (plus grande surface), pour la découverte d'emplacements
+      function terrOf(layer) {
+        var c = centroid(layer), best = null, bestArea = -1;
+        polygons().filter(isTerr).forEach(function (t) { var pt = points(t); if (pointIn(pt, c[0], c[1])) { var a = areaM2(pt); if (a > bestArea) { best = t; bestArea = a; } } });
         return best;
       }
       function zoneName(z) { var zt = data.zoneTypes[z._plan.ztype] || '', zl = z._plan.label || '(sans nom)'; return zt && z._plan.ztype !== 'autre' && zl.toLowerCase().indexOf(zt.toLowerCase()) !== 0 ? zt + ' ' + zl : zl; }
@@ -429,8 +652,8 @@ ga_head('Plan des commerces');
         return m.unit === 'ml' ? Math.round(rate * frontM(p)) : m.unit === 'm2' ? Math.round(rate * areaM2(p)) : rate;
       }
       function track(layer, meta) {
-        meta.id = meta.id || uid(); meta.label = meta.label || ''; meta.num = meta.num || ''; meta.shop = meta.shop || ''; meta.note = meta.note || ''; meta.surface = meta.surface || ''; meta.color = meta.color || '#b5502e'; meta.role = meta.role || 'slot'; meta.ztype = meta.ztype || 'autre'; meta.unit = meta.unit || 'slot'; meta.price = meta.price || ''; meta.pricePro = meta.pricePro || '';
-        layer._plan = meta; group.addLayer(layer); look(layer);
+        meta.id = meta.id || uid(); meta.label = meta.label || ''; meta.num = meta.num || ''; meta.shop = meta.shop || ''; meta.note = meta.note || ''; meta.surface = meta.surface || ''; meta.color = meta.color || '#b5502e'; meta.role = meta.role || 'slot'; meta.ztype = meta.ztype || 'autre'; meta.unit = meta.unit || 'slot'; meta.price = meta.price || ''; meta.pricePro = meta.pricePro || ''; meta.usage = meta.usage || ''; meta.flow = meta.flow || ''; meta.indoor = !!meta.indoor; meta.service = meta.service || '';
+        layer._plan = meta; group.addLayer(layer); look(layer); if (!loading) restack();
         layer.on('click', function (e) { if (placing) return; L.DomEvent.stopPropagation(e); select(layer); });
         return layer;
       }
@@ -461,26 +684,63 @@ ga_head('Plan des commerces');
         polys.slice().sort(function (a, b) { return (isZone(b) - isZone(a)) || String(a._plan.num).localeCompare(String(b._plan.num), 'fr', { numeric: true }); }).forEach(function (l) {
           var m = l._plan, tr = document.createElement('tr'), z = zoneOf(l), p = isZone(l) ? null : slotPrice(l, false), pp = isZone(l) ? null : slotPrice(l, true);
           var price = isZone(l) ? (toCents(m.price) ? eur(toCents(m.price)) + ' ' + ({ ml: '/ml', m2: '/m²', slot: '/empl.' })[m.unit] : '') : (p == null ? '' : eur(p) + (pp != null && pp !== p ? ' (pro ' + eur(pp) + ')' : ''));
-          [m.num || '—', (isZone(l) ? '▦ ' : '') + (m.label || ''), isZone(l) ? (data.zoneTypes[m.ztype] || '') : (z ? zoneName(z) : ''), m.shop && data.shops[m.shop] ? data.shops[m.shop] : '', fmtM2(areaM2(points(l))), price].forEach(function (v, i) { var td = document.createElement('td'); td.textContent = v; if (i >= 4) td.className = 'num'; tr.appendChild(td); });
+          [m.num || '—', (isZone(l) ? '▦ ' : isTerr(l) ? '⬡ ' : '') + (m.label || ''), isZone(l) ? (data.zoneTypes[m.ztype] || '') : (z ? zoneName(z) : ''), m.usage && data.usages[m.usage] ? data.usages[m.usage] : '', m.shop && data.shops[m.shop] ? data.shops[m.shop] : '', fmtM2(areaM2(points(l))), price].forEach(function (v, i) { var td = document.createElement('td'); td.textContent = v; if (i >= 5) td.className = 'num'; tr.appendChild(td); });
           tr.addEventListener('click', function () { map.fitBounds(l.getBounds().pad(0.8), { maxZoom: 21 }); select(l); });
           body.appendChild(tr);
         });
+        fillTerrList();
       }
+
+      // --- Annulation (Ctrl+Z) : instantanés des éléments du plan ; chaque action en pousse un avant de modifier ---
+      var undoStack = [], lastUndoAt = 0, suspendUndo = false;
+      function snapshotItems() {
+        return group.getLayers().map(function (l) { var m = l._plan; return { id: m.id, kind: kindOf(l), pts: points(l), label: m.label, num: m.num, shop: m.shop, color: m.color, note: m.note, surface: m.surface, role: m.role, ztype: m.ztype, unit: m.unit, price: m.price, pricePro: m.pricePro, usage: m.usage, flow: m.flow, indoor: m.indoor, service: m.service }; });
+      }
+      function pushUndo(force) {
+        if (suspendUndo) return;
+        var now = Date.now();      // évite les doublons quand Geoman émet enable + dragstart pour le même geste
+        if (!force && now - lastUndoAt < 400) return;
+        lastUndoAt = now;
+        undoStack.push(JSON.stringify(snapshotItems()));
+        if (undoStack.length > 60) undoStack.shift();
+        $('undoBtn').disabled = false;
+      }
+      function doUndo() {
+        if (!undoStack.length) return;
+        var snap = undoStack.pop();
+        group.clearLayers(); select(null); ghost.clearLayers();
+        JSON.parse(snap).forEach(function (it) {
+          var layer = it.kind === 'marker' ? L.marker(it.pts[0], { icon: dot(it.color) }) : it.kind === 'polygon' ? L.polygon(it.pts) : L.polyline(it.pts);
+          track(layer, { id: it.id, label: it.label, num: it.num, shop: it.shop, color: it.color, note: it.note, surface: it.surface, role: it.role, ztype: it.ztype, unit: it.unit, price: it.price, pricePro: it.pricePro, usage: it.usage, flow: it.flow, indoor: it.indoor, service: it.service });
+        });
+        $('undoBtn').disabled = !undoStack.length;
+        lastUndoAt = Date.now();      // Geoman ré-active ses modes globaux juste après un ré-ajout de couche (setTimeout) : cet instantané fantôme est ignoré
+        count();
+      }
+      $('undoBtn').addEventListener('click', doUndo);
+      document.addEventListener('keydown', function (e) {
+        if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;   // Ctrl+Z reste natif dans les champs
+        e.preventDefault(); doUndo();
+      });
 
       (saved.items || []).forEach(function (it) {
         var layer = it.kind === 'marker' ? L.marker(it.pts[0], { icon: dot(it.color) }) : it.kind === 'polygon' ? L.polygon(it.pts) : L.polyline(it.pts);
-        track(layer, { id: it.id, label: it.label, num: it.num, shop: it.shop, color: it.color, note: it.note, surface: it.surface, role: it.role || 'slot', ztype: it.ztype, unit: it.unit, price: it.price_cents ? (it.price_cents / 100).toString().replace('.', ',') : '', pricePro: it.price_pro_cents ? (it.price_pro_cents / 100).toString().replace('.', ',') : '' });
+        track(layer, { id: it.id, label: it.label, num: it.num, shop: it.shop, color: it.color, note: it.note, surface: it.surface, role: it.role || 'slot', ztype: it.ztype, unit: it.unit, price: it.price_cents ? (it.price_cents / 100).toString().replace('.', ',') : '', pricePro: it.price_pro_cents ? (it.price_pro_cents / 100).toString().replace('.', ',') : '', usage: it.usage, flow: it.flow, indoor: it.indoor, service: it.service });
       });
+      loading = false; restack();
       if (!saved.center && group.getLayers().length) map.fitBounds(group.getBounds().pad(0.2));
       count();
 
       // --- Numérotation ---
       function numText() { var n = parseInt($('numNext').value, 10); n = isNaN(n) ? 1 : n; var t = $('numPrefix').value + n; $('numNext').value = n + 1; return t; }
-      function autoNum(layer) { if ($('numAuto').checked && layer instanceof L.Polygon && !isZone(layer) && !layer._plan.num) { layer._plan.num = numText(); look(layer); } }
+      function autoNum(layer) { if ($('numAuto').checked && layer instanceof L.Polygon && !isZone(layer) && !isTerr(layer) && !layer._plan.num) { layer._plan.num = numText(); look(layer); } }
       $('numAll').addEventListener('click', function () {
-        var only = $('numOnlyEmpty').checked, order = $('numOrder').value, byZone = $('numByZone').checked, list = polygons().filter(function (l) { return !isZone(l) && (!only || !l._plan.num); });
+        var only = $('numOnlyEmpty').checked, order = $('numOrder').value, byZone = $('numByZone').checked, list = polygons().filter(function (l) { return !isZone(l) && !isTerr(l) && (!only || !l._plan.num); });
         if (!list.length) { $('count').textContent = 'Aucun emplacement à numéroter.'; return; }
         if (!only && !confirm('Renuméroter ' + list.length + ' emplacement(s), y compris ceux qui ont déjà un numéro ?')) return;
+        pushUndo();
         if (order !== 'created') {
           var info = list.map(function (l) { var c = centroid(l), p = points(l), la = p.map(function (x) { return x[0]; }), ln = p.map(function (x) { return x[1]; }); return { l: l, lat: c[0], lng: c[1], h: Math.max.apply(null, la) - Math.min.apply(null, la), w: Math.max.apply(null, ln) - Math.min.apply(null, ln) }; });
           var hs = info.map(function (i) { return i.h; }).sort(function (a, b) { return a - b; }), ws = info.map(function (i) { return i.w; }).sort(function (a, b) { return a - b; });
@@ -518,6 +778,7 @@ ga_head('Plan des commerces');
       map.on('click', function (e) {
         if (!placing) { select(null); return; }
         var angle = parseFloat($('angle').value) || 0;
+        pushUndo(true);
         var layer = track(L.polygon(rectAround(e.latlng, placing.w, placing.d, angle)), { color: placing.color, surface: placing.id, label: '' });
         autoNum(layer); count();
       });
@@ -551,26 +812,42 @@ ga_head('Plan des commerces');
 
       // Déplacement, modification des coins, rotation à la souris : zones, appartenance et tarifs sont recalculés
       group.on('pm:edit pm:dragend pm:rotateend', function () { renderList(); if (selected) select(selected); });
+      // Instantané avant le geste : Geoman émet pm:enable à l'activation d'un mode et pm:dragstart / pm:rotatestart au début du geste (fenêtre de 400 ms = un seul instantané)
+      group.on('pm:enable pm:dragstart pm:rotatestart', function () { pushUndo(); });
 
       // --- Création au crayon, suppression ---
       map.on('pm:create', function (e) {
         var layer = e.layer;
         if (e.shape === 'Marker') { layer.pm.disable(); map.pm.disableDraw(); }   // un repère à la fois : sans cela l'outil reste actif
+        pushUndo(true);
         track(layer, {});
         autoNum(layer); select(layer); count();
       });
-      map.on('pm:remove', function (e) { if (e.layer === selected) select(null); group.removeLayer(e.layer); count(); });
+      map.on('pm:remove', function (e) {
+        var snap = snapshotItems();
+        if (e.layer._plan && !snap.some(function (i) { return i.id === e.layer._plan.id; })) {   // Geoman peut déjà l'avoir retiré du groupe
+          var m = e.layer._plan;
+          snap.push({ id: m.id, kind: kindOf(e.layer), pts: points(e.layer), label: m.label, num: m.num, shop: m.shop, color: m.color, note: m.note, surface: m.surface, role: m.role, ztype: m.ztype, unit: m.unit, price: m.price, pricePro: m.pricePro });
+        }
+        undoStack.push(JSON.stringify(snap));
+        if (undoStack.length > 60) undoStack.shift();
+        $('undoBtn').disabled = false;
+        if (e.layer === selected) select(null); group.removeLayer(e.layer); count();
+      });
 
       // --- Rotation d'un élément autour de son centre (calculée en mètres : les formes gardent leurs proportions) ---
       function rotateLayer(layer, deg) {
         if (layer instanceof L.Marker) return;
+        pushUndo(true);
         var p = points(layer), la = 0, ln = 0; p.forEach(function (x) { la += x[0]; ln += x[1]; }); la /= p.length; ln /= p.length;
         var kLat = 111320, kLng = 111320 * Math.cos(la * Math.PI / 180), a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
         var out = p.map(function (x) { var X = (x[1] - ln) * kLng, Y = (x[0] - la) * kLat; return [la + (-X * s + Y * c) / kLat, ln + (X * c + Y * s) / kLng]; });   // sens horaire pour un angle positif
         var editing = layer.pm && layer.pm.enabled && layer.pm.enabled();
+        suspendUndo = true;      // pm:enable émis par la réactivation ne doit pas créer un second instantané
         if (editing) layer.pm.disable();
         layer.setLatLngs(out);
         if (editing) layer.pm.enable();
+        suspendUndo = false;
         look(layer); renderList(); if (selected === layer) select(layer);
       }
       document.querySelectorAll('#rotBox [data-rot]').forEach(function (b) { b.addEventListener('click', function () { if (selected) rotateLayer(selected, parseFloat(b.dataset.rot)); }); });
@@ -584,6 +861,11 @@ ga_head('Plan des commerces');
         var m = layer._plan, p = points(layer);
         var poly = layer instanceof L.Polygon;
         $('natureBox').hidden = !poly; $('selRole').value = m.role; $('ztypeBox').hidden = !isZone(layer); $('selZtype').value = m.ztype; $('priceBox').hidden = !isZone(layer) || !data.features.tarifs;
+        $('usageBox').hidden = false; $('selUsage').value = m.usage || '';
+        $('flowBox').hidden = m.usage !== 'circulation'; $('selFlow').value = m.flow || '';
+        $('serviceBox').hidden = m.usage !== 'service'; $('selService').value = m.service || '';
+        $('indoorBox').hidden = !poly || isTerr(layer); $('selIndoor').checked = !!m.indoor;
+        $('subBox').hidden = !(poly && p.length > 4 && !isTerr(layer));
         $('selUnit').value = m.unit; $('selPrice').value = m.price; $('selPricePro').value = m.pricePro;
         $('selLabel').value = m.label; $('selNum').value = m.num; $('selColor').value = m.color; $('selNote').value = m.note;
         shopSel.value = m.shop in data.shops ? m.shop : '';
@@ -591,30 +873,94 @@ ga_head('Plan des commerces');
         if (layer instanceof L.Polygon) {
           info = 'Surface : ' + fmtM2(areaM2(p)) + ' m²';
           var c = catalog.filter(function (x) { return x.id === m.surface; })[0]; if (c) info += ' (' + c.name + ')';
-          if (!isZone(layer)) { var zz = zoneOf(layer), sp = slotPrice(layer, false), sq = slotPrice(layer, true); info += zz ? ' · Zone : ' + zoneName(zz) : ' · hors de toute zone'; if (sp != null) info += ' · Tarif : ' + eur(sp) + (sq != null && sq !== sp ? ' (entreprise ' + eur(sq) + ')' : ''); }
+          if (!isZone(layer) && !isTerr(layer)) { var zz = zoneOf(layer), sp = slotPrice(layer, false), sq = slotPrice(layer, true); info += zz ? ' · Zone : ' + zoneName(zz) : ' · hors de toute zone'; if (sp != null) info += ' · Tarif : ' + eur(sp) + (sq != null && sq !== sp ? ' (entreprise ' + eur(sq) + ')' : ''); }
+          if (isTerr(layer)) { var inside = 0; polygons().forEach(function (o) { if (o !== layer && !isZone(o) && !isTerr(o) && pointIn(p, centroid(o)[0], centroid(o)[1])) inside++; }); info += ' · ' + inside + ' emplacement(s) à l\'intérieur'; }
+          if (m.usage && data.usages[m.usage]) info += ' · ' + data.usages[m.usage];
         }
         $('selInfo').textContent = info;
         $('rotBox').hidden = layer instanceof L.Marker;
-        $('splitBox').hidden = !(layer instanceof L.Polygon && p.length === 4);
+        $('splitBox').hidden = !(layer instanceof L.Polygon && p.length === 4) || isTerr(layer);
         $('splitTitle').textContent = isZone(layer) ? 'Découper cette zone en parcelles' : 'Diviser cet emplacement';
-        justSplit = false; if (!$('splitBox').hidden) { syncSimPrice(layer); splitRefresh(); } else ghost.clearLayers();
+        $('terrBox').hidden = !isTerr(layer);
+        justSplit = false;
+        if (!$('splitBox').hidden) { syncSimPrice(layer); splitRefresh(); }
+        else if (isTerr(layer)) { fillTerrSurf(); terrRefresh(); }
+        else ghost.clearLayers();
       }
       $('selLabel').addEventListener('input', function () { if (selected) { selected._plan.label = this.value; look(selected); renderList(); } });
       $('selNum').addEventListener('input', function () { if (selected) { selected._plan.num = this.value; look(selected); renderList(); } });
       $('selColor').addEventListener('input', function () { if (selected) { selected._plan.color = this.value; look(selected); } });
       $('selNote').addEventListener('input', function () { if (selected) selected._plan.note = this.value; });
-      $('selRole').addEventListener('change', function () { if (selected && selected instanceof L.Polygon) { selected._plan.role = this.value; look(selected); select(selected); count(); } });
-      $('selZtype').addEventListener('change', function () { if (selected) { selected._plan.ztype = this.value; renderList(); } });
+      $('selRole').addEventListener('change', function () { if (selected && selected instanceof L.Polygon) { pushUndo(true); selected._plan.role = this.value; look(selected); restack(); select(selected); count(); } });
+      $('selZtype').addEventListener('change', function () { if (selected) { selected._plan.ztype = this.value; var d = data.locationDefaults && data.locationDefaults[this.value]; if (d) { if (!selected._plan.unit || selected._plan.unit === 'slot') selected._plan.unit = d.unit || 'slot'; $('selUnit').value = selected._plan.unit; if (!selected._plan.price && d.price) { selected._plan.price = d.price; $('selPrice').value = d.price; } } renderList(); } });
       $('selUnit').addEventListener('change', function () { if (selected) { selected._plan.unit = this.value; renderList(); select(selected); } });
       $('selPrice').addEventListener('input', function () { if (selected) { selected._plan.price = this.value; renderList(); } });
       $('selPricePro').addEventListener('input', function () { if (selected) { selected._plan.pricePro = this.value; renderList(); } });
+      $('selUsage').addEventListener('change', function () {
+        if (!selected) return;
+        pushUndo(true);
+        var m = selected._plan; m.usage = this.value;
+        if (m.usage) { m.color = UCOL[m.usage] || m.color; $('selColor').value = m.color; }
+        if (m.usage !== 'service') m.service = '';
+        if (m.usage !== 'circulation') m.flow = '';
+        look(selected); select(selected); count();
+      });
+      $('selFlow').addEventListener('change', function () { if (selected) { selected._plan.flow = this.value; look(selected); renderList(); } });
+      $('selService').addEventListener('input', function () { if (selected) selected._plan.service = this.value; });
+      $('selIndoor').addEventListener('change', function () { if (selected) selected._plan.indoor = this.checked; });
       shopSel.addEventListener('change', function () {
         if (!selected) return;
         selected._plan.shop = this.value;
         if (this.value && !selected._plan.label) { selected._plan.label = data.shops[this.value]; $('selLabel').value = selected._plan.label; look(selected); }
         renderList();
       });
-      $('selDel').addEventListener('click', function () { if (selected) { group.removeLayer(selected); select(null); count(); } });
+      $('selDel').addEventListener('click', function () { if (selected) { pushUndo(true); group.removeLayer(selected); select(null); count(); } });
+      $('selClose').addEventListener('click', function () { select(null); });
+
+      // --- Sous-zones : découpe d'une forme quelconque en bandes parallèles (Sutherland–Hodgman) ---
+      function clipHalf(poly, axis, v, keepLess) {
+        var out = [];
+        for (var i = 0; i < poly.length; i++) {
+          var a = poly[i], b = poly[(i + 1) % poly.length], ai = axis ? a[1] : a[0], bi = axis ? b[1] : b[0];
+          var ain = keepLess ? ai <= v : ai >= v, bin = keepLess ? bi <= v : bi >= v;
+          if (ain) out.push(a);
+          if (ain !== bin) { var t = (v - ai) / ((bi - ai) || 1e-12); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+        }
+        return out;
+      }
+      function dedupe(poly) {
+        var out = [];
+        poly.forEach(function (p) { var q = out[out.length - 1]; if (!q || Math.abs(q[0] - p[0]) > 1e-9 || Math.abs(q[1] - p[1]) > 1e-9) out.push(p); });
+        if (out.length > 2) { var f = out[0], l = out[out.length - 1]; if (Math.abs(f[0] - l[0]) < 1e-9 && Math.abs(f[1] - l[1]) < 1e-9) out.pop(); }
+        return out;
+      }
+      function subSplit(layer, n, mode) {
+        var p = points(layer), m = layer._plan;
+        var las = p.map(function (q) { return q[0]; }), lns = p.map(function (q) { return q[1]; });
+        var minLa = Math.min.apply(null, las), maxLa = Math.max.apply(null, las), minLn = Math.min.apply(null, lns), maxLn = Math.max.apply(null, lns);
+        var h = (maxLa - minLa) * 111320, w = (maxLn - minLn) * 111320 * Math.cos(p[0][0] * Math.PI / 180);
+        var axis = mode === 'lat' ? 0 : mode === 'lng' ? 1 : (h >= w ? 0 : 1);
+        var lo = axis ? minLn : minLa, hi = axis ? maxLn : maxLa, step = (hi - lo) / n, pieces = [];
+        for (var k = 0; k < n; k++) {
+          var a = lo + step * k, b = k === n - 1 ? hi : lo + step * (k + 1) + 1e-12;
+          var piece = dedupe(clipHalf(clipHalf(p, axis, b, true), axis, a, false));
+          if (piece.length >= 3 && areaM2(piece) > 1) pieces.push(piece);
+        }
+        if (pieces.length < 2) return 0;
+        pushUndo(true);
+        pieces.forEach(function (pts, i) {
+          track(L.polygon(pts), { role: m.role, ztype: m.ztype, label: (m.label || 'Zone') + ' ' + (i + 1) + '/' + pieces.length, color: m.color,
+            unit: m.unit, price: m.price, pricePro: m.pricePro, surface: m.surface, note: m.note, shop: m.shop,
+            usage: m.usage, flow: m.flow, indoor: m.indoor, service: m.service });
+        });
+        group.removeLayer(layer); select(null); restack(); count();
+        return pieces.length;
+      }
+      $('subGo').addEventListener('click', function () {
+        if (!selected) return;
+        var made = subSplit(selected, Math.max(2, Math.min(20, parseInt($('subN').value, 10) || 2)), $('subAxis').value);
+        $('count').textContent = made ? made + ' sous-zones créées. Pensez à enregistrer.' : 'Cette forme ne peut pas être divisée ainsi (forme trop fine).';
+      });
 
       // --- Découpage d'une forme à 4 coins en parcelles, avec ou sans allée au milieu ---
       // p[0] p[1] p[2] p[3] : coins dans l'ordre ; u le long de p0→p1, v le long de p0→p3 (fractions 0..1). « f » : sens des façades, « g » : profondeur.
@@ -741,6 +1087,72 @@ ga_head('Plan des commerces');
         else if (!$('simPrice').value) $('simUnit').value = 'slot';
       }
 
+      // --- Découverte des emplacements potentiels d'un territoire : quadrillage de la surface choisie (repère métrique tourné),
+      // une cellule n'est retenue que si ses 4 coins sont entièrement dans le territoire ---
+      function fillTerrSurf() {
+        var sel = $('terrSurf'); sel.textContent = '';
+        catalog.forEach(function (c) { var o = document.createElement('option'); o.value = c.id; o.textContent = c.name + ' (' + fm(c.w) + ' × ' + fm(c.d) + ' m)'; sel.appendChild(o); });
+      }
+      function terrCandidates(t, surf, gap, angle) {
+        var p = points(t), lat0 = p[0][0], lng0 = p[0][1], kLat = 111320, kLng = 111320 * Math.cos(lat0 * Math.PI / 180);
+        var xy = p.map(function (q) { return [(q[1] - lng0) * kLng, (q[0] - lat0) * kLat]; });
+        var cx = 0, cy = 0; xy.forEach(function (q) { cx += q[0] / xy.length; cy += q[1] / xy.length; });
+        var a = angle * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+        var minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+        xy.forEach(function (q) { var dx = q[0] - cx, dy = q[1] - cy, u = dx * cs + dy * sn, v = -dx * sn + dy * cs; minU = Math.min(minU, u); maxU = Math.max(maxU, u); minV = Math.min(minV, v); maxV = Math.max(maxV, v); });
+        var w = Math.max(0.5, surf.w + gap), d = Math.max(0.5, surf.d + gap), out = [];
+        for (var u = minU + w / 2; u <= maxU - w / 2 + 1e-9 && out.length < 400; u += w) {
+          for (var v = minV + d / 2; v <= maxV - d / 2 + 1e-9 && out.length < 400; v += d) {
+            var ok = true;
+            [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (sg) {
+              if (!ok) return;
+              var uu = u + sg[0] * surf.w / 2, vv = v + sg[1] * surf.d / 2;
+              if (!pointIn(p, lat0 + (cy + (uu * sn + vv * cs)) / kLat, lng0 + (cx + (uu * cs - vv * sn)) / kLng)) ok = false;
+            });
+            if (ok) out.push(rectAround({ lat: lat0 + (cy + (u * sn + v * cs)) / kLat, lng: lng0 + (cx + (u * cs - v * sn)) / kLng }, surf.w, surf.d, angle));
+          }
+        }
+        return out;
+      }
+      var justTerr = false;
+      function terrRefresh() {
+        if (!selected || !isTerr(selected)) { ghost.clearLayers(); return; }
+        var surf = catalog.filter(function (x) { return x.id === $('terrSurf').value; })[0] || catalog[0];
+        if (surf && $('terrSurf').value !== surf.id) $('terrSurf').value = surf.id;
+        ghost.clearLayers();
+        if (!surf) { $('terrPreview').textContent = 'Ajoutez d\'abord une surface au catalogue (bloc « Catalogue de surfaces »).'; $('terrApply').disabled = true; return; }
+        $('terrApply').disabled = false;
+        var gap = Math.max(0, num('terrGap', 1)), angle = parseFloat($('terrAngle').value) || 0;
+        var cells = terrCandidates(selected, surf, gap, angle);
+        $('terrPreview').textContent = cells.length
+          ? '→ ' + cells.length + ' emplacement' + (cells.length > 1 ? 's' : '') + ' de ' + fm(surf.w) + ' × ' + fm(surf.d) + ' m (écart ' + fm(gap) + ' m, angle ' + angle + '°) tiennent entièrement dans ce territoire.'
+            + (cells.length >= 400 ? ' ⚠ aperçu limité à 400 emplacements.' : '') + (group.getLayers().length + cells.length > 600 ? ' ⚠ plus de 600 éléments sur le plan.' : '')
+          : 'Aucun emplacement de ' + fm(surf.w) + ' × ' + fm(surf.d) + ' m ne tient entièrement dans ce territoire (écart ' + fm(gap) + ' m) : réduisez la surface ou l\'écart, ou redessinez le territoire plus grand.';
+        if ($('terrGhost').checked && !justTerr && cells.length && cells.length <= 150) {
+          var next = parseInt($('numNext').value, 10); next = isNaN(next) ? 1 : next; var numOn = $('numAuto').checked, pre = $('numPrefix').value;
+          cells.forEach(function (q, i) {
+            var g = L.polygon(q, { color: '#1d4ed8', weight: 1.5, dashArray: '4 3', fillColor: '#3b82f6', fillOpacity: 0.2, interactive: false, pmIgnore: true });
+            if (numOn) g.bindTooltip(text(pre + (next + i)), { permanent: true, direction: 'center', className: 'plan-label' });
+            ghost.addLayer(g);
+          });
+        }
+      }
+      ['terrSurf', 'terrGap', 'terrAngle', 'terrGhost'].forEach(function (id) {
+        $(id).addEventListener('input', function () { if (selected && isTerr(selected)) terrRefresh(); });
+        $(id).addEventListener('change', function () { if (selected && isTerr(selected)) terrRefresh(); });
+      });
+      $('terrApply').addEventListener('click', function () {
+        if (!selected || !isTerr(selected)) return;
+        var surf = catalog.filter(function (x) { return x.id === $('terrSurf').value; })[0];
+        if (!surf) return;
+        var cells = terrCandidates(selected, surf, Math.max(0, num('terrGap', 1)), parseFloat($('terrAngle').value) || 0);
+        if (!cells.length) { terrRefresh(); return; }
+        if (group.getLayers().length + cells.length > 600) { $('count').textContent = 'Trop d\'éléments sur le plan (600 au plus).'; return; }
+        pushUndo(true);
+        cells.forEach(function (q) { autoNum(track(L.polygon(q), { color: surf.color, surface: surf.id, label: '' })); });
+        justTerr = true; select(selected); justTerr = false; count();      // l'aperçu n'est pas redessiné par-dessus les emplacements créés
+      });
+
       function splitRefresh() {
         if (!selected || !(selected instanceof L.Polygon) || points(selected).length !== 4) { ghost.clearLayers(); return; }
         var sizeMode = $('splitMode').value === 'size', aisleOn = $('splitAisle').checked;
@@ -763,6 +1175,7 @@ ga_head('Plan des commerces');
         var sp = splitPlan(), n = sp.cells.length + (sp.aisle && $('splitAisleDraw').checked ? 1 : 0);
         if (sp.cells.length < 2 && !sp.aisle) { $('count').textContent = 'Indiquez au moins 2 parcelles.'; return; }
         if (group.getLayers().length + n > 600) { $('count').textContent = 'Trop d\'éléments sur le plan (600 au plus).'; return; }
+        pushUndo(true);
         var m = selected._plan, src = selected, fromZone = isZone(src), made = [];
         sp.cells.forEach(function (c) { made.push(track(L.polygon(sp.quad(c)), { color: m.color, shop: fromZone ? '' : m.shop, surface: fromZone ? '' : m.surface })); });
         if (sp.aisle && $('splitAisleDraw').checked) track(L.polygon(sp.quad(sp.aisle)), { role: 'zone', ztype: 'allee', label: 'Allée', color: '#8a8a8a' });
@@ -773,23 +1186,113 @@ ga_head('Plan des commerces');
         count();
       });
 
-      // --- Localisation de la marchandise ---
-      var placeMsg = {};
-      // Adresse ↔ coordonnées : géocodeur IGN (adresses françaises), puis Photon en secours hors de France.
-      function geocodeReverse(lat, lon) {
-        return fetch('https://data.geopf.fr/geocodage/reverse?index=address&limit=1&lat=' + lat + '&lon=' + lon, { headers: { Accept: 'application/json' } })
-          .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (j) {
-            var p = j && j.features && j.features[0] && j.features[0].properties;
-            if (p && (p.street || p.city)) return { street: [p.housenumber, p.street].filter(Boolean).join(' '), postcode: p.postcode || '', city: p.city || '' };
-            return fetch('https://photon.komoot.io/reverse?lang=fr&limit=1&lat=' + lat + '&lon=' + lon, { headers: { Accept: 'application/json' } })
-              .then(function (r) { return r.ok ? r.json() : null; })
-              .then(function (q) {
-                var a = q && q.features && q.features[0] && q.features[0].properties;
-                return a ? { street: [a.housenumber, a.street].filter(Boolean).join(' '), postcode: a.postcode || '', city: a.city || a.town || a.village || '' } : null;
-              });
-          });
+      // --- Assistant de zonage : zones du territoire proposées par la BD TOPO (IGN) ---
+      var zdRows = [], zdEntries = [];
+      function fmtNum(v) { return Math.round(v).toLocaleString('fr-FR'); }
+      function fillTerrList() {
+        var sel = $('zdTerr'), list = polygons().filter(isTerr), cur = sel.value;
+        sel.textContent = '';
+        if (!list.length) { var o = document.createElement('option'); o.value = ''; o.textContent = '— dessinez d\'abord un territoire —'; sel.appendChild(o); $('zdGo').disabled = true; return; }
+        list.forEach(function (t, i) { var o = document.createElement('option'); o.value = t._plan.id; o.textContent = (t._plan.label || 'Territoire ' + (i + 1)) + ' · ' + fmtNum(areaM2(points(t))) + ' m²'; sel.appendChild(o); });
+        $('zdGo').disabled = false;
+        sel.value = list.some(function (t) { return t._plan.id === cur; }) ? cur : list[0]._plan.id;
       }
+      function terrById(id) { return polygons().filter(isTerr).filter(function (t) { return t._plan.id === id; })[0] || null; }
+      function zdRender() {
+        var body = $('zdBody'); body.textContent = '';
+        zdRows.forEach(function (r) {
+          var tr = document.createElement('tr');
+          var c0 = document.createElement('td'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = r.on; c0.appendChild(cb); tr.appendChild(c0);
+          var c1 = document.createElement('td'), lab = document.createElement('input'); lab.type = 'text'; lab.maxLength = 60; lab.value = r.label; c1.appendChild(lab); tr.appendChild(c1);
+          var c2 = document.createElement('td'), us = document.createElement('select');
+          ['vente', 'circulation', 'service', 'parking', 'exclu'].forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = data.usages[k]; us.appendChild(o); });
+          us.value = r.usage; c2.appendChild(us); tr.appendChild(c2);
+          var c3 = document.createElement('td'); c3.className = 'num'; c3.textContent = fmtNum(r.z.area); tr.appendChild(c3);
+          var c4 = document.createElement('td'), ind = document.createElement('input'); ind.type = 'checkbox'; ind.checked = r.indoor; ind.title = 'À l\'intérieur d\'un bâtiment'; c4.appendChild(ind); tr.appendChild(c4);
+          var c5 = document.createElement('td'), svc = document.createElement('input'); svc.type = 'text'; svc.maxLength = 40; svc.value = r.service; svc.placeholder = 'accueil…'; svc.style.display = r.usage === 'service' ? '' : 'none'; c5.appendChild(svc); tr.appendChild(c5);
+          cb.addEventListener('change', function () { r.on = cb.checked; });
+          lab.addEventListener('input', function () { r.label = lab.value; });
+          us.addEventListener('change', function () { r.usage = us.value; svc.style.display = r.usage === 'service' ? '' : 'none'; });
+          ind.addEventListener('change', function () { r.indoor = ind.checked; });
+          svc.addEventListener('input', function () { r.service = svc.value; });
+          body.appendChild(tr);
+        });
+        $('zdResult').hidden = !zdRows.length && !zdEntries.length;
+      }
+      function zdEntriesRender() {
+        var ul = $('zdEntryList'); ul.textContent = '';
+        $('zdEntries').hidden = !zdEntries.length;
+        zdEntries.forEach(function (e) {
+          var li = document.createElement('li'), b = document.createElement('button');
+          b.type = 'button'; b.className = 'btn mini'; b.textContent = 'Ajouter';
+          b.addEventListener('click', function () {
+            pushUndo(true);
+            track(L.marker([e.pts[0][0], e.pts[0][1]]), { label: e.label, usage: 'acces', flow: e.flow, color: UCOL.acces });
+            count(); b.disabled = true; b.textContent = 'Ajoutée';
+          });
+          li.appendChild(document.createTextNode((e.main ? '★ ' : '') + e.label + (e.flow ? ' · ' + (data.flows[e.flow] || '') : '') + ' '));
+          li.appendChild(b); ul.appendChild(li);
+        });
+      }
+      function zdReset() { zdRows = []; zdEntries = []; $('zdResult').hidden = true; $('zdSummary').textContent = ''; }
+      $('zdGo').addEventListener('click', function () {
+        var t = terrById($('zdTerr').value);
+        if (!t) { $('zdMsg').textContent = 'Dessinez d\'abord un territoire sur la carte.'; return; }
+        var fd = new FormData();
+        fd.append('csrf', CSRF); fd.append('action', 'discover');
+        fd.append('territory', JSON.stringify(points(t)));
+        fd.append('min_area', $('zdMin').value || '25');
+        if ($('zdRoads').checked) fd.append('roads', '1');
+        if ($('zdParking').checked) fd.append('parking', '1');
+        if ($('zdServices').checked) fd.append('services', '1');
+        $('zdGo').disabled = true; $('zdMsg').textContent = 'Analyse du site en cours (quelques secondes)…'; $('zdResult').hidden = true;
+        fetch(location.pathname + location.search, { method: 'POST', body: fd, credentials: 'same-origin', headers: { Accept: 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            $('zdGo').disabled = false;
+            if (!j || !j.ok) { $('zdMsg').textContent = (j && j.error) || 'Analyse impossible.'; return; }
+            var ev = j.event || {}, st = j.stats || {};
+            zdRows = (j.zones || []).map(function (z) {
+              return { z: z, on: true, label: z.label, usage: ['vente', 'circulation', 'service', 'parking', 'exclu'].indexOf(z.usage) >= 0 ? z.usage : 'vente',
+                indoor: !!z.indoor, service: z.service || '', flow: z.flow || '' };
+            });
+            zdEntries = j.entries || [];
+            $('zdSummary').textContent = 'Site : ' + fmtNum(j.territory.area) + ' m² · ' + (ev.indoor ? 'plutôt intérieur' : 'plutôt extérieur')
+              + ' (bâtiments : ' + ev.coverage + ' % de la surface) · ' + zdRows.length + ' zone(s) proposée(s), ' + zdEntries.length + ' entrée(s) détectée(s) · surface utile hors circulation, parking et services : ' + fmtNum(st.useful_area) + ' m².';
+            $('zdMsg').textContent = (j.warnings || []).join(' ');
+            $('zdAll').checked = true;
+            zdRender(); zdEntriesRender();
+          })
+          .catch(function () { $('zdGo').disabled = false; $('zdMsg').textContent = 'Analyse indisponible (réseau ou délai dépassé).'; });
+      });
+      $('zdAll').addEventListener('change', function () { var on = this.checked; zdRows.forEach(function (r) { r.on = on; }); zdRender(); });
+      $('zdClear').addEventListener('click', function () { zdReset(); $('zdMsg').textContent = ''; });
+      $('zdTerr').addEventListener('change', function () { zdReset(); $('zdMsg').textContent = ''; });
+      // Raccourci depuis la fiche du territoire : sélectionne ce territoire dans l'assistant et ouvre la carte de zonage.
+      $('terrZones').addEventListener('click', function () {
+        if (!selected || !isTerr(selected)) return;
+        fillTerrList();
+        $('zdTerr').value = selected._plan.id;
+        zdReset(); $('zdMsg').textContent = '';
+        setGcardCollapsed($('zoneCard'), false);
+        $('zoneCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $('zdGo').focus({ preventScroll: true });
+      });
+      $('zdAdd').addEventListener('click', function () {
+        var picked = zdRows.filter(function (r) { return r.on; });
+        if (!picked.length) { $('zdMsg').textContent = 'Cochez au moins une zone.'; return; }
+        if (group.getLayers().length + picked.length > 600) { $('zdMsg').textContent = 'Le plan dépasserait 600 éléments.'; return; }
+        pushUndo(true);
+        picked.forEach(function (r) {
+          track(L.polygon(r.z.pts), { role: 'zone', ztype: r.z.ztype || 'autre', label: r.label, usage: r.usage, flow: r.flow, indoor: r.indoor, service: r.service, color: UCOL[r.usage] || '#b5502e' });
+        });
+        restack(); count();
+        zdRows = zdRows.filter(function (r) { return !r.on; });
+        zdRender();
+        $('zdMsg').textContent = picked.length + ' zone(s) ajoutée(s) au plan. Pensez à enregistrer.';
+      });
+
+      // --- Recherche d'adresse : géocodeur IGN (adresses françaises), puis Photon en secours hors de France ---
       function geocodeSearch(q) {
         return fetch('https://data.geopf.fr/geocodage/search?index=address&limit=1&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } })
           .then(function (r) { return r.ok ? r.json() : null; })
@@ -806,45 +1309,13 @@ ga_head('Plan des commerces');
               });
           });
       }
-      function renderPlaces() {
-        var box = $('places'); box.textContent = '';
-        Object.keys(data.shops).forEach(function (k) {
-          var pl = places[k] = places[k] || { street: '', postcode: '', city: '', stand: '', note: '' };
-          var card = document.createElement('div'); card.className = 'plan-sub';
-          var h = document.createElement('strong'); h.textContent = data.shops[k]; card.appendChild(h);
-          var row = document.createElement('div'); row.className = 'plan-grid';
-          function field(label, key, ph, attrs) {
-            var l = document.createElement('label'); l.className = 'f'; l.appendChild(document.createTextNode(label));
-            var i = document.createElement('input'); i.type = 'text'; i.value = pl[key]; i.placeholder = ph || ''; Object.keys(attrs || {}).forEach(function (a) { i.setAttribute(a, attrs[a]); });
-            i.addEventListener('input', function () { pl[key] = i.value; }); l.appendChild(i); row.appendChild(l); return i;
-          }
-          field('Adresse', 'street', 'N° et rue', { maxlength: 120 }); field('Code postal', 'postcode', '69001', { maxlength: 10 }); field('Ville', 'city', 'Lyon', { maxlength: 60 });
-          var stand = field('Emplacement', 'stand', 'N° de stand', { maxlength: 12 });
-          card.appendChild(row);
-          var acts = document.createElement('div'); acts.className = 'row';
-          var b = document.createElement('button'); b.type = 'button'; b.className = 'btn mini'; b.textContent = 'Reprendre l\'adresse de son repère sur le plan';
-          var msg = document.createElement('span'); msg.className = 'meta'; msg.textContent = placeMsg[k] || '';
-          b.addEventListener('click', function () {
-            var l = group.getLayers().filter(function (x) { return x._plan.shop === k; })[0];
-            if (!l) { msg.textContent = 'Reliez d\'abord un élément du plan à ce commerce.'; return; }
-            var c = centroid(l); msg.textContent = 'Recherche…';
-            if (l._plan.num && !pl.stand) { pl.stand = l._plan.num; stand.value = pl.stand; }
-            geocodeReverse(c[0], c[1]).then(function (a) {
-              if (a) { pl.street = a.street; pl.postcode = a.postcode; pl.city = a.city; }
-              placeMsg[k] = a && (a.street || a.city) ? 'Adresse trouvée : vérifiez-la.' : 'Aucune adresse à cet endroit : saisissez-la.';
-              renderPlaces();
-            }).catch(function () { msg.textContent = 'Recherche indisponible.'; });
-          });
-          acts.appendChild(b); acts.appendChild(msg); card.appendChild(acts); box.appendChild(card);
-        });
-      }
-      renderPlaces();
 
       // --- Enregistrement ---
       $('saveForm').addEventListener('submit', function () {
         var c = map.getCenter();
-        $('mapJson').value = JSON.stringify({ center: [c.lat, c.lng], zoom: map.getZoom(), base: hidden ? 'none' : baseKind, catalog: catalog.filter(function (x) { return x.name && x.w >= 0.5 && x.d >= 0.5; }), places: places,
-          items: group.getLayers().map(function (l) { var m = l._plan; return { id: m.id, kind: kindOf(l), pts: points(l), label: m.label, num: m.num, shop: m.shop, color: m.color, note: m.note, surface: m.surface, role: m.role, ztype: m.ztype, unit: m.unit, price_cents: toCents(m.price), price_pro_cents: toCents(m.pricePro) }; }), costs: { fixed_cents: toCents($('simFixed').value), var_cents: toCents($('simVar').value), pct: num('simPct', 0), occ: [0, 1, 2].map(function (i) { return num('simOcc' + i, 0); }), adj: [0, 1, 2].map(function (i) { return num('simAdj' + i, 0); }) }, booking: { enabled: $('bkOn').checked, hold_days: parseInt($('bkDays').value, 10) || 7, intro: $('bkIntro').value } });
+        $('mapJson').value = JSON.stringify({ center: [c.lat, c.lng], zoom: map.getZoom(), base: hidden ? 'none' : baseKind, catalog: catalog.filter(function (x) { return x.name && x.w >= 0.5 && x.d >= 0.5; }),
+          background: bg ? { path: bg.path, bounds: bgLayer ? bgBoundsArr(bgLayer.getBounds()) : bg.bounds, opacity: bg.opacity } : null,
+          items: group.getLayers().map(function (l) { var m = l._plan; return { id: m.id, kind: kindOf(l), pts: points(l), label: m.label, num: m.num, shop: m.shop, color: m.color, note: m.note, surface: m.surface, role: m.role, ztype: m.ztype, unit: m.unit, price_cents: toCents(m.price), price_pro_cents: toCents(m.pricePro), usage: m.usage, flow: m.flow, indoor: !!m.indoor, service: m.service }; }), costs: { fixed_cents: toCents($('simFixed').value), var_cents: toCents($('simVar').value), pct: num('simPct', 0), occ: [0, 1, 2].map(function (i) { return num('simOcc' + i, 0); }), adj: [0, 1, 2].map(function (i) { return num('simAdj' + i, 0); }) }, booking: { enabled: $('bkOn').checked, hold_days: parseInt($('bkDays').value, 10) || 7, intro: $('bkIntro').value } });
       });
 
       // --- Hypothèses de simulation du chiffre d'affaires ---
@@ -856,42 +1327,54 @@ ga_head('Plan des commerces');
       $('bookCard').hidden = !data.features.exposants;
       var bk = saved.booking || {}; $('bkOn').checked = !!bk.enabled; $('bkDays').value = bk.hold_days || 7; $('bkIntro').value = bk.intro || '';
 
-      // --- Plein écran : la carte occupe l'écran, les modules s'ouvrent en panneaux repliables ---
+      // --- Blocs repliables : les quatre cartes de gestion et la barre d'outils, en page normale comme en plein écran ---
+      var COLLAPSE_KEY = 'planEditorCollapsed';
+      var collapseState = {};
+      try { collapseState = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {}; } catch (e) {}
+      function persistCollapse() { try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapseState)); } catch (e) {} }
+      function setGcardCollapsed(el, on) {
+        el.classList.toggle('collapsed', on);
+        var h = el.querySelector('h2');
+        if (h) h.setAttribute('aria-expanded', on ? 'false' : 'true');
+        collapseState[el.id] = on; persistCollapse();
+      }
+      ['catCard', 'numCard', 'bookCard', 'zoneCard'].forEach(function (id) {
+        var el = $(id), h = el && el.querySelector('h2');
+        if (!h) return;
+        h.tabIndex = 0; h.setAttribute('role', 'button');
+        setGcardCollapsed(el, !!collapseState[id]);
+        h.addEventListener('click', function () { setGcardCollapsed(el, !el.classList.contains('collapsed')); });
+        h.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault(); setGcardCollapsed(el, !el.classList.contains('collapsed'));
+        });
+      });
+
+      // --- Plein écran : la carte occupe l'écran, les modules deviennent des panneaux flottants ---
       var card = $('planCard'), fsSide = $('fsSide'), fsOn = false;
-      var fsCards = ['catCard', 'numCard', 'bookCard', 'placesCard'];
+      var fsCards = ['catCard', 'numCard', 'bookCard', 'zoneCard'];
       function resizeMap() { setTimeout(function () { map.invalidateSize(); }, 60); }
       function afterLayout() { requestAnimationFrame(function () { if (bearing) syncGeometry(); else resizeMap(); }); }
+      var mapBarEl = $('mapBar'), mapBarToggle = $('mapBarToggle');
+      function setMapBarCollapsed(on) {
+        mapBarEl.classList.toggle('collapsed', on);
+        mapBarToggle.setAttribute('aria-expanded', on ? 'false' : 'true');
+        mapBarToggle.textContent = on ? 'Outils de la carte ▸' : 'Outils de la carte ▾';
+        collapseState.mapBar = on; persistCollapse();
+        afterLayout();
+      }
+      mapBarToggle.addEventListener('click', function () { setMapBarCollapsed(!mapBarEl.classList.contains('collapsed')); });
+      setMapBarCollapsed(!!collapseState.mapBar);
       function fsPanels(on) {
         if (on) {
           fsSide.appendChild($('saveBar'));
-          fsCards.forEach(function (id) {
-            var el = $(id), h = el.querySelector('h2');
-            fsSide.appendChild(el);
-            if (h) { h.tabIndex = 0; h.setAttribute('role', 'button'); h.setAttribute('aria-expanded', el.classList.contains('collapsed') ? 'false' : 'true'); }
-          });
+          fsCards.forEach(function (id) { fsSide.appendChild($(id)); });
         } else {
           var form = $('saveForm');
-          fsCards.forEach(function (id) {
-            var el = $(id), h = el.querySelector('h2');
-            form.parentNode.insertBefore(el, form);
-            if (h) { h.removeAttribute('tabindex'); h.removeAttribute('role'); h.removeAttribute('aria-expanded'); }
-          });
+          fsCards.forEach(function (id) { form.parentNode.insertBefore($(id), form); });
           $('fsMain').appendChild($('saveBar'));
         }
       }
-      fsSide.addEventListener('click', function (e) {
-        var h = e.target.closest ? e.target.closest('h2') : null;
-        if (!h || h.parentNode.parentNode !== fsSide) return;
-        var el = h.parentNode;
-        el.classList.toggle('collapsed');
-        h.setAttribute('aria-expanded', el.classList.contains('collapsed') ? 'false' : 'true');
-      });
-      fsSide.addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        var h = e.target.closest ? e.target.closest('h2') : null;
-        if (!h || h.parentNode.parentNode !== fsSide) return;
-        e.preventDefault(); h.click();
-      });
       function openFs() {
         fsOn = true; card.classList.add('fs'); card.setAttribute('role', 'dialog'); card.setAttribute('aria-modal', 'true'); card.setAttribute('aria-label', 'Plan en plein écran');
         fsSide.hidden = false; fsPanels(true);

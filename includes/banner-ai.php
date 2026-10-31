@@ -120,13 +120,23 @@ function banner_ai_save(string $bytes, string $relativeDir, string $prefix, int 
 
 /**
  * Choisit un bandeau de la médiathèque commune pour une galerie : copie propre
- * à la galerie (même traitement que les images envoyées), pour qu'elle reste
- * affichée même si l'image partagée est retirée de la médiathèque.
+ * à la galerie, au même format (nom stable, donc un même bandeau n'est ajouté
+ * qu'une fois). La copie survit au retrait de l'image partagée.
  */
 function banner_ai_adopt_library(string $file, string $slug): string
 {
     $abs = banner_library_abs($file);
-    if ($abs === null) throw new InvalidArgumentException('Bandeau introuvable dans la médiathèque commune.');
-    if (!function_exists('gallery_image_store')) throw new RuntimeException("Enregistrement d'image indisponible.");
-    return gallery_image_store(['error' => UPLOAD_ERR_OK, 'tmp_name' => $abs, 'size' => (int) filesize($abs)], $slug, 'banner', 2000);
+    if ($abs === null || !preg_match('/^banner-([a-f0-9]{8})\.jpg$/', $file, $m)) {
+        throw new InvalidArgumentException('Bandeau introuvable dans la médiathèque commune.');
+    }
+    $relative = 'uploads/galeries/' . $slug . '-banner-' . $m[1] . '.jpg';
+    $target = dirname(__DIR__) . '/' . $relative;
+    $dir = dirname($target);
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+        throw new RuntimeException("Le dossier uploads/galeries/ n'est pas inscriptible.");
+    }
+    if (!is_file($target) && !@copy($abs, $target)) {
+        throw new RuntimeException("Impossible de copier le bandeau dans la galerie.");
+    }
+    return $relative;
 }

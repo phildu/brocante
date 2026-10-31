@@ -90,7 +90,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
             $rows[array_key_last($rows)]['notices'] = aco_notice_stats($op);
         }
     }
-    plugin_json(['operations' => $rows, 'now' => time(), 'notice_sources' => aco_notice_sources(), 'notice_batch' => ACO_NOTICE_BATCH]);
+    plugin_json(['operations' => $rows, 'now' => time(), 'notice_sources' => aco_notice_sources(), 'notice_batch' => ACO_NOTICE_BATCH,
+        'channel_labels' => aco_channel_labels()]);
 }
 
 $in = plugin_input();
@@ -138,7 +139,9 @@ if ($action === 'start') {
 if ($action === 'notify') {
     $op = aco_op($id);
     if (!$op) plugin_json(['error' => 'Opération introuvable.'], 404);
-    $result = aco_notice_send($op);
+    $channels = $in['channels'] ?? ['mail'];
+    $channels = is_array($channels) ? array_map('strval', $channels) : ['mail'];
+    $result = aco_notice_send($op, $channels);
     plugin_json($result, isset($result['error']) ? 409 : 200);
 }
 if ($action === 'stop') {

@@ -977,17 +977,21 @@ function feedback_widget_html(): string
     $shop = function_exists('tenant_slug') ? tenant_slug() : '';
     if ($session === null || $shop === '' || !feedback_widget_enabled($shop)) return '';
     $rendered = true;
+    // Le cookie de session est limité au préfixe de la boutique (/<identifiant>/)
+    // sur les adresses partagées : l'API doit être appelée sous ce même préfixe.
+    $base = function_exists('tenant_base_path') ? tenant_base_path() : '';
     $config = [
-        'api' => '/admin/feedback-api.php',
+        'api' => $base . '/admin/feedback-api.php',
         'csrf' => function_exists('admin_csrf_token') ? admin_csrf_token() : '',
         'shop' => $shop,
         'types' => FEEDBACK_TYPE_LABELS,
         'severities' => FEEDBACK_SEVERITY_LABELS,
         'statuses' => array_map('feedback_status_tester_label', array_combine(FEEDBACK_STATUSES, FEEDBACK_STATUSES)),
         'module' => (string) ($_GET['p'] ?? ''),
+        'lang' => 'fr-FR',
     ];
     ob_start(); ?>
-<link rel="stylesheet" href="/assets/feedback-widget.css?v=1">
+<link rel="stylesheet" href="/assets/feedback-widget.css?v=2">
 <div class="fbw" data-fbw data-config="<?= htmlspecialchars(json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>">
   <button type="button" class="fbw-launch" data-fbw-open aria-expanded="false" aria-controls="fbw-panel">
     <span class="fbw-launch-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 9.5 9.5 0 0 1-3.5-.7L4 20.5l1.4-4.1A8.1 8.1 0 0 1 3 11.5a8.4 8.4 0 0 1 8.5-8.3A8.4 8.4 0 0 1 21 11.5z"/></svg></span>
@@ -1021,9 +1025,30 @@ function feedback_widget_html(): string
         <label class="fbw-field">Votre message
           <textarea name="message" rows="5" maxlength="4000" minlength="10" required placeholder="Ce qui ne marche pas, comment le reproduire, ou ce qui vous manque…"></textarea>
         </label>
-        <label class="fbw-field fbw-file">Joindre une capture (facultatif, 3 Mo max)
-          <input type="file" name="shot" accept="image/jpeg,image/png,image/webp">
-        </label>
+        <div class="fbw-dictate">
+          <button type="button" class="fbw-tool fbw-mic" data-fbw-mic hidden aria-pressed="false" title="Dicter le message à la voix">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>
+            <span class="fbw-tool-label">Dicter</span>
+          </button>
+          <span class="fbw-dictate-state" data-fbw-dictate-state hidden role="status" aria-live="polite">Dictée en cours…</span>
+        </div>
+        <div class="fbw-shot">
+          <div class="fbw-shot-actions">
+            <button type="button" class="fbw-tool" data-fbw-capture>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg>
+              <span class="fbw-tool-label">Capturer l’écran</span>
+            </button>
+            <button type="button" class="fbw-tool" data-fbw-annotate hidden>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 10-10-3-3L5 16z"/><path d="M14 7l3 3"/></svg>
+              <span class="fbw-tool-label">Annoter l’image</span>
+            </button>
+            <button type="button" class="fbw-tool" data-fbw-shot-remove hidden>Retirer la capture</button>
+          </div>
+          <label class="fbw-field fbw-file">Joindre une capture (facultatif, 3 Mo max)
+            <input type="file" name="shot" accept="image/jpeg,image/png,image/webp">
+          </label>
+          <p class="fbw-shot-state" data-fbw-shot-state hidden role="status" aria-live="polite"></p>
+        </div>
         <p class="fbw-hint">La page, votre boutique et votre navigateur sont joints automatiquement pour aider à reproduire.</p>
         <div class="fbw-actions">
           <button type="submit" class="fbw-submit">Envoyer mon retour</button>
@@ -1037,7 +1062,36 @@ function feedback_widget_html(): string
       </div>
     </div>
   </section>
+  <div class="fbw-editor" data-fbw-editor hidden role="dialog" aria-modal="true" aria-labelledby="fbw-editor-title">
+    <div class="fbw-editor-card">
+      <header class="fbw-editor-head">
+        <div><p class="fbw-kicker">Capture d’écran</p><h3 id="fbw-editor-title">Entourez ou fléchez ce qui pose problème</h3></div>
+        <button type="button" class="fbw-close" data-fbw-editor-cancel aria-label="Fermer l’annotation">×</button>
+      </header>
+      <div class="fbw-editor-tools" role="toolbar" aria-label="Outils d’annotation">
+        <button type="button" class="fbw-tool is-active" data-fbw-tool="pen" aria-pressed="true">Crayon</button>
+        <button type="button" class="fbw-tool" data-fbw-tool="rect" aria-pressed="false">Cadre</button>
+        <button type="button" class="fbw-tool" data-fbw-tool="arrow" aria-pressed="false">Flèche</button>
+        <span class="fbw-colors" role="group" aria-label="Couleur du trait">
+          <button type="button" class="fbw-color is-active" data-fbw-color="#d92d20" style="--c:#d92d20" aria-label="Rouge" aria-pressed="true"></button>
+          <button type="button" class="fbw-color" data-fbw-color="#f59f00" style="--c:#f59f00" aria-label="Orange" aria-pressed="false"></button>
+          <button type="button" class="fbw-color" data-fbw-color="#1c7ed6" style="--c:#1c7ed6" aria-label="Bleu" aria-pressed="false"></button>
+          <button type="button" class="fbw-color" data-fbw-color="#111111" style="--c:#111111" aria-label="Noir" aria-pressed="false"></button>
+        </span>
+        <button type="button" class="fbw-tool" data-fbw-undo>Annuler le trait</button>
+        <button type="button" class="fbw-tool" data-fbw-clear>Tout effacer</button>
+      </div>
+      <div class="fbw-editor-stage"><canvas data-fbw-canvas></canvas></div>
+      <footer class="fbw-editor-foot">
+        <p class="fbw-hint">L’image reste dans votre navigateur jusqu’à l’envoi du retour.</p>
+        <div class="fbw-actions">
+          <button type="button" class="fbw-tool" data-fbw-editor-cancel>Annuler</button>
+          <button type="button" class="fbw-submit" data-fbw-editor-ok>Joindre la capture</button>
+        </div>
+      </footer>
+    </div>
+  </div>
 </div>
-<script src="/assets/feedback-widget.js?v=1" defer></script>
+<script src="/assets/feedback-widget.js?v=2" defer></script>
 <?php return (string) ob_get_clean();
 }

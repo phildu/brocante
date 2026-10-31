@@ -23,7 +23,7 @@ function ga_head(string $title, string $actions = ''): void
     ob_start();
     include __DIR__ . '/_galerie-nav.php';
     $gaNav = (string) ob_get_clean();
-    $publicUrl = $gaOrigin . '/galerie/' . rawurlencode((string) $gaSlug) . '/';
+    $publicUrl = gallery_public_url($gaGallery, $gaOrigin);
     $gaActions = '';
     if (!$limited) $gaActions .= '<a class="btn" href="/portail/galeries.php">← Galeries</a>';
     $gaActions .= '<a class="btn" href="' . e($publicUrl) . '" target="_blank" rel="noopener">Voir la galerie ↗</a>';

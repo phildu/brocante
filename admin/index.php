@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/key-check.php';
+require_once __DIR__ . '/../includes/sms.php';
 require_admin();
 
 $content = get_content();
@@ -390,6 +391,70 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
         <p class="hint">Les visiteurs sur téléphone se voient proposer, au bon moment (à partir de leur 2<sup>e</sup> page, jamais pendant le paiement), d'<strong>ajouter la boutique à leur écran d'accueil</strong> : un geste, plein écran, avec l'icône et le nom de votre boutique (le logo carré de « Apparence »). Un lien « Installer l'appli » reste en pied de page. Sans boutique d'applications ni téléchargement.</p>
         <label class="featured-check"><input type="checkbox" name="pwa_prompt" value="1"<?= shop_setting('pwa_prompt', '1') !== '0' ? ' checked' : '' ?>> Proposer d'installer la boutique comme web app</label>
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer</button>
+      </form>
+
+      <?php
+        $smsProv = sms_provider_name();
+        $smsOvh = sms_ovh_config();
+        $smsTw = sms_twilio_config();
+        $smsChosen = strtolower(sms_setting('sms_provider', 'SMS_PROVIDER'));
+        $smsFrom = $smsProv === 'ovh' ? $smsOvh['from'] : ($smsProv === 'twilio' ? $smsTw['from'] : '');
+      ?>
+      <form class="admin-block" method="post" action="/admin/save-sms.php" id="sms-settings" data-panel="general">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>SMS : OVH ou Twilio</h2>
+        <p class="hint">Les numéros reçoivent le code de connexion, les annonces des actions commerciales et les alertes de l'assistance vendeur. Choisissez le fournisseur et saisissez ses identifiants ; un mot de passe ou un jeton laissé vide conserve la valeur enregistrée. Les autres champs se vident quand vous les videz.</p>
+        <div class="field">
+          <label>Fournisseur</label>
+          <select name="sms_provider">
+            <option value=""<?= $smsChosen === '' ? ' selected' : '' ?>>Automatique — le premier des deux configuré</option>
+            <option value="ovh"<?= $smsChosen === 'ovh' ? ' selected' : '' ?>>OVH</option>
+            <option value="twilio"<?= $smsChosen === 'twilio' ? ' selected' : '' ?>>Twilio</option>
+          </select>
+        </div>
+        <p class="publish-status" data-kind="<?= $smsProv !== '' ? '' : 'error' ?>">
+          <?= $smsProv !== ''
+            ? 'Prêt : ' . h(sms_provider_label()) . ' — expéditeur « ' . h($smsFrom) . ' ».'
+            : 'Aucun fournisseur complet : les envois de SMS restent bloqués (en local, les messages sont écrits dans data/sms-outbox.log).' ?>
+        </p>
+        <h3 style="margin-top:18px;">OVH</h3>
+        <p class="hint">Identifiants OVH (espace client → Télécom → SMS) : le compte <code>sms-xxxxx-1</code>, l'utilisateur SMS et son mot de passe, puis l'expéditeur déclaré — 11 caractères alphanumériques au plus, affiché sur le téléphone du destinataire. L'adresse IP du serveur doit être autorisée sur le compte SMS, sinon OVH répond « unauthorized IP ».</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Compte SMS</label>
+            <input type="text" name="ovh_sms_account" value="<?= h($smsOvh['account']) ?>" autocomplete="off" placeholder="sms-xxxxx-1">
+          </div>
+          <div class="field">
+            <label>Identifiant</label>
+            <input type="text" name="ovh_sms_login" value="<?= h($smsOvh['login']) ?>" autocomplete="off">
+          </div>
+        </div>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Mot de passe</label>
+            <input type="password" name="ovh_sms_password" autocomplete="new-password" placeholder="<?= $smsOvh['password'] !== '' ? 'Déjà enregistré' : '' ?>">
+          </div>
+          <div class="field">
+            <label>Expéditeur affiché</label>
+            <input type="text" name="ovh_sms_from" value="<?= h($smsOvh['from']) ?>" maxlength="11" autocomplete="off" placeholder="Ma boutique">
+          </div>
+        </div>
+        <h3 style="margin-top:18px;">Twilio</h3>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Account SID</label>
+            <input type="text" name="twilio_sid" value="<?= h($smsTw['sid']) ?>" autocomplete="off" placeholder="AC...">
+          </div>
+          <div class="field">
+            <label>Numéro expéditeur</label>
+            <input type="text" name="twilio_from" value="<?= h($smsTw['from']) ?>" autocomplete="off" placeholder="+33...">
+          </div>
+        </div>
+        <div class="field">
+          <label>Auth token</label>
+          <input type="password" name="twilio_token" autocomplete="new-password" placeholder="<?= $smsTw['token'] !== '' ? 'Déjà enregistré' : '' ?>">
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer les réglages SMS</button>
       </form>
 
     </div>

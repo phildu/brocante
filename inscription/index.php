@@ -35,6 +35,14 @@ $savedOffer = $editRequest ? saas_req_offer($editRequest) : [];
 $siteMode = (string) ($_POST['site_mode'] ?? ($savedOffer['mode'] ?? $editRequest['site_mode'] ?? $_GET['mode'] ?? 'sales'));
 if (!in_array($siteMode, ['sales', 'showcase'], true)) $siteMode = 'sales';
 $grid = saas_grid($gallery, $siteMode);
+// Pionniers : les prix affichés sont ceux du prochain rang (ou du verrou déjà accordé à ce brouillon).
+$ebCampaign = function_exists('eb_campaign_for_signup') ? eb_campaign_for_signup($gallery) : null;
+$ebTier = $ebCampaign && $ebCampaign['progress']['open'] ? eb_tier_at($ebCampaign, $ebCampaign['progress']['next_rank']) : null;
+if ($editRequest && !empty($editRequest['earlybird']['discount_pct'])) {
+    $ebTier = ['label' => (string) ($editRequest['earlybird']['tier_label'] ?? 'Pionnier'), 'discount_pct' => (int) $editRequest['earlybird']['discount_pct'],
+        'perk' => (string) ($editRequest['earlybird']['perk'] ?? '')];
+}
+if ($ebTier) $grid = eb_discounted_grid($grid, $ebTier);
 $offers = saas_grid_offers($grid);
 $offersByKey = array_column($offers, null, 'key');
 $stripeOn = saas_stripe_configured();
@@ -104,6 +112,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors['form'] = 'Ce brouillon ne peut plus être modifié. Choisissez à nouveau une formule.';
         } else {
             $offer = saas_offer_snapshot($gallery, $v['plan'], $v['billing'], $siteMode);
+            $ebLock = ['offer' => $offer, 'earlybird' => null];
+            if ($offer && function_exists('eb_lock_offer')) $ebLock = eb_lock_offer($gallery, $offer, $editRequest['earlybird'] ?? null);
+            $offer = $ebLock['offer'];
             $quoteInput = $_POST['service_quotes'] ?? [];
             $serviceQuotes = [];
             if (!is_array($quoteInput)) {
@@ -132,6 +143,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $editRequest['site_mode'] = $siteMode;
                 $editRequest['gallery'] = $gallery;
                 $editRequest['offer'] = $offer;
+                if (!empty($ebLock['earlybird'])) $editRequest['earlybird'] = $ebLock['earlybird'];
+                else unset($editRequest['earlybird']);
                 $editRequest['service_quotes'] = $serviceQuotes;
                 if ($offerChanged) {
                     $editRequest['email'] = '';
@@ -177,6 +190,7 @@ saas_page_start('Créer ma boutique — ' . $cfg['name'], 'Choisissez votre form
   <?php if (isset($_GET['recu'])): ?>
     <div class="form-card"><div class="notice ok" role="status"><strong>Demande reçue, merci !</strong></div><p><a class="btn" href="/">Retour à l'accueil</a></p></div>
   <?php else: ?>
+    <?php if ($ebCampaign && $ebCampaign['enabled']): ?><?= eb_widget_html($gallery, ['show_cta' => false]) ?><?php endif; ?>
     <?php if ($resumable): ?>
       <div class="form-card" style="margin-bottom:20px">
         <div class="notice" role="status"><strong>Paiement non terminé.</strong> Votre demande est gardée 24 heures.</div>
@@ -212,6 +226,7 @@ saas_page_start('Créer ma boutique — ' . $cfg['name'], 'Choisissez votre form
         <?php endif; ?>
         <input type="hidden" name="galerie" value="<?= saas_e($gallery) ?>">
         <fieldset class="field full<?= isset($errors['plan']) ? ' has-error' : '' ?>" style="border:0;padding:0;margin:0"><span style="font-size:.82rem;font-weight:600">Votre offre</span>
+          <?php if ($ebTier && (int) $ebTier['discount_pct'] > 0): ?><p class="eb-apply" style="margin:0 0 8px;font-size:.86rem;font-weight:600;color:var(--accent)">Tarif pionnier appliqué : <?= saas_e((string) $ebTier['label']) ?> −<?= (int) $ebTier['discount_pct'] ?> % sur les prix ci-dessous.</p><?php endif; ?>
           <?= saas_offer_picker_html($grid, $v['plan'], $v['billing']) ?>
           <?= $err('plan') ?><?php if ($stripeOn): ?><small>Offre payante : paiement par carte (Stripe), abonnement résiliable. Offre gratuite : aucun paiement.</small><?php endif; ?></fieldset>
 

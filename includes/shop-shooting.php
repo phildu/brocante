@@ -492,7 +492,7 @@ function shop_shooting_can_publish_live(): bool
     return admin_role() === 'admin';
 }
 
-/** Tables du parcours : envois en attente et liens de partage. */
+/** Tables du parcours : envois en attente, vidéos enregistrées. */
 function shop_shooting_ensure_schema(): void
 {
     static $done = false;
@@ -520,6 +520,20 @@ CREATE TABLE IF NOT EXISTS shooting_requests (
 )
 SQL);
     db()->exec('CREATE INDEX IF NOT EXISTS idx_shooting_requests_status ON shooting_requests(status)');
+    db()->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS shooting_videos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  program TEXT NOT NULL DEFAULT 'presentation', -- presentation | testimonial
+  path TEXT NOT NULL,
+  caption TEXT NOT NULL DEFAULT '',
+  script TEXT NOT NULL DEFAULT '',
+  author_name TEXT NOT NULL DEFAULT '',
+  account_id INTEGER,
+  consent INTEGER NOT NULL DEFAULT 0,
+  duration INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+SQL);
 }
 
 /**
@@ -697,3 +711,143 @@ function shop_shooting_notify_admins(array $rows): int
     return count($ids);
 }
 
+
+// ── Vidéos du commerce : présentation et témoignages ───────────────────────
+// Deux tournages courts depuis le téléphone : le commerce se présente (texte
+// généré par l'IA, relu et modifié, puis affiché dans un prompteur) ou un
+// client témoigne (trame de questions + accord du client). La vidéo reste
+// dans la médiathèque, rien n'est publié automatiquement sur le site.
+
+/** Programmes vidéo proposés par le shooting, dans l'ordre d'affichage. */
+function shop_shooting_video_programs(): array
+{
+    return [
+        'presentation' => [
+            'title' => 'Le commerce se présente',
+            'icon' => '🎬',
+            'lead' => '40 à 60 secondes face caméra : qui vous êtes, ce qu’on trouve ici, pourquoi venir.',
+            'tips' => [
+                'Filmez à la verticale, téléphone à hauteur du visage, près de la vitrine ou du comptoir.',
+                'Lumière de face (vitrine, plafonnier) : jamais de contre-jour ni de fenêtre derrière vous.',
+                'Parlez lentement, souriez, gardez les coudes appuyés pour stabiliser.',
+            ],
+            'text_label' => 'Texte à dire (modifiable)',
+            'text_hint' => 'L’IA écrit un premier jet ; gardez vos mots, vos horaires et vos noms réels.',
+            'placeholder' => 'Ex. : Bonjour, nous sommes… Voici ce que vous trouvez chez nous…',
+            'consent' => false,
+            'capture' => 'user',
+        ],
+        'testimonial' => [
+            'title' => 'Un client témoigne',
+            'icon' => '💬',
+            'lead' => 'Une à deux minutes : un client raconte ce qu’il a trouvé, l’accueil, pourquoi il revient.',
+            'tips' => [
+                'Demandez l’accord du client avant d’appuyer sur Enregistrer.',
+                'Posez les questions une par une, laissez les silences : ne soufflez pas les réponses.',
+                'Cadrez le client à hauteur du visage, poitrine comprise, avec un fond simple.',
+            ],
+            'text_label' => 'Questions à poser au client',
+            'text_hint' => 'L’IA propose une phrase d’introduction et des questions ; adaptez-les au client.',
+            'placeholder' => 'Ex. : Qu’est-ce que vous cherchiez en entrant ? Qu’avez-vous trouvé ?…',
+            'consent' => true,
+            'capture' => 'environment',
+        ],
+    ];
+}
+
+function shop_shooting_video_program(string $key): ?array
+{
+    return shop_shooting_video_programs()[$key] ?? null;
+}
+
+/** Consigne envoyée au modèle pour préparer le texte du prompteur. */
+function shop_shooting_video_prompt(string $program, string $siteName, string $placeLabel): string
+{
+    if ($program === 'testimonial') {
+        return "Prépare une courte trame pour filmer le témoignage d’un client de « {$siteName} » ({$placeLabel}), en français. "
+            . "Réponds uniquement par une phrase d’introduction à dire par le commerçant (15 mots au plus), puis 4 questions courtes "
+            . "à poser au client, une par ligne, chacune précédée de « – ». "
+            . "Questions ouvertes et concrètes : ce qu’il cherchait, ce qu’il a trouvé, l’accueil, ce qu’il dirait à un ami. "
+            . "Aucune question qui suggère la réponse, aucun commentaire, aucun titre, aucun guillemet autour du texte.";
+    }
+    return "Écris le texte qu’un commerçant dira face caméra pour présenter « {$siteName} » ({$placeLabel}), en français, "
+        . "à la première personne du pluriel. Durée visée : 40 à 50 secondes, soit 110 à 130 mots. "
+        . "Structure en paragraphes très courts : une accroche concrète, ce que l’on trouve dans la boutique, "
+        . "ce qui la distingue, une invitation à venir. "
+        . "Ton chaleureux et simple, phrases courtes, aucune exagération, aucun chiffre, prix, récompense ni histoire inventés. "
+        . "N’ajoute ni titre, ni didascalie, ni guillemets, ni commentaire : seulement le texte à lire.";
+}
+
+/** Nettoie la réponse du modèle : sans markdown ni clôture, 1 200 caractères au plus. */
+function shop_shooting_clean_script(?string $text): string
+{
+    $text = trim((string) $text);
+    if ($text === '') return '';
+    $text = preg_replace('/^```[a-z]*\s*\n?|\n?```$/i', '', $text) ?? $text;
+    $text = preg_replace('/^\s{0,3}#{1,6}\s+/m', '', $text) ?? $text;
+    $text = str_replace(['**', '__'], '', $text);
+    $text = preg_replace("/\r\n?/", "\n", $text) ?? $text;
+    $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+    return mb_substr(trim($text), 0, 1200);
+}
+
+/** Enregistre une vidéo prise ou importée. Les champs sont déjà bornés par l'appelant. */
+function shop_shooting_video_create(array $data): int
+{
+    shop_shooting_ensure_schema();
+    $program = shop_shooting_video_program((string) ($data['program'] ?? '')) !== null
+        ? (string) $data['program']
+        : 'presentation';
+    $stmt = db()->prepare('INSERT INTO shooting_videos
+        (program, path, caption, script, author_name, account_id, consent, duration)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([
+        $program,
+        (string) ($data['path'] ?? ''),
+        mb_substr(trim((string) ($data['caption'] ?? '')), 0, 120),
+        mb_substr(trim((string) ($data['script'] ?? '')), 0, 1200),
+        mb_substr(trim((string) ($data['author_name'] ?? '')), 0, 80),
+        $data['account_id'] ?? null,
+        !empty($data['consent']) ? 1 : 0,
+        max(0, min(180, (int) ($data['duration'] ?? 0))),
+    ]);
+    return (int) db()->lastInsertId();
+}
+
+/** Vidéos de la boutique, de la plus récente à la plus ancienne. */
+function shop_shooting_videos(int $limit = 24): array
+{
+    try {
+        shop_shooting_ensure_schema();
+        $stmt = db()->query('SELECT * FROM shooting_videos ORDER BY id DESC LIMIT ' . max(1, min(100, $limit)));
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function shop_shooting_video_find(int $id): ?array
+{
+    shop_shooting_ensure_schema();
+    $stmt = db()->prepare('SELECT * FROM shooting_videos WHERE id = ?');
+    $stmt->execute([$id]);
+    return $stmt->fetch() ?: null;
+}
+
+/** Supprime une vidéo : fichier, ligne de médiathèque et fiche en base. */
+function shop_shooting_video_delete(int $id): bool
+{
+    $row = shop_shooting_video_find($id);
+    if (!$row) return false;
+    $path = (string) $row['path'];
+    if (preg_match('#^uploads/videos/shop-video-[A-Za-z0-9._-]+$#', $path)) {
+        $abs = dirname(__DIR__) . '/' . $path;
+        if (is_file($abs)) @unlink($abs);
+    }
+    try {
+        db()->prepare('DELETE FROM media_library WHERE path = ?')->execute([$path]);
+    } catch (Throwable $e) {
+    }
+    db()->prepare('DELETE FROM shooting_videos WHERE id = ?')->execute([$id]);
+    return true;
+}

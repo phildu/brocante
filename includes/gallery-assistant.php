@@ -290,7 +290,7 @@ function gass_platform_events(string $excludeSlug): array
             'slug' => $slug, 'gallery' => $g['name'], 'title' => (string) ($ev['title'] ?? $g['name']),
             'date' => (string) $ev['date'], 'end_date' => (string) ($ev['end_date'] ?? ''),
             'city' => (string) ($ev['city'] ?? ''), 'postcode' => (string) ($ev['postcode'] ?? ''),
-            'url' => '/galerie/' . $slug . '/',
+            'url' => gallery_public_url($g),
         ];
     }
     usort($out, static fn ($a, $b) => strcmp($a['date'], $b['date']));

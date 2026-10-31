@@ -4,6 +4,14 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/shop-shooting.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/shooting-tabs.php';
+
+// Le QR code et le lien partagé ouvrent directement l'application de shooting.
+// Sans session, on passe par la connexion en gardant cette page comme retour.
+if (!is_admin_logged_in()) {
+    $back = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    header('Location: /admin/login.php?next=' . rawurlencode($back !== '' && $back[0] === '/' ? $back : '/admin/shop-shooting.php'));
+    exit;
+}
 require_admin();
 
 $content = get_content();
@@ -17,13 +25,24 @@ $isAdmin = $role === 'admin';
 $canPublishLive = shop_shooting_can_publish_live();
 $pendingRows = $isAdmin ? shop_shooting_requests_pending() : [];
 $myRows = !$isAdmin && ($session['id'] ?? null) !== null ? shop_shooting_requests_mine((int) $session['id']) : [];
-$loginUrl = tenant_site_url() . '/admin/login.php';
+$videoPrograms = shop_shooting_video_programs();
+$videos = shop_shooting_videos();
+// Le QR doit ouvrir l'application sur le déploiement consulté : le domaine
+// canonique du commerce peut ne pas la recevoir (version autonome plus ancienne).
+$appHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
+if ($appHost === '' || !preg_match('/^[A-Za-z0-9.-]+(:\d+)?$/', $appHost)) {
+    $appUrl = tenant_site_url() . '/admin/shop-shooting.php';
+} else {
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+    $appUrl = ($https ? 'https' : 'http') . '://' . $appHost . tenant_base_path() . '/admin/shop-shooting.php';
+}
 $dataJson = json_encode([
     'places' => shop_shooting_places(),
     'targets' => $targets,
     'generalTips' => shop_shooting_general_tips(),
     'issueLabels' => shop_shooting_issue_labels(),
     'defaultPlace' => shop_shooting_default_place(),
+    'videoPrograms' => $videoPrograms,
     'canPublishLive' => $canPublishLive,
     'sessionKey' => bin2hex(random_bytes(8)),
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -74,7 +93,12 @@ $requestStatus = static function (string $status): string {
   <div class="ss" data-action="/admin/shop-shooting-action.php" data-ai="<?= $aiReady ? '1' : '0' ?>" data-role="<?= h($role) ?>">
     <?= shooting_tabs_html($role, 'shooting-lieu') ?>
 
-    <header class="ss-head">
+    <div class="ss-modes" role="group" aria-label="Type de prise de vue">
+      <button type="button" data-mode="photos" aria-pressed="true">Photos du lieu</button>
+      <button type="button" data-mode="video" aria-pressed="false">🎬 Vidéo du commerce</button>
+    </div>
+
+    <header class="ss-head" id="ss-head">
       <p class="eyebrow">Photos du lieu · parcours guidé</p>
       <h1>Shooting boutique / stand</h1>
       <p class="ss-lede">Un programme de prise de vue pour photographier votre boutique, votre stand ou votre atelier, puis publier chaque photo au bon endroit du site : accueil, « Notre histoire », écran en magasin et bandeaux de page.</p>
@@ -90,6 +114,7 @@ $requestStatus = static function (string $status): string {
       <?php endif; ?>
     </header>
 
+    <div class="ss-photo-flow" id="ss-photo-flow">
     <ol class="ss-steps" aria-label="Étapes">
       <li id="ss-step-1" aria-current="step">Lieu</li>
       <li id="ss-step-2">Programme</li>
@@ -206,13 +231,13 @@ $requestStatus = static function (string $status): string {
       <?php if ($isAdmin): ?>
       <div class="ss-card" id="ss-share-card">
         <h2>Accès du photographe</h2>
-        <p class="ss-note">Le compte se crée dans <a href="/admin/accounts.php">Comptes</a>, avec le rôle « Photographe ». Transmettez ensuite ce lien de connexion : la personne se connecte et arrive directement sur ce parcours. Elle peut préparer les photos, mais seul un administrateur les met en ligne.</p>
-        <label class="ss-field">Lien de connexion
-          <input type="text" id="ss-share-url" readonly value="<?= h($loginUrl) ?>">
+        <p class="ss-note">Le compte se crée dans <a href="/admin/accounts.php">Comptes</a>, avec le rôle « Photographe ». Transmettez ensuite ce lien de l'application : la personne se connecte et arrive directement sur ce parcours. Elle peut préparer les photos, mais seul un administrateur les met en ligne.</p>
+        <label class="ss-field">Lien de l'application
+          <input type="text" id="ss-share-url" readonly value="<?= h($appUrl) ?>">
         </label>
         <div class="ss-actions">
           <button type="button" class="btn btn-ghost" id="ss-share-copy">Copier le lien</button>
-          <?= share_button_html($loginUrl, 'Shooting boutique / stand — ' . $siteName, 'Connectez-vous pour photographier la boutique :', '', 'ss-share-open', true, true) ?>
+          <?= share_button_html($appUrl, 'Shooting boutique / stand — ' . $siteName, 'Ouvrez l\'application de shooting de la boutique :', '', 'ss-share-open', true, true) ?>
         </div>
       </div>
       <?php endif; ?>
@@ -375,10 +400,124 @@ $requestStatus = static function (string $status): string {
         </div>
       </div>
     </section>
+    </div>
+
+    <!-- Vidéo du commerce : présentation ou témoignage client -->
+    <section class="ss-panel ss-video-panel" id="ss-panel-video" aria-labelledby="ss-video-title" hidden>
+      <div class="ss-card">
+        <div class="ss-card-head">
+          <span class="ss-num" aria-hidden="true">🎬</span>
+          <div>
+            <h2 id="ss-video-title">Vidéo du commerce</h2>
+            <p>Deux tournages courts, au téléphone : le commerce se présente, ou un client témoigne. Le texte est écrit par l’IA, relu et modifié, puis affiché dans un prompteur pendant l’enregistrement.</p>
+          </div>
+        </div>
+
+        <div class="ss-places ss-video-programs" id="ss-video-programs" role="group" aria-label="Programme vidéo">
+          <?php foreach ($videoPrograms as $key => $program): ?>
+            <button type="button" data-video-program="<?= h($key) ?>" aria-pressed="false">
+              <span aria-hidden="true"><?= $program['icon'] ?></span>
+              <b><?= h($program['title']) ?></b>
+              <small><?= h($program['lead']) ?></small>
+            </button>
+          <?php endforeach; ?>
+        </div>
+
+        <div class="ss-video-work" id="ss-video-work" hidden>
+          <ul class="ss-video-tips" id="ss-video-tips"></ul>
+
+          <?php if (!$aiReady): ?>
+            <p class="ss-warn">Clé Gemini non configurée : écrivez le texte à la main, l’enregistrement fonctionne normalement.</p>
+          <?php endif; ?>
+
+          <label class="ss-field" for="ss-video-text">
+            <span id="ss-video-text-label">Texte à dire (modifiable)</span>
+            <textarea id="ss-video-text" rows="7" maxlength="1200" placeholder="Le texte apparaîtra dans le prompteur…"></textarea>
+          </label>
+          <p class="ss-note" id="ss-video-text-hint"></p>
+
+          <div class="ss-actions ss-actions-row">
+            <button type="button" class="btn btn-ghost" id="ss-video-ai"<?= $aiReady ? '' : ' disabled' ?>>✨ Générer un texte</button>
+            <button type="button" class="btn btn-ghost" id="ss-video-prompter-open" disabled>📱 Prompteur</button>
+          </div>
+          <p class="ss-note" id="ss-video-ai-note" role="status" aria-live="polite"></p>
+
+          <div class="ss-video-stage">
+            <video id="ss-video-preview" playsinline muted hidden></video>
+            <div class="ss-video-idle" id="ss-video-idle">
+              <p>Cadrez le visage ou le client, puis appuyez sur « Enregistrer ».</p>
+              <p class="ss-note" id="ss-video-support"></p>
+            </div>
+            <p class="ss-video-rec" id="ss-video-rec" hidden><span class="ss-rec-dot" aria-hidden="true"></span><span id="ss-video-time">00:00</span></p>
+          </div>
+
+          <label class="ss-field" for="ss-video-caption">Titre de la vidéo (facultatif)
+            <input type="text" id="ss-video-caption" maxlength="120" placeholder="Ex. : La boutique se présente">
+          </label>
+
+          <label class="ss-video-consent" id="ss-video-consent-wrap" hidden>
+            <input type="checkbox" id="ss-video-consent">
+            <span>Le client a donné son accord pour être filmé et pour l’usage de cette vidéo par la boutique.</span>
+          </label>
+
+          <div class="ss-actions">
+            <button type="button" class="btn btn-primary" id="ss-video-start">● Enregistrer</button>
+            <button type="button" class="btn btn-ghost" id="ss-video-stop" hidden>■ Arrêter</button>
+            <button type="button" class="btn btn-ghost" id="ss-video-retake" hidden>↺ Reprendre</button>
+            <button type="button" class="btn btn-ghost" id="ss-video-file">Importer une vidéo</button>
+            <button type="button" class="btn btn-primary" id="ss-video-upload" hidden>Envoyer la vidéo</button>
+          </div>
+          <input type="file" id="ss-video-input" accept="video/mp4,video/webm,video/quicktime" hidden>
+          <div class="ss-video-progress" id="ss-video-progress" hidden><span id="ss-video-progress-fill"></span></div>
+          <p class="ss-note" id="ss-video-note" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <div class="ss-card" id="ss-videos-card">
+        <div class="ss-card-head">
+          <span class="ss-num" aria-hidden="true">🎞</span>
+          <div>
+            <h2>Vidéos enregistrées</h2>
+            <p>Conservées dans la médiathèque de la boutique. Rien n’est publié automatiquement sur le site.</p>
+          </div>
+        </div>
+        <ul class="ss-videos" id="ss-videos-list">
+          <?php foreach ($videos as $video): ?>
+            <li data-video="<?= (int) $video['id'] ?>">
+              <video src="/<?= h($video['path']) ?>" controls preload="metadata" playsinline></video>
+              <div class="ss-video-meta">
+                <b><?= h($video['caption'] !== '' ? $video['caption'] : ($videoPrograms[$video['program']]['title'] ?? $video['program'])) ?></b>
+                <small><?= h($video['author_name'] !== '' ? $video['author_name'] : 'Équipe') ?> · <?= h($video['created_at']) ?> · <?= (int) $video['duration'] ?> s</small>
+              </div>
+              <?php if ($isAdmin): ?>
+                <button type="button" class="btn-small ss-ghost" data-video-delete="<?= (int) $video['id'] ?>">Supprimer</button>
+              <?php endif; ?>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+        <p class="ss-note" id="ss-videos-empty"<?= $videos ? ' hidden' : '' ?>>Aucune vidéo pour l’instant.</p>
+        <p class="ss-note" id="ss-videos-note" role="status" aria-live="polite" hidden></p>
+      </div>
+    </section>
 
     <p class="ss-audio-status" id="ss-audio-status" role="status" aria-live="polite"></p>
   </div>
 </main>
+
+<div class="ss-prompter" id="ss-prompter" hidden aria-label="Prompteur">
+  <div class="ss-prompter-bar">
+    <span id="ss-prompter-state">Prompteur</span>
+    <div class="ss-prompter-actions">
+      <button type="button" class="btn-small" id="ss-prompter-rec">● Enregistrer</button>
+      <span id="ss-prompter-time" hidden>00:00</span>
+      <button type="button" class="btn-small" id="ss-prompter-slower" aria-label="Défilement plus lent">A−</button>
+      <button type="button" class="btn-small" id="ss-prompter-play">Pause</button>
+      <button type="button" class="btn-small" id="ss-prompter-faster" aria-label="Défilement plus rapide">A+</button>
+      <button type="button" class="btn-small" id="ss-prompter-close">Fermer</button>
+    </div>
+  </div>
+  <div class="ss-prompter-text" id="ss-prompter-text" tabindex="0"></div>
+</div>
 
 <script type="application/json" id="ss-data"><?= $dataJson ?></script>
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>

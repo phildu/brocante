@@ -2,6 +2,9 @@
 // Endpoint du shooting du lieu (admin/shop-shooting.php).
 //   review  → mesures locales (GD) + critique IA facultative d'une photo du lieu
 //   caption → légende suggérée par l'IA
+//   script  → texte de vidéo suggéré par l'IA (présentation ou témoignage)
+//   video_begin / video_chunk / video_finish → envoi d'une vidéo par morceaux
+//   video_delete → suppression d'une vidéo (administrateurs)
 //   enhance → retouche IA de la lumière et de la netteté, décor inchangé
 //   publish → enregistrement de la photo, médiathèque, puis publication sur les cibles choisies
 //             (un photographe ne publie pas : sa photo part en validation)
@@ -111,6 +114,61 @@ function ss_shot(): array
     return [$place, $place['shots'][0]];
 }
 
+/** Dossier des vidéos en cours d'envoi (hors racine web, jamais servi). */
+function ss_video_dir(string $root): string
+{
+    $dir = $root . '/data/video-uploads';
+    if (!is_dir($dir)) @mkdir($dir, 0700, true);
+    return $dir;
+}
+
+/** Métadonnées d'un envoi en cours, bornées par un identifiant hexadécimal. */
+function ss_video_meta(string $dir, string $id): array
+{
+    if (!preg_match('/^[a-f0-9]{24}$/', $id)) {
+        ss_reply(['ok' => false, 'error' => 'Envoi vidéo inconnu.'], 400);
+    }
+    $meta = json_decode((string) @file_get_contents($dir . '/' . $id . '.json'), true);
+    if (!is_array($meta) || !is_file($dir . '/' . $id . '.part')) {
+        ss_reply(['ok' => false, 'error' => 'Envoi vidéo introuvable : reprenez depuis le début.'], 404);
+    }
+    $meta['id'] = $id;
+    return $meta;
+}
+
+/** Conteneur réellement reçu (mp4 / mov / webm), indépendamment du nom d'origine. */
+function ss_video_ext(string $file): ?string
+{
+    $fh = @fopen($file, 'rb');
+    if (!$fh) return null;
+    $head = (string) fread($fh, 12);
+    fclose($fh);
+    if (strlen($head) >= 12 && substr($head, 4, 4) === 'ftyp') {
+        // Les vidéos d'iPhone sont des QuickTime .mov : même structure, lecture
+        // assurée dans Safari. On garde l'extension réelle du conteneur.
+        return substr($head, 8, 4) === 'qt  ' ? 'mov' : 'mp4';
+    }
+    if (str_starts_with($head, "\x1A\x45\xDF\xA3")) return 'webm';
+    return null;
+}
+
+/** Vidéo présentée au navigateur. */
+function ss_video_out(array $row, string $siteName): array
+{
+    $program = shop_shooting_video_program((string) $row['program']) ?? shop_shooting_video_program('presentation');
+    return [
+        'id' => (int) $row['id'],
+        'program' => (string) $row['program'],
+        'program_title' => (string) $program['title'],
+        'path' => (string) $row['path'],
+        'url' => '/' . $row['path'],
+        'caption' => (string) $row['caption'],
+        'author' => (string) $row['author_name'],
+        'duration' => (int) $row['duration'],
+        'created_at' => (string) $row['created_at'],
+    ];
+}
+
 switch ($action) {
 
     case 'state':
@@ -169,6 +227,161 @@ switch ($action) {
         $caption = shop_shooting_clean_caption($text);
         if ($caption === '') ss_reply(['ok' => false, 'error' => "L'IA n'a pas proposé de légende exploitable."]);
         ss_reply(['ok' => true, 'caption' => $caption]);
+    }
+
+    case 'script': {
+        $programKey = (string) ($_POST['program'] ?? '');
+        $program = shop_shooting_video_program($programKey);
+        if ($program === null) ss_reply(['ok' => false, 'error' => 'Programme vidéo inconnu.'], 400);
+        $place = shop_shooting_place((string) ($_POST['place'] ?? ''));
+        $content = get_content();
+        $siteName = trim((string) ($content['site_name'] ?? '')) ?: (string) tenant('name');
+        $provider = ai_provider_active('text');
+        if (!GEMINI_API_KEY && !($provider && in_array($provider['driver'], ['openai', 'anthropic'], true))) {
+            ss_reply(['ok' => false, 'error' => 'IA non configurée : écrivez le texte à la main.'], 503);
+        }
+        if ($gate = ai_gate()) ss_reply(['ok' => false, 'quota' => true, 'error' => $gate]);
+        $text = gemini_describe_image('', shop_shooting_video_prompt($programKey, $siteName, $place['title']), 1);
+        $clean = shop_shooting_clean_script($text);
+        if ($clean === '') ss_reply(['ok' => false, 'error' => "L'IA n'a pas proposé de texte exploitable. Écrivez le vôtre."]);
+        ss_reply(['ok' => true, 'program' => $programKey, 'text' => $clean]);
+    }
+
+    // Envoi d'une vidéo par morceaux : les hébergements limitent souvent chaque
+    // requête à 2 Mo, une vidéo de téléphone en fait dix à trente fois plus.
+    case 'video_begin': {
+        $programKey = (string) ($_POST['program'] ?? '');
+        $program = shop_shooting_video_program($programKey);
+        if ($program === null) ss_reply(['ok' => false, 'error' => 'Programme vidéo inconnu.'], 400);
+        $size = (int) ($_POST['size'] ?? 0);
+        if ($size <= 0 || $size > 120 * 1048576) {
+            ss_reply(['ok' => false, 'error' => 'Vidéo vide ou trop lourde (120 Mo au plus).'], 413);
+        }
+        $consent = !empty($_POST['consent']);
+        if ($program['consent'] && !$consent) {
+            ss_reply(['ok' => false, 'error' => "Cochez l'accord du client avant d'envoyer le témoignage."], 400);
+        }
+
+        $dir = ss_video_dir($root);
+        foreach (glob($dir . '/*.part') ?: [] as $old) {
+            if (preg_match('/[a-f0-9]{24}\.part$/', $old) && @filemtime($old) < time() - 86400) {
+                @unlink($old);
+                @unlink(substr($old, 0, -5) . '.json');
+            }
+        }
+
+        $session = admin_session() ?? [];
+        $id = bin2hex(random_bytes(12));
+        $meta = [
+            'program' => $programKey,
+            'caption' => mb_substr(trim((string) ($_POST['caption'] ?? '')), 0, 120),
+            'script' => shop_shooting_clean_script($_POST['script'] ?? ''),
+            'author_name' => (string) ($session['name'] ?? ''),
+            'account_id' => $session['id'] ?? null,
+            'consent' => $consent ? 1 : 0,
+            'duration' => max(0, min(180, (int) ($_POST['duration'] ?? 0))),
+            'size' => $size,
+            'created' => time(),
+        ];
+        if (!@file_put_contents($dir . '/' . $id . '.json', json_encode($meta, JSON_UNESCAPED_UNICODE))
+            || !@touch($dir . '/' . $id . '.part')) {
+            ss_reply(['ok' => false, 'error' => "L'envoi n'a pas pu démarrer. Réessayez."], 500);
+        }
+        ss_reply(['ok' => true, 'id' => $id, 'chunk' => 1048576]);
+    }
+
+    case 'video_chunk': {
+        $dir = ss_video_dir($root);
+        $meta = ss_video_meta($dir, (string) ($_POST['id'] ?? ''));
+        $chunk = $_FILES['chunk'] ?? null;
+        if (!$chunk || ($chunk['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($chunk['tmp_name'])) {
+            ss_reply(['ok' => false, 'error' => 'Morceau de vidéo non reçu.'], 400);
+        }
+        $part = $dir . '/' . $meta['id'] . '.part';
+        clearstatcache(true, $part);
+        $received = (int) filesize($part);
+        if ($received + (int) $chunk['size'] > (int) $meta['size'] + 1024) {
+            ss_reply(['ok' => false, 'error' => 'Envoi incohérent : reprenez la vidéo.'], 409);
+        }
+        $out = @fopen($part, 'ab');
+        $in = @fopen($chunk['tmp_name'], 'rb');
+        if (!$out || !$in) {
+            if ($out) fclose($out);
+            if ($in) fclose($in);
+            ss_reply(['ok' => false, 'error' => 'Morceau de vidéo non enregistré.'], 500);
+        }
+        flock($out, LOCK_EX);
+        $copied = stream_copy_to_stream($in, $out);
+        fflush($out);
+        flock($out, LOCK_UN);
+        fclose($in);
+        fclose($out);
+        if ($copied === false) ss_reply(['ok' => false, 'error' => 'Morceau de vidéo non enregistré.'], 500);
+        clearstatcache(true, $part);
+        ss_reply(['ok' => true, 'received' => (int) filesize($part), 'size' => (int) $meta['size']]);
+    }
+
+    case 'video_finish': {
+        $dir = ss_video_dir($root);
+        $meta = ss_video_meta($dir, (string) ($_POST['id'] ?? ''));
+        $part = $dir . '/' . $meta['id'] . '.part';
+        clearstatcache(true, $part);
+        $actual = (int) filesize($part);
+        if ($actual <= 0 || $actual !== (int) $meta['size']) {
+            ss_reply(['ok' => false, 'error' => 'Envoi incomplet (' . $actual . ' octets sur ' . (int) $meta['size'] . ') : recommencez.'], 409);
+        }
+        $ext = ss_video_ext($part);
+        if ($ext === null) {
+            ss_reply(['ok' => false, 'error' => "Ce fichier n'est pas une vidéo lisible (MP4, MOV ou WebM attendu)."], 415);
+        }
+
+        $videosDir = $root . '/uploads/videos';
+        if (!is_dir($videosDir)) @mkdir($videosDir, 0755, true);
+        $name = 'shop-video-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
+        if (!@rename($part, $videosDir . '/' . $name)) {
+            if (!@copy($part, $videosDir . '/' . $name)) {
+                ss_reply(['ok' => false, 'error' => "La vidéo n'a pas pu être enregistrée."], 500);
+            }
+            @unlink($part);
+        }
+        @unlink($dir . '/' . $meta['id'] . '.json');
+
+        $path = 'uploads/videos/' . $name;
+        $content = get_content();
+        $siteName = trim((string) ($content['site_name'] ?? '')) ?: (string) tenant('name');
+        $program = shop_shooting_video_program((string) $meta['program']) ?? shop_shooting_video_program('presentation');
+        $rowId = 0;
+        try {
+            $rowId = shop_shooting_video_create([
+                'program' => $meta['program'],
+                'path' => $path,
+                'caption' => $meta['caption'],
+                'script' => $meta['script'],
+                'author_name' => $meta['author_name'],
+                'account_id' => $meta['account_id'],
+                'consent' => !empty($meta['consent']),
+                'duration' => $meta['duration'],
+            ]);
+            $label = $meta['caption'] !== '' ? $meta['caption'] : $program['title'] . ' — ' . $siteName;
+            media_library_register($path, $label, 'Shooting vidéo', 'lieu,video,' . $meta['program'], 'video');
+        } catch (Throwable $e) {
+            if ($rowId > 0) {
+                try { shop_shooting_video_delete($rowId); } catch (Throwable $ignored) {}
+            }
+            @unlink($videosDir . '/' . $name);
+            ss_reply(['ok' => false, 'error' => "La vidéo n'a pas pu être classée."], 500);
+        }
+        $row = shop_shooting_video_find($rowId);
+        ss_reply(['ok' => true, 'video' => ss_video_out($row ?: [], $siteName)]);
+    }
+
+    case 'video_delete': {
+        $adminOnly();
+        $id = (int) ($_POST['id'] ?? 0);
+        if ($id <= 0 || !shop_shooting_video_delete($id)) {
+            ss_reply(['ok' => false, 'error' => 'Vidéo introuvable.'], 404);
+        }
+        ss_reply(['ok' => true]);
     }
 
     case 'enhance': {

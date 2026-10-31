@@ -17,6 +17,11 @@ const GALLERY_MAP_MAX_POINTS = 60;
 const GALLERY_ZONE_TYPES = ['rue' => 'Rue', 'hall' => 'Hall', 'allee' => 'Allée', 'cour' => 'Cour', 'parking' => 'Parking', 'quartier' => 'Quartier', 'autre' => 'Autre zone'];
 /** Unités de tarification d'une zone : par emplacement, par mètre linéaire de façade, par m². */
 const GALLERY_PRICE_UNITS = ['slot' => 'par emplacement', 'ml' => 'par mètre linéaire', 'm2' => 'par m²'];
+/** Affectation d'un élément du plan : déballage, circulation, service, parking, zone exclue, entrée / sortie. */
+const GALLERY_USAGES = ['vente' => 'Déballage', 'circulation' => 'Circulation', 'service' => 'Service', 'parking' => 'Parking',
+    'exclu' => 'Exclu du déballage', 'acces' => 'Entrée / sortie'];
+/** Sens de circulation d'une voie (direct = ordre de dessin des points). */
+const GALLERY_FLOWS = ['direct' => 'Sens direct', 'inverse' => 'Sens inverse', 'double' => 'Double sens'];
 
 /** Clé d'un commerce membre, la même que dans gallery_catalogue() : l'identifiant local, ou « r » + empreinte de l'adresse. */
 function gallery_member_key(array $m): string
@@ -26,10 +31,16 @@ function gallery_member_key(array $m): string
 
 /**
  * Plan nettoyé, ou null s'il est vide. $allowedShops : clés de commerce acceptées (celles des membres) ; une autre clé est effacée.
+ * $locations : lieux de vente du type de galerie (clés acceptées pour « ztype ») ; les anciens types de zone restent toujours acceptés.
  * Éléments : repère (1 point), zone (3 points ou plus, rectangle compris) ou tracé (2 points ou plus).
  */
-function gallery_map_normalize(array $m, ?array $allowedShops = null): ?array
+function gallery_map_normalize(array $m, ?array $allowedShops = null, ?array $locations = null): ?array
 {
+    $locationKeys = [];
+    foreach ((array) $locations as $loc) {
+        $lk = is_array($loc) ? (string) ($loc['key'] ?? '') : '';
+        if (preg_match('/^[a-z0-9][a-z0-9_-]{0,23}$/', $lk)) $locationKeys[$lk] = true;
+    }
     $num = static fn ($v, float $min, float $max): ?float => is_numeric($v) && (float) $v >= $min && (float) $v <= $max ? round((float) $v, 6) : null;
     $items = [];
     foreach ((array) ($m['items'] ?? []) as $it) {
@@ -52,23 +63,34 @@ function gallery_map_normalize(array $m, ?array $allowedShops = null): ?array
         $items[] = ['id' => $id, 'kind' => $kind, 'pts' => $pts, 'shop' => $shop,
             'num' => preg_match('/^[\p{L}\p{N} ._\/#-]*$/u', $numero) ? $numero : '',
             'surface' => preg_match('/^[a-z0-9]{3,16}$/', (string) ($it['surface'] ?? '')) ? (string) $it['surface'] : '',
-            'role' => $kind === 'polygon' && ($it['role'] ?? '') === 'zone' ? 'zone' : ($kind === 'polygon' ? 'slot' : ''),
-            'ztype' => isset(GALLERY_ZONE_TYPES[(string) ($it['ztype'] ?? '')]) ? (string) $it['ztype'] : 'autre',
+            'role' => $kind === 'polygon' && in_array((string) ($it['role'] ?? ''), ['zone', 'territoire'], true) ? (string) $it['role'] : ($kind === 'polygon' ? 'slot' : ''),
+            'ztype' => isset($locationKeys[(string) ($it['ztype'] ?? '')]) || isset(GALLERY_ZONE_TYPES[(string) ($it['ztype'] ?? '')]) ? (string) $it['ztype'] : 'autre',
             'unit' => isset(GALLERY_PRICE_UNITS[(string) ($it['unit'] ?? '')]) ? (string) $it['unit'] : 'slot',
             'price_cents' => max(0, min(1000000, (int) ($it['price_cents'] ?? 0))),
             'price_pro_cents' => max(0, min(1000000, (int) ($it['price_pro_cents'] ?? 0))),
             'zone' => '',
             'label' => mb_substr(trim((string) ($it['label'] ?? '')), 0, 60),
             'note' => mb_substr(trim((string) ($it['note'] ?? '')), 0, 200),
+            'usage' => isset(GALLERY_USAGES[(string) ($it['usage'] ?? '')]) ? (string) $it['usage'] : '',
+            'flow' => isset(GALLERY_FLOWS[(string) ($it['flow'] ?? '')]) ? (string) $it['flow'] : '',
+            'indoor' => !empty($it['indoor']),
+            'service' => (string) ($it['usage'] ?? '') === 'service' ? mb_substr(trim((string) ($it['service'] ?? '')), 0, 40) : '',
             'color' => preg_match('/^#[0-9a-fA-F]{6}$/', $color) ? strtolower($color) : '#b5502e'];
     }
-    // Un emplacement appartient à la plus petite zone qui contient son centre (calculé ici : on ne fait pas confiance au navigateur).
+    // Un emplacement appartient à la plus petite zone tarifaire qui contient son centre (calculé ici : on ne fait pas confiance au navigateur) ;
+    // une zone de circulation, de service, de parking ou exclue ne capte pas les emplacements : un emplacement dont le centre tombe dedans reste sans zone.
     $zones = [];
-    foreach ($items as $i => $it) if ($it['role'] === 'zone') $zones[$i] = gallery_map_area_m2($it['pts']);
+    $blocked = [];
+    foreach ($items as $i => $it) {
+        if ($it['role'] !== 'zone') continue;
+        if (in_array($it['usage'], ['', 'vente'], true)) $zones[$i] = gallery_map_area_m2($it['pts']);
+        else $blocked[] = $i;
+    }
     if ($zones) {
         foreach ($items as $i => &$it) {
             if ($it['role'] !== 'slot') continue;
             [$cLat, $cLng] = gallery_map_centroid($it['pts']);
+            foreach ($blocked as $bi) if (gallery_map_contains($items[$bi]['pts'], $cLat, $cLng)) continue 2;
             $best = null;
             foreach ($zones as $zi => $area) if (gallery_map_contains($items[$zi]['pts'], $cLat, $cLng) && ($best === null || $area < $zones[$best])) $best = $zi;
             if ($best !== null) $it['zone'] = $items[$best]['id'];
@@ -110,16 +132,27 @@ function gallery_map_normalize(array $m, ?array $allowedShops = null): ?array
     $c = (array) ($m['center'] ?? []);
     $lat = $num($c[0] ?? null, -90, 90);
     $lng = $num($c[1] ?? null, -180, 180);
+    // Fond importé (plan masse, cadastre…) : image stockée sous uploads/galeries/ par le portail, calée sur deux coins [N,O]/[S,E].
+    $bg = (array) ($m['background'] ?? []);
+    $bgPath = (string) ($bg['path'] ?? '');
+    if (!preg_match('#^uploads/galeries/[a-z0-9][a-z0-9-]*-fond-[a-z0-9]+\.(?:jpe?g|png|webp)$#', $bgPath)) $bgPath = '';
+    $bgBounds = [];
+    foreach (array_slice((array) ($bg['bounds'] ?? []), 0, 2) as $pt) {
+        $blat = is_array($pt) ? $num($pt[0] ?? null, -90, 90) : null;
+        $blng = is_array($pt) ? $num($pt[1] ?? null, -180, 180) : null;
+        if ($blat !== null && $blng !== null) $bgBounds[] = [$blat, $blng];
+    }
+    $background = $bgPath !== '' && count($bgBounds) === 2 ? ['path' => $bgPath, 'bounds' => $bgBounds, 'opacity' => round(max(0.1, min(1, (float) ($bg['opacity'] ?? 0.7))), 2)] : null;
     if (!$items && !$catalog && !$places && $lat === null) return null;
     return ['center' => $lat !== null && $lng !== null ? [$lat, $lng] : null,
         'zoom' => max(1, min(20, (int) ($m['zoom'] ?? 17))),
         'base' => in_array($m['base'] ?? '', ['sat', 'none'], true) ? (string) $m['base'] : 'osm',
-        'catalog' => $catalog, 'places' => $places, 'booking' => $booking, 'costs' => $costs,
+        'catalog' => $catalog, 'places' => $places, 'booking' => $booking, 'costs' => $costs, 'background' => $background,
         'items' => $items];
 }
 
 /**
- * Localisation de la marchandise d'un commerce de ce serveur (saisie dans le plan de la galerie dont il est membre) : celle qui nourrit le champ
+ * Localisation de la marchandise d'un commerce de ce serveur (saisie dans l'espace de la galerie ou celui de la boutique) : celle qui nourrit le champ
  * « adresse du bien » des plateformes. Première galerie qui en renseigne une. -> ['street','postcode','city','stand','note','address'] ou null.
  */
 function gallery_member_place(string $shopSlug): ?array
@@ -204,9 +237,13 @@ function gallery_map_slot_price(array $map, array $slot, bool $pro = false): ?in
 }
 
 /** Nom d'une zone : « Rue des Fleurs », « Hall A » ; le type n'est ajouté que si le nom ne le dit pas déjà (« Fleurs » → « Rue Fleurs »). */
-function gallery_zone_name(array $zone): string
+function gallery_zone_name(array $zone, ?array $locations = null): string
 {
-    $t = (string) (GALLERY_ZONE_TYPES[$zone['ztype'] ?? 'autre'] ?? '');
+    $labels = GALLERY_ZONE_TYPES;
+    foreach ((array) $locations as $loc) {
+        if (is_array($loc) && isset($loc['key'])) $labels[(string) $loc['key']] = (string) ($loc['label'] ?? $loc['key']);
+    }
+    $t = (string) ($labels[$zone['ztype'] ?? 'autre'] ?? '');
     $l = trim((string) ($zone['label'] ?? ''));
     if ($l === '') return $t;
     return ($t !== '' && ($zone['ztype'] ?? 'autre') !== 'autre' && mb_stripos($l, $t) !== 0) ? $t . ' ' . $l : $l;

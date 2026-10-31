@@ -6,10 +6,10 @@
 // (compte de l'équipe, compte client, administrateur de galerie). Il sert à choisir
 // un nouveau mot de passe sur place, sans quitter la page.
 //
-// L'envoi passe par Twilio quand les réglages de la boutique (twilio_sid,
-// twilio_token, twilio_from) ou les variables d'environnement TWILIO_ACCOUNT_SID,
-// TWILIO_AUTH_TOKEN, TWILIO_FROM sont renseignés. En local, le message est écrit
-// dans data/sms-outbox.log (comme les e-mails) : le parcours reste testable.
+// L'envoi passe par OVH ou Twilio (includes/sms.php) quand les réglages de la
+// boutique ou les variables d'environnement fournissent des identifiants. En
+// local, le message est écrit dans data/sms-outbox.log (comme les e-mails) :
+// le parcours reste testable.
 //
 // Les codes sont conservés dans data/login-otps.json (empreinte SHA-256, jamais
 // le code en clair) : la page de galerie n'ouvre pas la base de la boutique, le
@@ -57,35 +57,15 @@ function login_otp_key(string $scope, string $login): string
 /** Hôte local ? (même règle que les e-mails : hôte sans point, « .test », « .localhost » ou adresse IP) */
 function login_otp_local(): bool
 {
-    $host = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    return !str_contains($host, '.') || str_ends_with($host, '.test') || str_ends_with($host, '.localhost') || filter_var($host, FILTER_VALIDATE_IP);
-}
-
-/** Réglages d'envoi SMS : ['sid', 'token', 'from'], vides si non configurés. */
-function login_otp_provider(): array
-{
-    $read = static function (string $setting, string $env): string {
-        $value = trim((string) getenv($env));
-        if ($value !== '') return $value;
-        try {
-            return trim(shop_setting($setting, ''));
-        } catch (Throwable $e) {
-            return '';
-        }
-    };
-    return [
-        'sid' => $read('twilio_sid', 'TWILIO_ACCOUNT_SID'),
-        'token' => $read('twilio_token', 'TWILIO_AUTH_TOKEN'),
-        'from' => $read('twilio_from', 'TWILIO_FROM'),
-    ];
+    require_once __DIR__ . '/sms.php';
+    return sms_local_host();
 }
 
 /** Un numéro peut-il recevoir un code ? (fournisseur configuré ou mode local pour tester) */
 function login_otp_sms_available(): bool
 {
-    if (login_otp_local()) return true;
-    $p = login_otp_provider();
-    return $p['sid'] !== '' && $p['token'] !== '' && $p['from'] !== '';
+    require_once __DIR__ . '/sms.php';
+    return sms_available();
 }
 
 /** Numéro masqué pour l'affichage : « +33 6 •• •• •• 78 ». */
@@ -98,40 +78,11 @@ function login_otp_phone_mask(string $phone): string
     return substr($p, 0, max(2, strlen($p) - 6)) . str_repeat('•', min(6, strlen($digits) - 4)) . substr($digits, -2);
 }
 
-/** Envoi du message : Twilio si configuré, sinon copie locale dans data/sms-outbox.log. */
+/** Envoi du message : OVH ou Twilio selon les réglages, sinon copie locale dans data/sms-outbox.log. */
 function login_otp_send_sms(string $to, string $body): bool
 {
-    $p = login_otp_provider();
-    if ($p['sid'] !== '' && $p['token'] !== '' && $p['from'] !== '') {
-        $url = 'https://api.twilio.com/2010-04-01/Accounts/' . rawurlencode($p['sid']) . '/Messages.json';
-        $data = http_build_query(['To' => $to, 'From' => $p['from'], 'Body' => $body]);
-        if (function_exists('curl_init')) {
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => $data,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 10,
-                CURLOPT_USERPWD => $p['sid'] . ':' . $p['token'],
-                CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
-            ]);
-            $ok = curl_exec($ch) !== false;
-            $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-            curl_close($ch);
-            return $ok && $status >= 200 && $status < 300;
-        }
-        $ctx = stream_context_create(['http' => [
-            'method' => 'POST',
-            'header' => "Content-Type: application/x-www-form-urlencoded\r\nAuthorization: Basic " . base64_encode($p['sid'] . ':' . $p['token']) . "\r\n",
-            'content' => $data,
-            'timeout' => 10,
-            'ignore_errors' => true,
-        ]]);
-        return @file_get_contents($url, false, $ctx) !== false;
-    }
-    if (!login_otp_local()) return false;
-    @file_put_contents(__DIR__ . '/../data/sms-outbox.log', '[' . date('c') . "] À : $to\n$body\n----\n", FILE_APPEND | LOCK_EX);
-    return true;
+    require_once __DIR__ . '/sms.php';
+    return sms_send($to, $body);
 }
 
 /**

@@ -147,6 +147,23 @@ function addon_shop_galleries(string $shop): array
     return $out;
 }
 
+/** Type de galerie effectif d'une boutique (sa galerie $gallery si fournie, sinon sa première galerie). */
+function addon_gallery_type(string $shop, string $gallery): string
+{
+    if (!function_exists('gallery_load')) require_once __DIR__ . '/galleries.php';
+    if ($gallery !== '') {
+        $g = gallery_load($gallery);
+        if ($g) return (string) ($g['type'] ?? 'marchande');
+    }
+    if ($shop === '') return '';
+    foreach (gallery_list() as $g) {
+        foreach ($g['members'] as $member) {
+            if (($member['type'] ?? '') === 'local' && ($member['slug'] ?? '') === $shop) return (string) ($g['type'] ?? 'marchande');
+        }
+    }
+    return '';
+}
+
 /** Étape d'un module : « live » (validé, en production) ou « beta » (en test : réservé aux testeurs, gratuit, avec retours). */
 const ADDON_STAGE_LABELS = ['live' => 'Validé', 'beta' => 'En test'];
 
@@ -228,8 +245,35 @@ function addon_info_resolve(string $module, array $settings, string $shop = '', 
     $d['beta_locked'] = false;
     $d['restriction'] = '';
 
+    // Rôle du plugin pour les vendeurs de ce type de galerie (configurateur « Types de galerie »). Un rôle explicite prime sur le ciblage global.
+    $typeMode = 'inherit';
+    if ($shop !== '' || $gallery !== '') {
+        if (!function_exists('gt_vendor_plugin_mode') && is_file(__DIR__ . '/gallery-types.php')) require_once __DIR__ . '/gallery-types.php';
+        if (function_exists('gt_vendor_plugin_mode')) {
+            $typeKey = addon_gallery_type($shop, $gallery);
+            if ($typeKey !== '') $typeMode = gt_vendor_plugin_mode($typeKey, $module);
+        }
+    }
+    if ($typeMode === 'included') {
+        $d['access'] = 'included';
+        $d['restriction'] = 'gallery_type_plugin';
+        $d['payment_modes'] = ['free'];
+        $d['stage'] = 'live';
+        $d['beta_tester'] = false;
+        $d['beta_locked'] = false;
+    } elseif ($typeMode === 'unavailable') {
+        $d['access'] = 'unavailable';
+        $d['restriction'] = 'gallery_type_plugin';
+    } elseif ($typeMode === 'available') {
+        $d['access'] = 'available';
+        $d['restriction'] = '';
+        $d['stage'] = 'live';
+        $d['beta_tester'] = false;
+        $d['beta_locked'] = false;
+    }
+
     // Ciblage : type de galerie et type de boutique (présence) autorisés ; vide = tous.
-    if ($d['access'] !== 'unavailable' && ($shop !== '' || $gallery !== '')) {
+    if ($typeMode === 'inherit' && $d['access'] !== 'unavailable' && ($shop !== '' || $gallery !== '')) {
         $galleries = $shop !== '' ? addon_shop_galleries($shop) : [];
         if ($gallery !== '' && !isset($galleries[$gallery])) {
             if (!function_exists('gallery_load')) require_once __DIR__ . '/galleries.php';

@@ -15,3 +15,8 @@ db-backup/
 data/
 .env.deploy.*
 *.db.bak-*
+# Bases des commerces (contenu réel, jamais versionné) et caches locaux.
+tenants/*/*.db
+tenants/*/*.sqlite
+tenants/*/secrets/
+.phpunit.result.cache

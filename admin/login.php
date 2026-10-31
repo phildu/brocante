@@ -4,9 +4,28 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/oauth.php';
 require_once __DIR__ . '/../includes/login-ui.php';
 
+// Le QR code du shooting ouvre l'application : après connexion, retour à cette
+// page. Adresse relative uniquement, jamais la page de connexion elle-même.
+$next = (string) ($_GET['next'] ?? ($_POST['next'] ?? ''));
+$nextPath = $next === '' ? '' : (string) (parse_url($next, PHP_URL_PATH) ?: '');
+$nextOk = $next !== ''
+    && $next[0] === '/'
+    && !str_starts_with($next, '//')
+    && !str_contains($next, '\\')
+    && !preg_match('/[\r\n]/', $next)
+    && $nextPath !== ''
+    && !str_ends_with($nextPath, '/admin/login.php');
+$next = $nextOk ? $next : '';
+$after_login = static function (string $role) use ($next, $nextPath): string {
+    if ($next !== '' && admin_role_can_access($role, $nextPath)) {
+        return $next;
+    }
+    return admin_home_for_role($role);
+};
+
 // Déjà connecté (bouton « Connexion » du site) : direction l'administration.
 if (is_admin_logged_in()) {
-    header('Location: ' . admin_home_for_role(admin_role()));
+    header('Location: ' . $after_login(admin_role()));
     exit;
 }
 
@@ -32,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $_SESSION['admin_account_id'] = $login['id'];
         }
-        header('Location: ' . admin_home_for_role($login['role']));
+        header('Location: ' . $after_login($login['role']));
         exit;
     }
     sleep(1); // freine les essais en série

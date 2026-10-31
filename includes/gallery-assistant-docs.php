@@ -196,7 +196,7 @@ function gass_document(string $kind, array $gallery, array $data): ?array
     $security = gass_security_result((array) ($data['security']['answers'] ?? []));
     $surveyOn = !empty($data['survey']['enabled']) && !empty($data['survey']['open']);
     $surveyUrl = gass_survey_url((string) $gallery['slug']);
-    $publicUrl = ga_public_url('/galerie/' . $gallery['slug'] . '/');
+    $publicUrl = gallery_public_url($gallery);
     $sign = gassd_signature($gallery, $data);
     $sender = gassd_sender($data);
     $recipientCity = $commune !== '' ? $h($commune) : gassd_todo('commune');

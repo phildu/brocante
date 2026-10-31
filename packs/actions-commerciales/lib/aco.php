@@ -1,5 +1,5 @@
 <?php
-// Actions commerciales : braderie, foire ou soldes. Une opération applique une remise aux pièces choisies,
+// Actions commerciales : braderie, vente flash, foire ou soldes. Une opération applique une remise aux pièces choisies,
 // les prix d'origine sont rétablis à la fin (ou à l'arrêt), et les ventes de la période sont chiffrées.
 defined('PLUGIN_RUNTIME') || exit;
 require_once dirname(__DIR__, 3) . '/includes/addons.php';
@@ -11,7 +11,7 @@ const ACO_MAX_AMOUNT_CENTS = 1000000;
 
 function aco_kind_labels(): array
 {
-    return ['braderie' => 'Braderie', 'foire' => 'Foire / marché', 'soldes' => 'Soldes'];
+    return ['braderie' => 'Braderie', 'flash' => 'Vente flash', 'foire' => 'Foire / marché', 'soldes' => 'Soldes'];
 }
 
 function aco_kind_label(string $kind): string
@@ -398,14 +398,63 @@ function aco_sales_report(array $op): array
         'op_revenue_cents' => $opRevenue, 'op_units' => $opUnits, 'by_ref' => $byRef, 'by_cat' => $byCat];
 }
 
-// — Annonces aux visiteurs : trois listes opt-in de la boutique (web app, alertes chineur, newsletter), dédoublonnées,
-//   avec un lien de désinscription par adresse et un journal par opération. Les annonces ne partent que sur action explicite.
+// — Annonces aux visiteurs : e-mail, annonce dans l'app, SMS et WhatsApp. Trois listes opt-in de la boutique,
+//   dédoublonnées, un accord par canal, un lien de désinscription et un journal par opération. Rien ne part sans action explicite.
 
-const ACO_NOTICE_BATCH = 40;   // adresses par envoi : au-delà, on relance pour ne pas saturer la boîte de l'hébergeur
+const ACO_NOTICE_BATCH = 40;   // adresses par canal et par envoi : au-delà, on relance pour ne pas saturer les envois
+const ACO_CHANNELS = ['mail', 'inapp', 'sms', 'whatsapp'];
 
 function aco_notice_sources(): array
 {
     return ['visiteur' => 'membres de la web app', 'chineur' => 'abonnés aux alertes', 'prospect' => 'prospects newsletter'];
+}
+
+function aco_channel_labels(): array
+{
+    return ['mail' => 'E-mail', 'inapp' => 'Dans l\'app', 'sms' => 'SMS', 'whatsapp' => 'WhatsApp'];
+}
+
+/** Canal prêt à envoyer : e-mail et in-app toujours ; SMS via OVH ou Twilio (includes/sms.php) ; WhatsApp via l'API Meta. */
+function aco_channel_ready(string $channel): bool
+{
+    if ($channel === 'mail' || $channel === 'inapp') return true;
+    if ($channel === 'sms') {
+        require_once dirname(__DIR__, 3) . '/includes/login-otp.php';
+        return function_exists('login_otp_sms_available') && login_otp_sms_available();
+    }
+    if ($channel === 'whatsapp') {
+        $c = aco_whatsapp_config();
+        return $c['phone_id'] !== '' && $c['token'] !== '';
+    }
+    return false;
+}
+
+/** Identifiants WhatsApp Cloud API (Meta) : réglages de la boutique, sinon variables d'environnement. */
+function aco_whatsapp_config(): array
+{
+    $read = static function (string $setting, string $env): string {
+        $v = trim((string) getenv($env));
+        if ($v !== '') return $v;
+        try {
+            return trim(shop_setting($setting, ''));
+        } catch (Throwable $e) {
+            return '';
+        }
+    };
+    return ['phone_id' => $read('meta_wa_phone_id', 'WHATSAPP_PHONE_ID'),
+        'token' => $read('meta_wa_token', 'WHATSAPP_TOKEN'),
+        'template' => $read('meta_wa_template', 'WHATSAPP_TEMPLATE')];
+}
+
+/** Numéro international : « 06 12 34 56 78 » → « +33612345678 » ; null si invalide. */
+function aco_phone_e164(string $raw): ?string
+{
+    $p = preg_replace('/[\s.\-()\/]/', '', trim($raw));
+    if ($p === '' || !preg_match('/^\+?\d+$/', $p)) return null;
+    if (str_starts_with($p, '00')) $p = '+' . substr($p, 2);
+    if ($p[0] !== '+' && preg_match('/^0[1-9]\d{8}$/', $p)) $p = '+33' . substr($p, 1);
+    $digits = strlen(ltrim($p, '+'));
+    return $digits >= 8 && $digits <= 15 ? $p : null;
 }
 
 /** Table d'un autre module présente dans cette boutique (ces modules ne sont pas toujours installés). */
@@ -420,50 +469,109 @@ function aco_table_exists(string $table): bool
     }
 }
 
-/**
- * Adresses à prévenir, avec leurs sources : membres de l'espace visiteur (accord explicite), abonnés confirmés
- * aux alertes chineur, prospects inscrits à la newsletter. Les désinscrits et les adresses déjà prévenues
- * pour l'opération sont comptés à part ; seules les adresses en attente sont renvoyées.
- */
-function aco_notice_audience(?array $op = null): array
+/** Jeton de version des caches d'audience : aco_cache_flush() les périme après une écriture. */
+function aco_cache_gen(int $bump = 0): int
 {
-    $emails = [];
-    $add = static function (string $email, string $source) use (&$emails): void {
+    static $gen = 0;
+    if ($bump > 0) $gen++;
+    return $gen;
+}
+
+function aco_cache_flush(): void
+{
+    aco_cache_gen(1);
+}
+
+/**
+ * Toutes les adresses joignables, avec leurs listes d'origine. « idok » : la personne peut être reconnue sur le site
+ * (compte client ou lien personnel de la web app), donc voir une annonce dans l'app.
+ */
+function aco_notice_base(): array
+{
+    static $base = null, $gen = -1;
+    if ($base !== null && $gen === aco_cache_gen()) return $base;
+    $gen = aco_cache_gen();
+    $base = [];
+    $add = static function (string $email, string $source, bool $idok = false, string $name = '', string $phone = '') use (&$base): void {
         $email = mb_strtolower(trim($email));
         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return;
-        $emails[$email][$source] = true;
+        if (!isset($base[$email])) $base[$email] = ['sources' => [], 'idok' => false, 'name' => '', 'phone' => ''];
+        if ($source !== '') $base[$email]['sources'][$source] = true;
+        $base[$email]['idok'] = $base[$email]['idok'] || $idok;
+        if ($base[$email]['name'] === '' && $name !== '') $base[$email]['name'] = $name;
+        if ($base[$email]['phone'] === '' && $phone !== '') $base[$email]['phone'] = $phone;
     };
     if (aco_table_exists('ev_members')) {
-        foreach (db()->query('SELECT email FROM ev_members')->fetchAll(PDO::FETCH_COLUMN) as $e) $add((string) $e, 'visiteur');
+        foreach (db()->query('SELECT email, name FROM ev_members')->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $add((string) $r['email'], 'visiteur', true, (string) $r['name']);
+        }
     }
     if (aco_table_exists('ac_alerts')) {
         foreach (db()->query("SELECT email FROM ac_alerts WHERE status = 'active'")->fetchAll(PDO::FETCH_COLUMN) as $e) $add((string) $e, 'chineur');
     }
     if (aco_table_exists('accounts')) {
-        foreach (db()->query("SELECT email FROM accounts WHERE source = 'newsletter' AND is_active = 1 AND role IN ('prospect', 'client')")->fetchAll(PDO::FETCH_COLUMN) as $e) $add((string) $e, 'prospect');
+        foreach (db()->query("SELECT email, name, phone FROM accounts WHERE source = 'newsletter' AND is_active = 1 AND role IN ('prospect', 'client')")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $add((string) $r['email'], 'prospect', true, (string) $r['name'], (string) $r['phone']);
+        }
     }
-    $stopped = [];
+    return $base;
+}
+
+/** Fiches de consentement (numéro, accords par canal), indexées par adresse. */
+function aco_contacts_map(): array
+{
+    static $map = null, $gen = -1;
+    if ($map !== null && $gen === aco_cache_gen()) return $map;
+    $gen = aco_cache_gen();
+    $map = [];
     if (aco_table_exists('aco_contacts')) {
-        foreach (db()->query("SELECT email FROM aco_contacts WHERE state = 'stopped'")->fetchAll(PDO::FETCH_COLUMN) as $e) $stopped[mb_strtolower((string) $e)] = true;
+        foreach (db()->query('SELECT * FROM aco_contacts')->fetchAll(PDO::FETCH_ASSOC) as $r) $map[mb_strtolower((string) $r['email'])] = $r;
     }
+    return $map;
+}
+
+/** La personne accepte-t-elle ce canal (et a-t-elle le moyen nécessaire : compte reconnu, numéro valide) ? */
+function aco_channel_allowed(string $channel, ?array $contact, array $info): bool
+{
+    if ($channel === 'mail') return true;
+    if ($channel === 'inapp') return $info['idok'] && (!$contact || (int) ($contact['consent_inapp'] ?? 1) === 1);
+    if ($channel === 'sms' || $channel === 'whatsapp') {
+        if (!$contact || aco_phone_e164((string) ($contact['phone'] ?? '')) === null) return false;
+        return (int) ($contact[$channel === 'sms' ? 'consent_sms' : 'consent_wa'] ?? 0) === 1;
+    }
+    return false;
+}
+
+/**
+ * Adresses à prévenir pour un canal : membres de l'espace visiteur (accord explicite), abonnés confirmés
+ * aux alertes chineur, prospects inscrits à la newsletter. Les désinscrits, les adresses déjà prévenues
+ * pour l'opération et celles sans accord pour ce canal sont comptés à part ; seules les adresses en attente sont renvoyées.
+ */
+function aco_notice_audience(?array $op = null, string $channel = 'mail'): array
+{
+    $base = aco_notice_base();
+    $contacts = aco_contacts_map();
     $sent = [];
-    if ($op && aco_table_exists('aco_notices')) {
-        $st = db()->prepare("SELECT email FROM aco_notices WHERE operation_id = ? AND status = 'sent'");
-        $st->execute([(int) $op['id']]);
+    if ($op && aco_table_exists('aco_messages')) {
+        $st = db()->prepare("SELECT email FROM aco_messages WHERE operation_id = ? AND channel = ? AND status = 'sent'");
+        $st->execute([(int) $op['id'], $channel]);
         foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $e) $sent[mb_strtolower((string) $e)] = true;
     }
     $bySource = array_fill_keys(array_keys(aco_notice_sources()), 0);
     $pending = [];
     $blocked = 0;
     $already = 0;
-    foreach ($emails as $email => $sources) {
-        foreach (array_keys($sources) as $s) $bySource[$s]++;
-        if (isset($stopped[$email])) { $blocked++; continue; }
+    $skipped = 0;
+    foreach ($base as $email => $info) {
+        foreach (array_keys($info['sources']) as $s) $bySource[$s]++;
+        $contact = $contacts[$email] ?? null;
+        if ($contact && (string) $contact['state'] === 'stopped') { $blocked++; continue; }
         if (isset($sent[$email])) { $already++; continue; }
-        $pending[$email] = array_keys($sources);
+        if (!aco_channel_allowed($channel, $contact, $info)) { $skipped++; continue; }
+        $pending[$email] = array_keys($info['sources']);
     }
-    return ['total' => count($emails), 'by_source' => $bySource, 'pending' => $pending,
-        'pending_count' => count($pending), 'stopped' => $blocked, 'already' => $already];
+    return ['total' => count($base), 'by_source' => $bySource, 'pending' => $pending,
+        'pending_count' => count($pending), 'stopped' => $blocked, 'already' => $already, 'skipped' => $skipped];
 }
 
 /** Fiche d'envoi d'une adresse (jeton de désinscription) : créée au premier envoi, jamais modifiée ensuite. */
@@ -511,36 +619,120 @@ function aco_notice_text(array $op, string $shopUrl, string $stopUrl): array
     return [$subject, implode("\n", $lines)];
 }
 
+/** Texte court pour le SMS et WhatsApp, avec la boutique et le lien de désinscription. */
+function aco_notice_short(array $op, string $stopUrl): string
+{
+    $site = (string) (get_content()['site_name'] ?: tenant('name'));
+    $label = trim((string) $op['label']) ?: aco_kind_label((string) $op['kind']);
+    return mb_substr($site . ' : ' . $label . ' ' . aco_period_short($op) . ' — ' . aco_discount_text($op)
+        . ' sur une sélection. ' . shop_abs_url('/boutique.php') . ' Désinscription : ' . $stopUrl, 0, 480);
+}
+
+/** Livraison d'un message sur un canal externe. L'in-app se contente du journal (la personne le lit connectée). */
+function aco_channel_deliver(string $channel, string $email, string $phone, string $subject, string $body, array $op, string $stopUrl): bool
+{
+    try {
+        if ($channel === 'mail') return aco_mail($email, $subject, $body);
+        if ($channel === 'sms') {
+            require_once dirname(__DIR__, 3) . '/includes/login-otp.php';
+            return login_otp_send_sms($phone, aco_notice_short($op, $stopUrl));
+        }
+        if ($channel === 'whatsapp') return aco_whatsapp_send($phone, aco_notice_short($op, $stopUrl));
+    } catch (Throwable $e) {
+        error_log('Actions commerciales (' . $channel . ') : ' . $e->getMessage());
+    }
+    return false;
+}
+
+/** Message WhatsApp Cloud API : modèle approuvé si « meta_wa_template » est renseigné, sinon texte simple. */
+function aco_whatsapp_send(string $phone, string $text): bool
+{
+    $c = aco_whatsapp_config();
+    if ($c['phone_id'] === '' || $c['token'] === '') return false;
+    $to = preg_replace('/\D/', '', $phone);
+    $payload = $c['template'] !== ''
+        ? ['messaging_product' => 'whatsapp', 'to' => $to, 'type' => 'template',
+            'template' => ['name' => $c['template'], 'language' => ['code' => 'fr'],
+                'components' => [['type' => 'body', 'parameters' => [['type' => 'text', 'text' => $text]]]]]]
+        : ['messaging_product' => 'whatsapp', 'to' => $to, 'type' => 'text',
+            'text' => ['preview_url' => false, 'body' => $text]];
+    $url = 'https://graph.facebook.com/v20.0/' . rawurlencode($c['phone_id']) . '/messages';
+    $json = (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $json,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $c['token']],
+        ]);
+        curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        curl_close($ch);
+        return $status >= 200 && $status < 300;
+    }
+    $ctx = stream_context_create(['http' => [
+        'method' => 'POST',
+        'header' => "Content-Type: application/json\r\nAuthorization: Bearer " . $c['token'] . "\r\n",
+        'content' => $json,
+        'timeout' => 10,
+        'ignore_errors' => true,
+    ]]);
+    return @file_get_contents($url, false, $ctx) !== false;
+}
+
 /**
- * Envoie l'annonce de l'opération aux adresses en attente, par lots de ACO_NOTICE_BATCH.
- * Un échec est journalisé et pourra être retenté ; une adresse prévenue ne reçoit jamais deux fois la même opération.
+ * Envoie l'annonce de l'opération sur les canaux demandés, par lots de ACO_NOTICE_BATCH et par canal.
+ * Un échec est journalisé et pourra être retenté ; une adresse prévenue ne reçoit jamais deux fois la même
+ * opération sur le même canal.
  */
-function aco_notice_send(array $op): array
+function aco_notice_send(array $op, array $channels = ['mail']): array
 {
     if (!in_array((string) $op['status'], ['scheduled', 'running'], true)) {
         return ['error' => 'Seule une opération programmée ou en cours peut être annoncée.'];
     }
-    $aud = aco_notice_audience($op);
-    if ($aud['pending_count'] === 0) {
-        return ['ok' => true, 'sent' => 0, 'failed' => 0, 'remaining' => 0, 'message' => 'Aucune nouvelle adresse à prévenir.'];
+    $channels = array_values(array_intersect(ACO_CHANNELS, array_map('strval', $channels)));
+    if (!$channels) $channels = ['mail'];
+    $ready = array_values(array_filter($channels, 'aco_channel_ready'));
+    $labels = aco_channel_labels();
+    if (!$ready) {
+        return ['error' => 'Aucun canal disponible (' . implode(', ', array_map(static fn ($c) => $labels[$c] ?? $c, $channels))
+            . ') : configurez l\'envoi SMS (OVH ou Twilio) ou WhatsApp (Meta) dans les réglages de la boutique.'];
     }
     $shopUrl = shop_abs_url('/boutique.php');
-    $journal = db()->prepare('INSERT OR REPLACE INTO aco_notices (operation_id, email, source, status) VALUES (?, ?, ?, ?)');
-    $sent = 0;
-    $failed = 0;
-    foreach ($aud['pending'] as $email => $sources) {
-        if ($sent + $failed >= ACO_NOTICE_BATCH) break;
-        $contact = aco_notice_contact($email);
-        if (!$contact || $contact['state'] !== 'active') continue;
-        [$subject, $body] = aco_notice_text($op, $shopUrl, shop_abs_url('/api/braderie/stop/' . $contact['token']));
-        $ok = aco_mail($email, $subject, $body);
-        $journal->execute([(int) $op['id'], $email, implode(',', $sources), $ok ? 'sent' : 'failed']);
-        $ok ? $sent++ : $failed++;
+    $journal = db()->prepare('INSERT OR REPLACE INTO aco_messages (operation_id, email, channel, status, detail) VALUES (?, ?, ?, ?, ?)');
+    $out = ['ok' => true, 'sent' => 0, 'failed' => 0, 'remaining' => 0, 'channels' => []];
+    $parts = [];
+    foreach ($ready as $channel) {
+        $aud = aco_notice_audience($op, $channel);
+        $sent = 0;
+        $failed = 0;
+        foreach ($aud['pending'] as $email => $sources) {
+            if ($sent + $failed >= ACO_NOTICE_BATCH) break;
+            $contact = aco_notice_contact($email);
+            if (!$contact || (string) $contact['state'] !== 'active') continue;
+            $stopUrl = shop_abs_url('/api/braderie/stop/' . $contact['token']);
+            [$subject, $body] = aco_notice_text($op, $shopUrl, $stopUrl);
+            $ok = $channel === 'inapp' || aco_channel_deliver($channel, $email, (string) $contact['phone'], $subject, $body, $op, $stopUrl);
+            $journal->execute([(int) $op['id'], $email, $channel, $ok ? 'sent' : 'failed', $ok ? '' : 'envoi refusé']);
+            $ok ? $sent++ : $failed++;
+        }
+        $remaining = aco_notice_audience($op, $channel)['pending_count'];
+        $out['channels'][$channel] = ['sent' => $sent, 'failed' => $failed, 'remaining' => $remaining];
+        $out['sent'] += $sent;
+        $out['failed'] += $failed;
+        $out['remaining'] += $remaining;
+        if ($sent + $failed > 0) {
+            $parts[] = ($labels[$channel] ?? $channel) . ' : ' . $sent . ' envoyé(s)' . ($failed > 0 ? ', ' . $failed . ' échec(s)' : '');
+        }
     }
-    $remaining = aco_notice_audience($op)['pending_count'];
-    return ['ok' => true, 'sent' => $sent, 'failed' => $failed, 'remaining' => $remaining,
-        'message' => $sent . ' annonce(s) envoyée(s)' . ($failed > 0 ? ', ' . $failed . ' échec(s) à retenter' : '')
-            . ($remaining > 0 ? ' — ' . $remaining . ' adresse(s) restante(s) : relancez pour continuer.' : '.')];
+    $skipped = array_values(array_diff($channels, $ready));
+    if ($skipped) $parts[] = 'non configuré : ' . implode(', ', array_map(static fn ($c) => $labels[$c] ?? $c, $skipped));
+    $out['message'] = $parts
+        ? implode(' · ', $parts) . ($out['remaining'] > 0 ? '. ' . $out['remaining'] . ' en attente : relancez pour continuer.' : '.')
+        : 'Aucune adresse en attente sur ces canaux.';
+    return $out;
 }
 
 function aco_mail(string $to, string $subject, string $body): bool
@@ -553,12 +745,120 @@ function aco_mail(string $to, string $subject, string $body): bool
     }
 }
 
-/** Chiffres affichés dans l'administration : audience totale, déjà prévenus, en attente, désinscrits. */
+/** Chiffres affichés dans l'administration : audience, en attente et déjà prévenus par canal. */
 function aco_notice_stats(array $op): array
 {
-    $aud = aco_notice_audience($op);
-    return ['audience' => $aud['total'], 'sent' => $aud['already'], 'pending' => $aud['pending_count'],
-        'stopped' => $aud['stopped'], 'by_source' => $aud['by_source']];
+    $channels = [];
+    $audience = 0;
+    $bySource = [];
+    $stopped = 0;
+    foreach (ACO_CHANNELS as $channel) {
+        $a = aco_notice_audience($op, $channel);
+        $channels[$channel] = ['ready' => aco_channel_ready($channel), 'eligible' => $a['pending_count'],
+            'already' => $a['already'], 'skipped' => $a['skipped']];
+        if ($channel === 'mail') {
+            $audience = $a['total'];
+            $bySource = $a['by_source'];
+            $stopped = $a['stopped'];
+        }
+    }
+    return ['audience' => $audience, 'sent' => $channels['mail']['already'], 'pending' => $channels['mail']['eligible'],
+        'stopped' => $stopped, 'by_source' => $bySource, 'channels' => $channels];
+}
+
+/** Contacts avec listes, numéro et accords par canal (fiche de consentement créée au premier enregistrement). */
+function aco_contacts_list(): array
+{
+    $base = aco_notice_base();
+    $map = aco_contacts_map();
+    $labels = aco_notice_sources();
+    $out = [];
+    foreach (array_keys($base + $map) as $email) {
+        $info = $base[$email] ?? ['sources' => [], 'idok' => false, 'name' => '', 'phone' => ''];
+        $c = $map[$email] ?? null;
+        $sources = [];
+        foreach (array_keys($info['sources']) as $s) $sources[] = $labels[$s] ?? $s;
+        $out[] = [
+            'email' => (string) $email,
+            'name' => (string) $info['name'],
+            'sources' => $sources,
+            'phone' => (string) ($c['phone'] ?? '') !== '' ? (string) $c['phone'] : (string) $info['phone'],
+            'identifiable' => (bool) $info['idok'],
+            'inapp' => $c ? (int) ($c['consent_inapp'] ?? 1) === 1 : (bool) $info['idok'],
+            'sms' => $c ? (int) ($c['consent_sms'] ?? 0) === 1 : false,
+            'wa' => $c ? (int) ($c['consent_wa'] ?? 0) === 1 : false,
+            'stopped' => $c ? (string) $c['state'] === 'stopped' : false,
+        ];
+    }
+    usort($out, static fn (array $a, array $b): int => strcmp($a['email'], $b['email']));
+    return $out;
+}
+
+/** Enregistre le numéro et les accords d'un contact. Renvoie le message d'erreur, ou null. */
+function aco_contact_save(string $email, string $phone, bool $inapp, bool $sms, bool $wa): ?string
+{
+    $email = mb_strtolower(trim($email));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return 'Adresse invalide.';
+    $raw = trim($phone);
+    $normalized = $raw === '' ? '' : (aco_phone_e164($raw) ?? '');
+    if ($raw !== '' && $normalized === '') return 'Numéro invalide (ex. 06 12 34 56 78).';
+    if (($sms || $wa) && $normalized === '') return 'Renseignez un numéro avant d\'autoriser le SMS ou WhatsApp.';
+    $base = aco_notice_base();
+    if ($inapp && empty($base[$email]['idok'])) {
+        return 'Cette personne n\'a pas de compte sur le site : elle ne peut pas voir d\'annonce dans l\'app.';
+    }
+    if (!aco_notice_contact($email)) return 'Contact introuvable.';
+    db()->prepare('UPDATE aco_contacts SET phone = ?, consent_inapp = ?, consent_sms = ?, consent_wa = ?, consent_at = CURRENT_TIMESTAMP WHERE email = ?')
+        ->execute([$normalized, $inapp ? 1 : 0, $sms ? 1 : 0, $wa ? 1 : 0, $email]);
+    aco_cache_flush();
+    return null;
+}
+
+/** Personne reconnue sur ce site : client connecté, ou membre de la web app arrivé par son lien personnel. */
+function aco_current_email(): string
+{
+    try {
+        if (function_exists('customer_session')) {
+            $c = customer_session();
+            if (is_array($c) && !empty($c['email']) && filter_var($c['email'], FILTER_VALIDATE_EMAIL)) {
+                return mb_strtolower((string) $c['email']);
+            }
+        }
+    } catch (Throwable $e) {
+    }
+    $token = trim((string) ($_GET['t'] ?? ''));
+    if ($token !== '' && preg_match('/^[a-f0-9]{16,64}$/', $token) && aco_table_exists('ev_members')) {
+        $st = db()->prepare('SELECT email FROM ev_members WHERE token = ?');
+        $st->execute([$token]);
+        $email = $st->fetchColumn();
+        if ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) return mb_strtolower((string) $email);
+    }
+    return '';
+}
+
+/** Annonces dans l'app non encore fermées par cette personne, pour les opérations en cours ou à venir. */
+function aco_inapp_unseen(string $email): array
+{
+    if (!aco_table_exists('aco_messages')) return [];
+    $st = db()->prepare("SELECT o.* FROM aco_messages m JOIN aco_operations o ON o.id = m.operation_id
+        WHERE m.email = ? AND m.channel = 'inapp' AND m.status = 'sent' AND o.status IN ('scheduled', 'running') AND o.ends_at > ?
+        ORDER BY o.starts_at ASC LIMIT 3");
+    $st->execute([mb_strtolower(trim($email)), time()]);
+    return $st->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/** Références des pièces effectivement réduites par l'opération (pour les étiquettes en surimpression). */
+function aco_front_refs(array $op): array
+{
+    $refs = [];
+    if ((string) $op['status'] === 'running') {
+        $st = db()->prepare('SELECT product_ref FROM aco_items WHERE operation_id = ? AND active = 1');
+        $st->execute([(int) $op['id']]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $r) $refs[(string) $r] = true;
+    } else {
+        foreach (aco_scope($op) as $p) $refs[(string) $p['ref']] = true;
+    }
+    return array_keys($refs);
 }
 
 /** Lignes du bilan au format CSV. */

@@ -35,6 +35,8 @@ function portail_chrome_icons(): array
         'upload' => '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
         'close' => '<path d="M6 6l12 12M18 6 6 18"/>',
         'external' => '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+        'compass' => '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5.5-5.5 2 2-5.5z"/>',
+        'briefcase' => '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 12h18M10 12v3h4v-3"/>',
     ];
 }
 
@@ -91,6 +93,21 @@ function portail_new_feedback(): int
     return $count;
 }
 
+/** Nombre de candidatures de recrutement encore au statut « À traiter » (pastille du menu). */
+function portail_pending_recrutement(): int
+{
+    static $count = null;
+    if ($count !== null) return $count;
+    $count = 0;
+    try {
+        if (!function_exists('rc_application_pending_count')) require_once PORTAIL_ROOT . '/includes/recrutement.php';
+        $count = rc_application_pending_count();
+    } catch (Throwable $error) {
+        $count = 0;
+    }
+    return $count;
+}
+
 /** Navigation principale groupée. */
 function portail_nav_groups(): array
 {
@@ -101,6 +118,8 @@ function portail_nav_groups(): array
             ['href' => '/portail/inscriptions.php', 'label' => 'Inscriptions', 'icon' => 'inbox', 'badge' => portail_pending_inscriptions()],
             ['href' => '/portail/retours.php', 'label' => 'Retours testeurs', 'icon' => 'message', 'badge' => portail_new_feedback()],
             ['href' => '/portail/equipe.php', 'label' => 'Équipe', 'icon' => 'users', 'match' => ['equipe.php', 'equipe-*.php'], 'badge' => portail_pending_candidatures()],
+            ['href' => '/portail/recrutement/', 'label' => 'Recrutement', 'icon' => 'briefcase', 'match' => ['recrutement/*'], 'badge' => portail_pending_recrutement()],
+            ['href' => '/portail/vente/', 'label' => 'Forces de vente', 'icon' => 'compass', 'match' => ['vente/*']],
         ]],
         ['label' => 'Boutiques', 'items' => [
             ['href' => '/portail/plugins.php', 'label' => 'Plugins', 'icon' => 'puzzle'],
@@ -112,6 +131,7 @@ function portail_nav_groups(): array
         ]],
         ['label' => 'Revenus', 'items' => [
             ['href' => '/portail/tarifs.php', 'label' => 'Tarifs', 'icon' => 'tag'],
+            ['href' => '/portail/earlybird.php', 'label' => 'Pionniers', 'icon' => 'sparkles'],
             ['href' => '/portail/commissions.php', 'label' => 'Commissions', 'icon' => 'percent'],
             ['href' => '/portail/ia.php', 'label' => 'Coûts IA', 'icon' => 'sparkles'],
             ['href' => '/portail/ia-fournisseurs.php', 'label' => 'Fournisseurs IA', 'icon' => 'plug'],
@@ -164,7 +184,9 @@ function portail_palette_data(): array
 
 function portail_current_script(): string
 {
-    return basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (strncmp($script, '/portail/', 9) === 0) return substr($script, 9);
+    return basename($script);
 }
 
 /** L'élément de navigation correspond-il à la page courante ? */

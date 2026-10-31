@@ -1,0 +1,49 @@
+/* Assistance vendeur — page d'administration. */
+.av-admin { display: grid; gap: 16px; max-width: 1100px; }
+.av-admin h1 { font-size: 1.8rem; margin: 12px 0 4px; }
+.av-admin-lede { margin: 0; max-width: 78ch; color: var(--ink-soft); line-height: 1.55; }
+.av-admin-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.av-card { border: 1px solid var(--line); padding: 16px; display: grid; gap: 12px; align-content: start; }
+.av-card h2 { margin: 0; font-size: 1.05rem; }
+.av-card h3 { margin: 0; font-size: 0.95rem; }
+.av-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.av-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.av-live { margin: 0; font-size: 0.92rem; line-height: 1.5; color: var(--ink-soft); }
+.av-live.is-on { color: var(--ink); font-weight: 600; }
+.av-live.is-on::before { content: "● "; color: var(--sage, #6e7c57); }
+.av-field { display: grid; gap: 4px; font-size: 0.82rem; color: var(--ink-soft); }
+.av-field input, .av-field select { width: 100%; box-sizing: border-box; }
+.av-check { display: flex; align-items: center; gap: 6px; font-size: 0.86rem; font-weight: 400; }
+.av-form-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.av-badge { display: inline-block; min-width: 1.4em; padding: 1px 7px; border-radius: 999px; background: var(--accent, #b5502e); color: var(--accent-ink, #fff8ef); font-size: 0.72rem; text-align: center; vertical-align: middle; }
+.av-list { display: grid; gap: 10px; }
+
+.av-alert { border: 1px solid var(--line); border-left: 4px solid var(--line); padding: 10px 12px; display: grid; gap: 6px; background: var(--surface); }
+.av-alert.level-high { border-left-color: var(--accent, #b5502e); }
+.av-alert.level-mid { border-left-color: var(--accent-2, #46647a); }
+.av-alert.is-unseen { box-shadow: 0 0 0 1px var(--accent, #b5502e) inset; }
+.av-alert.is-handled { opacity: 0.62; }
+.av-alert-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.av-alert-kind { font-weight: 700; font-size: 0.92rem; }
+.av-alert-time { font-size: 0.76rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.av-alert-detail { margin: 0; font-size: 0.86rem; line-height: 1.5; white-space: pre-line; }
+.av-alert-product { font-size: 0.86rem; }
+.av-alert-contact { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.82rem; }
+.av-alert-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.av-alert-actions select { width: auto; padding: 3px 6px; font-size: 0.8rem; }
+.av-alert .btn-small { font-size: 0.78rem; padding: 4px 9px; }
+.av-alert-action { font-size: 0.78rem; color: var(--ink-soft); }
+
+.av-visitor { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--line); font-size: 0.84rem; }
+.av-token { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78rem; color: var(--ink-soft); }
+.av-muted { color: var(--ink-soft); }
+
+.av-seller { border: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 8px; }
+.av-seller-form { border-top: 1px dashed var(--line); padding-top: 14px; display: grid; gap: 10px; }
+.av-settings { display: grid; gap: 16px; }
+.av-settings fieldset { border: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 8px; margin: 0; }
+.av-settings legend { padding: 0 6px; font-size: 0.86rem; font-weight: 600; }
+.av-msg { font-size: 0.82rem; min-height: 1.2em; }
+.av-msg.is-error { color: #a02e1c; }
+.av-msg.is-ok { color: var(--sage, #6e7c57); font-weight: 600; }
+.av-flash { outline: 2px solid var(--accent, #b5502e); outline-offset: 2px; }

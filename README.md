@@ -808,6 +808,8 @@ simplifié se met à jour pendant la saisie ; rien ne change en ligne avant « E
 
 Les pages publiques des galeries (`/galerie/` et `/galerie/<identifiant>/`) portent un appel « **Créer ma boutique** » : bouton dans l'en-tête (avec le prix de départ de la grille de la galerie), tuile « ＋ Votre boutique ici » parmi les commerces, bandeau « Vous êtes commerçant ? » en bas de page et bouton flottant sur smartphone ; tous mènent à `/inscription/?galerie=<identifiant>`.
 
+Deux autres niveaux de prix viennent du **type de galerie** (voir « Types de galerie ») : les **offres du type** (abonnement de la galerie : mensuel, annuel, membres, essai) et le **prix indicatif de chaque lieu de vente** du type, qui préremplit le tarif de la zone dans le plan d'implantation.
+
 Les anciennes formules (`data/saas.json`) sont reprises telles quelles comme grille par défaut tant qu'aucun tarif n'est enregistré.
 
 ## Galeries commerciales
@@ -825,6 +827,9 @@ présente, et chaque pièce renvoie vers sa fiche chez le commerçant (pas de pa
   L'exploitant peut supprimer la fiche et ses images (sans toucher aux boutiques), exporter un JSON portable avec les images ou importer cet
   export. L'import d'une nouvelle galerie la crée en brouillon sans comptes administrateurs ni offre Stripe ; le remplacement conserve les
   administrateurs et l'offre de la galerie cible. Les comptes et identifiants de paiement ne figurent jamais dans un export.
+- **Adresse et type** : chaque galerie a un **type** (voir « Types de galerie »), qui décide de son vocabulaire, de ses lieux de vente et des plugins
+  proposés à ses vendeurs, et peut recevoir un **nom de domaine propre** (voir « Nom de domaine propre d'une galerie ») en plus de
+  `/galerie/<identifiant>/`.
 - **Données** : chaque boutique sert son **catalogue public** en JSON à `/catalogue.php` (infos du commerce, logo, pièces non masquées et
   en stock, prix, photo de couverture, lien de la fiche). La galerie lit directement la base des commerces de ce serveur et le flux
   `/catalogue.php` des commerces d'ailleurs ; le catalogue regroupé est mis en cache 10 minutes (`data/galeries/cache/`, bouton
@@ -911,9 +916,16 @@ Un dispositif distinct des retours par module (`includes/addons.php`) : il recue
 boutiques testeuses, avec une capture d'écran facultative, et les suit jusqu'à la réponse.
 
 - **Le widget** (`includes/feedback.php`, `assets/feedback-widget.*`, API `admin/feedback-api.php`) apparaît en bas à droite de
-  l'administration des boutiques couvertes (`includes/admin-nav.php`). Formulaire court (nature, gravité pour un bug, message,
-  capture JPEG/PNG/WebP ≤ 3 Mo), puis onglet **Mes retours** avec le statut et les réponses de l'équipe ; une pastille signale une
+  l'administration des boutiques couvertes (`includes/admin-nav.php`). Formulaire court (nature, gravité pour un bug, message
+  dictable à la voix, capture), puis onglet **Mes retours** avec le statut et les réponses de l'équipe ; une pastille signale une
   réponse non lue, sans la marquer lue avant l'ouverture de l'onglet. L'onglet reçoit le module courant (`?p=`) et la page.
+- **Capture annotée** : « Capturer l'écran » passe par `getDisplayMedia` (HTTPS requis : l'utilisateur choisit l'onglet ou la
+  fenêtre), fige l'image dans un `<canvas>` puis ouvre l'éditeur intégré — crayon, cadre, flèche, quatre couleurs, annuler le
+  dernier trait, tout effacer. Le PNG annoté (re-encodé en JPEG au-delà de 3 Mo) part avec le retour. À défaut de capture, on
+  choisit une image puis « Annoter l'image ». Aucune bibliothèque externe ; l'image ne quitte le navigateur qu'à l'envoi.
+- **Dictée** : bouton « Dicter » (API Web Speech, `fr-FR`, HTTPS + autorisation du micro). La transcription s'ajoute au message,
+  les résultats intermédiaires s'affichent, le moteur relance après un silence, et le bouton est masqué si le navigateur ne la
+  propose pas. Un refus du micro affiche un message sans bloquer le formulaire.
 - **Couverture** : portail → **Retours testeurs** → *Programme testeurs*. On coche des boutiques et/ou des galeries (tous leurs
   membres locaux), on peut inclure automatiquement les testeurs déjà déclarés sur les modules « En test » (Tarifs des plugins), ou
   ouvrir le widget à toutes les boutiques. Le même écran règle l'e-mail d'alerte et le délai de relance.
@@ -1311,11 +1323,11 @@ Réglage dans **Portail → Commissions** (`portail/commissions.php`, exploitant
 
 ## Plan d'implantation d'une galerie
 
-Chaque galerie peut dessiner où se trouvent ses commerces : **Portail → Galeries → [galerie] → Plan des commerces** (`portail/galerie-plan.php`, ouvert aussi aux administrateurs de la galerie). On cherche une adresse (recherche OpenStreetMap/Nominatim), puis on place des **repères**, **rectangles**, **zones** et **tracés** avec les outils à gauche de la carte (Leaflet 1.9.4 + Leaflet-Geoman 2.17.0, chargés depuis cdnjs et jsDelivr). Un clic sur un élément permet de lui donner un nom, une couleur, une précision et de le **lier à un commerce membre** ; le fond est « Plan » (OpenStreetMap) ou « Satellite » (Esri).
+Chaque galerie peut dessiner où se trouvent ses commerces : **Portail → Galeries → [galerie] → Plan des commerces** (`portail/galerie-plan.php`, ouvert aussi aux administrateurs de la galerie). On cherche une adresse (géocodeur IGN, secours Photon hors de France), puis on place des **repères**, **rectangles**, **zones** et **tracés** avec les outils à gauche de la carte (Leaflet 1.9.4 + Leaflet-Geoman 2.17.0, chargés depuis cdnjs et jsDelivr). Un clic sur un élément permet de lui donner un nom, une couleur, une précision, un **type de zone** (les lieux de vente du type de galerie : boutique, stand, emplacement…, sinon un ancien type rue/hall/allée/cour/parking/quartier/autre) et de le **lier à un commerce membre** ; le fond est « Plan » ou « Satellite » (tuiles IGN Géoplateforme).
 
-- **Données** : clé `map` de `data/galeries/<id>.json` (`center`, `zoom`, `base`, `items[]` = `kind` marker/polygon/line, `pts` en latitude-longitude, `label`, `note`, `color`, `shop`). Tout est revalidé côté serveur par `gallery_map_normalize()` (`includes/gallery-map.php`) : 300 éléments et 60 points au plus, couleurs `#rrggbb`, commerce lié limité aux membres de la galerie.
-- **Page publique** : section « Plan des commerces » de `/galerie/<id>/` (ancre `#plan-commerces`). La carte ne se charge **qu'au clic** du visiteur (aucune requête vers OpenStreetMap avant), et les noms sont insérés en texte brut (pas de HTML). Un repère ou une zone liée à un commerce ouvre sa boutique.
-- **Google Maps** n'est pas utilisé : clé d'API facturable et conditions d'utilisation qui interdisent de recopier son fond de carte. Les fonds OpenStreetMap et Esri demandent une attribution (affichée) et un usage raisonnable : pour un fort trafic, prévoir un fournisseur de tuiles dédié.
+- **Données** : clé `map` de `data/galeries/<id>.json` (`center`, `zoom`, `base`, `items[]` = `kind` marker/polygon/line, `pts` en latitude-longitude, `ztype`, `label`, `note`, `color`, `shop`). Tout est revalidé côté serveur par `gallery_map_normalize()` (`includes/gallery-map.php`, avec les lieux du type de la galerie) : 300 éléments et 60 points au plus, couleurs `#rrggbb`, commerce lié limité aux membres de la galerie.
+- **Page publique** : section « Plan des commerces » de `/galerie/<id>/` (ancre `#plan-commerces`). La carte ne se charge **qu'au clic** du visiteur (aucune requête de tuiles avant), et les noms sont insérés en texte brut (pas de HTML). Un repère ou une zone liée à un commerce ouvre sa boutique. Les textes emploient le **lieu de vente du type** (« Emplacement libre », « Stand 12 »…).
+- **Fonds de carte** : WMTS **IGN Géoplateforme** (plan ou orthophoto), sans clé d'API, avec secours automatique CARTO/Esri si l'IGN ne couvre pas le lieu. Les tuiles `tile.openstreetmap.org` sont volontairement exclues (politique d'usage) et Google Maps n'est pas utilisé (clé facturable, fond non recopiable). Les attributions sont affichées.
 
 ## Réservation : arrhes ou acompte
 
@@ -1354,23 +1366,33 @@ Module payant avec essai (comme les autres, voir `includes/addons.php`), à acti
 
 Le portail (**Types de galerie**, `portail/offres-galerie.php`) propose plusieurs produits à partir du même moteur : **Galerie marchande**, **Marché aux puces**, **Vide-grenier** et **Quartier marchand** (nom proposé pour réunir les commerçants d'une rue, d'un quartier ou d'un village ; modifiable), plus les types que l'exploitant ajoute. Chaque type a (registre `includes/gallery-types.php`, réglages dans `data/saas/galeries-types.json`) :
 
-- ses **dénominations** (galerie / marché / vide-grenier ; commerces / marchands / exposants / commerçants ; titres, bouton « Rejoindre », page de création…), appliquées à la page publique, à la page de création, aux e-mails et au portail ;
+- ses **dénominations** (galerie / marché / vide-grenier ; commerces / marchands / exposants / commerçants ; lieux de vente ; titres, bouton « Rejoindre », page de création…), appliquées à la page publique, à la page de création, aux e-mails et au portail ;
+- ses **lieux de vente** (boutique, stand, emplacement, vitrine, rue… : jusqu'à 20, avec libellé, unité — emplacement, mètre linéaire, m² — et prix indicatif) : ils forment les types de zone proposés dans le plan d'implantation et préremplissent son unité et son tarif ; les anciens types de zone (rue, hall, allée, cour, parking, quartier, autre) restent acceptés dans tous les types ;
+- ses **plugins vendeurs** : pour chaque module payant de `addon_defaults()`, « selon la plateforme » (le ciblage global s'applique), « proposé », « inclus » (gratuit, sans essai) ou « masqué » aux vendeurs des boutiques de ce type de galerie ; un choix explicite prime sur le ciblage global du module ;
 - ses **fonctionnalités** cochées : plan, tarifs par zone, demandes d'emplacement des exposants, prospects, tableau de bord, abonnés (les boutons du menu d'une galerie et les blocs du plan en dépendent) ;
 - ses **trois offres** (test gratuit, deux abonnements) avec prix mensuel et annuel, nombre de membres et durée d'essai propres ;
 - sa **page de création** : `/galerie/creer.php` propose le choix du type, `/galerie/creer.php?type=<type>` mène directement au bon produit (offres et vocabulaire du type). Le test gratuit est limité à une fois par adresse et par type.
 
 Le type d'une galerie est la clé `type` de `data/galeries/<id>.json` (galerie marchande si absent) et se change dans le tableau « Type et offre de chaque galerie ». Les offres réglées avant l'arrivée des types restent celles de la galerie marchande. Un changement d'offre ou un paiement Stripe retrouve les offres du type de la galerie (métadonnée `gallery_type`).
 
+Chaque galerie peut aussi recevoir un **nom de domaine propre** (champ « Nom de domaine propre » dans l'onglet Galeries commerciales, clé `domain` du fichier de la galerie). Saisi sous la forme `galerie-exemple.fr` (les `https://`, `www.` et chemins sont retirés ; un domaine de second niveau est exigé), il doit être unique : le portail refuse un domaine déjà attribué à une autre galerie. Côté serveur, `accueil/index.php` et `galerie/index.php` reconnaissent l'en-tête `Host` et servent la galerie à la racine du domaine (avec ou sans `www`), quel que soit le déploiement. Les adresses publiques, liens de partage, e-mails et `canonical` utilisent alors `https://<domaine>/` ; sans domaine, ils gardent `<origine>/galerie/<identifiant>/`. **Le DNS et le certificat HTTPS restent à faire côté hébergement** : le domaine doit pointer vers le serveur et être couvert par un certificat. Les exports JSON n'emportent pas le domaine (risque de collision) ; un import dans une galerie existante conserve le sien.
+
 ## Plan : zones nommées, tarifs et exposants
 
-- **Zones** : un polygone dessiné peut être une **zone** (rue, hall, allée, cour, parking, quartier, autre) avec un nom ; les **emplacements** qu'elle contient lui appartiennent (calculé côté serveur : plus petite zone contenant leur centre). Les zones sont affichées en pointillés avec leur nom ; la numérotation peut recommencer à 1 dans chaque zone (le N° de la zone sert de préfixe).
+- **Zones** : un polygone dessiné peut être une **zone** avec un nom ; le type de zone est choisi parmi les **lieux de vente du type de galerie** (boutique, stand, emplacement, vitrine, rue…), avec repli sur les anciens types (rue, hall, allée, cour, parking, quartier, autre). Choisir un lieu du type préremplit l'unité de tarification et le prix indicatif. Les **emplacements** qu'elle contient lui appartiennent (calculé côté serveur : plus petite zone contenant leur centre). Les zones sont affichées en pointillés avec leur nom ; la numérotation peut recommencer à 1 dans chaque zone (le N° de la zone sert de préfixe).
 - **Tarifs par zone** : par emplacement, par mètre linéaire de façade (premier côté de l'emplacement) ou par m², avec un tarif **professionnel** facultatif. Le tarif d'un emplacement hérite de sa zone ; il s'affiche dans la fiche, la liste et le plan public (si le type a la fonctionnalité « tarifs »).
-- **Exposants** : réglage « Exposants : choisir son emplacement » du plan. Sur la page publique, le bouton « Je suis exposant » colore les emplacements (libre, demandé, attribué) ; l'exposant choisit un emplacement libre, remplit sa demande (accord à l'enregistrement de ses coordonnées, champ anti-robot, 6 demandes par heure et par connexion, 2 demandes en attente par adresse) et reçoit un e-mail avec un lien d'annulation (confirmation demandée). Une demande en attente bloque l'emplacement le nombre de jours réglé. L'organisateur la traite dans **Exposants** (accepter, refuser, libérer ; e-mail à l'exposant ; export CSV). Les demandes sont dans `data/galeries/<id>.slots.json`. Le règlement se fait hors ligne.
+- **Exposants** : réglage « Exposants : choisir son emplacement » du plan. Sur la page publique, le bouton « Je suis exposant » colore les emplacements (libre, demandé, attribué) ; l'exposant choisit un emplacement libre, remplit sa demande (accord à l'enregistrement de ses coordonnées, champ anti-robot, 6 demandes par heure et par connexion, 2 demandes en attente par adresse) et reçoit un e-mail avec un lien d'annulation (confirmation demandée). Une demande en attente bloque l'emplacement le nombre de jours réglé. L'organisateur la traite dans **Exposants** (accepter, refuser, libérer ; e-mail à l'exposant ; export CSV). Les demandes sont dans `data/galeries/<id>.slots.json`. Le règlement se fait hors ligne. Le lien personnel de l'e-mail ouvre l'**espace exposant** (`galerie/exposant.php?g=<galerie>&t=<jeton>`) : statut de la demande, plan et itinéraire, installation sur le téléphone, annulation, et — une fois la demande acceptée — le **pass QR** de confirmation (voir « Pass QR de confirmation (appli exposant) »).
 - **Plein écran** : le catalogue et la numérotation passent dans une colonne qui défile sans déborder sur la carte.
 
 ## Page d'accueil de la plateforme
 
 `accueil/index.php` (racine du domaine du portail) est organisée par parcours : **Je vends** (boutique et ses formules), **J'organise** (les types de galerie, leurs fonctionnalités et prix, avec un tableau comparatif construit à partir des types actifs), **J'expose** (galeries dont les demandes d'emplacement sont ouvertes et qui ont encore des emplacements libres), **Je découvre** (galeries avec leur type, boutiques, annuaire), plus les **options à la carte** (modules de `addon_defaults()`), une barre d'ancres, la FAQ et un bandeau « Déjà client ? ». Tout est lu dans les réglages (types de galerie, offres, modules) : modifier un prix, un nom de type ou une fonctionnalité dans le portail met la page à jour.
+
+## Nom de domaine propre d'une galerie
+
+Portail → Galeries commerciales → *Gérer* → **Publication** → « Nom de domaine propre ». Le champ est facultatif, par galerie (`domain` dans `data/galeries/<identifiant>.json`) : laissez vide pour garder `/galerie/<identifiant>/`. Saisi avec ou sans `https://`, `www.` ou chemin, il est normalisé (ex. `https://www.Galerie-Exemple.fr/` → `galerie-exemple.fr`) et refusé s'il n'a pas de point ou s'il appartient déjà à une autre galerie. La galerie est alors servie à la racine du domaine (accueil et `/galerie/…`, avec ou sans `www`) et les liens publics (partage, e-mails, `canonical`) pointent vers `https://<domaine>/`.
+
+Ce que le site ne fait pas : l'enregistrement DNS et le certificat HTTPS. Faites pointer le domaine vers ce serveur (enregistrement `A`/`AAAA`, ou `CNAME` vers l'hébergement) puis activez le certificat (Let's Encrypt chez l'hébergeur, ou certificat du proxy) avant d'annoncer l'adresse. En local : `curl -H 'Host: galerie-exemple.fr' http://127.0.0.1:8123/`. Les exports JSON n'emportent pas le domaine (risque de collision) ; un import dans une galerie existante conserve le sien.
 
 ## Import de prospects et de clients
 
@@ -1417,10 +1439,29 @@ La galerie a sa propre web app visiteurs et son propre programme de fidélité, 
 
 - **Réglages** : portail → galerie → « Fidélité visiteurs » (`portail/galerie-fidelite.php`, fonctionnalité `fidelite` des types de galerie, activée par défaut) : programme ouvert ou non, nom, points de bienvenue, points par lieu scanné, jusqu'à 5 récompenses (palier en points + libellé), message d'accueil, lieux de scan (un par ligne ; bouton pour reprendre les membres de la galerie).
 - **Gagner des points** : chaque lieu (commerce, stand, entrée, buvette…) a un QR code secret (`gl_stand_code`) ; planche à imprimer depuis la page d'administration. Le visiteur le scanne avec l'appareil photo de son téléphone : points une fois par lieu et par jour (25 scans par jour au plus). Un lieu retiré de la liste ne rapporte plus rien.
-- **Visiteur** : `galerie/visiteur.php?g=<galerie>` : inscription par e-mail (lien personnel, sans mot de passe, consentement obligatoire), points, barre de progression, échange contre une récompense (code à présenter à l'organisateur), lieux déjà scannés, déconnexion et effacement de ses données. Installable sur l'écran d'accueil : la feuille commune `assets/pwa-save.js` s'ouvre dès l'arrivée sur téléphone, avec les étapes du navigateur détecté, et `galerie/pwa-sw.php` rend l'appli installable sous Chrome/Android. Le QR scanné avant connexion est crédité à l'ouverture du lien reçu, si c'est dans le même navigateur.
+- **Visiteur** : `galerie/visiteur.php?g=<galerie>` : inscription par e-mail (lien personnel, sans mot de passe, consentement obligatoire), points, barre de progression, échange contre une récompense (code à présenter à l'organisateur), lieux déjà scannés, déconnexion et effacement de ses données. Installable sur l'écran d'accueil : la feuille commune `assets/pwa-save.js` s'ouvre dès l'arrivée sur téléphone, avec les étapes du navigateur détecté, et `galerie/pwa-sw.php` rend l'appli installable sous Chrome/Android. Même chose pour l'espace exposant (`galerie/exposant.php`). Le QR scanné avant connexion est crédité à l'ouverture du lien reçu, si c'est dans le même navigateur.
 - **Organisateur** : récompenses à remettre (« Remise ✓ » ou « Annuler » qui rend les points), membres (ajuster les points, supprimer, export CSV).
 - **Page publique** : le bouton « 📱 Application visiteurs » de l'en-tête de la galerie pointe vers cette appli dès que le programme est ouvert et la galerie publiée ; sinon, il liste les espaces visiteurs des boutiques membres qui ont activé le module.
 - Données : `data/galeries/<id>.fidelite.json` (jamais déployé, écriture sous verrou, limite de 8 inscriptions par heure et par connexion). Code : `includes/gallery-loyalty.php`. Hors périmètre : scan du QR dans l'appli elle-même (l'appareil photo du téléphone suffit), e-mail de relance des membres.
+
+## Localisation : trouver un stand ou une boutique
+
+La carte « Où trouver un stand ou une boutique » apparaît dans l'appli visiteurs (`galerie/visiteur.php`) dès que la galerie est publiée et qu'un plan ou un lieu est renseigné : elle reste disponible même si le programme de fidélité est fermé. Les positions viennent du plan de la galerie et des adresses des commerces membres (`includes/gallery-locate.php`).
+
+- **Recherche et filtres** : recherche par nom d'emplacement, de commerce ou d'événement ; filtres *Tout / Commerces / Emplacements / Événement* ; chaque résultat indique son adresse, son stand et un bouton « Itinéraire » (application de cartes du téléphone).
+- **Carte** : chargée seulement à l'ouverture du bloc (Leaflet 1.9.4 depuis cdnjs). Les zones, emplacements et boutiques du plan sont dessinés ; les zones passent en arrière-plan. Fonds **IGN Géoplateforme** sans clé, avec repli automatique sur Esri puis CARTO (les tuiles OpenStreetMap ne sont pas utilisées). L'adresse est complétée par le géocodage IGN (`data.geopf.fr`).
+- **Me localiser** : demande la position de l'appareil et affiche la distance jusqu'à chaque lieu ; un refus ou un échec est expliqué sans bloquer la liste. La position n'est ni transmise au serveur ni enregistrée.
+- **Appli exposant** : `galerie/exposant.php?g=<galerie>&t=<jeton>` reprend le même plan pour situer l'emplacement attribué, avec « Afficher le plan », « Itinéraire » et « Me localiser ». La page n'existe que par le lien personnel reçu par e-mail (`noindex`, `no-store`, `Referrer-Policy: no-referrer`), avec installateur (manifeste propre à la galerie) et lien d'annulation.
+
+## Pass QR de confirmation (appli exposant)
+
+Une fois sa demande **acceptée** par l'organisateur, l'exposant voit dans son espace un **QR code de confirmation** à présenter aux organisateurs ou à la sécurité du site.
+
+- **Contenu** : le QR encode l'adresse de vérification `/galerie/exposant.php?g=<galerie>&p=<code>` ; le code est un HMAC propre à la demande (32 caractères hexadécimaux, `gb_pass_code()`), **distinct du jeton d'annulation** : communiquer le pass ne permet pas d'annuler la demande.
+- **Dans l'appli** : QR affiché sous le statut, code en clair pour la saisie manuelle, copie, bouton « Afficher en grand » (plein écran, fermeture par Échap, croix ou clic à côté) et « Imprimer ». Le QR est dessiné localement (`assets/vendor/qrcode-generator.js`), sans service extérieur.
+- **Contrôle** : la page `?p=<code>` affiche « Pass valide » ou « Pass non valide ». Un pass valide montre la galerie, le nom de l'exposant, l'emplacement, le statut « Confirmé », l'événement (titre, date, horaires, adresse) et un avertissement si l'événement est terminé. **Jamais d'e-mail ni de téléphone** ; la page ne permet aucune modification. Un bouton « Actualiser le contrôle » relit l'état au moment du scan, avec la date et l'heure du serveur.
+- **Robustesse** : seules les demandes au statut `taken` produisent un pass ; une demande en attente, annulée ou expirée affiche « Pass non valide ». Les pages sont en `no-store` et `no-index`.
+- Code : `includes/gallery-booking.php` (`gb_by_token`, `gb_by_pass`, `gb_pass_code`, `gb_pass_url`, `gb_app_url`) et `galerie/exposant.php`.
 
 ## Mobile d'abord (passe 1, front et administration)
 
@@ -1453,7 +1494,7 @@ Chaque boutique est une web app installable (écran d'accueil du téléphone, pl
 - **Incitation de la boutique** (`assets/pwa-install.js`, uniquement sur téléphone / tablette, jamais si l'appli est déjà installée) : un bandeau « Ajoutez la boutique à votre écran d'accueil » apparaît **tout de suite après une arrivée par code QR (`?from=qr`, 1,2 s) ou par lien partagé (`?from=share`, 3,5 s)**, à partir de la 2<sup>e</sup> page vue (4 s), ou après 20 s sur une fiche pièce ; jamais dans le panier, le paiement, le compte ni l'administration, ni dans le navigateur intégré. « Ajouter » ouvre l'invite native ou la marche à suivre commune. « Plus tard » : 14 jours ; « × » : 90 jours.
 - **Lien permanent** « 📲 Installer l'appli » en pied de page, sur toutes les mises en page.
 - **Réglage** : Administration → Réglages du site → « Boutique installable (web app) » (activé par défaut ; décoché, plus de manifeste ni de bandeau).
-- **Même marche à suivre dans les autres applis** : l'espace visiteur (`visiteur.php` et pack « Espace visiteur »), la galerie visiteurs (`galerie/visiteur.php`, manifeste + `galerie/pwa-sw.php`) et le Studio (`studio.php`, service worker `studio-sw.php`) affichent la feuille commune dès l'arrivée sur téléphone, et proposent « Installer l'appli » / « Installer l'application ». Le shooting (`admin/shop-shooting.php`) a un bouton « 📲 Installer l'appli sur ce téléphone ». L'invite du navigateur ne s'affiche qu'en HTTPS (ou localhost).
+- **Même marche à suivre dans les autres applis** : l'espace visiteur (`visiteur.php` et pack « Espace visiteur »), la galerie visiteurs (`galerie/visiteur.php`, manifeste + `galerie/pwa-sw.php`), l'espace exposant (`galerie/exposant.php`, manifeste + service worker) et le Studio (`studio.php`, service worker `studio-sw.php`) affichent la feuille commune dès l'arrivée sur téléphone, et proposent « Installer l'appli » / « Installer l'application ». Le shooting (`admin/shop-shooting.php`) a un bouton « 📲 Installer l'appli sur ce téléphone ». L'invite du navigateur ne s'affiche qu'en HTTPS (ou localhost).
 
 ## Panier : auto-complétion de l'adresse et localisation
 
@@ -1475,3 +1516,18 @@ Bloc « Destination » du panier (`cart.php`, script `assets/cart-address.js`) :
 **Livraison à une autre personne** : au panier, la case « La livraison est pour une autre personne » ajoute le **nom** et le **téléphone du destinataire** (exigés si la case est cochée, contrôlés côté serveur). Ils sont conservés avec la commande (`orders.ship_name`, `ship_phone`) et affichés dans Administration → Commandes (« 🎁 Livrer à … », lien d'appel, mention « différent du client »). L'adresse de livraison elle-même se saisit à l'étape de paiement Stripe et peut toujours différer de celle du client ; les coordonnées du client (e-mail, téléphone) restent celles de la facturation et du compte.
 
 **Adresse de livraison saisie au panier** (bloc « Destination » de `cart.php`) : pays, **adresse (numéro et rue)**, **complément** (bâtiment, étage, digicode…), **code postal** et **ville**. La recherche d'adresse (« Rechercher mon adresse », Base Adresse Nationale) et « 📍 Me localiser » remplissent tous ces champs, qui restent modifiables à la main (autres pays compris). Le code postal fixe la zone tarifaire. À « Passer à la caisse », l'adresse affichée part avec le formulaire de paiement (même sans avoir cliqué « Actualiser ») et est **contrôlée côté serveur** : adresse, ville et code postal (5 chiffres en France) sont exigés dès que la livraison n'est pas un retrait sur place. Le paiement Stripe est **prérempli** avec cette adresse (client Stripe portant l'adresse et le nom du destinataire, modifiable par le client) ; si la création du client échoue, le paiement continue sans préremplissage. L'adresse saisie est conservée avec la commande (`orders.declared_address`) et sert de repli si Stripe n'en renvoie pas ; l'adresse finale confirmée chez Stripe reste prioritaire.
+
+## Recrutement : emplois, primo-aidants et bénévoles de vide-grenier
+
+Module autonome pour recruter sur trois pistes, sans toucher au module Équipe existant :
+
+- **Trois pistes** : *Emploi* (salarié, freelance, prestation, stage), *Primo-aidant* (amis et famille qui aident sur le design, le fonctionnel, le financement ou les tests) et *Bénévole* (tenue d'un stand lors d'un vide-grenier ou de puces). Chaque piste a ses domaines, ses contrats et son formulaire.
+- **Besoins publiés** (`portail/recrutement/`) : titre, piste, contrat, domaines, missions, profil recherché, rémunération, lieu, télétravail, nombre de places, date limite et, pour les bénévoles, **le vide-grenier concerné** (choisi parmi les événements de galerie à venir, types `vide-grenier` et `puces`). Chaque besoin reçoit un **code court** et un lien public ; un besoin échu ou fermé cesse d'accepter des candidatures.
+- **Page publique** (`/portail/recrutement/postuler.php`) : accueil avec les trois pistes et les besoins ouverts, page d'un besoin (`?offre=CODE`), ou candidature spontanée par piste (`?piste=emploi|primo|benevole`). Le formulaire s'adapte à la piste (domaines, disponibilité, expérience, prétentions, mobilité, date de l'événement). Garde-fous : CSRF, champ piège, 3 envois par heure et par session, refus des doublons sur le même besoin pendant 30 jours, consentement obligatoire, notification à l'adresse réglée dans le portail.
+- **Suivi des candidatures** : statuts reçue → contactée → entretien → retenue → intégrée (écartée à tout moment), notes horodatées, comptage par besoin, export CSV, suppression.
+- **Pont vers Équipe** : un primo-aidant retenu peut être envoyé en un clic dans le module Équipe (`includes/equipe.php`), qui reste la source de vérité pour les conseillers, testeurs et partenaires financiers (catégorie et domaines traduits).
+- **Onglet Bénévoles** : la liste des vide-greniers à venir avec, pour chacun, les missions créées et les bénévoles confirmés (statut retenue ou intégrée) ; création rapide d'un besoin rattaché à l'événement.
+- **Onglet Partage** : liens publics par piste et par besoin (bouton « Copier »), réglages (ouverture des candidatures spontanées, adresse de notification, texte d'introduction).
+- **Stockage** : fichiers JSON dans `data/recrutement/` (`besoins/`, `candidatures/`, `settings.json`), jamais servis en HTTP, comme le reste du portail ; écritures atomiques. Aucune table SQL, aucune migration.
+- **Accès** : entrée « Recrutement » dans le menu du portail (groupe Pilotage), avec pastille des candidatures à traiter.
+- **Code** : `includes/recrutement.php`, `portail/recrutement/index.php`, `portail/recrutement/action.php`, `portail/recrutement/postuler.php` ; tests `tests/RecrutementTest.php`.

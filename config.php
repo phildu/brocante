@@ -13,6 +13,11 @@ tenant_enable_base_path();
 // Clés API partagées pendant la période de test (voir includes/shared-secrets.php).
 require_once __DIR__ . '/includes/shared-secrets.php';
 
+// Surveillance : capture des erreurs fatales et battement de cœur (voir
+// includes/watchdog.php et health.php).
+require_once __DIR__ . '/includes/watchdog.php';
+wd_install();
+
 // La base est un simple fichier SQLite (comme le projet Louxor) — aucun
 // serveur de base de données à provisionner, ni en local ni sur OVH. Un
 // fichier par commerce (tenant.php → db_file ; brocante.db pour le Petit Chalet).

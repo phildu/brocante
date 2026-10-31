@@ -8,14 +8,14 @@ $starts = date('Y-m-d\TH:i', time() + 3600);
 $ends = date('Y-m-d\TH:i', time() + 4 * 3600);
 $pageUrl = static fn (string $v): string => '/admin/plugin.php?' . http_build_query(['p' => $plugin['id'], 'v' => $v, 'id' => '']);
 ?>
-<div id="aco-page" style="display:grid;gap:16px;max-width:980px;" data-api="<?= h($pluginApi('operations')) ?>" data-csrf="<?= h($pluginCsrf) ?>" data-entitled="<?= $ent['entitled'] ? '1' : '0' ?>" data-labels="<?= h($pageUrl('etiquettes')) ?>" data-report="<?= h($pageUrl('bilan')) ?>" data-export="<?= h($pluginApi('export')) ?>">
+<div id="aco-page" style="display:grid;gap:16px;max-width:980px;" data-api="<?= h($pluginApi('operations')) ?>" data-contacts="<?= h($pluginApi('contacts')) ?>" data-csrf="<?= h($pluginCsrf) ?>" data-entitled="<?= $ent['entitled'] ? '1' : '0' ?>" data-labels="<?= h($pageUrl('etiquettes')) ?>" data-report="<?= h($pageUrl('bilan')) ?>" data-export="<?= h($pluginApi('export')) ?>">
   <p class="eyebrow">Module · <?= h($plugin['name']) ?> · v<?= h($plugin['version']) ?></p>
   <h1 style="font-size:1.8rem;margin:0;">Actions commerciales</h1>
   <?= addon_panel_html(ACO_MODULE, $pluginApi('access'), $pluginCsrf) ?>
   <?php if (!$ent['entitled']): ?>
     <?= addon_locked_html(ACO_MODULE) ?>
   <?php else: ?>
-  <p class="hint" style="max-width:72ch;margin:0;">Braderie, foire ou période de soldes : les pièces choisies passent à leur prix réduit à l'heure dite, puis retrouvent leur prix d'origine à la fin. Les prix réduits sont ceux que facturent la boutique, la caisse et les galeries dont la boutique est membre. Les ventes de la période sont chiffrées dans le bilan.</p>
+  <p class="hint" style="max-width:72ch;margin:0;">Braderie, vente flash, foire ou période de soldes : les pièces choisies passent à leur prix réduit à l'heure dite, puis retrouvent leur prix d'origine à la fin. Les prix réduits sont ceux que facturent la boutique, la caisse et les galeries dont la boutique est membre. Un bandeau et une étiquette sur les photos signalent l'opération, avec un appel à l'action dans le hero de l'accueil et en tête du catalogue. Les ventes de la période sont chiffrées dans le bilan.</p>
 
   <section style="border:1px solid var(--line);padding:16px;display:grid;gap:12px;">
     <h2 style="margin:0;font-size:1.05rem;">Nouvelle opération</h2>
@@ -122,7 +122,17 @@ $pageUrl = static fn (string $v): string => '/admin/plugin.php?' . http_build_qu
       <thead><tr><th align="left">Opération</th><th align="left">Période</th><th align="left">Remise</th><th align="left">État</th><th align="right">Pièces</th><th align="right">Valeur</th><th></th></tr></thead>
       <tbody></tbody>
     </table></div>
-    <p class="hint" style="margin:0;max-width:78ch;">« Prévenir » envoie l'annonce de l'opération par e-mail aux visiteurs qui ont donné leur accord : membres de la web app, abonnés confirmés aux alertes chineur et prospects de la newsletter. Chaque message contient un lien de désinscription, une adresse n'est jamais prévenue deux fois pour la même opération, et les envois partent par lots de <?= ACO_NOTICE_BATCH ?>.</p>
+    <p class="hint" style="margin:0;max-width:78ch;">« Prévenir » envoie l'annonce aux visiteurs qui ont donné leur accord, sur les canaux choisis : e-mail, annonce dans l'app pour les personnes reconnues sur le site, SMS et WhatsApp pour celles qui ont laissé un numéro et accepté le canal. Chaque message contient un lien de désinscription, une adresse n'est jamais prévenue deux fois pour la même opération sur un canal, et les envois partent par lots de <?= ACO_NOTICE_BATCH ?>.</p>
+  </section>
+
+  <section style="border:1px solid var(--line);padding:16px;display:grid;gap:10px;">
+    <h2 style="margin:0;font-size:1.05rem;">Contacts & consentements</h2>
+    <p class="hint" style="margin:0;max-width:78ch;">L'e-mail suit l'inscription aux listes de la boutique ; l'annonce dans l'app ne s'affiche qu'aux personnes reconnues (compte client ou lien de la web app). Pour le SMS et WhatsApp, saisissez le numéro et cochez l'accord que la personne a donné en boutique ou par formulaire. « Désinscrit » signifie qu'elle a demandé à ne plus recevoir d'annonces : elle n'est plus contactée, quels que soient les canaux.</p>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.88rem;" id="aco-contacts">
+      <thead><tr><th align="left">Contact</th><th align="left">Listes</th><th align="left">Téléphone</th><th align="center">Dans l'app</th><th align="center">SMS</th><th align="center">WhatsApp</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <p class="hint" id="aco-contacts-msg" role="status" style="margin:0;"></p>
   </section>
 
   <p class="hint" style="max-width:72ch;margin:0;">Pour des soldes, la période légale ne dépasse pas quatre semaines consécutives et le prix barré doit correspondre au prix pratiqué avant la période. Une opération peut être arrêtée à tout moment : les prix d'origine sont alors rétablis.</p>

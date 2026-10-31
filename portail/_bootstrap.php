@@ -141,7 +141,7 @@ function portail_account(): ?array
 // Administrateur d'une galerie (connecté via /galerie/admin.php) : accès restreint à SA galerie, aux seules pages ci-dessous (voir includes/gallery-admin.php).
 // L'exploitant, connecté au portail, garde l'accès complet ; en local, une connexion d'administrateur de galerie fait passer en mode restreint.
 require_once __DIR__ . '/../includes/gallery-admin.php';
-const GA_PAGES = ['galeries.php', 'galerie-tableau.php', 'galerie-prospects.php', 'galerie-compte.php', 'galerie-offre.php', 'galerie-plan.php', 'galerie-exposants.php', 'galerie-exposant.php', 'galerie-attente.php', 'galerie-cni.php', 'galerie-import.php', 'galerie-assistant.php', 'addons.php'];
+const GA_PAGES = ['galeries.php', 'galerie-tableau.php', 'galerie-prospects.php', 'galerie-compte.php', 'galerie-offre.php', 'galerie-plan.php', 'galerie-exposants.php', 'galerie-exposant.php', 'galerie-attente.php', 'galerie-bourse.php', 'galerie-cni.php', 'galerie-import.php', 'galerie-assistant.php', 'addons.php'];
 $portailLoginRoute = basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'login.php'
     || (defined('PORTAIL_PUBLIC_ROUTE') && PORTAIL_PUBLIC_ROUTE === true);
 if (!$portailLoginRoute && empty($_SESSION['portail_user']) && ($gaAdmin = ga_current())) {

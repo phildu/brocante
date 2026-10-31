@@ -265,7 +265,8 @@ $stmt->execute([
     $contact['ship_other'] ? $shipPhoneNorm : null,
     $declaredAddress,
 ]);
-checkout_remember_order((int) db()->lastInsertId());
+$orderId = (int) db()->lastInsertId();
+checkout_remember_order($orderId);
 // « Créer mon compte » : lien pour choisir son mot de passe (le compte n'existe qu'une fois l'adresse confirmée par ce lien).
 if ($contact['create_account']) {
     try {
@@ -275,7 +276,7 @@ if ($contact['create_account']) {
         error_log('checkout create_account : ' . $e->getMessage());
     }
 }
-if (!empty($discount['reward'])) plugin_fire('checkout_created', ['order_id' => (int) db()->lastInsertId(), 'code' => (string) ($_SESSION['reward_code'] ?? '')]);   // réserve la récompense jusqu'au paiement
+plugin_fire('checkout_created', ['order_id' => $orderId, 'code' => (string) ($_SESSION['reward_code'] ?? '')]);   // réserve la récompense jusqu'au paiement
 
 header('Location: ' . $session['url'], true, 303);
 exit;

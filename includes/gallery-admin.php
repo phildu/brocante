@@ -449,7 +449,7 @@ function ga_prospect_send(string $slug, string $id, string $subject, string $bod
         $sent = (array) ($p['contacts'] ?? []);
         if (count($sent) >= GA_RELANCE_MAX + 1) return 'Déjà ' . (GA_RELANCE_MAX + 1) . ' messages envoyés : il n\'est plus relancé.';
         if ($sent && time() - max($sent) < GA_RELANCE_DELAY) return 'Un message a déjà été envoyé il y a moins de 3 jours.';
-        $text = strtr($body, ['{nom}' => $p['name'], '{galerie}' => $gallery['name'], '{lien}' => ga_public_url('/galerie/' . $slug . '/'), '{desinscription}' => ga_optout_url($slug, 'prospect', $p['id'])]);
+        $text = strtr($body, ['{nom}' => $p['name'], '{galerie}' => $gallery['name'], '{lien}' => gallery_public_url($gallery), '{desinscription}' => ga_optout_url($slug, 'prospect', $p['id'])]);
         if (!ga_mail($p['email'], $subject, $text)) return "L'e-mail n'a pas pu partir.";
         $list[$k]['contacts'][] = time();
         if ($list[$k]['status'] === 'nouveau') $list[$k]['status'] = 'contacte'; elseif ($list[$k]['status'] === 'contacte') $list[$k]['status'] = 'relance';
@@ -522,7 +522,7 @@ function ga_sub_broadcast(string $slug, string $subject, string $body): array
     $sent = 0;
     foreach ($subs as $k => $s) {
         if (empty($s['confirmed'])) continue;
-        $text = $body . "\n\n—\n« {$gallery['name']} » : " . ga_public_url('/galerie/' . $slug . '/') . "\nSe désinscrire : " . ga_optout_url($slug, 'sub', $s['id']) . "\n";
+        $text = $body . "\n\n—\n« {$gallery['name']} » : " . gallery_public_url($gallery) . "\nSe désinscrire : " . ga_optout_url($slug, 'sub', $s['id']) . "\n";
         if (ga_mail($s['email'], $subject, $text)) { $sent++; $subs[$k]['last_sent'] = time(); }
         if ($sent >= 500) break;
     }

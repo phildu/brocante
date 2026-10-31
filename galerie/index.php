@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/gallery-admin.php';
 require_once __DIR__ . '/../includes/gallery-offers.php';
 require_once __DIR__ . '/../includes/gallery-loyalty.php';
 require_once __DIR__ . '/../includes/gallery-booking.php';
+require_once __DIR__ . '/../includes/gallery-bourse.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/promo.php';
 require_once __DIR__ . '/../includes/banner-slides.php';
@@ -30,6 +31,10 @@ $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' :
 $origin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 $slug = strtolower((string) ($_GET['g'] ?? ''));
 $testRequest = null;
+
+// Nom de domaine propre : une galerie qui a réservé l'adresse du visiteur est servie à la racine.
+$hostGallery = $slug === '' ? gallery_from_host((string) ($_SERVER['HTTP_HOST'] ?? '')) : null;
+if ($hostGallery) { $slug = (string) $hostGallery['slug']; $_GET['g'] = $slug; }
 
 // ── Liste des galeries ──
 if ($slug === '') {
@@ -79,6 +84,10 @@ $ink = gal_ink_on($accent);
 $theme = $gallery ? gallery_theme($gallery) : null;
 $st = $gallery['style'] ?? gallery_style_normalize([]);
 $bannerImages = $gallery ? gallery_banner_images($st) : [];
+
+// Campagne pionniers de la galerie : le palier du prochain inscrit remise le tarif « à partir de » et alimente le bandeau public.
+$ebCampaign = $gallery && function_exists('eb_campaign_for_signup') ? eb_campaign_for_signup($gallery['slug']) : null;
+$ebTier = $ebCampaign && $ebCampaign['progress']['open'] ? eb_tier_at($ebCampaign, $ebCampaign['progress']['next_rank']) : null;
 
 // ── Filtres (galerie) ──
 $data = ['shops' => [], 'products' => [], 'skipped' => []];
@@ -158,7 +167,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 <meta name="description" content="<?= e($metaDescription) ?>">
 <meta property="og:title" content="<?= e($pageTitle) ?>">
 <meta property="og:description" content="<?= e($metaDescription) ?>">
-<?php if ($gallery): echo share_og_html($pageTitle, $metaDescription, $origin . '/galerie/' . $gallery['slug'] . '/', !empty($st['banner']) ? $origin . '/' . $st['banner'] : '', 'website', $pageTitle); endif; ?>
+<?php if ($gallery): echo share_og_html($pageTitle, $metaDescription, gallery_public_url($gallery, $origin), !empty($st['banner']) ? $origin . '/' . $st['banner'] : '', 'website', $pageTitle); endif; ?>
 <link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.css') ?>">
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>
 <?php if (!empty($notFound) || ($gallery && !$gallery['published'])): ?><meta name="robots" content="noindex, nofollow"><?php endif; ?>
@@ -347,7 +356,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       <li><strong><?= count($data['products']) ?></strong>pièce<?= count($data['products']) > 1 ? 's' : '' ?> en ligne</li>
       <li><strong><?= count($universes) ?></strong>univers</li>
     </ul><?php endif; ?>
-    <?php if ($gallery['published']): ?><p class="hero-share"><?= share_button_html($origin . '/galerie/' . $gallery['slug'] . '/', $gallery['name'], $gallery['tagline'] ?: 'Les pièces de ' . count($shops) . ' commerces réunies au même endroit.', $st['banner'] !== '' ? $origin . '/' . $st['banner'] : '') ?></p><?php endif; ?>
+    <?php if ($gallery['published']): ?><p class="hero-share"><?= share_button_html(gallery_public_url($gallery, $origin), $gallery['name'], $gallery['tagline'] ?: 'Les pièces de ' . count($shops) . ' commerces réunies au même endroit.', $st['banner'] !== '' ? $origin . '/' . $st['banner'] : '') ?></p><?php endif; ?>
     <?php if (gl_open($gallery)): ?>
       <div class="hero-app"><a class="app-btn" href="/galerie/visiteur.php?g=<?= e($gallery['slug']) ?>">📱 Application visiteurs · <?= e(gl_settings($gallery)['program_name']) ?>, points et récompenses</a></div>
     <?php elseif ($vApps = array_values(array_filter($shops, static fn ($s) => ($s['visitor_url'] ?? '') !== ''))): ?>
@@ -359,7 +368,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <?php endif; ?>
     <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
       <p class="hero-cta"><a class="btn-cta" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><?= e($st['cta_label'] !== '' ? $st['cta_label'] : 'Créer ma boutique dans cette galerie') ?></a>
-        <span class="from"><?= e(saas_grid_from_text(saas_grid($gallery['slug']))) ?> · sans engagement</span><a class="alt" href="#cta-boutique">En savoir plus</a></p>
+        <span class="from"><?= e(saas_grid_from_text($ebTier ? eb_discounted_grid(saas_grid($gallery['slug']), $ebTier) : saas_grid($gallery['slug']))) ?> · sans engagement</span><a class="alt" href="#cta-boutique">En savoir plus</a></p>
     <?php endif; ?>
   </div></header>
 
@@ -368,6 +377,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <?php if ($data['skipped']): ?>
       <p class="note">Certains <?= e($vocab['members'] ?? 'commerces') ?> ne répondent pas pour le moment (<?= e(implode(', ', $data['skipped'])) ?>) : leurs pièces reviendront dès que possible.</p>
     <?php endif; ?>
+    <?php if ($ebCampaign && $ebCampaign['enabled'] && $gallery['published'] && !$preview): ?><?= eb_widget_html($gallery['slug']) ?><?php endif; ?>
 
     <?php if ($shops): ?>
     <section aria-labelledby="h-commerces">
@@ -447,12 +457,12 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           .ev-place:disabled{opacity:.85;}
           .ev-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 0;font-size:.85rem;color:var(--ink-soft);}
         </style>
-        <div id="ev-grid" role="list" aria-label="Places de la manifestation">
+        <div id="ev-grid" role="list" aria-label="<?= e(ucfirst((string) ($vocab['places'] ?? 'places'))) ?> de la manifestation">
           <?php foreach ($evPlaces as $place):
               $state = $evStates[$place['id']] ?? '';
               $free = $state === '' && $galleryBooking['source'] === 'event';
               $cls = $state === 'taken' ? 'is-taken' : ($state === 'pending' ? 'is-pending' : ($free ? 'is-free' : ''));
-              $label = 'Place ' . (int) $place['num'] . ' — ' . ($state === 'taken' ? 'attribuée' : ($state === 'pending' ? 'demande en cours' : ($free ? 'libre' : 'réservations fermées')));
+              $label = ucfirst((string) ($vocab['place'] ?? 'place')) . ' ' . (int) $place['num'] . ' — ' . ($state === 'taken' ? 'indisponible' : ($state === 'pending' ? 'demande en cours' : ($free ? 'libre' : 'réservations fermées')));
           ?>
             <button type="button" role="listitem" class="ev-place <?= $cls ?>"<?= $free ? ' data-slot="' . e($place['id']) . '" data-num="' . (int) $place['num'] . '" data-price="' . (int) ($place['price_cents'] ?? '') . '" data-pricepro="' . (int) ($place['price_pro_cents'] ?? '') . '"' : ' disabled' ?> title="<?= e($label) ?>" aria-label="<?= e($label) ?>"><?= (int) $place['num'] ?></button>
           <?php endforeach; ?>
@@ -463,16 +473,17 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           <script>
           (function(){
             var grid=document.getElementById('ev-grid');if(!grid)return;
+            var pword=<?= json_encode(ucfirst((string) ($vocab['place'] ?? 'place')), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
             grid.addEventListener('click',function(e){
               var b=e.target.closest?e.target.closest('button[data-slot]'):null;
               if(!b||b.disabled||!window.GXEventBooking)return;
               var p=b.getAttribute('data-price'),pp=b.getAttribute('data-pricepro');
-              window.GXEventBooking.open(b.getAttribute('data-slot'),'Place '+(b.getAttribute('data-num')||''),p===''?null:+p,pp===''?null:+pp);
+              window.GXEventBooking.open(b.getAttribute('data-slot'),pword+' '+(b.getAttribute('data-num')||''),p===''?null:+p,pp===''?null:+pp);
             });
             window.addEventListener('gx:booking',function(e){
               var b=grid.querySelector('button[data-slot="'+e.detail.slot+'"]');if(!b)return;
               b.disabled=true;b.classList.remove('is-free');b.classList.add('is-pending');
-              b.title='Place '+(b.getAttribute('data-num')||'')+' — demande en cours';
+              b.title=pword+' '+(b.getAttribute('data-num')||'')+' — demande en cours';
               b.setAttribute('aria-label',b.title);
             });
           })();
@@ -494,7 +505,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       $withPrices = $gallery && gt_feature($gallery, 'tarifs');
       $slotStates = !empty($bk['enabled']) ? gb_states($gallery) : [];
       $zoneNames = [];
-      foreach (($planMap['items'] ?? []) as $pi) if ($pi['role'] === 'zone') $zoneNames[$pi['id']] = gallery_zone_name($pi);
+      foreach (($planMap['items'] ?? []) as $pi) if ($pi['role'] === 'zone') $zoneNames[$pi['id']] = gallery_zone_name($pi, gt_locations($gallery));
       foreach (($planMap['items'] ?? []) as $pi) {
           $ps = $shops[$pi['shop']] ?? null;
           $isSlot = $pi['role'] === 'slot';
@@ -502,13 +513,14 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           $planItems[] = ['id' => $pi['id'], 'kind' => $pi['kind'], 'role' => $pi['role'], 'pts' => $pi['pts'], 'color' => $pi['color'],
               'label' => $pi['label'] !== '' ? $pi['label'] : ($ps['name'] ?? ''), 'num' => $pi['num'], 'note' => $pi['note'],
               'm2' => $pi['kind'] === 'polygon' ? round(gallery_map_area_m2($pi['pts']), 1) : 0,
-              'ztype' => $pi['role'] === 'zone' ? (GALLERY_ZONE_TYPES[$pi['ztype']] ?? '') : '', 'zone' => $isSlot ? ($zoneNames[$pi['zone']] ?? '') : '',
+              'ztype' => $pi['role'] === 'zone' ? gt_location_label($gallery, (string) $pi['ztype']) : '', 'zone' => $isSlot ? ($zoneNames[$pi['zone']] ?? '') : '',
               'price' => $isSlot && $withPrices ? gallery_map_slot_price($planMap, $pi, false) : null, 'price_pro' => $isSlot && $withPrices ? gallery_map_slot_price($planMap, $pi, true) : null,
               'state' => $isSlot && !empty($bk['enabled']) ? ($pi['shop'] !== '' ? 'taken' : ($slotStates[$pi['id']] ?? 'free')) : '', 'free' => $free,
               'shop' => $ps ? $ps['name'] : '', 'url' => $ps ? ($ps['url'] !== '' ? $ps['url'] : gal_url(['commerce' => $pi['shop']]) . '#pieces') : ''];
       }
       $planData = $carteOn && $planItems ? ['center' => $planMap['center'], 'zoom' => $planMap['zoom'], 'base' => $planMap['base'], 'items' => $planItems,
           'tiles' => ['osm' => GALLERY_MAP_TILE_PLAN, 'sat' => GALLERY_MAP_TILE_SAT],
+          'background' => $planMap['background'] ?? null,
           'booking' => !empty($bk['enabled']) ? ['intro' => $bk['intro'], 'endpoint' => '/galerie/exposant.php', 'slug' => $gallery['slug']] : null] : null;
     ?>
     <?php if ($planData): ?>
@@ -615,27 +627,28 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       <script type="application/json" id="plan-data"><?= json_encode($planData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
       <script>
       (function(){var b=document.getElementById('plan-show');if(!b)return;
-      var d=JSON.parse(document.getElementById('plan-data').textContent),map=null,layers=[],bookMode=false,box=document.getElementById('plan-box');
+      var d=JSON.parse(document.getElementById('plan-data').textContent),map=null,layers=[],bookMode=false,box=document.getElementById('plan-box'),placeWord=<?= json_encode(ucfirst((string) ($vocab['place'] ?? 'emplacement')), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
       function load(u,t){return new Promise(function(ok,ko){var e=document.createElement(t==='css'?'link':'script');if(t==='css'){e.rel='stylesheet';e.href=u}else e.src=u;e.onload=ok;e.onerror=ko;document.head.appendChild(e)})}
       function eur(c){return c==null?null:(c/100).toFixed(2).replace('.',',')+' €'}
       function style(it,l){
         var c=it.color,o={color:c,weight:2,fillColor:c,fillOpacity:.3};
         if(it.role==='zone')o={color:c,weight:2,dashArray:'8 6',fillColor:c,fillOpacity:.07};
+        if(it.role==='territoire')o={color:c,weight:2.5,dashArray:'2 6',fillColor:c,fillOpacity:.04};
         if(bookMode&&it.role==='slot'&&it.state){var st={free:'#2e8b57',pending:'#e08a1e',taken:'#9a9a9a'}[it.state];o={color:st,weight:2,fillColor:st,fillOpacity:it.state==='free'?.45:.35}}
         l.setStyle(o)}
       function popup(it){
         var p=document.createElement('div'),h=document.createElement('strong'),t=[];
-        if(it.role==='zone')t.push((it.ztype&&(it.label||'').toLowerCase().indexOf(it.ztype.toLowerCase())!==0?it.ztype+' ':'')+(it.label||''));else{if(it.num)t.push('Emplacement '+it.num);if(it.label)t.push(it.label);if(!t.length)t.push(it.shop||'Commerce')}
+        if(it.role==='zone')t.push((it.ztype&&(it.label||'').toLowerCase().indexOf(it.ztype.toLowerCase())!==0?it.ztype+' ':'')+(it.label||''));else{if(it.num)t.push(placeWord+' '+it.num);if(it.label)t.push(it.label);if(!t.length)t.push(it.shop||'Commerce')}
         h.textContent=t.join(' — ');p.appendChild(h);
         var add=function(x){var n=document.createElement('div');n.textContent=x;p.appendChild(n)};
         if(it.zone)add(it.zone);if(it.m2>0)add((it.m2>=100?Math.round(it.m2):it.m2)+' m²');if(it.note)add(it.note);
         if(it.role==='slot'&&it.price!=null)add('Tarif : '+eur(it.price)+(it.price_pro!=null&&it.price_pro!==it.price?' (entreprise : '+eur(it.price_pro)+')':''));
-        if(it.role==='slot'&&it.state)add({free:'Emplacement libre',pending:'Demande en cours',taken:'Emplacement attribué'}[it.state]);
+        if(it.role==='slot'&&it.state)add({free:placeWord+' libre',pending:'Demande en cours',taken:placeWord+' indisponible'}[it.state]);
         if(it.url){var a=document.createElement('a');a.href=it.url;a.target='_blank';a.rel='noopener';a.textContent=it.shop?'Boutique '+it.shop+' ↗':'Boutique ↗';a.style.display='block';p.appendChild(a)}
         if(bookMode&&it.role==='slot'&&it.free){var bt=document.createElement('button');bt.type='button';bt.textContent='Demander cet emplacement';bt.style.cssText='margin-top:6px;padding:6px 10px;cursor:pointer;';bt.addEventListener('click',function(){openForm(it);map.closePopup()});p.appendChild(bt)}
         return p}
       function openForm(it){var f=document.getElementById('plan-form');f.style.display='grid';f.hidden=false;f.slot.value=it.id;
-        var nm=[it.num?'Emplacement '+it.num:'Emplacement',it.zone].filter(Boolean).join(' — ');document.getElementById('plan-form-title').textContent='Demande pour : '+nm;
+        var nm=[it.num?placeWord+' '+it.num:placeWord,it.zone].filter(Boolean).join(' — ');document.getElementById('plan-form-title').textContent='Demande pour : '+nm;
         function price(){var pr=f.kind.value==='entreprise'&&it.price_pro!=null?it.price_pro:it.price;document.getElementById('plan-form-price').textContent=pr!=null?'Tarif : '+eur(pr)+' ('+(f.kind.value==='entreprise'?'entreprise':'particulier')+')':'Tarif communiqué par l\'organisateur'}
         function syncKind(){
           var t=f.kind.value;
@@ -655,10 +668,10 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           var l;
           if(it.kind==='marker')l=L.marker(it.pts[0],{icon:L.divIcon({className:'',html:'<span style="display:block;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45),0 2px 5px rgba(0,0,0,.35);background:'+it.color+'"></span>',iconSize:[18,18],iconAnchor:[9,9]})});
           else{l=it.kind==='polygon'?L.polygon(it.pts):L.polyline(it.pts,{color:it.color,weight:3});if(it.kind==='polygon')style(it,l)}
-          if(it.role==='zone'){var bd=l.getBounds(),sp=document.createElement('span');sp.style.cssText='display:inline-block;transform:translate(-50%,-100%);white-space:nowrap;font:700 11px/1.3 system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#222;background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.3);border-radius:4px;padding:2px 7px;pointer-events:none';sp.textContent=(it.ztype&&(it.label||'').toLowerCase().indexOf(it.ztype.toLowerCase())!==0?it.ztype+' · ':'')+(it.label||'');
+          if(it.role==='zone'||it.role==='territoire'){var bd=l.getBounds(),sp=document.createElement('span');sp.style.cssText='display:inline-block;transform:translate(-50%,-100%);white-space:nowrap;font:700 11px/1.3 system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#222;background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.3);border-radius:4px;padding:2px 7px;pointer-events:none';sp.textContent=(it.role==='territoire'?'⬡ ':'')+(it.ztype&&(it.label||'').toLowerCase().indexOf(it.ztype.toLowerCase())!==0?it.ztype+' · ':'')+(it.label||'');
             var zl=L.marker([bd.getNorth(),bd.getCenter().lng],{icon:L.divIcon({className:'',html:sp,iconSize:[0,0]}),interactive:false,keyboard:false});layers.push({l:zl});zl.addTo(map)}
-          else{var tt=[it.num,it.label].filter(Boolean).join(' · ');if(tt){var t=document.createElement('span');t.textContent=tt;l.bindTooltip(t,it.kind==='marker'?{permanent:true,direction:'top',offset:[0,-10]}:{permanent:true,direction:'center'})}}
-          l.bindPopup(function(){return popup(it)});l.addTo(map);if(it.role==='zone'&&l.bringToBack)l.bringToBack();layers.push({l:l});all.push(l)});
+          else if(it.role!=='territoire'){var tt=[it.num,it.label].filter(Boolean).join(' · ');if(tt){var t=document.createElement('span');t.textContent=tt;l.bindTooltip(t,it.kind==='marker'?{permanent:true,direction:'top',offset:[0,-10]}:{permanent:true,direction:'center'})}}
+          l.bindPopup(function(){return popup(it)});l.addTo(map);if((it.role==='zone'||it.role==='territoire')&&l.bringToBack)l.bringToBack();layers.push({l:l});if(it.role!=='territoire')all.push(l)});
         return all}
       b.addEventListener('click',function(){b.textContent='Chargement…';
         Promise.all([load('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css','css'),load('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js','js')]).then(function(){
@@ -672,6 +685,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
               tl.addTo(map)});
             tl.addTo(map)}
           L.control.scale({metric:true,imperial:false}).addTo(map);
+          if(d.background){map.createPane('planBgPane').style.zIndex=350;L.imageOverlay('/'+d.background.path,d.background.bounds,{pane:'planBgPane',opacity:d.background.opacity||.7}).addTo(map)}
           var all=render();
           if(!d.center&&all.length)map.fitBounds(L.featureGroup(all).getBounds().pad(.2));
           var bk=document.getElementById('plan-book');
@@ -773,6 +787,32 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <?php elseif (!$planData && !$hasEventSection): ?>
       <section><p class="empty"><?= e($vocab['empty'] ?? "Cette galerie n'a pas encore de commerce.") ?></p></section>
     <?php endif; ?>
+
+    <?php if ($gallery['published'] && function_exists('gt_feature') && gt_feature($gallery, 'bourse')):
+      $gbSearches = array_slice(gbo_public_searches($gallery['slug']), 0, 3);
+      $gbCount = count(gbo_public_searches($gallery['slug']));
+      $gbUrl = '/galerie/bourse.php?g=' . rawurlencode($gallery['slug']); ?>
+      <section id="bourse" aria-labelledby="h-bourse">
+        <h2 id="h-bourse">Bourse d’échanges</h2>
+        <p class="lede">Une pièce à vendre — un meuble, un service de table, un tableau ? Proposez-la à la galerie. Vous pouvez aussi retrouver
+          les pièces que nous recherchons en ce moment.</p>
+        <?php if ($gbSearches): ?>
+          <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin:4px 0 16px;">
+            <?php foreach ($gbSearches as $gs): ?>
+              <article style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 15px;">
+                <h3 style="margin:0 0 4px;font-size:1rem;"><?= e($gs['title']) ?></h3>
+                <p style="margin:0 0 8px;color:var(--ink-soft);font-size:.88rem;overflow-wrap:anywhere;"><?= e(mb_strimwidth($gs['description'], 0, 160, '…')) ?></p>
+                <p style="margin:0;color:var(--ink-soft);font-size:.78rem;">
+                  <?php if ($gs['category'] !== ''): ?><?= e($gs['category']) ?><?php endif; ?>
+                  <?php if ($gs['price_cents']): ?><?= $gs['category'] !== '' ? ' · ' : '' ?>budget jusqu’à <?= e(gbo_money((int) $gs['price_cents'])) ?><?php endif; ?>
+                </p>
+              </article>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+        <p><a class="btn" href="<?= e($gbUrl) ?>">Proposer une pièce<?= $gbCount ? ' · voir les ' . $gbCount . ' recherche' . ($gbCount > 1 ? 's' : '') : '' ?></a></p>
+      </section>
+    <?php endif; ?>
   </main>
 <?php endif; ?>
 
@@ -820,6 +860,9 @@ fetch('/galerie/contact.php',{method:'POST',headers:{Accept:'application/json'},
 <footer><div class="wrap">
   <?php if ($slug !== ''): ?><a href="/galerie/">← Toutes les galeries</a> · <?php endif; ?><?= e($st['footer_text'] !== '' && $slug !== '' ? $st['footer_text'] : 'Les pièces sont vendues et expédiées par les commerces eux-mêmes.') ?>
   · <a href="/galerie/admin.php" rel="nofollow">Gérer ma galerie</a>
+  <?php if ($slug !== '' && $gallery && $gallery['published'] && function_exists('gt_feature') && gt_feature($gallery, 'bourse')): ?>
+    · <a href="/galerie/bourse.php?g=<?= e(rawurlencode($slug)) ?>">Bourse d’échanges</a>
+  <?php endif; ?>
 </div></footer>
 <?= banner_slides_script() ?>
 </body>

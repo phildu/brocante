@@ -195,10 +195,71 @@
 
 .ss-audio-status { margin: 0; font-size: 0.8rem; color: var(--ink-soft); font-family: var(--font-mono); min-height: 1.2em; }
 
+/* ── Vidéo du commerce ──────────────────────────────────────────────────── */
+.ss-modes { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); background: var(--surface); }
+.ss-modes button { appearance: none; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--ink-soft); font-family: var(--font-body); font-size: 0.88rem; font-weight: 600; padding: 13px 8px; cursor: pointer; }
+.ss-modes button:hover { color: var(--ink); }
+.ss-modes button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); background: var(--bg); }
+
+.ss-photo-flow[hidden], .ss-video-work[hidden], .ss-video-consent[hidden], .ss-video-progress[hidden],
+.ss-video-idle[hidden], .ss-video-rec[hidden], #ss-video-preview[hidden], #ss-videos-empty[hidden],
+.ss-prompter[hidden], #ss-prompter-time[hidden] { display: none !important; }
+
+.ss-video-panel .ss-card { gap: 16px; }
+.ss-video-programs { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.ss-video-programs button small { line-height: 1.35; }
+
+.ss-video-tips { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ss-video-tips li { padding: 9px 11px; background: var(--bg); border: 1px solid var(--line); font-size: 0.84rem; color: var(--ink-soft); }
+
+.ss-field textarea { background: var(--surface); border: 1px solid var(--line); color: var(--ink); padding: 10px 11px; font-family: var(--font-body); font-size: 0.95rem; line-height: 1.55; resize: vertical; min-height: 140px; width: 100%; }
+
+.ss-video-stage { position: relative; width: 100%; max-width: 380px; margin: 0 auto; aspect-ratio: 9 / 16; max-height: 62vh; background: #14110d; border: 1px solid var(--line); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+#ss-video-preview { width: 100%; height: 100%; object-fit: contain; display: block; background: #14110d; }
+.ss-video-idle { padding: 26px 20px; text-align: center; color: #f4eee1; font-size: 0.9rem; display: flex; flex-direction: column; gap: 8px; }
+.ss-video-idle p { margin: 0; }
+.ss-video-idle .ss-note { color: rgba(244, 238, 225, 0.72); }
+.ss-video-rec { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 6px 10px; background: rgba(0, 0, 0, 0.62); color: #fff; font-family: var(--font-mono); font-size: 0.82rem; }
+.ss-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #e0492f; animation: ss-rec 1.1s ease-in-out infinite; }
+@keyframes ss-rec { 50% { opacity: 0.25; } }
+
+.ss-video-consent { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; padding: 11px 12px; border: 1px solid var(--accent); background: var(--bg); font-size: 0.85rem; cursor: pointer; }
+.ss-video-consent input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--accent); }
+
+.ss-video-progress { height: 10px; border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
+.ss-video-progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s ease; }
+
+.ss-videos { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ss-videos li { display: grid; grid-template-columns: 120px 1fr auto; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--line); background: var(--bg); }
+.ss-videos video { width: 120px; max-height: 160px; aspect-ratio: 9 / 16; object-fit: cover; display: block; background: #14110d; }
+.ss-video-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 0.88rem; }
+.ss-video-meta small { color: var(--ink-soft); font-size: 0.74rem; }
+.ss-videos .btn-small { align-self: center; }
+
+/* Prompteur plein écran : lisible à bout de bras pendant l'enregistrement. */
+.ss-prompter { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; background: #0e0d0b; color: #f5efe3; }
+.ss-prompter-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px; border-bottom: 1px solid rgba(245, 239, 227, 0.18); font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.ss-prompter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ss-prompter .btn-small { appearance: none; background: transparent; border: 1px solid rgba(245, 239, 227, 0.5); color: #f5efe3; padding: 8px 12px; min-height: 40px; font-family: var(--font-body); font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.ss-prompter .btn-small:hover { background: #f5efe3; color: #0e0d0b; }
+.ss-prompter .btn-small:disabled { opacity: 0.5; cursor: not-allowed; }
+#ss-prompter-rec.is-rec { background: #e0492f; border-color: #e0492f; color: #fff; }
+#ss-prompter-time { font-family: var(--font-mono); color: #ff8a73; font-size: 0.86rem; }
+.ss-prompter-text { flex: 1 1 auto; overflow-y: auto; padding: 10vh 8vw 50vh; font-family: var(--font-body); font-size: clamp(1.35rem, 5.4vw, 2.4rem); line-height: 1.6; white-space: pre-wrap; outline: none; }
+.ss-prompter-text:focus-visible { box-shadow: inset 0 0 0 2px rgba(245, 239, 227, 0.35); }
+
 @media (max-width: 640px) {
   .ss-main { padding: 16px 12px calc(48px + env(safe-area-inset-bottom, 0px)); }
   .ss-tips { grid-template-columns: 1fr; }
   .ss-compare { grid-template-columns: 1fr; }
   .ss-state li { grid-template-columns: 12px 1fr; grid-template-areas: "dot label" ". where" ". link"; }
   .ss-steps li { font-size: 0.66rem; }
+  .ss-modes button { font-size: 0.82rem; padding: 12px 6px; }
+  .ss-video-stage { max-width: none; max-height: 58vh; }
+  .ss-videos li { grid-template-columns: 84px 1fr; }
+  .ss-videos video { width: 84px; max-height: 120px; }
+  .ss-videos li .btn-small { grid-column: 2; justify-self: start; }
+  .ss-prompter-text { padding: 8vh 6vw 55vh; }
+  .ss-prompter-bar { font-size: 0.68rem; }
+  .ss-prompter .btn-small { padding: 8px 10px; }
 }

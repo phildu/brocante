@@ -114,8 +114,8 @@ ga_head('Événement');
       </div>
       <label class="f">Consignes affichées aux exposants<textarea name="notes" rows="3" maxlength="600" placeholder="Installation à partir de 6 h, véhicule sur le parking, objets interdits…"><?= $val('notes') ?></textarea></label>
 
-      <h3>Places et tarif</h3>
-      <p class="meta" style="margin:0;">La numérotation est automatique : Place 1 à Place N. Aucun plan à dessiner n'est nécessaire.</p>
+      <h3><?= e(ucfirst(gt_word($gaGallery, 'places'))) ?> et tarif</h3>
+      <p class="meta" style="margin:0;">La numérotation est automatique : <?= e(ucfirst(gt_word($gaGallery, 'place'))) ?> 1 à <?= e(ucfirst(gt_word($gaGallery, 'place'))) ?> N. Aucun plan à dessiner n'est nécessaire.</p>
       <div class="row">
         <label class="f">Je saisis<select name="mode" id="ev-mode">
           <?php foreach (GE_MODES as $mk => $ml): ?><option value="<?= e($mk) ?>"<?= ($event['mode'] ?? 'places') === $mk ? ' selected' : '' ?>><?= e($ml) ?></option><?php endforeach; ?>
@@ -151,7 +151,7 @@ ga_head('Événement');
       ?>
       <div class="ev-chips">
         <?php foreach ($preview as $p): $st = $states[$p['id']] ?? 'free'; ?>
-          <span class="ev-chip <?= e($st) ?>" title="<?= e(ge_slot_name($p)) ?> : <?= $st === 'taken' ? 'attribuée' : ($st === 'pending' ? 'en attente' : 'libre') ?>"><?= e($p['num']) ?></span>
+          <span class="ev-chip <?= e($st) ?>" title="<?= e(ge_slot_name($p, ucfirst(gt_word($gaGallery, 'place')))) ?> : <?= $st === 'taken' ? 'attribuée' : ($st === 'pending' ? 'en attente' : 'libre') ?>"><?= e($p['num']) ?></span>
         <?php endforeach; ?>
       </div>
       <?php if ($count > 200): ?><p class="meta">Aperçu des 200 premières places ; les <?= $count - 200 ?> suivantes sont numérotées de la même façon.</p><?php endif; ?>

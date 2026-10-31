@@ -43,6 +43,7 @@
   <div class="quick-preview-media" id="quick-preview-media"></div>
   <span id="quick-preview-name"></span>
 </div>
+<?= plugin_render('site_footer') ?>
 <script>
 (function () {
   // Écran de bienvenue (accueil, mobile) — une seule fois par session, pour

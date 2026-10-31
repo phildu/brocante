@@ -20,6 +20,7 @@ const SAAS_EVENT_TYPES = [
     'ai_credit_purchased'   => ['Crédit IA racheté', 'paiement', 'ok'],
     'addon_subscribed'      => ['Option Annonces souscrite', 'paiement', 'ok'],
     'addon_canceled'        => ['Option Annonces résiliée', 'suppression', 'bad'],
+    'domain_ordered'        => ['Nom de domaine commandé (OVH)', 'paiement', 'ok'],
     'payment_failed'        => ['Paiement refusé', 'paiement', 'bad'],
     'payment_refunded'      => ['Paiement remboursé', 'paiement', 'warn'],
     'subscription_canceled' => ['Abonnement résilié', 'suppression', 'bad'],

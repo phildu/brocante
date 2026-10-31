@@ -664,6 +664,656 @@
     return 'Attention : ' + parts.join(', ') + '. Vous pouvez reprendre la photo, améliorer la lumière, ou continuer si cela vous convient.';
   }
 
+  // ── Vidéo du commerce : présentation ou témoignage client ────────────────
+  // Le texte (généré ou écrit) sert de prompteur ; la vidéo reste dans la
+  // médiathèque de la boutique, rien n'est publié automatiquement.
+  var MAX_CLIP = 120;
+  var clip = {
+    program: '',
+    blob: null,
+    url: '',
+    duration: 0,
+    recording: false,
+    recorder: null,
+    stream: null,
+    chunks: [],
+    startedAt: 0,
+    timer: null,
+    mime: ''
+  };
+  var PROMPTER = { open: false, playing: false, speed: 24, last: 0, frame: 0, pos: 0, written: 0 };
+
+  function vNote(text) {
+    var box = $('ss-video-note');
+    box.hidden = !text;
+    box.textContent = text || '';
+  }
+  function vAiNote(text) {
+    $('ss-video-ai-note').textContent = text || '';
+  }
+  var videosTimer = null;
+  function videosNote(text) {
+    var box = $('ss-videos-note');
+    if (!box) return;
+    box.hidden = !text;
+    box.textContent = text || '';
+    if (videosTimer) clearTimeout(videosTimer);
+    videosTimer = text ? setTimeout(function () { box.hidden = true; }, 4000) : null;
+  }
+  function fmtTime(seconds) {
+    var m = Math.floor(seconds / 60), s = seconds % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function fmtSize(bytes) {
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(bytes >= 10485760 ? 0 : 1) + ' Mo';
+    if (bytes >= 1024) return Math.round(bytes / 1024) + ' Ko';
+    return bytes + ' o';
+  }
+  function setProgress(pct) {
+    $('ss-video-progress-fill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+  }
+
+  function setMode(mode) {
+    Array.prototype.forEach.call(document.querySelectorAll('.ss-modes button'), function (b) {
+      b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false');
+    });
+    var videoMode = mode === 'video';
+    if (!videoMode) {
+      if (clip.recording) stopRecording();
+      closePrompter();
+    }
+    $('ss-head').hidden = videoMode;
+    $('ss-photo-flow').hidden = videoMode;
+    $('ss-panel-video').hidden = !videoMode;
+    if (videoMode) {
+      window.scrollTo(0, 0);
+    } else {
+      showPanel('place');
+    }
+  }
+
+  function selectVideoProgram(key) {
+    var p = DATA.videoPrograms[key];
+    if (!p) return;
+    clip.program = key;
+    Array.prototype.forEach.call($('ss-video-programs').querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', b.dataset.videoProgram === key ? 'true' : 'false');
+    });
+    $('ss-video-work').hidden = false;
+    var tips = $('ss-video-tips');
+    tips.textContent = '';
+    (p.tips || []).forEach(function (line) { tips.appendChild(el('li', null, line)); });
+    $('ss-video-text-label').textContent = p.text_label || 'Texte à dire (modifiable)';
+    $('ss-video-text-hint').textContent = p.text_hint || '';
+    $('ss-video-text').placeholder = p.placeholder || '';
+    $('ss-video-consent-wrap').hidden = !p.consent;
+    $('ss-video-caption').placeholder = p.consent ? 'Ex. : Témoignage d’un client' : 'Ex. : La boutique se présente';
+    $('ss-video-support').textContent = (p.capture === 'environment' ? 'Caméra arrière conseillée' : 'Caméra avant conseillée')
+      + ' · enregistrement direct (' + MAX_CLIP + ' s au plus) ou import d’une vidéo.';
+    syncPrompterButton();
+    vAiNote('');
+  }
+
+  function generateScript() {
+    if (!clip.program) {
+      vNote('Choisissez d’abord un programme vidéo.');
+      return;
+    }
+    if ($('ss-video-text').value.trim() !== ''
+      && !window.confirm('Le texte actuel sera remplacé par la proposition de l’IA. Continuer ?')) return;
+    var button = $('ss-video-ai');
+    button.disabled = true;
+    vAiNote('L’IA prépare le texte… comptez quelques secondes.');
+    var fd = new FormData();
+    fd.append('action', 'script');
+    fd.append('program', clip.program);
+    fd.append('place', state.place);
+    post(ACTION, fd).then(function (res) {
+      button.disabled = !AI;
+      if (!res.ok) {
+        vAiNote(res.error || 'L’IA n’a pas répondu : écrivez le texte à la main.');
+        return;
+      }
+      $('ss-video-text').value = res.text || '';
+      syncPrompterButton();
+      vAiNote('Texte proposé : corrigez les noms, les horaires et les détails avant de le lire.');
+    });
+  }
+
+  function syncPrompterButton() {
+    $('ss-video-prompter-open').disabled = $('ss-video-text').value.trim() === '';
+  }
+
+  function prompterLabel(force) {
+    var base = clip.recording ? '● Enregistrement' : (PROMPTER.playing ? 'Défilement' : 'Pause');
+    var speed = PROMPTER.speed <= 16 ? 'lente' : (PROMPTER.speed >= 40 ? 'rapide' : 'moyenne');
+    $('ss-prompter-state').textContent = (force || base) + ' · vitesse ' + speed;
+  }
+
+  function updatePrompterState(force) {
+    if (!PROMPTER.open && !force) return;
+    prompterLabel(force);
+    var button = $('ss-prompter-rec');
+    button.textContent = clip.recording ? '■ Arrêter' : '● Enregistrer';
+    button.classList.toggle('is-rec', clip.recording);
+    var time = $('ss-prompter-time');
+    time.hidden = !clip.recording;
+    if (clip.recording) time.textContent = $('ss-video-time').textContent;
+  }
+
+  function openPrompter() {
+    var text = $('ss-video-text').value.trim();
+    if (!text) {
+      vNote('Écrivez ou générez le texte avant d’ouvrir le prompteur.');
+      return;
+    }
+    closePrompter();
+    $('ss-prompter-text').textContent = text;
+    $('ss-prompter-text').scrollTop = 0;
+    PROMPTER.pos = 0;
+    PROMPTER.written = 0;
+    $('ss-prompter').hidden = false;
+    PROMPTER.open = true;
+    PROMPTER.playing = true;
+    PROMPTER.last = 0;
+    $('ss-prompter-play').textContent = 'Pause';
+    PROMPTER.frame = requestAnimationFrame(prompterTick);
+    updatePrompterState();
+    vNote('Prompteur ouvert : réglez la vitesse, puis enregistrez.');
+  }
+
+  function closePrompter() {
+    if (PROMPTER.frame) cancelAnimationFrame(PROMPTER.frame);
+    PROMPTER.frame = 0;
+    PROMPTER.open = false;
+    PROMPTER.playing = false;
+    $('ss-prompter').hidden = true;
+  }
+
+  function prompterTick(now) {
+    if (!PROMPTER.open || !PROMPTER.playing) return;
+    var box = $('ss-prompter-text');
+    if (!PROMPTER.last) PROMPTER.last = now;
+    var dt = Math.min(0.12, (now - PROMPTER.last) / 1000);
+    PROMPTER.last = now;
+    // scrollTop est arrondi à l'entier par le navigateur : on garde la position
+    // exacte en mémoire, sinon un pas de 0,4 px ne décolle jamais de zéro.
+    var max = Math.max(0, box.scrollHeight - box.clientHeight);
+    if (Math.abs(box.scrollTop - PROMPTER.written) > 2) PROMPTER.pos = box.scrollTop;
+    PROMPTER.pos = Math.min(max, PROMPTER.pos + PROMPTER.speed * dt);
+    box.scrollTop = PROMPTER.pos;
+    PROMPTER.written = box.scrollTop;
+    if (PROMPTER.pos >= max - 1) {
+      PROMPTER.playing = false;
+      $('ss-prompter-play').textContent = 'Rejouer';
+      prompterLabel('Fin du texte');
+      return;
+    }
+    PROMPTER.frame = requestAnimationFrame(prompterTick);
+  }
+
+  function restartPrompter() {
+    var box = $('ss-prompter-text');
+    box.scrollTop = 0;
+    PROMPTER.pos = 0;
+    PROMPTER.written = 0;
+    if (PROMPTER.frame) cancelAnimationFrame(PROMPTER.frame);
+    PROMPTER.playing = true;
+    PROMPTER.last = 0;
+    $('ss-prompter-play').textContent = 'Pause';
+    PROMPTER.frame = requestAnimationFrame(prompterTick);
+  }
+
+  function togglePrompter() {
+    if (!PROMPTER.open) return;
+    var box = $('ss-prompter-text');
+    if (PROMPTER.playing) {
+      PROMPTER.playing = false;
+      if (PROMPTER.frame) cancelAnimationFrame(PROMPTER.frame);
+      PROMPTER.frame = 0;
+      $('ss-prompter-play').textContent = 'Reprendre';
+      prompterLabel('Pause');
+      return;
+    }
+    if (box.scrollTop + box.clientHeight >= box.scrollHeight - 2) {
+      box.scrollTop = 0;
+      PROMPTER.pos = 0;
+      PROMPTER.written = 0;
+    } else {
+      PROMPTER.pos = box.scrollTop;
+    }
+    PROMPTER.playing = true;
+    PROMPTER.last = 0;
+    $('ss-prompter-play').textContent = 'Pause';
+    PROMPTER.frame = requestAnimationFrame(prompterTick);
+    prompterLabel();
+  }
+
+  function pickVideoMime() {
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+    var types = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    for (var i = 0; i < types.length; i++) {
+      try { if (MediaRecorder.isTypeSupported(types[i])) return types[i]; } catch (e) {}
+    }
+    return '';
+  }
+
+  function stopStream() {
+    if (!clip.stream) return;
+    clip.stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) {} });
+    clip.stream = null;
+  }
+
+  function clearClip() {
+    revoke(clip.url);
+    clip.blob = null;
+    clip.url = '';
+    clip.duration = 0;
+    clip.chunks = [];
+    var preview = $('ss-video-preview');
+    try { preview.pause(); } catch (e) {}
+    preview.removeAttribute('src');
+    preview.srcObject = null;
+    preview.controls = false;
+    preview.muted = true;
+    preview.hidden = true;
+    $('ss-video-idle').hidden = false;
+    $('ss-video-rec').hidden = true;
+    $('ss-video-start').hidden = false;
+    $('ss-video-start').disabled = false;
+    $('ss-video-stop').hidden = true;
+    $('ss-video-retake').hidden = true;
+    $('ss-video-upload').hidden = true;
+    $('ss-video-file').hidden = false;
+    $('ss-video-input').value = '';
+    $('ss-video-progress').hidden = true;
+    setProgress(0);
+  }
+
+  function startRecording() {
+    if (clip.recording) return;
+    var p = clip.program ? DATA.videoPrograms[clip.program] : null;
+    if (!p) {
+      vNote('Choisissez d’abord un programme vidéo.');
+      updatePrompterState('Choisissez un programme');
+      return;
+    }
+    if (p.consent && !$('ss-video-consent').checked) {
+      vNote('Cochez l’accord du client avant d’enregistrer le témoignage.');
+      updatePrompterState('Accord du client requis');
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      vNote('Ce navigateur ne peut pas filmer directement : utilisez « Importer une vidéo ».');
+      updatePrompterState('Caméra indisponible');
+      return;
+    }
+    clearClip();
+    vNote('Ouverture de la caméra…');
+    updatePrompterState('Ouverture de la caméra');
+    $('ss-video-start').disabled = true;
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: p.capture === 'environment' ? 'environment' : 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: { echoCancellation: true, noiseSuppression: true }
+    }).then(function (stream) {
+      clip.stream = stream;
+      var preview = $('ss-video-preview');
+      preview.hidden = false;
+      preview.muted = true;
+      preview.controls = false;
+      preview.srcObject = stream;
+      var playing = preview.play();
+      if (playing && playing.catch) playing.catch(function () {});
+      $('ss-video-idle').hidden = true;
+
+      var mime = pickVideoMime();
+      var recorder = null;
+      try { recorder = mime ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 }) : new MediaRecorder(stream); } catch (e) {}
+      if (!recorder) {
+        stopStream();
+        $('ss-video-start').disabled = false;
+        vNote('Enregistrement direct impossible sur ce navigateur : utilisez « Importer une vidéo ».');
+        updatePrompterState('Caméra indisponible');
+        return;
+      }
+      clip.recorder = recorder;
+      clip.mime = recorder.mimeType || mime || 'video/webm';
+      clip.chunks = [];
+      recorder.ondataavailable = function (event) {
+        if (event.data && event.data.size) clip.chunks.push(event.data);
+      };
+      recorder.onstop = finalizeRecording;
+      try {
+        recorder.start(1000);
+      } catch (e) {
+        clip.recorder = null;
+        stopStream();
+        $('ss-video-start').disabled = false;
+        vNote('Enregistrement direct impossible : utilisez « Importer une vidéo ».');
+        updatePrompterState('Caméra indisponible');
+        return;
+      }
+
+      clip.recording = true;
+      clip.startedAt = Date.now();
+      $('ss-video-time').textContent = '00:00';
+      $('ss-video-rec').hidden = false;
+      $('ss-video-start').hidden = true;
+      $('ss-video-stop').hidden = false;
+      $('ss-video-retake').hidden = true;
+      $('ss-video-upload').hidden = true;
+      $('ss-video-file').hidden = true;
+      clip.timer = setInterval(tickRecording, 250);
+      vNote('Enregistrement en cours… parlez tranquillement.');
+      if (PROMPTER.open) restartPrompter();
+      updatePrompterState();
+    }, function () {
+      $('ss-video-start').disabled = false;
+      vNote('Caméra refusée ou indisponible : autorisez la caméra, ou importez une vidéo.');
+      updatePrompterState('Caméra indisponible');
+    });
+  }
+
+  function tickRecording() {
+    if (!clip.recording) return;
+    var seconds = Math.floor((Date.now() - clip.startedAt) / 1000);
+    var text = fmtTime(seconds);
+    $('ss-video-time').textContent = text;
+    $('ss-prompter-time').textContent = text;
+    if (seconds >= MAX_CLIP) {
+      stopRecording();
+      vNote('Durée maximale atteinte (' + MAX_CLIP + ' s) : vérifiez la vidéo puis envoyez-la.');
+    }
+  }
+
+  function stopRecording() {
+    if (!clip.recording) return;
+    clip.recording = false;
+    if (clip.timer) { clearInterval(clip.timer); clip.timer = null; }
+    $('ss-video-rec').hidden = true;
+    $('ss-video-stop').hidden = true;
+    $('ss-video-start').hidden = false;
+    $('ss-video-start').disabled = false;
+    $('ss-video-file').hidden = false;
+    var preview = $('ss-video-preview');
+    if (preview.srcObject) {
+      try { preview.pause(); } catch (e) {}
+      preview.srcObject = null;
+    }
+    stopStream();
+    if (clip.recorder && clip.recorder.state !== 'inactive') {
+      try { clip.recorder.stop(); } catch (e) { finalizeRecording(); }
+    } else {
+      finalizeRecording();
+    }
+    updatePrompterState('Vidéo prête');
+    closePrompter();
+    vNote('Enregistrement terminé : vérifiez la vidéo, puis envoyez-la.');
+  }
+
+  function finalizeRecording() {
+    var seconds = Math.max(1, Math.round((Date.now() - clip.startedAt) / 1000));
+    var type = String(clip.mime || 'video/webm').split(';')[0];
+    var blob = new Blob(clip.chunks, { type: type });
+    clip.chunks = [];
+    clip.recorder = null;
+    if (!blob.size) {
+      vNote('Rien n’a été enregistré : reprenez la vidéo.');
+      clearClip();
+      return;
+    }
+    clip.blob = blob;
+    clip.duration = Math.min(MAX_CLIP, seconds);
+    clip.url = URL.createObjectURL(blob);
+    var preview = $('ss-video-preview');
+    preview.srcObject = null;
+    preview.src = clip.url;
+    preview.muted = false;
+    preview.controls = true;
+    preview.hidden = false;
+    var playing = preview.play();
+    if (playing && playing.catch) playing.catch(function () {});
+    $('ss-video-idle').hidden = true;
+    $('ss-video-upload').hidden = false;
+    $('ss-video-retake').hidden = false;
+    $('ss-video-input').value = '';
+    vNote('Vidéo prête (' + fmtSize(blob.size) + ' · ' + fmtTime(seconds) + ') : vérifiez-la puis envoyez-la.');
+  }
+
+  function retakeVideo() {
+    if (clip.recording) return;
+    clearClip();
+    vNote('');
+  }
+
+  function onVideoPick(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (!/^video\//.test(file.type)) {
+      vNote('Fichier non reconnu : choisissez une vidéo MP4, MOV ou WebM.');
+      return;
+    }
+    if (file.size > 120 * 1048576) {
+      vNote('Vidéo trop lourde (120 Mo au plus).');
+      return;
+    }
+    if (clip.recording) stopRecording();
+    clearClip();
+    clip.blob = file;
+    clip.url = URL.createObjectURL(file);
+    var preview = $('ss-video-preview');
+    preview.srcObject = null;
+    preview.src = clip.url;
+    preview.muted = false;
+    preview.controls = true;
+    preview.hidden = false;
+    $('ss-video-idle').hidden = true;
+    $('ss-video-upload').hidden = false;
+    $('ss-video-retake').hidden = false;
+    preview.addEventListener('loadedmetadata', function onMeta() {
+      preview.removeEventListener('loadedmetadata', onMeta);
+      if (isFinite(preview.duration)) clip.duration = Math.round(preview.duration);
+      vNote('Vidéo importée (' + fmtSize(file.size) + ' · ' + fmtTime(clip.duration) + ') : vérifiez-la puis envoyez-la.');
+    });
+    vNote('Vidéo importée (' + fmtSize(file.size) + ') : vérifiez-la puis envoyez-la.');
+  }
+
+  function uploadFailed(message, button, retake) {
+    button.disabled = false;
+    retake.disabled = false;
+    setProgress(0);
+    $('ss-video-progress').hidden = true;
+    vNote(message);
+  }
+
+  function sendChunks(id, chunk) {
+    var total = clip.blob.size;
+    var offset = 0;
+    function step() {
+      if (offset >= total) return Promise.resolve(true);
+      var end = Math.min(total, offset + chunk);
+      var fd = new FormData();
+      fd.append('action', 'video_chunk');
+      fd.append('id', id);
+      fd.append('chunk', clip.blob.slice(offset, end), 'chunk.bin');
+      return sendChunk(fd, 0).then(function (res) {
+        if (!res.ok) {
+          if (res.error) vNote(res.error);
+          return false;
+        }
+        offset = end;
+        var pct = Math.round(offset / total * 100);
+        setProgress(pct);
+        vNote('Envoi de la vidéo : ' + pct + ' % (' + fmtSize(offset) + ' sur ' + fmtSize(total) + ')');
+        return step();
+      });
+    }
+    return step();
+  }
+
+  function sendChunk(fd, attempt) {
+    return fetch(ACTION, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (r) {
+        return r.json().catch(function () { return { ok: false, error: 'Réponse inattendue du serveur (' + r.status + ').' }; });
+      })
+      .catch(function () { return { ok: false, error: 'Connexion perdue : vérifiez le réseau.' }; })
+      .then(function (res) {
+        if (!res.ok && attempt < 2) {
+          return new Promise(function (resolve) { setTimeout(resolve, 600 * (attempt + 1)); })
+            .then(function () { return sendChunk(fd, attempt + 1); });
+        }
+        return res;
+      });
+  }
+
+  function uploadVideo() {
+    if (!clip.blob) {
+      vNote('Enregistrez ou importez une vidéo d’abord.');
+      return;
+    }
+    var p = clip.program ? DATA.videoPrograms[clip.program] : null;
+    if (!p) {
+      vNote('Choisissez d’abord un programme vidéo.');
+      return;
+    }
+    if (p.consent && !$('ss-video-consent').checked) {
+      vNote('Cochez l’accord du client avant d’envoyer le témoignage.');
+      $('ss-video-consent').focus();
+      return;
+    }
+    var button = $('ss-video-upload');
+    var retake = $('ss-video-retake');
+    button.disabled = true;
+    retake.disabled = true;
+    setProgress(0);
+    $('ss-video-progress').hidden = false;
+    vNote('Préparation de l’envoi…');
+
+    var fd = new FormData();
+    fd.append('action', 'video_begin');
+    fd.append('program', clip.program);
+    fd.append('caption', $('ss-video-caption').value.trim());
+    fd.append('script', $('ss-video-text').value.trim());
+    fd.append('duration', String(Math.round(clip.duration || 0)));
+    fd.append('size', String(clip.blob.size));
+    if ($('ss-video-consent').checked) fd.append('consent', '1');
+
+    post(ACTION, fd).then(function (res) {
+      if (!res.ok || !res.id) {
+        uploadFailed(res.error || 'L’envoi n’a pas pu démarrer.', button, retake);
+        return;
+      }
+      var chunk = Math.max(262144, Math.min(4194304, Number(res.chunk) || 1048576));
+      sendChunks(res.id, chunk).then(function (ok) {
+        if (!ok) {
+          uploadFailed('L’envoi s’est interrompu : vérifiez le réseau puis réessayez.', button, retake);
+          return;
+        }
+        vNote('Vérification de la vidéo…');
+        var fin = new FormData();
+        fin.append('action', 'video_finish');
+        fin.append('id', res.id);
+        post(ACTION, fin).then(function (done) {
+          if (!done.ok) {
+            uploadFailed(done.error || 'La vidéo n’a pas pu être enregistrée.', button, retake);
+            return;
+          }
+          setProgress(100);
+          $('ss-video-progress').hidden = true;
+          addVideoCard(done.video);
+          button.disabled = false;
+          retake.disabled = false;
+          clearClip();
+          $('ss-video-caption').value = '';
+          $('ss-video-consent').checked = false;
+          vNote('✓ Vidéo enregistrée dans la médiathèque de la boutique.');
+        });
+      });
+    });
+  }
+
+  function addVideoCard(video) {
+    var list = $('ss-videos-list');
+    if (!list || !video) return;
+    var li = el('li');
+    li.dataset.video = String(video.id);
+    var player = document.createElement('video');
+    player.src = video.url;
+    player.controls = true;
+    player.preload = 'metadata';
+    player.setAttribute('playsinline', '');
+    var meta = el('div', 'ss-video-meta');
+    meta.appendChild(el('b', null, video.caption || video.program_title || 'Vidéo'));
+    meta.appendChild(el('small', null, (video.author || 'Équipe') + ' · ' + video.created_at + ' · ' + (video.duration || 0) + ' s'));
+    li.appendChild(player);
+    li.appendChild(meta);
+    if (IS_ADMIN) {
+      var remove = el('button', 'btn-small ss-ghost', 'Supprimer');
+      remove.type = 'button';
+      remove.dataset.videoDelete = String(video.id);
+      li.appendChild(remove);
+    }
+    list.insertBefore(li, list.firstChild);
+    $('ss-videos-empty').hidden = true;
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ss-modes button'), function (b) {
+    b.addEventListener('click', function () { setMode(b.dataset.mode); });
+  });
+  Array.prototype.forEach.call($('ss-video-programs').querySelectorAll('button'), function (b) {
+    b.addEventListener('click', function () { selectVideoProgram(b.dataset.videoProgram); });
+  });
+  $('ss-video-text').addEventListener('input', syncPrompterButton);
+  $('ss-video-ai').addEventListener('click', generateScript);
+  $('ss-video-prompter-open').addEventListener('click', openPrompter);
+  $('ss-video-start').addEventListener('click', startRecording);
+  $('ss-video-stop').addEventListener('click', stopRecording);
+  $('ss-video-retake').addEventListener('click', retakeVideo);
+  $('ss-video-file').addEventListener('click', function () { $('ss-video-input').click(); });
+  $('ss-video-input').addEventListener('change', onVideoPick);
+  $('ss-video-upload').addEventListener('click', uploadVideo);
+  $('ss-prompter-play').addEventListener('click', togglePrompter);
+  $('ss-prompter-close').addEventListener('click', closePrompter);
+  $('ss-prompter-slower').addEventListener('click', function () {
+    PROMPTER.speed = Math.max(10, PROMPTER.speed - 6);
+    prompterLabel();
+  });
+  $('ss-prompter-faster').addEventListener('click', function () {
+    PROMPTER.speed = Math.min(70, PROMPTER.speed + 6);
+    prompterLabel();
+  });
+  $('ss-prompter-rec').addEventListener('click', function () {
+    if (clip.recording) stopRecording(); else startRecording();
+  });
+
+  $('ss-videos-list').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-video-delete]');
+    if (!button) return;
+    if (!window.confirm('Supprimer cette vidéo ? Le fichier sera aussi retiré de la médiathèque.')) return;
+    button.disabled = true;
+    var fd = new FormData();
+    fd.append('action', 'video_delete');
+    fd.append('id', button.dataset.videoDelete);
+    post(ACTION, fd).then(function (res) {
+      if (!res.ok) {
+        button.disabled = false;
+        videosNote(res.error || 'La suppression a échoué.');
+        return;
+      }
+      var row = button.closest('li');
+      if (row) row.remove();
+      $('ss-videos-empty').hidden = $('ss-videos-list').children.length > 0;
+      videosNote('Vidéo supprimée de la médiathèque.');
+    });
+  });
+
+  window.addEventListener('beforeunload', function (event) {
+    if (clip.recording || clip.blob) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+
   // ── Événements ───────────────────────────────────────────────────────────
   Array.prototype.forEach.call($('ss-places').querySelectorAll('button'), function (b) {
     b.addEventListener('click', function () { selectPlace(b.dataset.place); });

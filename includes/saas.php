@@ -19,7 +19,7 @@ require_once __DIR__ . '/autofeed.php';
 require_once __DIR__ . '/oauth.php';
 
 const SAAS_RESERVED_SLUGS = ['galerie', 'annuaire', 'inscription', 'accueil', 'portail', 'admin', 'assets', 'uploads', 'includes', 'data', 'tenants',
-    'var', 'scripts', 'api', 'modal', 'static', 'www', 'mail', 'test', 'demo'];
+    'var', 'scripts', 'api', 'modal', 'static', 'www', 'mail', 'test', 'demo', 'dossier'];
 const SAAS_CACHE_TTL = 600;
 
 function saas_data_dir(): string
@@ -353,11 +353,19 @@ function saas_request_start(array $in): array
     if (!$offer) $err['plan'] = 'Choisissez une formule.';
     if ($err) return ['ok' => false, 'errors' => $err];
 
+    // Place pionnière : le rang et la remise sont figés maintenant, le prix remisé part chez Stripe.
+    $lock = function_exists('eb_lock_offer') ? eb_lock_offer($gallery, $offer) : ['offer' => $offer, 'earlybird' => null];
+    $offer = $lock['offer'];
     $req = ['id' => bin2hex(random_bytes(8)), 'token' => bin2hex(random_bytes(16)), 'created' => time(), 'status' => 'draft', 'email' => $email, 'plan' => $plan, 'site_mode' => $mode,
         'offer' => $offer, 'shop_name' => '', 'slug' => '', 'first_name' => '', 'last_name' => '', 'phone' => '', 'about' => '', 'gallery' => $gallery, 'template' => SHOP_TEMPLATE_DEFAULT,
         'service_quotes' => $serviceQuotes, 'payment' => []];
+    if (!empty($lock['earlybird'])) $req['earlybird'] = $lock['earlybird'];
     if (!saas_request_save($req)) return ['ok' => false, 'errors' => ['form' => "Impossible d'enregistrer la demande pour le moment : réessayez dans quelques minutes."]];
-    saas_event('signup_started', ['ref' => $req['id'], 'email' => $email, 'plan' => $plan, 'gallery' => $gallery, 'actor' => 'client', 'note' => saas_offer_note($offer)]);
+    saas_event('signup_started', ['ref' => $req['id'], 'email' => $email, 'plan' => $plan, 'gallery' => $gallery, 'actor' => 'client', 'note' => saas_offer_note($offer, $req['earlybird'] ?? null)]);
+    if (!empty($lock['earlybird'])) {
+        saas_event('pioneer_granted', ['ref' => $req['id'], 'email' => $email, 'plan' => $plan, 'gallery' => $gallery, 'actor' => 'client',
+            'note' => eb_lock_label($lock['earlybird']) . ' · ' . saas_price_text((int) ($offer['cents'] ?? 0), (string) ($offer['billing'] ?? 'month'))]);
+    }
     return ['ok' => true, 'request' => $req];
 }
 
@@ -617,11 +625,12 @@ function saas_req_payable(array $req): bool
 }
 
 /** Description courte d'une offre figée, pour le journal : « Standard — annuel, 199 € / an, galerie x ». */
-function saas_offer_note(?array $o): string
+function saas_offer_note(?array $o, ?array $earlybird = null): string
 {
     if (!$o) return '';
     return $o['name'] . ' — ' . SAAS_BILLING[$o['billing']][1] . ', ' . saas_price_text($o['cents'], $o['billing'])
-        . ($o['max_items'] ? ', jusqu\'à ' . $o['max_items'] . ' articles' : '') . (($o['gallery'] ?? '') !== '' ? ', galerie ' . $o['gallery'] : '');
+        . ($o['max_items'] ? ', jusqu\'à ' . $o['max_items'] . ' articles' : '') . (($o['gallery'] ?? '') !== '' ? ', galerie ' . $o['gallery'] : '')
+        . (!empty($earlybird['discount_pct']) ? ', ' . eb_lock_label($earlybird) : '');
 }
 
 /** Crée la session Stripe Checkout (abonnement mensuel ou annuel, selon l'offre figée) d'une demande ; retourne la session (id, url). */
@@ -637,7 +646,7 @@ function saas_stripe_checkout(array $req, string $origin): array
             'price_data' => [
                 'currency' => 'eur', 'unit_amount' => (int) $o['cents'], 'recurring' => ['interval' => $yearly ? 'year' : 'month'],
                 'product_data' => ['name' => $cfg['name'] . ' — ' . ($o['model'] === 'tier' ? '' : 'formule ') . $o['name'] . (($o['gallery'] ?? '') !== '' ? ' (galerie ' . $o['gallery'] . ')' : ''),
-                    'description' => 'Abonnement ' . ($yearly ? 'annuel' : 'mensuel') . ' à votre boutique en ligne' . ($o['max_items'] ? ' — jusqu\'à ' . $o['max_items'] . ' articles' : '')],
+                    'description' => 'Abonnement ' . ($yearly ? 'annuel' : 'mensuel') . ' à votre boutique en ligne' . ($o['max_items'] ? ' — jusqu\'à ' . $o['max_items'] . ' articles' : '') . (!empty($req['earlybird']['discount_pct']) ? ' — ' . eb_lock_label($req['earlybird']) : '')],
             ],
         ]],
         'metadata' => ['request_id' => $req['id'], 'plan' => $o['key'], 'billing' => $o['billing'], 'gallery' => (string) ($o['gallery'] ?? ''), 'site_mode' => (string) ($o['mode'] ?? 'sales')],
@@ -867,7 +876,7 @@ function saas_page_end(): void
 </main>
 <footer class="site-foot"><div class="wrap foot">
   <div><strong><?= saas_e($cfg['name']) ?></strong><br><span><?= saas_e($cfg['tagline']) ?></span></div>
-  <nav aria-label="Pied de page"><a href="/">Accueil</a><a href="/galerie/">Galeries</a><a href="/annuaire/">Annuaire</a><a href="/inscription/">Créer ma boutique</a><?php if ($cfg['contact'] !== ''): ?><a href="mailto:<?= saas_e($cfg['contact']) ?>">Contact</a><?php endif; ?></nav>
+  <nav aria-label="Pied de page"><a href="/">Accueil</a><a href="/vide-greniers/">Organiser un vide-grenier</a><a href="/marche-aux-puces/">Gérer un marché aux puces</a><a href="/galerie-marchande/">Créer une galerie marchande</a><a href="/quartier-marchand/">Créer un quartier marchand</a><a href="/galerie/">Galeries</a><a href="/annuaire/">Annuaire</a><a href="/inscription/">Créer ma boutique</a><a href="/dossier/">Dossier de subvention</a><?php if ($cfg['contact'] !== ''): ?><a href="mailto:<?= saas_e($cfg['contact']) ?>">Contact</a><?php endif; ?></nav>
 </div></footer>
 <script src="/assets/pwd-toggle.js" defer></script>
 </body>
@@ -877,3 +886,4 @@ function saas_page_end(): void
 
 require_once __DIR__ . '/saas-pricing.php';
 require_once __DIR__ . '/saas-events.php';
+require_once __DIR__ . '/earlybird.php';

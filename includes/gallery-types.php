@@ -22,12 +22,23 @@ const GT_FEATURES = [
     'tableau' => 'Tableau de bord de fréquentation',
     'abonnes' => 'Abonnés aux nouveautés',
     'fidelite' => 'Espace visiteur et fidélité de la galerie (web app, QR codes)',
+    'bourse' => 'Bourse d\'échanges (propositions de vente et recherches d\'achat)',
 ];
 const GT_VOCAB_KEYS = [
     'gallery' => 'La galerie (singulier)', 'galleries' => 'Les galeries (pluriel)', 'member' => 'Un membre (singulier)', 'members' => 'Les membres (pluriel)',
+    'place' => 'Un lieu de vente (singulier)', 'places' => 'Les lieux de vente (pluriel)',
     'members_title' => 'Titre de la liste des membres', 'members_lede' => 'Phrase sous ce titre', 'plan_of' => 'Plan « … » (complément)', 'join_cta' => 'Bouton de rejoindre',
     'create_cta' => 'Bouton de création', 'create_title' => 'Titre de la page de création', 'create_intro' => 'Introduction de la page de création', 'empty' => 'Message galerie vide',
 ];
+
+/** Unités de tarification d'un lieu de vente (mêmes clés que le plan d'implantation). */
+const GT_LOCATION_UNITS = ['slot' => 'par emplacement', 'ml' => 'par mètre linéaire', 'm2' => 'par m²'];
+
+/** Rôle d'un plugin (module payant des boutiques) pour les vendeurs d'un type de galerie. */
+const GT_VENDOR_PLUGIN_MODES = ['inherit' => 'Selon la plateforme', 'available' => 'Proposé aux vendeurs', 'included' => 'Inclus pour les vendeurs', 'unavailable' => 'Masqué aux vendeurs'];
+
+/** Libellés des anciens types de zone (plans enregistrés avant les lieux configurables). */
+const GT_LEGACY_LOCATION_LABELS = ['rue' => 'Rue', 'hall' => 'Hall', 'allee' => 'Allée', 'cour' => 'Cour', 'parking' => 'Parking', 'quartier' => 'Quartier', 'autre' => 'Autre lieu'];
 
 /** Offres d'un type : mêmes clés (test, essentiel, pro) que partout, valeurs propres au type. */
 function gt_offers_for(array $over): array
@@ -37,26 +48,66 @@ function gt_offers_for(array $over): array
     return $out;
 }
 
+/**
+ * Lieux de vente d'origine : le type de lieu (boutique, stand, emplacement…) que l'on choisit pour une zone du plan, avec son unité de
+ * tarification et un prix indicatif (0 = à fixer). Les clés historiques du plan (rue, hall, allée…) restent acceptées dans tous les types.
+ */
+function gt_default_locations(): array
+{
+    return [
+        'marchande' => [
+            ['key' => 'boutique', 'label' => 'Boutique', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'atelier', 'label' => 'Atelier', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'stand', 'label' => 'Stand', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'rue', 'label' => 'Rue', 'unit' => 'ml', 'price_cents' => 0],
+            ['key' => 'autre', 'label' => 'Autre lieu', 'unit' => 'slot', 'price_cents' => 0],
+        ],
+        'puces' => [
+            ['key' => 'stand', 'label' => 'Stand', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'emplacement', 'label' => 'Emplacement', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'hall', 'label' => 'Hall', 'unit' => 'ml', 'price_cents' => 0],
+            ['key' => 'cour', 'label' => 'Cour', 'unit' => 'm2', 'price_cents' => 0],
+            ['key' => 'autre', 'label' => 'Autre lieu', 'unit' => 'slot', 'price_cents' => 0],
+        ],
+        'vide-grenier' => [
+            ['key' => 'emplacement', 'label' => 'Emplacement', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'stand', 'label' => 'Stand', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'rue', 'label' => 'Rue', 'unit' => 'ml', 'price_cents' => 0],
+            ['key' => 'allee', 'label' => 'Allée', 'unit' => 'ml', 'price_cents' => 0],
+            ['key' => 'autre', 'label' => 'Autre lieu', 'unit' => 'slot', 'price_cents' => 0],
+        ],
+        'quartier' => [
+            ['key' => 'boutique', 'label' => 'Boutique', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'vitrine', 'label' => 'Vitrine', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'rue', 'label' => 'Rue', 'unit' => 'ml', 'price_cents' => 0],
+            ['key' => 'autre', 'label' => 'Autre lieu', 'unit' => 'slot', 'price_cents' => 0],
+        ],
+    ];
+}
+
 function gt_defaults(): array
 {
     $all = static function (array $on): array { $f = []; foreach (array_keys(GT_FEATURES) as $k) $f[$k] = in_array($k, $on, true); return $f; };
+    $loc = gt_default_locations();
     return [
         'marchande' => [
             'name' => 'Galerie marchande', 'emoji' => '🏬', 'active' => true, 'order' => 1,
             'tagline' => 'Des commerces réunis sur une même page : leurs pièces, leurs boutiques, leur plan.',
-            'vocab' => ['gallery' => 'galerie commerciale', 'galleries' => 'galeries commerciales', 'member' => 'commerce', 'members' => 'commerces', 'members_title' => 'Les commerces',
+            'vocab' => ['gallery' => 'galerie commerciale', 'galleries' => 'galeries commerciales', 'member' => 'commerce', 'members' => 'commerces', 'place' => 'lieu de vente', 'places' => 'lieux de vente', 'members_title' => 'Les commerces',
                 'members_lede' => 'Chaque commerce a sa boutique, son panier et son paiement : une pièce se règle chez son commerçant.', 'plan_of' => 'des commerces', 'join_cta' => 'Votre boutique ici',
                 'create_cta' => 'Créer ma galerie', 'create_title' => 'Créez votre galerie commerciale', 'create_intro' => 'Réunissez plusieurs commerces sur une page commune, avec un annuaire, des filtres, vos couleurs et un tableau de bord.', 'empty' => "Cette galerie n'a pas encore de commerce."],
-            'features' => $all(['plan', 'prospects', 'tableau', 'abonnes', 'fidelite']),
+            'features' => $all(['plan', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse']),
+            'locations' => $loc['marchande'],
             'offers' => gt_offers_for([]),
         ],
         'puces' => [
             'name' => 'Marché aux puces', 'emoji' => '🧺', 'active' => true, 'order' => 2,
             'tagline' => 'Des marchands sur des emplacements numérotés, avec un plan et des tarifs par zone.',
-            'vocab' => ['gallery' => 'marché aux puces', 'galleries' => 'marchés aux puces', 'member' => 'marchand', 'members' => 'marchands', 'members_title' => 'Les marchands',
+            'vocab' => ['gallery' => 'marché aux puces', 'galleries' => 'marchés aux puces', 'member' => 'marchand', 'members' => 'marchands', 'place' => 'emplacement', 'places' => 'emplacements', 'members_title' => 'Les marchands',
                 'members_lede' => 'Retrouvez chaque marchand et ses trouvailles : une pièce se règle chez son marchand.', 'plan_of' => 'du marché', 'join_cta' => 'Devenir marchand',
                 'create_cta' => 'Créer mon marché aux puces', 'create_title' => 'Créez votre marché aux puces', 'create_intro' => 'Dessinez le plan de votre marché, numérotez les emplacements, fixez les tarifs par zone et présentez vos marchands.', 'empty' => "Ce marché n'a pas encore de marchand."],
-            'features' => $all(['plan', 'tarifs', 'prospects', 'tableau', 'abonnes', 'fidelite']),
+            'features' => $all(['plan', 'tarifs', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse']),
+            'locations' => $loc['puces'],
             'offers' => gt_offers_for([
                 'test' => ['tagline' => 'Pour essayer votre marché sans engagement', 'max_members' => 5],
                 'essentiel' => ['tagline' => 'Pour un marché de quartier ou de village', 'month_cents' => 3900, 'year_cents' => 39000, 'max_members' => 25],
@@ -66,10 +117,11 @@ function gt_defaults(): array
         'vide-grenier' => [
             'name' => 'Vide-grenier', 'emoji' => '🪑', 'active' => true, 'order' => 3,
             'tagline' => 'Les exposants choisissent leur emplacement sur le plan et le demandent en ligne.',
-            'vocab' => ['gallery' => 'vide-grenier', 'galleries' => 'vides-greniers', 'member' => 'exposant', 'members' => 'exposants', 'members_title' => 'Les exposants',
+            'vocab' => ['gallery' => 'vide-grenier', 'galleries' => 'vides-greniers', 'member' => 'exposant', 'members' => 'exposants', 'place' => 'emplacement', 'places' => 'emplacements', 'members_title' => 'Les exposants',
                 'members_lede' => 'Retrouvez les exposants du vide-grenier et leurs boutiques en ligne.', 'plan_of' => 'du vide-grenier', 'join_cta' => 'Exposer ici',
                 'create_cta' => 'Organiser mon vide-grenier', 'create_title' => 'Organisez votre vide-grenier', 'create_intro' => 'Un plan en ligne, des tarifs par zone (rue, hall…), et des exposants qui demandent leur emplacement : vous validez en un clic.', 'empty' => "Ce vide-grenier n'a pas encore d'exposant."],
-            'features' => $all(['plan', 'tarifs', 'exposants', 'tableau', 'abonnes', 'fidelite']),
+            'features' => $all(['plan', 'tarifs', 'exposants', 'tableau', 'abonnes', 'fidelite', 'bourse']),
+            'locations' => $loc['vide-grenier'],
             'offers' => gt_offers_for([
                 'test' => ['tagline' => 'Pour préparer votre prochain vide-grenier', 'max_members' => 10],
                 'essentiel' => ['tagline' => 'Pour un vide-grenier de village ou de quartier', 'month_cents' => 1900, 'year_cents' => 19000, 'max_members' => 40],
@@ -79,10 +131,11 @@ function gt_defaults(): array
         'quartier' => [
             'name' => 'Quartier marchand', 'emoji' => '🏘️', 'active' => true, 'order' => 4,
             'tagline' => 'Les commerçants d\'une rue, d\'un quartier ou d\'un village réunis sous une même enseigne.',
-            'vocab' => ['gallery' => 'quartier marchand', 'galleries' => 'quartiers marchands', 'member' => 'commerçant', 'members' => 'commerçants', 'members_title' => 'Les commerçants du quartier',
+            'vocab' => ['gallery' => 'quartier marchand', 'galleries' => 'quartiers marchands', 'member' => 'commerçant', 'members' => 'commerçants', 'place' => 'boutique', 'places' => 'boutiques', 'members_title' => 'Les commerçants du quartier',
                 'members_lede' => 'Les boutiques de la rue, du quartier ou du village : chacune garde son panier et son paiement.', 'plan_of' => 'du quartier', 'join_cta' => 'Rejoindre le quartier',
                 'create_cta' => 'Créer mon quartier marchand', 'create_title' => 'Créez votre quartier marchand', 'create_intro' => 'Réunissez les commerçants d\'une rue, d\'un quartier ou d\'un village : annuaire, plan des boutiques, promotions communes et lettre d\'information.', 'empty' => "Ce quartier n'a pas encore de commerçant."],
-            'features' => $all(['plan', 'prospects', 'tableau', 'abonnes', 'fidelite']),
+            'features' => $all(['plan', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse']),
+            'locations' => $loc['quartier'],
             'offers' => gt_offers_for([
                 'test' => ['tagline' => 'Pour réunir vos premiers commerçants', 'max_members' => 5],
                 'essentiel' => ['tagline' => 'Pour une rue ou un petit village', 'month_cents' => 2500, 'year_cents' => 25000, 'max_members' => 15],
@@ -100,6 +153,52 @@ function gt_file(): string
 function gt_clean_key(string $k): string
 {
     return preg_match('/^[a-z0-9][a-z0-9-]{1,23}$/', $k) ? $k : '';
+}
+
+/** Liste de lieux de vente normalisée : clés uniques, libellés courts, unité et prix sûrs ; la liste d'origine sert de repli si tout est vide. */
+function gt_locations_normalize(array $list, array $fallback = []): array
+{
+    $out = [];
+    foreach ($list as $loc) {
+        if (!is_array($loc)) continue;
+        $key = strtolower(trim((string) ($loc['key'] ?? '')));
+        if (!preg_match('/^[a-z0-9][a-z0-9_-]{0,23}$/', $key) || isset($out[$key])) continue;
+        $out[$key] = [
+            'key' => $key,
+            'label' => mb_substr(trim((string) ($loc['label'] ?? '')), 0, 40) ?: ucfirst($key),
+            'unit' => isset(GT_LOCATION_UNITS[(string) ($loc['unit'] ?? '')]) ? (string) $loc['unit'] : 'slot',
+            'price_cents' => max(0, min(1000000, (int) ($loc['price_cents'] ?? 0))),
+            'price_pro_cents' => max(0, min(1000000, (int) ($loc['price_pro_cents'] ?? 0))),
+        ];
+        if (count($out) >= 20) break;
+    }
+    if ($out) {
+        if (!isset($out['autre'])) $out['autre'] = ['key' => 'autre', 'label' => 'Autre lieu', 'unit' => 'slot', 'price_cents' => 0, 'price_pro_cents' => 0];
+        return array_values($out);
+    }
+    $clean = [];
+    foreach ($fallback as $loc) {
+        if (!is_array($loc) || !isset($loc['key'])) continue;
+        $key = (string) $loc['key'];
+        $clean[$key] = ['key' => $key, 'label' => (string) ($loc['label'] ?? ucfirst($key)),
+            'unit' => isset(GT_LOCATION_UNITS[(string) ($loc['unit'] ?? '')]) ? (string) $loc['unit'] : 'slot',
+            'price_cents' => max(0, (int) ($loc['price_cents'] ?? 0)), 'price_pro_cents' => max(0, (int) ($loc['price_pro_cents'] ?? 0))];
+    }
+    return array_values($clean);
+}
+
+/** Rôles de plugins vendeurs enregistrés (seuls les rôles explicites sont gardés). */
+function gt_vendor_plugins_normalize(array $map): array
+{
+    $known = function_exists('addon_defaults') ? array_keys(addon_defaults()) : null;
+    $out = [];
+    foreach ($map as $id => $mode) {
+        $id = strtolower(trim((string) $id));
+        if (!preg_match('/^[a-z0-9][a-z0-9-]{1,40}$/', $id) || ($known !== null && !in_array($id, $known, true))
+            || !in_array($mode, array_keys(GT_VENDOR_PLUGIN_MODES), true) || $mode === 'inherit') continue;
+        $out[$id] = (string) $mode;
+    }
+    return $out;
 }
 
 /** Un type normalisé : valeurs enregistrées par-dessus les valeurs d'origine ($base). */
@@ -120,9 +219,13 @@ function gt_normalize(string $key, array $saved, array $base): array
         $mode = (string) (($saved['modules'] ?? [])[$mk] ?? '');
         $modules[$mk] = in_array($mode, GM_MODES, true) ? $mode : gm_default_type_mode($key, $mk);
     }
+    $baseLocations = (array) ($base['locations'] ?? (gt_default_locations()[$key] ?? []));
+    $locations = array_key_exists('locations', $saved) ? gt_locations_normalize((array) $saved['locations'], $baseLocations) : gt_locations_normalize($baseLocations);
+    $vendorPlugins = gt_vendor_plugins_normalize((array) ($saved['vendor_plugins'] ?? ($base['vendor_plugins'] ?? [])));
     return ['key' => $key, 'name' => $txt($saved['name'] ?? null, 40, (string) $base['name']), 'emoji' => $txt($saved['emoji'] ?? null, 8, (string) ($base['emoji'] ?? '🏬')),
         'tagline' => $txt($saved['tagline'] ?? null, 160, (string) ($base['tagline'] ?? '')), 'active' => array_key_exists('active', $saved) ? !empty($saved['active']) : !empty($base['active']),
         'order' => (int) ($saved['order'] ?? $base['order'] ?? 50), 'vocab' => $vocab, 'features' => $features, 'offers' => $offers,
+        'locations' => $locations, 'vendor_plugins' => $vendorPlugins,
         'modules' => $modules, 'custom' => !empty($base['custom'])];
 }
 
@@ -174,6 +277,34 @@ function gt_feature(array $gallery, string $key): bool
     return !empty(gt_of($gallery)['features'][$key]);
 }
 
+/** Lieux de vente d'une galerie (ou d'un type) : liste de ['key','label','unit','price_cents','price_pro_cents']. */
+function gt_locations(array $galleryOrType): array
+{
+    $t = isset($galleryOrType['locations']) ? $galleryOrType : gt_of($galleryOrType);
+    return is_array($t['locations'] ?? null) ? $t['locations'] : gt_locations_normalize(gt_default_locations()[(string) ($t['key'] ?? '')] ?? []);
+}
+
+/** Lieux de vente indexés par clé. */
+function gt_location_map(array $galleryOrType): array
+{
+    $out = [];
+    foreach (gt_locations($galleryOrType) as $loc) $out[(string) $loc['key']] = $loc;
+    return $out;
+}
+
+/** Libellé d'un lieu (« Boutique », « Stand »…), ou la clé brute pour un ancien type de zone. */
+function gt_location_label(array $galleryOrType, string $key): string
+{
+    return (string) (gt_location_map($galleryOrType)[$key]['label'] ?? GT_LEGACY_LOCATION_LABELS[$key] ?? ucfirst($key));
+}
+
+/** Rôle d'un plugin vendeur pour ce type : inherit, available, included ou unavailable. */
+function gt_vendor_plugin_mode(string $typeKey, string $module): string
+{
+    $mode = (string) (gt_type($typeKey)['vendor_plugins'][$module] ?? 'inherit');
+    return in_array($mode, array_keys(GT_VENDOR_PLUGIN_MODES), true) ? $mode : 'inherit';
+}
+
 /** Enregistre les réglages d'un type (formulaire du portail). -> message d'erreur ou null. */
 function gt_save(string $key, array $post, bool $create = false): ?string
 {
@@ -190,6 +321,16 @@ function gt_save(string $key, array $post, bool $create = false): ?string
         $mode = (string) (($post['modules'] ?? [])[$mk] ?? '');
         $entry['modules'][$mk] = in_array($mode, GM_MODES, true) ? $mode : gm_default_type_mode($key, $mk);
     }
+    $locations = [];
+    foreach ((array) ($post['locations'] ?? []) as $loc) {
+        if (!is_array($loc) || trim((string) ($loc['key'] ?? '')) === '') continue;
+        foreach (['price_cents', 'price_pro_cents'] as $k) {
+            if (isset($loc[$k . '_eur'])) $loc[$k] = (int) round((float) str_replace(',', '.', (string) $loc[$k . '_eur']) * 100);
+        }
+        $locations[] = $loc;
+    }
+    $entry['locations'] = $locations;
+    $entry['vendor_plugins'] = gt_vendor_plugins_normalize((array) ($post['vendor_plugins'] ?? []));
     $offers = [];
     foreach (go_defaults() as $d) {
         $p = (array) ($post['offers'][$d['key']] ?? []);
