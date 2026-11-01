@@ -73,6 +73,14 @@ try {
 } catch (Throwable $e) {
 }
 $map = $gaGallery['map'];
+// Adresse du lieu saisie à la création de l'événement : préremplit la recherche d'adresse du plan.
+$addrDefault = '';
+if (is_array($gaGallery['event'] ?? null)) {
+    $ev = $gaGallery['event'];
+    $line1 = trim((string) ($ev['address'] ?? '')) ?: trim((string) ($ev['place'] ?? ''));
+    $line2 = trim(trim((string) ($ev['postcode'] ?? '')) . ' ' . trim((string) ($ev['city'] ?? '')));
+    $addrDefault = trim($line1 . ($line1 !== '' && $line2 !== '' ? ', ' : '') . $line2);
+}
 // Types de lieux du type de galerie, puis les anciens types de zone (plans déjà dessinés) sans doublon.
 $zoneTypes = [];
 $locationDefaults = [];
@@ -108,10 +116,21 @@ ga_head('Plan des commerces');
       .btn.icon { width: 38px; height: 38px; padding: 0; flex: none; }
       .btn.icon svg { width: 18px; height: 18px; }
       .btn.icon[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+      #addrBar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; margin: 0 0 8px; }
+      #addrRow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+      #addrBar.collapsed #addrRow { display: none; }
+      #addrLoc svg, #addrGo svg { width: 16px; height: 16px; }
+      #addrToggle { justify-self: end; }
+      #addrToggle svg { width: 16px; height: 16px; flex: none; transition: transform .18s ease; }
+      #addrBar.collapsed #addrToggle svg { transform: rotate(-90deg); }
+      #addrBar.collapsed #addrToggle { width: auto; max-width: 100%; padding: 0 10px; }
+      #addrEcho { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+      #addrBar.collapsed #addrEcho { display: inline-block; }
+      #addrMsg { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #plan.vertexing { cursor: crosshair; }
       #mapBar { display: grid; gap: 8px; min-width: 0; position: relative; z-index: 30; }
       #mapBar.collapsed > #mapBarBody { display: none !important; }
       #mapBarBody { display: grid; gap: 8px; }
-      #mapBarHead { align-items: flex-start; }
       #advancedTools { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; }
       #advancedTools > summary { cursor: pointer; font-weight: 600; font-size: .85rem; }
       #advancedTools[open] > .row { margin-top: 8px; }
@@ -146,7 +165,9 @@ ga_head('Plan des commerces');
       .tip { font-size: .8rem; opacity: .75; margin: 0; }
       .mini { padding: 3px 8px; font-size: .8rem; } table.t input[type=text], table.t input[type=number] { min-width: 0; width: 100%; padding: 5px 7px; }
       .listplan { max-height: 240px; overflow: auto; } .listplan tr { cursor: pointer; } .listplan tr:hover { background: rgba(0,0,0,.05); }
-      .zdwrap { max-height: 300px; overflow: auto; margin: 6px 0 10px; border: 1px solid var(--line); border-radius: 8px; }
+      .zdwrap { max-height: 340px; overflow: auto; margin: 6px 0 10px; border: 1px solid var(--line); border-radius: 8px; }
+      .zdwrap thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+      .zdactions { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px; margin: 0; background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -6px 14px rgba(0,0,0,.08); }
       .zdwrap td { padding: 3px 4px; } .zdwrap td input[type=text], .zdwrap td select { min-width: 0; width: 100%; padding: 4px 6px; }
       .zdwrap td:first-child, .zdwrap th:first-child { width: 28px; text-align: center; }
       .zdlist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; font-size: .9rem; }
@@ -161,6 +182,11 @@ ga_head('Plan des commerces');
       body.placing #plan { cursor: crosshair; }
       .plan-zone { display: inline-block; transform: translate(-50%, -100%); white-space: nowrap; font: 700 11px/1.3 system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase; color: #222; background: rgba(255,255,255,.88); border: 1px solid rgba(0,0,0,.3); border-radius: 4px; padding: 2px 7px; pointer-events: none; }
       .plan-zone small { font-weight: 500; opacity: .7; margin-right: 4px; }
+      #plan.hide-labels .plan-zone { opacity: 0; transition: opacity .12s ease; }
+      #plan.hide-labels .plan-zone.show { opacity: 1; }
+      /* les infobulles Leaflet portent une opacité en style inline : il faut la forcer */
+      #plan.hide-labels .plan-label { opacity: 0 !important; transition: opacity .12s ease; }
+      #plan.hide-labels .plan-label.show { opacity: .9 !important; }
       /* Plein écran : la carte occupe tout l'écran, les modules de gestion flottent en panneaux repliables */
       #fsLayout, #fsMain { display: grid; gap: 10px; min-width: 0; } #fsSide[hidden] { display: none; }
       #planCard.fs { position: fixed; inset: 0; z-index: 9999; margin: 0; border-radius: 0; border: 0; overflow: hidden; padding: 0; display: block; background: var(--bg); }
@@ -170,7 +196,8 @@ ga_head('Plan des commerces');
       #planCard.fs #fsTitleBar { position: absolute; top: 0; left: 0; right: 0; z-index: 1300; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px 8px 62px; background: linear-gradient(rgba(18,18,18,.62), rgba(18,18,18,0)); pointer-events: none; }
       #planCard.fs #fsTitleBar h2 { margin: 0; color: #fff; font-size: 1.05rem; text-shadow: 0 1px 3px rgba(0,0,0,.55); }
       #planCard.fs #fsTitleBar .btn { pointer-events: auto; }
-      #planCard.fs #mapBar { position: absolute; top: 58px; left: 56px; right: 384px; z-index: 1200; width: auto; background: var(--panel); padding: 8px 10px; border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); }
+      #planCard.fs #addrBar { position: absolute; top: 56px; left: 56px; right: 384px; z-index: 1200; width: auto; margin: 0; background: var(--panel); padding: 6px 8px; border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); }
+      #planCard.fs #mapBar { position: absolute; top: 112px; left: 56px; right: 384px; z-index: 1200; width: auto; background: var(--panel); padding: 8px 10px; border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); }
       #planCard.fs #fsSide { position: absolute; top: 58px; right: 12px; bottom: 12px; width: 360px; z-index: 1250; overflow: auto; display: grid; grid-auto-rows: max-content; gap: 10px; align-content: start; }
       #planCard.fs #fsSide > .gcard, #planCard.fs #fsSide > #saveBar, #planCard.fs #fsSide > #sel { background: var(--panel); border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); padding: 10px 12px; margin: 0; }
       #planCard.fs #fsSide .gcard { min-width: 0; overflow-x: auto; }
@@ -191,6 +218,7 @@ ga_head('Plan des commerces');
       #fsSide #catBody td.num { text-align: right; }
       #fsSide .listplan table.t { display: table; } #fsSide .listplan table.t tbody { display: table-row-group; } #fsSide .listplan table.t thead { display: table-header-group; }
       @media (max-width: 900px) {
+        #planCard.fs #addrBar { left: 8px; right: 8px; }
         #planCard.fs #mapBar { left: 8px; right: 8px; }
         #planCard.fs #fsSide { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 44vh; }
       }
@@ -199,10 +227,10 @@ ga_head('Plan des commerces');
     <details class="help">
       <summary>Aide : dessiner le plan du site pas à pas</summary>
       <ol>
-        <li><strong>Cadrez le lieu</strong> : tapez l'adresse dans la recherche, puis « Centrer la carte ». Choisissez le fond (plan ou satellite) ou cochez <em>Masquer le fond de carte</em> pour ne garder que votre dessin sur une grille.</li>
+        <li><strong>Cadrez le lieu</strong> : tapez l'adresse dans la recherche puis « Centrer la carte », ou « Ma position » pour utiliser la position de l'appareil (le navigateur demande l'autorisation). Choisissez le fond (plan ou satellite) ou cochez <em>Masquer le fond de carte</em> pour ne garder que votre dessin sur une grille.</li>
         <li><strong>Définissez vos surfaces</strong> dans le catalogue (ex. « Stand 3 × 2 m ») : une fois créées, un clic sur « Poser » dessine l'emplacement aux bonnes dimensions, à l'échelle de la carte (réglez l'angle pour l'aligner sur l'allée).</li>
         <li><strong>Tournez un emplacement</strong> : sélectionnez-le puis ↻ / ↺ (1°, 15°, 90° ou un angle précis), ou prenez l'outil de rotation à gauche de la carte.</li>
-        <li><strong>Dessinez à la main</strong> avec les outils à gauche de la carte : repère (entrée, caisse, toilettes), rectangle ou zone libre (halle, cour), tracé (allée).</li>
+        <li><strong>Dessinez à la main</strong> avec les outils à gauche de la carte : repère (entrée, caisse, toilettes), rectangle ou zone libre (halle, cour), tracé (allée). Pour ajuster une forme, sélectionnez-la puis « + Ajouter un point » (sur le bord le plus proche) ou « − Supprimer un point » (sur un coin) dans sa fiche.</li>
         <li><strong>Numérotez</strong> : un numéro par emplacement dans sa fiche, ou « Numéroter tout » pour le faire d'un coup (de gauche à droite et de haut en bas, par exemple). Le compteur « prochain numéro » sert aussi à la pose et à la division.</li>
         <li><strong>Découpez une zone en parcelles</strong> : sélectionnez la zone (rue, hall) à 4 coins, choisissez le nombre de parcelles ou leurs dimensions, cochez « Allée au milieu » pour laisser un couloir entre deux rangées, puis « Découper ». L'aperçu donne la taille des parcelles ; chacune reçoit le numéro suivant.</li>
         <li><strong>Reliez chaque emplacement à un commerce</strong> pour que les visiteurs voient qui s'y trouve. L'adresse de la marchandise (rue, code postal, ville, stand) se règle dans « Présentation et commerces », et côté boutique dans « Mes galeries ».</li>
@@ -212,30 +240,34 @@ ga_head('Plan des commerces');
     </details>
 
     <section class="gcard" id="planCard">
+      <div id="addrBar">
+        <div id="addrRow">
+          <div class="addrwrap">
+            <input type="text" id="addr" value="<?= e($addrDefault) ?>" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addrList" aria-label="Rechercher une adresse, une rue, un lieu" placeholder="Rechercher une adresse, une rue, un lieu…" autocomplete="off">
+            <ul id="addrList" role="listbox" aria-label="Suggestions d'adresses" hidden></ul>
+          </div>
+          <button class="btn mini" type="button" id="addrLoc" title="Centrer le plan sur la position de cet appareil ; le navigateur demande l'autorisation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/></svg>Ma position</button>
+          <button class="btn icon" type="button" id="addrGo" title="Centrer la carte sur la recherche" aria-label="Centrer la carte sur la recherche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+          <span class="meta" id="addrMsg" role="status"></span>
+        </div>
+        <button class="btn icon" type="button" id="addrToggle" aria-pressed="true" aria-expanded="true" aria-controls="addrRow" title="Replier ou déplier la recherche d'adresse" aria-label="Adresse et localisation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span id="addrEcho"><?= e($addrDefault !== '' ? $addrDefault : 'Adresse du lieu') ?></span></button>
+      </div>
       <div class="row" id="fsTitleBar">
         <h2 id="planTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z"/><path d="M9 4v13M15 6.5v13"/></svg>Plan d'implantation</h2>
         <div class="plan-actions" role="toolbar" aria-label="Actions du plan">
-          <button class="btn icon" type="button" id="mapBarToggle" aria-pressed="true" aria-controls="mapBarBody" title="Afficher ou masquer les outils de la carte (recherche, fond, rotation)" aria-label="Outils de la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg></button>
+          <button class="btn icon" type="button" id="mapBarToggle" aria-pressed="true" aria-controls="mapBarBody" title="Afficher ou masquer les outils de la carte (fond, rotation)" aria-label="Outils de la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg></button>
           <button class="btn icon" type="button" id="fsOpen" title="Agrandir le plan en plein écran" aria-label="Plein écran"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
           <button class="btn btn-primary icon" type="button" id="fsClose" hidden title="Fermer le plein écran" aria-label="Fermer le plein écran"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
         </div>
       </div>
       <div id="fsLayout"><div id="fsSide" hidden></div><div id="fsMain">
       <div id="mapBar">
-      <div class="row" id="mapBarHead">
-        <div class="addrwrap">
-          <input type="text" id="addr" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addrList" aria-label="Rechercher une adresse, une rue, un lieu" placeholder="Rechercher une adresse, une rue, un lieu…" autocomplete="off">
-          <ul id="addrList" role="listbox" aria-label="Suggestions d'adresses" hidden></ul>
-        </div>
-        <button class="btn icon" type="button" id="addrGo" title="Centrer la carte sur la recherche" aria-label="Centrer la carte sur la recherche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
-        <span class="meta" id="addrMsg" role="status"></span>
-        <span class="meta" id="mode" role="status"></span>
-      </div>
       <div id="mapBarBody">
       <div class="row">
         <label class="row" style="gap:6px;">Fond de carte
           <select id="baseSel" style="flex:none;min-width:0;"><option value="osm">Plan (IGN)</option><option value="sat">Satellite (IGN)</option></select></label>
         <label class="row" style="gap:6px;" title="N'affiche que votre dessin, sur une grille : utile pour un plan intérieur ou quand le fond gêne la lecture."><input type="checkbox" id="hideBase"> Masquer le fond de carte (plan seul)</label>
+        <span class="meta" id="mode" role="status"></span>
       </div>
       <details id="advancedTools">
         <summary>Fond importé et rotation de la carte</summary>
@@ -309,6 +341,15 @@ ga_head('Plan des commerces');
             <button class="btn mini" type="button" id="rotGo">Tourner de cet angle</button>
           </div>
           <p class="tip">Rotation autour du centre de l'élément ; ↻ tourne vers la droite (sens des aiguilles d'une montre), ↺ vers la gauche. Vous pouvez aussi tourner à la souris avec l'outil de rotation à gauche de la carte.</p>
+        </div>
+        <div class="plan-sub" id="vertexBox" hidden style="grid-column:1/-1;">
+          <strong>Points d'ancrage</strong>
+          <div class="row">
+            <button class="btn mini" type="button" id="vertexAdd" aria-pressed="false">+ Ajouter un point</button>
+            <button class="btn mini" type="button" id="vertexDel" aria-pressed="false">− Supprimer un point</button>
+            <button class="btn mini" type="button" id="vertexStop" hidden>Terminer</button>
+          </div>
+          <p class="tip" id="vertexMsg">Ajoutez un point sur le bord le plus proche ou retirez un coin pour ajuster la forme (3 points minimum).</p>
         </div>
         <div class="plan-sub" id="terrBox" hidden style="grid-column:1/-1;">
           <strong>Découvrir les emplacements potentiels de ce territoire</strong>
@@ -406,10 +447,10 @@ ga_head('Plan des commerces');
         <p class="meta" id="zdSummary"></p>
         <div class="zdwrap">
           <table class="t"><thead><tr><th><input type="checkbox" id="zdAll" checked title="Tout cocher ou décocher"></th><th style="min-width:300px;">Zone proposée</th><th style="min-width:150px;">Affectation</th><th class="num">Surface</th><th title="À l'intérieur d'un bâtiment">Int.</th><th style="width:120px;">Service</th></tr></thead><tbody id="zdBody"></tbody></table>
-        </div>
-        <div class="row">
-          <button class="btn btn-primary" type="button" id="zdAdd">Ajouter les zones cochées</button>
-          <button class="btn" type="button" id="zdClear">Effacer la proposition</button>
+          <div class="row zdactions">
+            <button class="btn btn-primary" type="button" id="zdAdd">Ajouter les zones cochées</button>
+            <button class="btn" type="button" id="zdClear">Effacer la proposition</button>
+          </div>
         </div>
         <p class="tip">Les zones ajoutées sont des zones du plan : elles portent l'affectation choisie, restent modifiables dans leur fiche et peuvent être découpées en sous-zones. « Exclu du déballage » signale un espace où aucun emplacement ne doit être installé (accès secours, zone technique…). Un emplacement dans une zone de circulation, de service, de parking ou exclue n'hérite d'aucun tarif.</p>
         <div id="zdEntries" hidden>
@@ -622,6 +663,17 @@ ga_head('Plan des commerces');
       function dot(color) { return L.divIcon({ className: '', html: '<span class="plan-dot" style="background:' + color + '"></span>', iconSize: [18, 18], iconAnchor: [9, 9] }); }
       function tip(m) { return [m.num, m.label].filter(Boolean).join(' · '); }
       var zoneLabels = L.layerGroup().addTo(map);
+      // Trop loin, les noms se chevauchent : ils ne s'affichent qu'au survol de leur zone jusqu'au zoom 19.
+      var LABEL_ZOOM = 19;
+      function syncLabelZoom() { planEl.classList.toggle('hide-labels', map.getZoom() < LABEL_ZOOM); }
+      map.on('zoomend', syncLabelZoom);
+      syncLabelZoom();
+      function showLabel(layer, on) {
+        if (!layer) return;
+        if (layer._planLab) layer._planLab.classList.toggle('show', on);
+        var tt = layer.getTooltip && layer.getTooltip();
+        if (tt && tt._container) tt._container.classList.toggle('show', on);
+      }
       function isZone(l) { return l instanceof L.Polygon && l._plan && l._plan.role === 'zone'; }
       function isTerr(l) { return l instanceof L.Polygon && l._plan && l._plan.role === 'territoire'; }
       function look(layer) {
@@ -653,6 +705,7 @@ ga_head('Plan des commerces');
           if (isTerr(z)) { var q = document.createElement('small'); q.textContent = '⬡'; n.appendChild(q); }
           var use = z._plan.usage && z._plan.usage !== 'vente' ? (data.usages[z._plan.usage] || '') : '';
           var zt = use || data.zoneTypes[z._plan.ztype] || '', zl = z._plan.label || (isTerr(z) ? '(territoire sans nom)' : '(zone sans nom)'); if (zt && zl.toLowerCase().indexOf(zt.toLowerCase()) !== 0 && (use || z._plan.ztype !== 'autre')) { var t = document.createElement('small'); t.textContent = zt; n.appendChild(t); } n.appendChild(document.createTextNode(zl));
+          z._planLab = n;
           zoneLabels.addLayer(L.marker(z._plan.ztype === 'allee' || z._plan.usage === 'circulation' ? b.getCenter() : [b.getNorth(), b.getCenter().lng], { icon: L.divIcon({ className: '', html: n, iconSize: [0, 0] }), interactive: false, keyboard: false }));
         });
         // Sens de circulation : une flèche au centre des zones de voirie (double sens = flèche à deux têtes)
@@ -699,7 +752,9 @@ ga_head('Plan des commerces');
       function track(layer, meta) {
         meta.id = meta.id || uid(); meta.label = meta.label || ''; meta.num = meta.num || ''; meta.shop = meta.shop || ''; meta.note = meta.note || ''; meta.surface = meta.surface || ''; meta.color = meta.color || '#b5502e'; meta.role = meta.role || 'slot'; meta.ztype = meta.ztype || 'autre'; meta.unit = meta.unit || 'slot'; meta.price = meta.price || ''; meta.pricePro = meta.pricePro || ''; meta.usage = meta.usage || ''; meta.flow = meta.flow || ''; meta.indoor = !!meta.indoor; meta.service = meta.service || '';
         layer._plan = meta; group.addLayer(layer); look(layer); if (!loading) restack();
-        layer.on('click', function (e) { if (placing) return; L.DomEvent.stopPropagation(e); select(layer); });
+        layer.on('click', function (e) { if (placing) return; L.DomEvent.stopPropagation(e); if (vertexMode) { vertexApply(e.latlng); return; } select(layer); });
+        layer.on('mouseover', function () { showLabel(layer, true); });
+        layer.on('mouseout', function () { showLabel(layer, false); });
         return layer;
       }
       function points(layer) {
@@ -819,8 +874,13 @@ ga_head('Plan des commerces');
       }
       function stopPlace() { placing = null; document.body.classList.remove('placing'); $('placeStop').hidden = true; $('mode').textContent = hidden ? 'Plan seul (fond masqué)' : ''; }
       $('placeStop').addEventListener('click', stopPlace);
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && placing) { e.__posee = true; stopPlace(); } });
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        if (placing) { e.__posee = true; stopPlace(); return; }
+        if (vertexMode) { e.__posee = true; setVertexMode(null); }
+      });
       map.on('click', function (e) {
+        if (vertexMode) { vertexApply(e.latlng); return; }
         if (!placing) { select(null); return; }
         var angle = parseFloat($('angle').value) || 0;
         pushUndo(true);
@@ -900,12 +960,16 @@ ga_head('Plan des commerces');
 
       // --- Fiche de l'élément sélectionné ---
       function select(layer) {
+        if (selected && selected !== layer) showLabel(selected, false);
         selected = layer;
         $('sel').hidden = !layer;
-        if (!layer) { ghost.clearLayers(); return; }
+        if (!layer) { setVertexMode(null); ghost.clearLayers(); return; }
+        showLabel(layer, true);
         if ($('sel').getBoundingClientRect().top > window.innerHeight) $('sel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         var m = layer._plan, p = points(layer);
         var poly = layer instanceof L.Polygon;
+        $('vertexBox').hidden = !poly;
+        if (!poly) setVertexMode(null);
         $('natureBox').hidden = !poly; $('selRole').value = m.role; $('ztypeBox').hidden = !isZone(layer); $('selZtype').value = m.ztype; $('priceBox').hidden = !isZone(layer) || !data.features.tarifs;
         $('usageBox').hidden = false; $('selUsage').value = m.usage || '';
         $('flowBox').hidden = m.usage !== 'circulation'; $('selFlow').value = m.flow || '';
@@ -962,6 +1026,63 @@ ga_head('Plan des commerces');
       });
       $('selDel').addEventListener('click', function () { if (selected) { pushUndo(true); group.removeLayer(selected); select(null); count(); } });
       $('selClose').addEventListener('click', function () { select(null); });
+
+      // --- Points d'ancrage : insérer un point sur un bord ou retirer un coin d'une zone ---
+      var vertexMode = null;
+      function layerLatLngs(layer) { var ll = layer.getLatLngs(); while (Array.isArray(ll[0])) ll = ll[0]; return ll; }
+      function nearestSegment(layer, latlng) {     // projette le clic sur le bord le plus proche : la forme n'est pas déformée
+        var pts = layerLatLngs(layer), p = map.latLngToLayerPoint(latlng), best = { i: 0, pt: p, d: Infinity };
+        for (var i = 0; i < pts.length; i++) {
+          var a = map.latLngToLayerPoint(pts[i]), b = map.latLngToLayerPoint(pts[(i + 1) % pts.length]);
+          var ab = b.subtract(a), d2 = ab.x * ab.x + ab.y * ab.y;
+          var t = d2 ? Math.max(0, Math.min(1, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / d2)) : 0;
+          var q = a.add(ab.multiplyBy(t)), d = p.distanceTo(q);
+          if (d < best.d) best = { i: i, pt: q, d: d };
+        }
+        return best;
+      }
+      function nearestVertex(layer, latlng) {
+        var pts = layerLatLngs(layer), p = map.latLngToLayerPoint(latlng), best = -1, bestD = Infinity;
+        pts.forEach(function (v, i) { var d = p.distanceTo(map.latLngToLayerPoint(v)); if (d < bestD) { bestD = d; best = i; } });
+        return bestD <= 18 ? best : -1;
+      }
+      function setVertexMode(mode) {
+        vertexMode = mode;
+        planEl.classList.toggle('vertexing', !!mode);
+        $('vertexAdd').setAttribute('aria-pressed', mode === 'add' ? 'true' : 'false');
+        $('vertexDel').setAttribute('aria-pressed', mode === 'del' ? 'true' : 'false');
+        $('vertexStop').hidden = !mode;
+        if (mode) {     // l'édition Geoman et l'insertion de points ne doivent pas se disputer les clics
+          map.pm.disableDraw();
+          if (map.pm.globalEditModeEnabled && map.pm.globalEditModeEnabled()) map.pm.disableGlobalEditMode();
+        }
+        $('vertexMsg').textContent = mode === 'add' ? 'Cliquez sur le plan : le point s\'insère sur le bord le plus proche.'
+          : mode === 'del' ? 'Cliquez sur un point (coin) de la zone pour le retirer.'
+          : 'Ajoutez un point sur le bord le plus proche ou retirez un coin pour ajuster la forme (3 points minimum).';
+      }
+      function vertexApply(latlng) {
+        if (!vertexMode || !selected || !(selected instanceof L.Polygon)) { setVertexMode(null); return; }
+        var pts = layerLatLngs(selected);
+        if (vertexMode === 'add') {
+          pushUndo(true);
+          var seg = nearestSegment(selected, latlng), next = pts.slice();
+          next.splice(seg.i + 1, 0, map.layerPointToLatLng(seg.pt));
+          selected.setLatLngs(next);
+          $('vertexMsg').textContent = 'Point ajouté : ' + next.length + ' points.';
+        } else {
+          if (pts.length <= 3) { $('vertexMsg').textContent = 'Une zone doit garder au moins 3 points ; pour l\'ajuster autrement, découpez-la ou supprimez-la.'; return; }
+          var idx = nearestVertex(selected, latlng);
+          if (idx < 0) { $('vertexMsg').textContent = 'Cliquez sur un point (coin) de la zone pour le retirer.'; return; }
+          pushUndo(true);
+          var rest = pts.slice(); rest.splice(idx, 1);
+          selected.setLatLngs(rest);
+          $('vertexMsg').textContent = 'Point supprimé : ' + rest.length + ' points restants.';
+        }
+        look(selected); renderList(); select(selected); count();
+      }
+      $('vertexAdd').addEventListener('click', function () { setVertexMode(vertexMode === 'add' ? null : 'add'); });
+      $('vertexDel').addEventListener('click', function () { setVertexMode(vertexMode === 'del' ? null : 'del'); });
+      $('vertexStop').addEventListener('click', function () { setVertexMode(null); });
 
       // --- Sous-zones : découpe d'une forme quelconque en bandes parallèles (Sutherland–Hodgman) ---
       function clipHalf(poly, axis, v, keepLess) {
@@ -1398,6 +1519,7 @@ ga_head('Plan des commerces');
         });
       }
       var addrEl = $('addr'), addrList = $('addrList'), addrItems = [], addrActive = -1, addrTimer = null, addrSeq = 0;
+      function addrEcho(t) { $('addrEcho').textContent = (t || '').trim() || 'Adresse du lieu'; }
       function addrClose() {
         addrList.hidden = true; addrEl.setAttribute('aria-expanded', 'false'); addrEl.removeAttribute('aria-activedescendant');
         addrItems = []; addrActive = -1;
@@ -1427,6 +1549,7 @@ ga_head('Plan des commerces');
       function addrGoTo(it) {
         if (!it) return;
         addrEl.value = it.label;
+        addrEcho(it.label);
         addrClose();
         $('addrMsg').textContent = it.label.slice(0, 70) + (it.ctx ? ' · ' + it.ctx : '');
         map.setView([it.lat, it.lon], Math.max(map.getZoom(), 18));
@@ -1443,6 +1566,48 @@ ga_head('Plan des commerces');
           addrGoTo(out[0]);
         });
       }
+      // Adresse la plus proche d'une position : IGN, puis Photon en secours
+      function reverseAddr(lat, lon) {
+        var q = 'lat=' + lat.toFixed(6) + '&lon=' + lon.toFixed(6);
+        function ctxOf(p, label) {     // l'IGN renvoie déjà « 12 rue… 75004 Paris » : on ne répète pas le code postal
+          var c = [p.postcode, p.city].filter(Boolean).join(' ');
+          return p.postcode && label.indexOf(p.postcode) >= 0 ? '' : c;
+        }
+        return geoFetch('https://data.geopf.fr/geocodage/reverse?index=address&limit=1&' + q).then(function (fs) {
+          var f = fs[0]; if (!f) return null;
+          var p = f.properties || {}, l = p.label || p.name || '';
+          return { label: l, ctx: l ? ctxOf(p, l) : '' };
+        }).then(function (it) {
+          if (it && it.label) return it;
+          return geoFetch('https://photon.komoot.io/reverse?lang=fr&limit=1&' + q).then(function (fs) {
+            var f = fs[0]; if (!f) return null;
+            var p = f.properties || {}, l = p.name || [p.housenumber, p.street].filter(Boolean).join(' ');
+            return l ? { label: l, ctx: ctxOf(p, l) } : null;
+          });
+        }).catch(function () { return null; });
+      }
+      // Position de l'appareil : le navigateur demande l'autorisation, puis la carte se cale et le champ reprend l'adresse
+      $('addrLoc').addEventListener('click', function () {
+        var btn = this;
+        if (!navigator.geolocation) { $('addrMsg').textContent = 'La localisation n\'est pas disponible dans ce navigateur.'; return; }
+        btn.disabled = true;
+        $('addrMsg').textContent = 'Localisation en cours : autorisez le navigateur à utiliser votre position…';
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          var lat = pos.coords.latitude, lon = pos.coords.longitude;
+          map.setView([lat, lon], Math.max(map.getZoom(), 19));
+          $('addrMsg').textContent = 'Position trouvée (' + lat.toFixed(5) + ', ' + lon.toFixed(5) + ') · recherche de l\'adresse…';
+          reverseAddr(lat, lon).then(function (it) {
+            btn.disabled = false;
+            if (!it) { $('addrMsg').textContent = 'Position trouvée mais adresse introuvable : saisissez-la à la main, la carte est déjà centrée.'; return; }
+            addrEl.value = it.label; addrEcho(it.label);
+            $('addrMsg').textContent = 'Position du navigateur : ' + it.label + (it.ctx ? ' · ' + it.ctx : '');
+          });
+        }, function (err) {
+          btn.disabled = false;
+          $('addrMsg').textContent = err && err.code === 1 ? 'Localisation refusée : autorisez-la dans les réglages du navigateur pour ce site.'
+            : err && err.code === 3 ? 'Localisation trop lente : réessayez ou saisissez l\'adresse à la main.' : 'Localisation indisponible sur cet appareil.';
+        }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+      });
 
       // --- Enregistrement ---
       $('saveForm').addEventListener('submit', function () {
@@ -1498,6 +1663,17 @@ ga_head('Plan des commerces');
       }
       mapBarToggle.addEventListener('click', function () { setMapBarCollapsed(!mapBarEl.classList.contains('collapsed')); });
       setMapBarCollapsed(!!collapseState.mapBar);
+      var addrBarEl = $('addrBar'), addrToggle = $('addrToggle');
+      function setAddrCollapsed(on) {
+        addrBarEl.classList.toggle('collapsed', on);
+        addrToggle.setAttribute('aria-pressed', on ? 'false' : 'true');
+        addrToggle.setAttribute('aria-expanded', on ? 'false' : 'true');
+        addrToggle.title = on ? "Déplier la recherche d'adresse et la localisation" : "Replier la recherche d'adresse";
+        collapseState.addr = on; persistCollapse();
+        afterLayout();
+      }
+      addrToggle.addEventListener('click', function () { setAddrCollapsed(!addrBarEl.classList.contains('collapsed')); });
+      setAddrCollapsed(!!collapseState.addr);
       function fsPanels(on) {
         if (on) {
           fsSide.appendChild($('saveBar'));
@@ -1545,6 +1721,7 @@ ga_head('Plan des commerces');
       // --- Recherche d'adresse : saisie au clavier ou au clic, découverte des lieux au fil de la frappe ---
       addrEl.addEventListener('input', function () {
         var q = addrEl.value.trim(), seq = ++addrSeq;
+        addrEcho(q);
         clearTimeout(addrTimer);
         if (!addrList.hidden) addrClose();
         if (q.length < 2) return;
