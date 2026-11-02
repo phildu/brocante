@@ -37,6 +37,7 @@ return function (E2e $e): void {
             'csrf' => $csrf, 'r' => $r, 'k' => $k, 'action' => 'continue_payment',
             'shop_name' => 'Boutique E2E S1', 'about' => 'Objets de brocante testés en e2e',
             'location' => 'Lyon', 'activity_primary' => 'other', 'activity_other' => 'Brocante e2e',
+            'address' => '12 rue de la Brocante', 'postal_code' => '69001', 'city' => 'Lyon',
             'email' => 'e2e-s1@example.com', 'terms' => '1', 'defer_domain' => '1',
         ], $client, true);
         $e->check($res['status'] === 303 && str_contains($res['location'], 'design.php'), 'attendu 303 vers design.php, reçu ' . $res['status'] . ' → ' . $res['location']);

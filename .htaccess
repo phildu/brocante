@@ -1,11 +1,11 @@
 # Routage des adresses (Apache / OVH).
 RewriteEngine On
 
-# Déploiement « portail » : la racine du domaine ouvre la page d'accueil de la plateforme (accueil/index.php ; annuaire/, inscription/ et
-# galerie/ sont ses autres pages publiques ; le portail de l'exploitant reste à /portail/). Absent d'un déploiement à un seul commerce,
-# dont la racine est la boutique.
-RewriteCond %{DOCUMENT_ROOT}/portail/index.php -f
-RewriteRule ^$ accueil/index.php [L]
+# Racine du domaine : index.php décide. Déploiement « portail » : l'accueil de la plateforme (accueil/index.php ; annuaire/,
+# inscription/ et galerie/ sont ses autres pages publiques ; le portail de l'exploitant reste à /portail/). Le domaine propre d'un
+# commerce (site_url sans chemin dans son tenant.php, ex. brocante.arrimage.com) ouvre sa boutique à la racine, comme sous
+# /<identifiant>/ ; un déploiement à un seul commerce affiche toujours la boutique.
+DirectoryIndex index.php
 
 # Galeries commerciales (page publique, sans connexion) : /galerie/ et /galerie/<identifiant>/ — voir galerie/index.php.
 RewriteRule ^galerie/?$ galerie/index.php [L]

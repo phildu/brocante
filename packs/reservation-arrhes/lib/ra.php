@@ -123,7 +123,7 @@ function ra_held(): array
 function ra_mail(string $to, string $subject, string $body): bool
 {
     require_once dirname(__DIR__, 3) . '/includes/password-reset.php';
-    return password_reset_mail($to, $subject, $body);
+    return password_reset_mail($to, $subject, $body, 'reservation');
 }
 
 /** Démarre une réservation : crée l'enregistrement en attente puis la page de paiement Stripe. -> [url, erreur]. */

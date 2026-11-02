@@ -131,6 +131,30 @@ final class FeedbackTest extends TestCase
         self::assertCount(1, feedback_all());
     }
 
+    public function testCustomerScopesHistoryAndRateLimit(): void
+    {
+        $client = static fn (string $message, string $email = 'client@example.test'): array => feedback_add([
+            'shop' => 'demo',
+            'audience' => 'customer',
+            'email' => $email,
+            'type' => 'other',
+            'message' => $message,
+        ], null, 'Client Démo');
+
+        $first = $client('Le bouton de recherche ne répond pas sur mobile.');
+        $other = $client('Le bouton de recherche ne répond pas sur mobile.', 'autre@example.test');
+        self::assertNotSame($first['id'], $other['id'], 'Deux clients peuvent envoyer le même texte sans être fusionnés.');
+        self::assertSame('client', $first['source']);
+        self::assertSame([$first['id']], array_column(feedback_records_for_email('demo', 'CLIENT@example.test'), 'id'));
+
+        $client('Deuxième retour du même client.');
+        $client('Troisième retour du même client.');
+        $client('Quatrième retour du même client.');
+        $client('Cinquième retour du même client.');
+        $this->expectException(InvalidArgumentException::class);
+        $client('Sixième retour du même client.');
+    }
+
     public function testFiltersByStatusTypeAndText(): void
     {
         $bug = $this->add('La recherche ignore les accents dans les titres.');

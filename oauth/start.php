@@ -98,6 +98,7 @@ if ($ctx === 'signup') {
         $req['about'] = mb_substr(trim((string) ($_POST['about'] ?? $req['about'] ?? '')), 0, 400);
         $req['location'] = mb_substr(trim((string) ($_POST['location'] ?? $req['location'] ?? '')), 0, 100);
         $req['activity_details'] = $activity;
+        $req = array_merge($req, saas_owner_input($_POST, $req));
         if (($req['branding']['domain_choice']['name'] ?? '') !== $shopName) unset($req['branding']['domain_choice']);
         $availability = (array) ($req['branding']['step2']['availability'] ?? []);
         if (($availability['primary'] ?? '') !== trim(saas_slug($shopName), '-')) $req['branding']['step2']['availability'] = [];

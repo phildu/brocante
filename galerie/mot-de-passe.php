@@ -106,6 +106,9 @@ http_response_code($error ? 400 : 200);
 <?php elseif ($sent): ?>
   <h1>Mot de passe oublié</h1>
   <p class="hint">Si cette adresse administre une galerie, un e-mail avec un lien (valable 1 heure) vient de lui être envoyé. Pensez à vérifier vos courriers indésirables.</p>
+  <?php $gaHost = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')); if (!str_contains($gaHost, '.') || str_ends_with($gaHost, '.test') || filter_var($gaHost, FILTER_VALIDATE_IP)): ?>
+    <p class="hint">En local, le message est recopié dans <code>data/mail-outbox.log</code> : ouvrez la <a href="/portail/journal-local.php?canal=mail">boîte locale</a> pour récupérer le lien.</p>
+  <?php endif; ?>
   <p class="login-foot"><a href="/galerie/admin.php">← Retour à la connexion</a></p>
 <?php else: ?>
   <h1>Mot de passe oublié</h1>

@@ -25,11 +25,16 @@ if (isset($_GET['s'])) {
             if ($result['state'] === 'ordered') {
                 $domain = (string) ($result['purchase']['quote']['domain'] ?? 'votre domaine');
                 flash_set('Merci ! La commande de ' . $domain . ' a été transmise à OVH.', 'ok');
+            } elseif ($result['state'] === 'test') {
+                $domain = (string) ($result['purchase']['quote']['domain'] ?? 'votre domaine');
+                flash_set('Paiement de test enregistré : la commande de ' . $domain . ' n’a pas été transmise à OVH (aucun débit réel).', 'error');
             } elseif ($result['state'] === 'already') {
                 $alreadyState = (string) ($result['purchase']['state'] ?? '');
                 $alreadyDomain = (string) ($result['purchase']['quote']['domain'] ?? 'ce domaine');
                 if ($alreadyState === 'ordered') {
                     flash_set('Ce paiement est déjà pris en compte : la commande de ' . $alreadyDomain . ' est enregistrée.', 'ok');
+                } elseif ($alreadyState === 'test_paid') {
+                    flash_set('Ce paiement de test est déjà enregistré : aucune commande OVH n’a été passée.', 'error');
                 } elseif ($alreadyState === 'paid_needs_review') {
                     flash_set('Ce paiement est déjà pris en compte, mais OVH n’a pas confirmé la commande. L’exploitant de la plateforme la vérifie.', 'error');
                 } else {
@@ -182,6 +187,17 @@ if (!$owner) {
         <h2>Domaine commandé</h2>
         <p><strong><?= h($orderedDomain) ?></strong> a été commandé chez OVH le <?= h(date('d/m/Y à H:i', (int) ($purchase['ordered_at'] ?? time()))) ?><?= !empty($purchase['ovh_order_id']) ? ' (commande n° ' . h((string) $purchase['ovh_order_id']) . ')' : '' ?>.</p>
         <p>La réservation couvre la première année. Le renouvellement annuel se règle ensuite dans le compte OVH de la plateforme. Pour mettre le domaine en service, ses enregistrements DNS doivent pointer vers ce serveur : demandez la configuration à l’exploitant de la plateforme, qui l’ajoutera comme adresse de la boutique.</p>
+      </div>
+    <?php elseif ($state === 'test_paid'): ?>
+      <div class="dm-card">
+        <h2>Paiement de test</h2>
+        <p>Le paiement de <strong><?= h((string) ($quote['domain'] ?? 'votre domaine')) ?></strong> a été fait avec Stripe en mode test : aucun argent n’a été encaissé et aucune commande n’a été passée chez OVH.</p>
+        <p class="dm-note">Effacez ce paiement de test pour recommencer : la commande réelle part quand la plateforme est en mode réel.</p>
+        <form method="post" action="/admin/domaine-action.php">
+          <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+          <input type="hidden" name="action" value="cancel">
+          <button type="submit" class="btn">Effacer et recommencer</button>
+        </form>
       </div>
     <?php elseif ($state === 'paid_needs_review'): ?>
       <div class="dm-card">

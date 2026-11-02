@@ -37,6 +37,7 @@ function portail_chrome_icons(): array
         'external' => '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
         'compass' => '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5.5-5.5 2 2-5.5z"/>',
         'briefcase' => '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 12h18M10 12v3h4v-3"/>',
+        'at' => '<circle cx="12" cy="12" r="4"/><path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1"/>',
     ];
 }
 
@@ -111,6 +112,8 @@ function portail_pending_recrutement(): int
 /** Navigation principale groupée. */
 function portail_nav_groups(): array
 {
+    global $portailLocal;
+
     return [
         ['label' => 'Pilotage', 'items' => [
             ['href' => '/portail/', 'label' => "Vue d'ensemble", 'icon' => 'gauge', 'match' => ['index.php']],
@@ -131,16 +134,22 @@ function portail_nav_groups(): array
         ]],
         ['label' => 'Revenus', 'items' => [
             ['href' => '/portail/tarifs.php', 'label' => 'Tarifs', 'icon' => 'tag'],
+            ['href' => '/portail/marges.php', 'label' => 'Marge & rentabilité', 'icon' => 'activity'],
+            ['href' => '/portail/services-devis.php', 'label' => 'Prestations sur devis', 'icon' => 'briefcase'],
             ['href' => '/portail/earlybird.php', 'label' => 'Pionniers', 'icon' => 'sparkles'],
             ['href' => '/portail/commissions.php', 'label' => 'Commissions', 'icon' => 'percent'],
             ['href' => '/portail/ia.php', 'label' => 'Coûts IA', 'icon' => 'sparkles'],
             ['href' => '/portail/ia-fournisseurs.php', 'label' => 'Fournisseurs IA', 'icon' => 'plug'],
             ['href' => '/portail/addons.php', 'label' => 'Tarifs des plugins', 'icon' => 'receipt'],
         ]],
-        ['label' => 'Plateforme', 'items' => [
+        ['label' => 'Plateforme', 'items' => array_merge([
             ['href' => '/portail/api.php', 'label' => 'API & réseaux', 'icon' => 'key'],
+            ['href' => '/portail/domaines.php', 'label' => 'Noms de domaine', 'icon' => 'at'],
             ['href' => '/portail/nouveau.php', 'label' => 'Nouveau commerce', 'icon' => 'plus'],
-        ]],
+        ], !empty($portailLocal) ? [[
+            // Les fichiers data/*-outbox.log n'existent qu'en local : pas d'entrée en ligne.
+            'href' => '/portail/journal-local.php', 'label' => 'Boîte locale', 'icon' => 'inbox',
+        ]] : [])],
     ];
 }
 

@@ -80,6 +80,7 @@ if (!admin_password_configured()) {
   .login-box p.lede { font-size: 0.9rem; margin-bottom: 22px; }
   .login-notice { font-size: 0.88rem; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--line); background: var(--bg); }
   .login-error { color: var(--accent); font-size: 0.85rem; margin-bottom: 14px; font-family: var(--font-mono); }
+  .login-other { font-size: 0.82rem; margin-top: 16px; text-align: center; }
 </style>
 </head>
 <body>
@@ -97,6 +98,7 @@ if (!admin_password_configured()) {
       'forgot_url' => '/admin/mot-de-passe-oublie.php',
       'submit' => 'Se connecter',
     ]) ?>
+    <p class="login-other"><a href="/connexion.php">Connexion unique — boutique, galerie, portail, compte client</a></p>
   </div>
 </div>
 <script src="/assets/pwd-toggle.js" defer></script>

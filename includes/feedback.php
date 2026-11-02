@@ -28,6 +28,7 @@ const FEEDBACK_MAX_MESSAGE = 4000;
 const FEEDBACK_MAX_ATTACHMENT = 3145728; // 3 Mo
 const FEEDBACK_MAX_RECORDS = 5000;
 const FEEDBACK_HOURLY_LIMIT = 10;
+const FEEDBACK_CUSTOMER_HOURLY_LIMIT = 5;
 
 function feedback_data_dir(): string
 {
@@ -340,7 +341,7 @@ function feedback_record_normalize(array $f): array
 {
     $out = array_merge([
         'id' => '', 'at' => '', 'shop' => '', 'shop_name' => '', 'gallery' => '', 'module' => '',
-        'account' => '', 'account_id' => null, 'email' => '', 'type' => 'other', 'severity' => '',
+        'account' => '', 'account_id' => null, 'email' => '', 'source' => 'equipe', 'type' => 'other', 'severity' => '',
         'message' => '', 'page' => '', 'page_title' => '', 'context' => [],
         'status' => 'new', 'priority' => 'normal', 'attachment' => '',
         'notes' => [], 'replies' => [], 'status_log' => [],
@@ -353,6 +354,7 @@ function feedback_record_normalize(array $f): array
     if (!in_array($out['status'], FEEDBACK_STATUSES, true)) $out['status'] = 'new';
     if (!in_array($out['priority'], FEEDBACK_PRIORITIES, true)) $out['priority'] = 'normal';
     if (!in_array($out['severity'], FEEDBACK_SEVERITIES, true)) $out['severity'] = '';
+    if (!in_array($out['source'], ['equipe', 'client'], true)) $out['source'] = 'equipe';
     return $out;
 }
 
@@ -439,6 +441,34 @@ function feedback_shop_unread(string $shop): int
     return $n;
 }
 
+/** Retours d'un auteur précis (même boutique), les plus récents d'abord. */
+function feedback_records_for_email(string $shop, string $email, int $limit = 20): array
+{
+    $shop = trim($shop);
+    $email = mb_strtolower(trim($email));
+    if ($shop === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return [];
+    $out = [];
+    foreach (feedback_all() as $f) {
+        if ($f['shop'] !== $shop) continue;
+        if (mb_strtolower(trim((string) $f['email'])) !== $email) continue;
+        $out[] = $f;
+        if (count($out) >= max(1, $limit)) break;
+    }
+    return $out;
+}
+
+/** Réponses non vues parmi une liste de retours, à partir d'une date de lecture. */
+function feedback_records_unread(array $records, string $seenAt): int
+{
+    $n = 0;
+    foreach ($records as $f) {
+        foreach ($f['replies'] as $reply) {
+            if ((string) ($reply['at'] ?? '') > $seenAt) $n++;
+        }
+    }
+    return $n;
+}
+
 function feedback_mark_shop_seen(string $shop): void
 {
     if ($shop === '' || feedback_shop_unread($shop) === 0) return;
@@ -483,8 +513,12 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
     $severity = $type === 'bug' && in_array((string) ($in['severity'] ?? ''), FEEDBACK_SEVERITIES, true)
         ? (string) $in['severity'] : ($type === 'bug' ? 'major' : '');
 
-    $email = trim((string) ($in['email'] ?? ''));
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $email = feedback_shop_email($shop, $accountId);
+    $audience = (string) ($in['audience'] ?? 'admin') === 'customer' ? 'customer' : 'admin';
+    $email = mb_strtolower(trim((string) ($in['email'] ?? '')));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $email = $audience === 'customer' ? '' : feedback_shop_email($shop, $accountId);
+    }
+    if ($audience === 'customer' && $email === '') throw new InvalidArgumentException('Session client expirée : reconnectez-vous.');
 
     $page = feedback_clean_text($in['page'] ?? '', 400);
     if ($page !== '' && !str_starts_with($page, '/')) $page = '/' . ltrim(preg_replace('#^[a-z]+://[^/]+#i', '', $page), '/');
@@ -509,6 +543,7 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
         'account' => feedback_clean_text($accountName, 80),
         'account_id' => $accountId,
         'email' => $email,
+        'source' => $audience === 'customer' ? 'client' : 'equipe',
         'type' => $type,
         'severity' => $severity,
         'message' => $message,
@@ -530,19 +565,31 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
 
     $duplicate = null;
     try {
-        $created = feedback_mutate(static function (array &$data) use ($record, &$duplicate): array {
+        $created = feedback_mutate(static function (array &$data) use ($record, $audience, $email, &$duplicate): array {
             $now = time();
             $recent = 0;
+            $authorRecent = 0;
             foreach ($data as $f) {
                 if (($f['shop'] ?? '') !== $record['shop']) continue;
                 $at = (int) strtotime((string) ($f['at'] ?? ''));
-                if ($at > $now - 3600) $recent++;
-                if ($at > $now - 180 && ($f['message'] ?? '') === $record['message']) {
+                $sameAuthor = mb_strtolower(trim((string) ($f['email'] ?? ''))) === $email;
+                // Le doublon et le plafond horaire du client ne visent que ses propres retours :
+                // un autre client ne peut ni le bloquer ni lui faire renvoyer son message.
+                if ($audience === 'customer' && !$sameAuthor) continue;
+                if ($at > $now - 3600) {
+                    $recent++;
+                    if ($sameAuthor) $authorRecent++;
+                }
+                if ($at > $now - 180 && $sameAuthor && ($f['message'] ?? '') === $record['message']) {
                     $duplicate = $f;
                     return $f;
                 }
             }
-            if ($recent >= FEEDBACK_HOURLY_LIMIT) {
+            if ($audience === 'customer') {
+                if ($authorRecent >= FEEDBACK_CUSTOMER_HOURLY_LIMIT) {
+                    throw new InvalidArgumentException('Trop de retours envoyés récemment : réessayez dans une heure.');
+                }
+            } elseif ($recent >= FEEDBACK_HOURLY_LIMIT) {
                 throw new InvalidArgumentException('Trop de retours envoyés récemment : réessayez dans une heure.');
             }
             $data[] = $record;
@@ -729,7 +776,7 @@ function feedback_notify_new(array $f): bool
     $subject = '[Retours] ' . (FEEDBACK_TYPE_LABELS[$f['type']] ?? 'Retour') . ' — ' . $f['shop_name']
         . ' : ' . mb_substr($firstLine, 0, 60);
     $link = feedback_origin() . '/portail/retours.php?focus=' . rawurlencode($f['id']);
-    $body = "Nouveau retour de testeur.\n\n"
+    $body = "Nouveau retour " . ($f['source'] === 'client' ? "d'un client" : 'de testeur') . ".\n\n"
         . "Boutique : {$f['shop_name']} ({$f['shop']})\n"
         . "Type : " . (FEEDBACK_TYPE_LABELS[$f['type']] ?? $f['type']) . "\n"
         . ($f['severity'] !== '' ? 'Gravité : ' . (FEEDBACK_SEVERITY_LABELS[$f['severity']] ?? $f['severity']) . "\n" : '')
@@ -967,22 +1014,43 @@ function feedback_type_icon(string $type): string
     };
 }
 
-// ── Widget (administration d'une boutique) ─────────────────────────────────
+// ── Widget (administration d'une boutique, ou client connecté) ─────────────
+
+/** Jeton CSRF du widget pour un client connecté (la session d'administration a le sien). */
+function feedback_csrf_token(): string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) return '';
+    if (empty($_SESSION['feedback_csrf'])) $_SESSION['feedback_csrf'] = bin2hex(random_bytes(16));
+    return (string) $_SESSION['feedback_csrf'];
+}
 
 function feedback_widget_html(): string
 {
     static $rendered = false;
     if ($rendered) return '';
-    $session = function_exists('admin_session') ? admin_session() : null;
     $shop = function_exists('tenant_slug') ? tenant_slug() : '';
-    if ($session === null || $shop === '' || !feedback_widget_enabled($shop)) return '';
+    if ($shop === '' || !feedback_widget_enabled($shop)) return '';
+    $session = function_exists('admin_session') ? admin_session() : null;
+    $customer = null;
+    if ($session !== null) {
+        $audience = 'admin';
+        $csrf = function_exists('admin_csrf_token') ? admin_csrf_token() : '';
+        $kicker = 'Programme testeurs';
+    } else {
+        $customer = function_exists('customer_session') ? customer_session() : null;
+        if (!is_array($customer) || !filter_var((string) ($customer['email'] ?? ''), FILTER_VALIDATE_EMAIL)) return '';
+        $audience = 'customer';
+        $csrf = feedback_csrf_token();
+        $kicker = 'Votre boutique';
+    }
     $rendered = true;
     // Le cookie de session est limité au préfixe de la boutique (/<identifiant>/)
     // sur les adresses partagées : l'API doit être appelée sous ce même préfixe.
     $base = function_exists('tenant_base_path') ? tenant_base_path() : '';
     $config = [
         'api' => $base . '/admin/feedback-api.php',
-        'csrf' => function_exists('admin_csrf_token') ? admin_csrf_token() : '',
+        'csrf' => $csrf,
+        'audience' => $audience,
         'shop' => $shop,
         'types' => FEEDBACK_TYPE_LABELS,
         'severities' => FEEDBACK_SEVERITY_LABELS,
@@ -991,7 +1059,7 @@ function feedback_widget_html(): string
         'lang' => 'fr-FR',
     ];
     ob_start(); ?>
-<link rel="stylesheet" href="/assets/feedback-widget.css?v=2">
+<link rel="stylesheet" href="/assets/feedback-widget.css?v=3">
 <div class="fbw" data-fbw data-config="<?= htmlspecialchars(json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP), ENT_QUOTES, 'UTF-8') ?>">
   <button type="button" class="fbw-launch" data-fbw-open aria-expanded="false" aria-controls="fbw-panel">
     <span class="fbw-launch-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 9.5 9.5 0 0 1-3.5-.7L4 20.5l1.4-4.1A8.1 8.1 0 0 1 3 11.5a8.4 8.4 0 0 1 8.5-8.3A8.4 8.4 0 0 1 21 11.5z"/></svg></span>
@@ -1000,7 +1068,7 @@ function feedback_widget_html(): string
   </button>
   <section class="fbw-panel" id="fbw-panel" role="dialog" aria-labelledby="fbw-title" hidden>
     <header class="fbw-head">
-      <div><p class="fbw-kicker">Programme testeurs</p><h2 id="fbw-title">Votre retour</h2></div>
+      <div><p class="fbw-kicker"><?= htmlspecialchars($kicker) ?></p><h2 id="fbw-title">Votre retour</h2></div>
       <button type="button" class="fbw-close" data-fbw-close aria-label="Fermer">×</button>
     </header>
     <div class="fbw-tabs" role="tablist">
@@ -1049,7 +1117,9 @@ function feedback_widget_html(): string
           </label>
           <p class="fbw-shot-state" data-fbw-shot-state hidden role="status" aria-live="polite"></p>
         </div>
-        <p class="fbw-hint">La page, votre boutique et votre navigateur sont joints automatiquement pour aider à reproduire.</p>
+        <p class="fbw-hint"><?= $audience === 'customer'
+            ? 'La page et votre navigateur sont joints automatiquement pour nous aider à comprendre.'
+            : 'La page, votre boutique et votre navigateur sont joints automatiquement pour aider à reproduire.' ?></p>
         <div class="fbw-actions">
           <button type="submit" class="fbw-submit">Envoyer mon retour</button>
           <p class="fbw-msg" data-fbw-msg role="status" aria-live="polite"></p>

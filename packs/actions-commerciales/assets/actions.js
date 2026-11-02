@@ -262,6 +262,9 @@
               return (o.notices.channels[k] || {}).already || 0;
             }).concat([0]));
             if (reached > 0) stateCell.appendChild(el('div', reached + ' prévenu(s)', { 'class': 'hint' }));
+            if ((o.notices.opened || 0) > 0) {
+              stateCell.appendChild(el('div', o.notices.opened + ' e-mail(s) ouvert(s)', { 'class': 'hint' }));
+            }
           }
           tr.appendChild(stateCell);
           tr.appendChild(el('td', String(o.count), { align: 'right' }));

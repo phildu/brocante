@@ -1,11 +1,13 @@
 <?php
 // API JSON du widget « Un retour ? » (assets/feedback-widget.js).
-// Session de l'administration de la boutique obligatoire ; jeton CSRF pour
-// toute écriture. GET ?action=mine : retours de la boutique et réponses.
-// POST action=submit : nouveau retour, capture facultative (multipart).
+// Session de l'administration de la boutique ou compte client de la boutique
+// obligatoire ; jeton CSRF pour toute écriture. Un client ne voit que ses
+// propres retours. GET ?action=mine : retours et réponses. POST action=submit :
+// nouveau retour, capture facultative (multipart).
 
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/oauth.php';
 require_once __DIR__ . '/../includes/feedback.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -20,7 +22,18 @@ function feedback_json(mixed $data, int $status = 200): never
 }
 
 $session = admin_session();
-if ($session === null) feedback_json(['ok' => false, 'error' => 'Session expirée : reconnectez-vous.'], 401);
+$customer = null;
+if ($session !== null) {
+    $audience = 'admin';
+    $csrf = admin_csrf_token();
+} else {
+    $customer = customer_session();
+    if (!is_array($customer) || !filter_var((string) ($customer['email'] ?? ''), FILTER_VALIDATE_EMAIL)) {
+        feedback_json(['ok' => false, 'error' => 'Session expirée : reconnectez-vous.'], 401);
+    }
+    $audience = 'customer';
+    $csrf = feedback_csrf_token();
+}
 $shop = tenant_slug();
 if (!feedback_widget_enabled($shop)) feedback_json(['ok' => false, 'error' => "Le widget de retour n'est pas ouvert à cette boutique."], 403);
 
@@ -28,14 +41,14 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = (string) ($_GET['action'] ?? $_POST['action'] ?? '');
 if ($method !== 'GET') {
     $token = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf'] ?? '');
-    if (!hash_equals(admin_csrf_token(), $token)) feedback_json(['ok' => false, 'error' => 'Jeton expiré : rechargez la page.'], 400);
+    if ($csrf === '' || !hash_equals($csrf, $token)) feedback_json(['ok' => false, 'error' => 'Jeton expiré : rechargez la page.'], 400);
 }
 
-/** Retours de la boutique tels que le testeur les voit (sans notes internes ni journal technique). */
-function feedback_widget_items(string $shop): array
+/** Retours tels que leur auteur les voit (sans notes internes ni journal technique). */
+function feedback_widget_items(array $records): array
 {
     $out = [];
-    foreach (feedback_shop_records($shop, 20) as $f) {
+    foreach ($records as $f) {
         $replies = [];
         foreach ($f['replies'] as $reply) {
             $replies[] = ['at' => (string) ($reply['at'] ?? ''), 'by' => (string) ($reply['by'] ?? ''), 'text' => (string) ($reply['text'] ?? '')];
@@ -58,20 +71,41 @@ function feedback_widget_items(string $shop): array
     return $out;
 }
 
+/** Retours visibles par la session courante : toute la boutique pour l'équipe, les siens pour un client. */
+function feedback_widget_scope(string $shop, string $audience, ?array $customer): array
+{
+    if ($audience === 'customer') {
+        return feedback_records_for_email($shop, (string) ($customer['email'] ?? ''), 20);
+    }
+    return feedback_shop_records($shop, 20);
+}
+
 if ($method === 'GET' && $action === 'peek') {
+    if ($audience === 'customer') {
+        $seen = (string) ($_SESSION['feedback_seen'][$shop] ?? '');
+        feedback_json(['ok' => true, 'unread' => feedback_records_unread(feedback_widget_scope($shop, $audience, $customer), $seen)]);
+    }
     feedback_json(['ok' => true, 'unread' => feedback_shop_unread($shop)]);
 }
 
 if ($method === 'GET' && $action === 'mine') {
-    $unread = feedback_shop_unread($shop);
-    feedback_mark_shop_seen($shop);
-    feedback_json(['ok' => true, 'unread' => $unread, 'items' => feedback_widget_items($shop)]);
+    $records = feedback_widget_scope($shop, $audience, $customer);
+    if ($audience === 'customer') {
+        $unread = feedback_records_unread($records, (string) ($_SESSION['feedback_seen'][$shop] ?? ''));
+        $_SESSION['feedback_seen'][$shop] = gmdate('c');
+    } else {
+        $unread = feedback_shop_unread($shop);
+        feedback_mark_shop_seen($shop);
+    }
+    feedback_json(['ok' => true, 'unread' => $unread, 'items' => feedback_widget_items($records)]);
 }
 
 if ($method === 'POST' && $action === 'submit') {
     try {
         $record = feedback_add([
             'shop' => $shop,
+            'audience' => $audience,
+            'email' => $audience === 'customer' ? (string) $customer['email'] : '',
             'type' => (string) ($_POST['type'] ?? 'other'),
             'severity' => (string) ($_POST['severity'] ?? ''),
             'message' => (string) ($_POST['message'] ?? ''),
@@ -82,7 +116,8 @@ if ($method === 'POST' && $action === 'submit') {
             'ua' => (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''),
             'version' => (string) ($_POST['version'] ?? ''),
             'attachment_file' => $_FILES['shot'] ?? null,
-        ], isset($session['id']) ? (int) $session['id'] : null, (string) ($session['name'] ?? ''));
+        ], $audience === 'customer' ? null : (isset($session['id']) ? (int) $session['id'] : null),
+            $audience === 'customer' ? (string) ($customer['name'] ?? '') : (string) ($session['name'] ?? ''));
         feedback_json([
             'ok' => true,
             'message' => 'Merci ! Votre retour est enregistré.',

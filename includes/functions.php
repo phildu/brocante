@@ -19,6 +19,8 @@ require_once __DIR__ . '/veo.php';
 require_once __DIR__ . '/siliconflow-video.php';
 require_once __DIR__ . '/modal-video.php';
 require_once __DIR__ . '/shop-hours.php';
+require_once __DIR__ . '/order-flow.php';
+require_once __DIR__ . '/payments.php';
 
 function h($s): string
 {
@@ -195,6 +197,9 @@ function order_mark_paid(array $order, array $session): bool
     ]);
     if ($upd->rowCount() === 0) return false;
     decrement_stock_for_order(json_decode((string) $order['items'], true) ?: []);
+    // Mode de livraison définitif, code de retrait et étape de préparation.
+    order_prepare_after_payment($order, $session);
+    order_event((int) $order['id'], 'paiement', 'Paiement confirmé (' . format_cents((int) ($session['amount_total'] ?? $order['amount_total'])) . ')', 'stripe', 'paid');
     // Le client rejoint la liste des comptes (Administration → Comptes) ; un prospect inscrit à la newsletter passe en client.
     account_upsert_contact(
         (string) ($session['customer_details']['email'] ?? ''),
@@ -203,6 +208,12 @@ function order_mark_paid(array $order, array $session): bool
         'commande',
         (string) ($order['phone'] ?? $session['customer_details']['phone'] ?? '')    // téléphone saisi au panier (sinon celui de Stripe)
     );
+    // Récapitulatif envoyé une seule fois (page de retour ou webhook, le premier arrivé gagne).
+    try {
+        order_send_confirmation((int) $order['id']);
+    } catch (Throwable $e) {
+        error_log('confirmation commande : ' . $e->getMessage());
+    }
     // Les plugins actifs réagissent au paiement (ex. reçu d'achat) sans jamais bloquer la commande.
     try {
         require_once __DIR__ . '/plugins.php';
@@ -274,7 +285,7 @@ function checkout_expire_own_sessions(): void
 {
     $own = checkout_own_orders();
     if (!$own) return;
-    $stmt = db()->prepare("SELECT stripe_session_id, payment_via FROM orders WHERE id IN (" . implode(',', array_fill(0, count($own), '?')) . ") AND status = 'pending'");
+    $stmt = db()->prepare("SELECT stripe_session_id, payment_via FROM orders WHERE id IN (" . implode(',', array_fill(0, count($own), '?')) . ") AND status = 'pending' AND (payment_provider IS NULL OR payment_provider = 'stripe')");
     $stmt->execute($own);
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $o) {
         $sessionId = $o['stripe_session_id'];
@@ -297,7 +308,7 @@ function orders_settle_pending_for(array $refs): void
 {
     $refs = array_map('strval', $refs);
     if (!$refs) return;
-    $pending = db()->query("SELECT * FROM orders WHERE status = 'pending' AND created_at >= datetime('now', '-1 day') ORDER BY id DESC LIMIT 20")->fetchAll();
+    $pending = db()->query("SELECT * FROM orders WHERE status = 'pending' AND created_at >= datetime('now', '-1 day') AND (payment_provider IS NULL OR payment_provider = 'stripe') ORDER BY id DESC LIMIT 20")->fetchAll();
     foreach ($pending as $order) {
         $items = json_decode((string) $order['items'], true) ?: [];
         if (!array_intersect($refs, array_map('strval', array_column($items, 'ref')))) continue;
@@ -3403,6 +3414,62 @@ function format_cents(int $cents): string
     return number_format($cents / 100, 2, ',', ' ') . ' €';
 }
 
+/** « Marie Dupont » → ['Marie', 'Dupont'] ; pour les anciens comptes qui n'ont qu'un seul champ nom. */
+function contact_name_parts(string $name): array
+{
+    $name = trim(preg_replace('/\s+/u', ' ', $name));
+    if ($name === '') return ['', ''];
+    $pos = mb_strpos($name, ' ');
+    return $pos === false ? [$name, ''] : [mb_substr($name, 0, $pos), mb_substr($name, $pos + 1)];
+}
+
+/* ---------- Coordonnées du panier mémorisées sur l'appareil (préremplissage) ---------- */
+
+const CART_CONTACT_COOKIE_DAYS = 180;
+
+/** Nom du cookie propre au commerce : plusieurs boutiques peuvent partager le même domaine. */
+function cart_contact_cookie_name(): string
+{
+    return 'brocs_cc_' . substr(hash('sha256', tenant_slug()), 0, 10);
+}
+
+/** Dernières coordonnées saisies sur cet appareil, ou [] si rien n'a été mémorisé. */
+function cart_contact_cookie_get(): array
+{
+    $raw = (string) ($_COOKIE[cart_contact_cookie_name()] ?? '');
+    if ($raw === '') return [];
+    $data = json_decode($raw, true);
+    if (!is_array($data)) return [];
+    $clean = static fn (string $key, int $max): string => mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($data[$key] ?? ''))), 0, $max);
+    return array_filter([
+        'first_name' => $clean('first_name', 40),
+        'last_name' => $clean('last_name', 40),
+        'email' => $clean('email', 120),
+        'phone' => $clean('phone', 30),
+    ], static fn (string $value): bool => $value !== '');
+}
+
+/** Mémorise les coordonnées sur l'appareil pour préremplir les prochaines commandes. */
+function cart_contact_cookie_remember(array $contact): void
+{
+    $data = array_filter([
+        'first_name' => mb_substr(trim((string) ($contact['first_name'] ?? '')), 0, 40),
+        'last_name' => mb_substr(trim((string) ($contact['last_name'] ?? '')), 0, 40),
+        'email' => mb_substr(trim((string) ($contact['email'] ?? '')), 0, 120),
+        'phone' => mb_substr(trim((string) ($contact['phone'] ?? '')), 0, 30),
+    ], static fn (string $value): bool => $value !== '');
+    if (!$data) return;
+    $json = (string) json_encode($data, JSON_UNESCAPED_UNICODE);
+    setcookie(cart_contact_cookie_name(), $json, [   // setcookie encode la valeur automatiquement
+        'expires' => time() + CART_CONTACT_COOKIE_DAYS * 86400,
+        'path' => tenant_base_path() . '/',
+        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'httponly' => false,                        // relu par le script du panier pour mémoriser une saisie non envoyée
+        'samesite' => 'Lax',
+    ]);
+    $_COOKIE[cart_contact_cookie_name()] = $json;
+}
+
 function cart_get(): array
 {
     return $_SESSION['cart'] ?? [];
@@ -3821,10 +3888,10 @@ function stripe_request(string $method, string $path, array $params = [], bool $
     return $data;
 }
 
-/** Le paiement en ligne de la boutique peut-il fonctionner ? Clés propres, ou compte relié à la plateforme (Stripe Connect, voir includes/connect.php). */
+/** Le paiement en ligne de la boutique peut-il fonctionner ? Au moins un moyen configuré (Stripe, Monetico ou PayPal). */
 function shop_checkout_ready(): bool
 {
-    return stripe_configured() || connect_shop() !== null;
+    return shop_payment_methods() !== [];
 }
 
 function stripe_configured(): bool
@@ -3834,5 +3901,12 @@ function stripe_configured(): bool
 
 function fulfillment_label(string $status): string
 {
-    return ['a_preparer' => 'À préparer', 'expediee' => 'Expédiée', 'livree' => 'Livrée'][$status] ?? $status;
+    return [
+        'a_confirmer' => 'À confirmer',
+        'a_preparer' => 'À préparer',
+        'pret_retrait' => 'Prêt au retrait',
+        'expediee' => 'Expédiée',
+        'livree' => 'Livrée',
+        'retiree' => 'Retirée',
+    ][$status] ?? $status;
 }

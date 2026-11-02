@@ -189,6 +189,29 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
+-- Suivi d'ouverture des e-mails (image invisible de 1 × 1 pixel, voir
+-- includes/mail-tracking.php et mail-open.php). Une ligne par message envoyé ;
+-- open_count ne compte que les demandes humaines, bot_count celles des robots.
+CREATE TABLE IF NOT EXISTS mail_opens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  token TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL DEFAULT '',
+  subject TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT '',
+  context TEXT NOT NULL DEFAULT '',
+  sent_at INTEGER NOT NULL,
+  first_open_at INTEGER,
+  last_open_at INTEGER,
+  open_count INTEGER NOT NULL DEFAULT 0,
+  bot_count INTEGER NOT NULL DEFAULT 0,
+  ip TEXT NOT NULL DEFAULT '',
+  user_agent TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_mail_opens_sent ON mail_opens(sent_at);
+CREATE INDEX IF NOT EXISTS idx_mail_opens_source ON mail_opens(source);
+CREATE INDEX IF NOT EXISTS idx_mail_opens_email ON mail_opens(email COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_mail_opens_context ON mail_opens(context);
+
 -- Comptes : équipe (admin, community_manager) et contacts (client, prospect).
 -- Voir includes/accounts.php (créée aussi automatiquement à l'ouverture d'une base ancienne).
 CREATE TABLE IF NOT EXISTS accounts (

@@ -50,6 +50,6 @@ saas_page_start('Annuaire des commerces — ' . $cfg['name'], 'Tous les commerce
     <p class="empty"><?= $q !== '' || $cat !== '' ? 'Aucun commerce ne correspond à cette recherche.' : 'Aucun commerce dans l\'annuaire pour le moment.' ?></p>
   <?php endif; ?>
 
-  <div class="cta-band"><h2>Votre commerce n'est pas encore là ?</h2><p>Créez votre boutique en ligne et apparaissez dans l'annuaire.</p><a class="btn" href="/inscription/">Créer ma boutique</a></div>
+  <div class="cta-band"><h2>Votre commerce n'est pas encore là ?</h2><p>Créez votre boutique en ligne et apparaissez dans l'annuaire.</p><a class="btn" href="/inscription/">Je veux vendre en ligne</a></div>
 </div>
 <?php saas_page_end(); ?>

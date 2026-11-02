@@ -10,7 +10,8 @@ $navBtn('galeries.php', 'Présentation et commerces');
 $navG = $gaGallery ?? ($edit ?? null);
 $navOn = static fn (string $f): bool => !$navG || gt_feature($navG, $f);        // fonctionnalités du type de galerie (Types de galerie, portail)
 $navMod = static fn (string $m): bool => (bool) $navG && function_exists('gm_enabled') && gm_enabled($navG, $m);
-if ($navOn('plan') && (!$navG || $navMod('carte'))) $navBtn('galerie-plan.php', 'Plan');
+// Toujours proposé quand le type de galerie comprend un plan : la page explique comment activer l'option si elle est en veille.
+if ($navOn('plan')) $navBtn('galerie-plan.php', 'Plan');
 if ($navOn('exposants')) $navBtn('galerie-exposants.php', $navG ? ucfirst(gt_word($navG, 'members')) : 'Exposants');
 if ($navG && $navMod('organisateur') && $navOn('exposants')) {
     $navBtn('galerie-evenement.php', 'Événement');

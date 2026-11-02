@@ -20,17 +20,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     } elseif ($_POST['action'] === 'qty') {
         cart_set_qty($ref, max(0, (int) ($_POST['qty'] ?? 1)));
     } elseif ($_POST['action'] === 'set_destination') {
-        $country = (string) ($_POST['country'] ?? 'FR');
-        $_SESSION['shipping_country'] = array_key_exists($country, shipping_allowed_countries()) ? $country : 'FR';
-        $_SESSION['shipping_postal_code'] = preg_replace('/[^0-9]/', '', (string) ($_POST['postal_code'] ?? ''));
-        // Adresse choisie dans la liste ou trouvée par « Me localiser » : gardée pour l'afficher (jamais la position GPS).
-        $addr = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['address_label'] ?? ''))), 0, 160);
-        if ($addr !== '' && $_SESSION['shipping_postal_code'] !== '') $_SESSION['shipping_address'] = $addr; else unset($_SESSION['shipping_address']);
-        // Adresse de livraison complète (rue, complément, ville) : gardée pour le paiement et la préparation de la commande.
         $clean = static fn (string $k, int $max): string => mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST[$k] ?? ''))), 0, $max);
-        $_SESSION['shipping_line1'] = $clean('address_line1', 120);
-        $_SESSION['shipping_line2'] = $clean('address_line2', 120);
-        $_SESSION['shipping_city'] = $clean('address_city', 80);
+        // Adresse de l'acheteur : toujours demandée, sert aussi d'adresse de livraison quand le destinataire est l'acheteur.
+        $buyerCountry = strtoupper($clean('buyer_country', 2)) ?: 'FR';
+        if (!array_key_exists($buyerCountry, shipping_allowed_countries())) $buyerCountry = 'FR';
+        $_SESSION['buyer_country'] = $buyerCountry;
+        $_SESSION['buyer_line1'] = $clean('buyer_line1', 120);
+        $_SESSION['buyer_postal'] = preg_replace('/[^0-9A-Za-z]/', '', $clean('buyer_postal', 12));
+        $_SESSION['buyer_city'] = $clean('buyer_city', 80);
+        // Adresse choisie dans la liste ou trouvée par « Me localiser » : gardée pour l'afficher (jamais la position GPS).
+        $buyerLabel = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['buyer_label'] ?? ''))), 0, 160);
+        if ($buyerLabel !== '' && $_SESSION['buyer_postal'] !== '') $_SESSION['buyer_address_label'] = $buyerLabel; else unset($_SESSION['buyer_address_label']);
+        $shipOther = !empty($_POST['ship_other']);
+        // Adresse de livraison : celle de l'acheteur, sauf si le client livre ailleurs (autre adresse ou autre personne).
+        if ($shipOther) {
+            $country = strtoupper($clean('dest_country', 2)) ?: 'FR';
+            $_SESSION['shipping_country'] = array_key_exists($country, shipping_allowed_countries()) ? $country : 'FR';
+            $_SESSION['shipping_postal_code'] = preg_replace('/[^0-9A-Za-z]/', '', $clean('dest_postal', 12));
+            $_SESSION['shipping_line1'] = $clean('dest_line1', 120);
+            $_SESSION['shipping_city'] = $clean('dest_city', 80);
+        } else {
+            $_SESSION['shipping_country'] = $buyerCountry;
+            $_SESSION['shipping_postal_code'] = $_SESSION['buyer_postal'];
+            $_SESSION['shipping_line1'] = $_SESSION['buyer_line1'];
+            $_SESSION['shipping_city'] = $_SESSION['buyer_city'];
+        }
+        $_SESSION['shipping_line2'] = '';
+        // Le formulaire porte aussi les coordonnées déjà saisies : conservées quand la zone est recalculée.
+        $firstName = $clean('contact_first_name', 40);
+        $lastName = $clean('contact_last_name', 40);
+        $email = mb_strtolower($clean('contact_email', 120));
+        $phone = $clean('contact_phone', 30);
+        if ($firstName !== '' || $lastName !== '' || $email !== '' || $phone !== '') {
+            $_SESSION['checkout_contact'] = array_merge((array) ($_SESSION['checkout_contact'] ?? []), [
+                'first_name' => $firstName, 'last_name' => $lastName,
+                'name' => mb_substr(trim($firstName . ' ' . $lastName), 0, 80),
+                'email' => $email, 'phone' => $phone,
+                'ship_other' => $shipOther,
+                'ship_name' => $clean('ship_name', 80),
+                'ship_phone' => $clean('ship_phone', 30),
+                'create_account' => !empty($_POST['create_account']),
+            ]);
+        }
+        $_SESSION['shipping_ui'] = (string) ($_POST['shipping_choice'] ?? 'pickup');
     }
     header('Location: /cart.php');
     exit;
@@ -55,12 +87,18 @@ $totalAfterDiscount = $total - $discount['cents'];
 
 $destCountry = (string) ($_SESSION['shipping_country'] ?? 'FR');
 $destPostalCode = (string) ($_SESSION['shipping_postal_code'] ?? '');
-$destAddress = (string) ($_SESSION['shipping_address'] ?? '');
 $destLine1 = (string) ($_SESSION['shipping_line1'] ?? '');
-$destLine2 = (string) ($_SESSION['shipping_line2'] ?? '');
 $destCity = (string) ($_SESSION['shipping_city'] ?? '');
-$ccErr = (array) ($_SESSION['checkout_contact_errors'] ?? []);       // lues ici (bloc Destination) et plus bas (coordonnées)
-$destZone = shipping_zone_for_address($destCountry, $destPostalCode);
+$shipOther = !empty($_SESSION['checkout_contact']['ship_other']);
+// Adresse de l'acheteur : session dédiée ; reprise de l'ancienne adresse de livraison pour les paniers ouverts avant ce changement.
+$buyerCountry = (string) ($_SESSION['buyer_country'] ?? ($shipOther ? 'FR' : $destCountry));
+$buyerPostalCode = (string) ($_SESSION['buyer_postal'] ?? ($shipOther ? '' : $destPostalCode));
+$buyerLine1 = (string) ($_SESSION['buyer_line1'] ?? ($shipOther ? '' : $destLine1));
+$buyerCity = (string) ($_SESSION['buyer_city'] ?? ($shipOther ? '' : $destCity));
+$buyerAddressLabel = (string) ($_SESSION['buyer_address_label'] ?? '');
+$ccErr = (array) ($_SESSION['checkout_contact_errors'] ?? []);       // lues ici (adresses) et plus bas (coordonnées)
+// Zone tarifaire : celle de l'adresse de livraison effective (destinataire si différent, sinon acheteur).
+$destZone = shipping_zone_for_address($shipOther ? $destCountry : $buyerCountry, $shipOther ? $destPostalCode : $buyerPostalCode);
 $carrierRates = ($lines && !$pickupOnly) ? matching_shipping_rates(cart_total_weight_g($lines), $destZone) : [];
 $flatFeeCents = price_to_cents($content['shipping_fee']) ?? 0;
 // Pays où la Base Adresse Nationale (La Poste) permet l'auto-complétion —
@@ -68,10 +106,31 @@ $flatFeeCents = price_to_cents($content['shipping_fee']) ?? 0;
 // couvert par ce service.
 $banEligibleCountries = ['FR', 'GP', 'MQ', 'GF', 'RE', 'YT'];
 
+// Choix de livraison (clé = valeur du bouton radio). Le choix est mémorisé quand la zone est recalculée,
+// pour retrouver l'adresse affichée après le rechargement.
+$shippingChoices = [['key' => 'pickup', 'label' => (string) $content['pickup_label'], 'price' => 0, 'detail' => '']];
+if (!$pickupOnly) {
+    if ($carrierRates) {
+        foreach ($carrierRates as $rate) {
+            $shippingChoices[] = ['key' => 'rate-' . (int) $rate['id'], 'label' => $rate['carrier_name'] . ' — ' . $rate['service_name'], 'price' => (int) $rate['price_cents'], 'detail' => (string) $rate['delivery_delay']];
+        }
+    } else {
+        $shippingChoices[] = ['key' => 'flat', 'label' => (string) $content['shipping_label'], 'price' => $flatFeeCents, 'detail' => ''];
+    }
+}
+$uiKeys = array_column($shippingChoices, 'key');
+$uiChoice = (string) ($_SESSION['shipping_ui'] ?? 'pickup');
+if (!in_array($uiChoice, $uiKeys, true)) $uiChoice = $uiChoice !== 'pickup' ? ($uiKeys[1] ?? 'pickup') : 'pickup';
+$deliverySelected = $uiChoice !== 'pickup';
+$paymentMethods = $lines ? shop_payment_methods() : [];
+$selectedPayment = (string) ($_SESSION['checkout_payment_method'] ?? '');
+if (!isset($paymentMethods[$selectedPayment])) $selectedPayment = (string) array_key_first($paymentMethods);
+
 $activeNav = '';
 $pageTitle = 'Panier';
 include __DIR__ . '/includes/header.php';
 ?>
+<link rel="stylesheet" href="/assets/oauth.css">
 
 <section class="tight">
   <div class="wrap">
@@ -80,8 +139,20 @@ include __DIR__ . '/includes/header.php';
 
     <?php if (!shop_checkout_ready()): ?>
       <p class="publish-status" data-kind="error" style="margin-bottom:24px;">
-        Le paiement Stripe n'est pas encore configuré (clé absente dans config.php) — la commande ne pourra pas être finalisée pour l'instant.
+        Aucun moyen de paiement n'est configuré pour cette boutique — la commande ne pourra pas être finalisée pour l'instant.
       </p>
+    <?php endif; ?>
+
+    <?php
+    $paymentNotice = (string) ($_GET['paiement'] ?? '');
+    $paymentNotices = [
+        'refuse' => ['error', "Le paiement n'a pas abouti. Votre panier est conservé : vous pouvez réessayer ou choisir un autre moyen de paiement."],
+        'attente' => ['', "Le paiement est en cours de confirmation : ne payez pas une seconde fois. La commande sera mise à jour dès la confirmation du prestataire."],
+        'indisponible' => ['error', "Ce moyen de paiement n'est pas disponible pour le moment. Choisissez-en un autre."],
+        'erreur' => ['error', "Une erreur est survenue pendant la redirection vers le prestataire. Vous pouvez réessayer."],
+    ];
+    if (isset($paymentNotices[$paymentNotice])): [$noticeKind, $noticeText] = $paymentNotices[$paymentNotice]; ?>
+      <p class="publish-status" data-kind="<?= h($noticeKind) ?>" style="margin-bottom:24px;"><?= h($noticeText) ?></p>
     <?php endif; ?>
 
     <?php if (!$lines): ?>
@@ -89,7 +160,7 @@ include __DIR__ . '/includes/header.php';
     <?php else: ?>
       <div class="admin-block">
         <div class="product-admin-list">
-          <?php foreach ($lines as $line): $p = $line['product']; ?>
+          <?php foreach ($lines as $line): $p = $line['product']; $singlePiece = (int) $p['stock'] <= 1 && (int) $line['qty'] <= 1; ?>
             <div class="product-admin-row cart-line" style="grid-template-columns:90px 1fr auto;">
               <div class="admin-photo-preview"><?= product_media_html($p) ?></div>
               <div class="product-admin-fields">
@@ -98,15 +169,19 @@ include __DIR__ . '/includes/header.php';
                 <?php if ($line['qty'] > product_free_qty($p, $held)): ?>
                   <p class="desc" style="color:var(--accent);font-size:0.88rem;">En cours de paiement par un autre client : de nouveau disponible d'ici une demi-heure si ce paiement n'aboutit pas.</p>
                 <?php endif; ?>
-                <form method="post" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                  <?= cart_csrf_field() ?>
-                  <input type="hidden" name="ref" value="<?= h($p['ref']) ?>">
-                  <input type="hidden" name="action" value="qty">
-                  <label style="font-family:var(--font-mono);font-size:0.7rem;color:var(--ink-soft);">Quantité
-                    <input type="number" name="qty" value="<?= (int) $line['qty'] ?>" min="0" max="20" style="width:64px;margin-left:8px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:6px 8px;">
-                  </label>
-                  <button type="submit" class="btn-small">Mettre à jour</button>
-                </form>
+                <?php if ($singlePiece): ?>
+                  <p class="desc" style="color:var(--ink-soft);font-size:0.88rem;"><?= product_lot_qty($p) > 1 ? 'Lot unique' : 'Pièce unique' ?> — pas de quantité à choisir.</p>
+                <?php else: ?>
+                  <form method="post" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <?= cart_csrf_field() ?>
+                    <input type="hidden" name="ref" value="<?= h($p['ref']) ?>">
+                    <input type="hidden" name="action" value="qty">
+                    <label style="font-family:var(--font-mono);font-size:0.7rem;color:var(--ink-soft);">Quantité
+                      <input type="number" name="qty" value="<?= (int) $line['qty'] ?>" min="0" max="<?= max(1, min(20, (int) $p['stock'])) ?>" style="width:64px;margin-left:8px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:6px 8px;">
+                    </label>
+                    <button type="submit" class="btn-small">Mettre à jour</button>
+                  </form>
+                <?php endif; ?>
               </div>
               <div style="text-align:right;">
                 <p class="price" style="margin-bottom:10px;"><?= format_cents($line['total_cents']) ?></p>
@@ -134,114 +209,58 @@ include __DIR__ . '/includes/header.php';
         <?php if ($discountHint): ?>
           <p class="discount-hint" style="font-size:0.85rem;color:var(--ink-soft);margin:10px 0 0;">💡 <?= h($discountHint) ?></p>
         <?php endif; ?>
-        <div class="shipping-destination" style="margin-top:20px;padding-top:20px;border-top:1px solid var(--line);"<?= $pickupOnly ? ' hidden' : '' ?>>
-          <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Destination</span>
-          <form method="post" id="destination-form" class="dst-form" data-ban="<?= h(implode(',', $banEligibleCountries)) ?>">
-            <?= cart_csrf_field() ?>
-            <input type="hidden" name="action" value="set_destination">
-            <label style="font-family:var(--font-mono);font-size:0.7rem;color:var(--ink-soft);">Pays
-              <select name="country" id="destination-country" style="display:block;margin-top:6px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px;min-width:220px;">
-                <option value="FR"<?= $destCountry === 'FR' ? ' selected' : '' ?>>France (métropole & Corse)</option>
-                <?php
-                  $countryGroups = [];
-                  foreach (shipping_countries() as $code => [$label, $zone]) {
-                      $countryGroups[$zone][$code] = $label;
+        <?php
+          require_once __DIR__ . '/includes/customers.php';
+          require_once __DIR__ . '/includes/legal.php';
+          $cc = (array) ($_SESSION['checkout_contact'] ?? []);
+          $custSess = customer_session();
+          $custAcc = $custSess ? customer_account($custSess['email']) : null;
+          $lastContact = cart_contact_cookie_get();
+          $ccFirst = (string) ($cc['first_name'] ?? '');
+          $ccLast = (string) ($cc['last_name'] ?? '');
+          $ccName = (string) ($cc['name'] ?? ($custAcc['name'] ?? ($custSess['name'] ?? '')));
+          if ($ccFirst === '' && $ccLast === '' && $ccName !== '') [$ccFirst, $ccLast] = contact_name_parts($ccName);
+          if ($ccFirst === '') $ccFirst = (string) ($lastContact['first_name'] ?? '');
+          if ($ccLast === '') $ccLast = (string) ($lastContact['last_name'] ?? '');
+          $ccFirst = mb_substr($ccFirst, 0, 40);
+          $ccLast = mb_substr($ccLast, 0, 40);
+          $ccEmail = (string) ($cc['email'] ?? '');
+          if ($ccEmail === '') $ccEmail = (string) ($custSess['email'] ?? ($lastContact['email'] ?? ''));
+          $ccPhone = (string) ($cc['phone'] ?? '');
+          if ($ccPhone === '') $ccPhone = $custAcc ? customer_phone_display((string) $custAcc['phone']) : (string) ($lastContact['phone'] ?? '');
+          // Un compte ouvert par un réseau social n'a pas encore de mot de passe : la case « créer mon compte » reste utile.
+          $socialNeedsPassword = $custSess && $custAcc && empty($custAcc['password_hash']);
+          $socialButtons = !$custSess ? oauth_buttons_html('customer', ['next' => '/cart.php'], false) : '';
+          $countryOptionsHtml = static function (string $selected): string {
+              $html = '<option value="FR"' . ($selected === 'FR' ? ' selected' : '') . '>France (métropole &amp; Corse)</option>';
+              $groups = [];
+              foreach (shipping_countries() as $code => [$label, $zone]) $groups[$zone][$code] = $label;
+              foreach ($groups as $zoneKey => $countries) {
+                  $html .= '<optgroup label="' . h(shipping_zones()[$zoneKey] ?? $zoneKey) . '">';
+                  foreach ($countries as $code => $label) {
+                      $html .= '<option value="' . h($code) . '"' . ($selected === $code ? ' selected' : '') . '>' . h($label) . '</option>';
                   }
-                ?>
-                <?php foreach ($countryGroups as $zoneKey => $countries): ?>
-                  <optgroup label="<?= h(shipping_zones()[$zoneKey] ?? $zoneKey) ?>">
-                    <?php foreach ($countries as $code => $label): ?>
-                      <option value="<?= h($code) ?>"<?= $destCountry === $code ? ' selected' : '' ?>><?= h($label) ?></option>
-                    <?php endforeach; ?>
-                  </optgroup>
-                <?php endforeach; ?>
-              </select>
-            </label>
-
-            <label id="address-search-wrap" class="dst-search" style="position:relative;">
-              Rechercher mon adresse
-              <input type="text" id="address-search" placeholder="Tapez votre adresse…" autocomplete="off" enterkeyhint="search" value="">
-              <div id="address-suggestions" class="address-suggestions" hidden></div>
-            </label>
-            <button type="button" class="btn-small" id="geo-locate" title="Retrouver votre adresse grâce à la position de votre appareil">📍 Me localiser</button>
-            <div class="dst-grid">
-              <label class="dst-wide">Adresse (numéro et rue) <span class="cc-req" aria-hidden="true">*</span>
-                <input type="text" name="address_line1" id="address-line1" value="<?= h($destLine1) ?>" maxlength="120" autocomplete="address-line1" placeholder="12 rue de Rivoli">
-              </label>
-              <label class="dst-wide">Complément d'adresse
-                <input type="text" name="address_line2" id="address-line2" value="<?= h($destLine2) ?>" maxlength="120" autocomplete="address-line2" placeholder="Bâtiment, étage, digicode, lieu-dit…">
-              </label>
-              <label>Code postal <span class="cc-req" aria-hidden="true">*</span>
-                <input type="text" name="postal_code" id="postal-code-value" value="<?= h($destPostalCode) ?>" maxlength="12" autocomplete="postal-code" inputmode="text" placeholder="75004">
-              </label>
-              <label>Ville <span class="cc-req" aria-hidden="true">*</span>
-                <input type="text" name="address_city" id="address-city" value="<?= h($destCity) ?>" maxlength="80" autocomplete="address-level2" placeholder="Paris">
-              </label>
-            </div>
-            <input type="hidden" name="address_label" id="address-label-value" value="<?= h($destAddress) ?>">
-            <button type="submit" class="btn-small">Actualiser la zone de livraison</button>
-          </form>
-          <?php if (isset($ccErr['addr'])): ?><em class="cc-err" role="alert" id="addr-err"><?= h($ccErr['addr']) ?></em><?php endif; ?>
-          <p id="geo-status" class="geo-status" role="status" aria-live="polite"><?= $destAddress !== '' ? 'Adresse retenue : ' . h($destAddress) : '' ?></p>
-          <p style="font-size:0.78rem;color:var(--ink-soft);margin-top:10px;">
-            Zone tarifaire détectée : <strong><?= h(shipping_zones()[$destZone] ?? $destZone) ?></strong>
-            <?php if ($destZone === 'corse'): ?> — les codes postaux 20xxx sont reconnus comme Corse.<?php endif; ?>
-          </p>
-        </div>
-
+                  $html .= '</optgroup>';
+              }
+              return $html;
+          };
+          $buyerSummary = implode(', ', array_filter([$buyerLine1, trim($buyerPostalCode . ' ' . $buyerCity)]));
+          unset($_SESSION['checkout_contact_errors']);
+        ?>
         <form method="post" action="/checkout.php" id="checkout-form" style="margin-top:24px;">
           <?= cart_csrf_field() ?>
-          <?php foreach (["dest_country", "dest_line1", "dest_line2", "dest_postal", "dest_city"] as $dk): ?><input type="hidden" name="<?= $dk ?>" value=""><?php endforeach; ?>
-          <div class="shipping-choice" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
-            <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Livraison</span>
 
-            <label class="shipping-choice-option">
-              <input type="radio" name="shipping_choice" value="pickup" data-price-cents="0" checked>
-              <span><?= h($content['pickup_label']) ?></span>
-              <span class="shipping-choice-price">Gratuit</span>
-            </label>
-
-            <?php if ($pickupOnly): ?>
-              <p class="pickup-only-note" style="font-size:0.9rem;color:var(--ink-soft);margin-top:8px;"><?= h(pickup_only_message($content)) ?> Pas de livraison pour <?= count($lines) > 1 ? 'ces articles' : 'cet article' ?>.</p>
-            <?php elseif ($carrierRates): ?>
-              <?php foreach ($carrierRates as $rate): ?>
-                <label class="shipping-choice-option">
-                  <input type="radio" name="shipping_choice" value="rate-<?= (int) $rate['id'] ?>" data-price-cents="<?= (int) $rate['price_cents'] ?>">
-                  <span>
-                    <?= h($rate['carrier_name']) ?> — <?= h($rate['service_name']) ?>
-                    <?php if ($rate['delivery_delay'] !== ''): ?><span style="color:var(--ink-soft);font-size:0.82rem;"> (<?= h($rate['delivery_delay']) ?>)</span><?php endif; ?>
-                  </span>
-                  <span class="shipping-choice-price"><?= h(format_cents((int) $rate['price_cents'])) ?></span>
-                </label>
-              <?php endforeach; ?>
-            <?php else: ?>
-              <label class="shipping-choice-option">
-                <input type="radio" name="shipping_choice" value="flat" data-price-cents="<?= (int) $flatFeeCents ?>">
-                <span><?= h($content['shipping_label']) ?></span>
-                <span class="shipping-choice-price"><?= h($content['shipping_fee']) ?></span>
-              </label>
-            <?php endif; ?>
-
-            <p style="font-size:0.78rem;color:var(--ink-soft);margin-top:10px;">Le mode choisi ici est présélectionné à l'étape de paiement — vous pourrez encore en changer juste avant de payer.</p>
-          </div>
-
-          <?php
-            require_once __DIR__ . '/includes/customers.php';
-            require_once __DIR__ . '/includes/legal.php';
-            $cc = (array) ($_SESSION['checkout_contact'] ?? []);
-            $custSess = customer_session();
-            $custAcc = $custSess ? customer_account($custSess['email']) : null;
-            $ccEmail = (string) ($cc['email'] ?? ($custSess['email'] ?? ''));
-            $ccName = (string) ($cc['name'] ?? ($custAcc['name'] ?? ($custSess['name'] ?? '')));
-            $ccPhone = (string) ($cc['phone'] ?? ($custAcc ? customer_phone_display((string) $custAcc['phone']) : ''));
-            unset($_SESSION['checkout_contact_errors']);
-          ?>
           <div class="checkout-contact" id="checkout-contact" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
             <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Vos coordonnées</span>
-            <?php if ($custSess): ?><p class="cc-note">Connecté·e en tant que <strong><?= h($custSess['email']) ?></strong> — <a href="/compte.php">mon compte</a>.</p><?php endif; ?>
+            <?php if ($custSess): ?><p class="cc-note">Connecté·e en tant que <strong><?= h($custSess['email']) ?></strong><?= $custSess['provider'] !== 'password' ? ' (' . h(OAUTH_PROVIDERS[$custSess['provider']]['label'] ?? $custSess['provider']) . ')' : '' ?> — <a href="/compte.php">mon compte</a>.</p><?php endif; ?>
             <div class="cc-grid">
-              <label>Nom et prénom
-                <input type="text" name="contact_name" value="<?= h($ccName) ?>" maxlength="80" autocomplete="name" placeholder="Marie Dupont">
+              <label>Prénom <span class="cc-req" aria-hidden="true">*</span>
+                <input type="text" name="contact_first_name" value="<?= h($ccFirst) ?>" required maxlength="40" autocomplete="given-name" placeholder="Marie"<?= isset($ccErr['first_name']) ? ' aria-invalid="true"' : '' ?>>
+                <?php if (isset($ccErr['first_name'])): ?><em class="cc-err" role="alert"><?= h($ccErr['first_name']) ?></em><?php endif; ?>
+              </label>
+              <label>Nom <span class="cc-req" aria-hidden="true">*</span>
+                <input type="text" name="contact_last_name" value="<?= h($ccLast) ?>" required maxlength="40" autocomplete="family-name" placeholder="Dupont"<?= isset($ccErr['last_name']) ? ' aria-invalid="true"' : '' ?>>
+                <?php if (isset($ccErr['last_name'])): ?><em class="cc-err" role="alert"><?= h($ccErr['last_name']) ?></em><?php endif; ?>
               </label>
               <label>Téléphone <span class="cc-req" aria-hidden="true">*</span>
                 <input type="tel" name="contact_phone" value="<?= h($ccPhone) ?>" required maxlength="30" autocomplete="tel" inputmode="tel" placeholder="06 12 34 56 78"<?= isset($ccErr['phone']) ? ' aria-invalid="true"' : '' ?>>
@@ -254,23 +273,126 @@ include __DIR__ . '/includes/header.php';
                 <?php if (isset($ccErr['email'])): ?><em class="cc-err" role="alert"><?= h($ccErr['email']) ?></em><?php endif; ?>
               </label>
             </div>
-            <label class="cc-check"><input type="checkbox" name="ship_other" value="1" id="ship-other"<?= !empty($cc['ship_other']) ? ' checked' : '' ?>>
-              <span>La livraison est pour une autre personne (cadeau, proche…) : indiquer son nom et son téléphone</span></label>
-            <div class="cc-grid" id="ship-other-fields" style="margin-top:12px;"<?= empty($cc['ship_other']) ? ' hidden' : '' ?>>
-              <label>Nom du destinataire <span class="cc-req" aria-hidden="true">*</span>
-                <input type="text" name="ship_name" value="<?= h((string) ($cc['ship_name'] ?? '')) ?>" maxlength="80" autocomplete="off" placeholder="Paul Martin"<?= isset($ccErr['ship_name']) ? ' aria-invalid="true"' : '' ?>>
-                <?php if (isset($ccErr['ship_name'])): ?><em class="cc-err" role="alert"><?= h($ccErr['ship_name']) ?></em><?php endif; ?>
+            <div class="buyer-address dst-form" id="buyer-address" data-ban="<?= h(implode(',', $banEligibleCountries)) ?>">
+              <span class="eyebrow" style="font-size:0.85rem;display:block;margin:18px 0 10px;">Votre adresse <span class="cc-req" aria-hidden="true">*</span></span>
+              <label>Pays <span class="cc-req" aria-hidden="true">*</span>
+                <select name="buyer_country" id="buyer-country" style="display:block;margin-top:6px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px;min-width:220px;">
+                  <?= $countryOptionsHtml($buyerCountry) ?>
+                </select>
               </label>
-              <label>Téléphone du destinataire <span class="cc-req" aria-hidden="true">*</span>
-                <input type="tel" name="ship_phone" value="<?= h((string) ($cc['ship_phone'] ?? '')) ?>" maxlength="30" autocomplete="off" inputmode="tel" placeholder="06 98 76 54 32"<?= isset($ccErr['ship_phone']) ? ' aria-invalid="true"' : '' ?>>
-                <small>Pour le transporteur. L'adresse de livraison se saisit à l'étape de paiement : elle peut être différente de la vôtre.</small>
-                <?php if (isset($ccErr['ship_phone'])): ?><em class="cc-err" role="alert"><?= h($ccErr['ship_phone']) ?></em><?php endif; ?>
-              </label>
+              <div class="dst-grid">
+                <label class="dst-wide">Adresse (numéro, rue, complément) <span class="cc-req" aria-hidden="true">*</span>
+                  <div id="address-search-wrap" style="position:relative;">
+                    <input type="text" name="buyer_line1" id="address-line1" value="<?= h($buyerLine1) ?>" required maxlength="120" autocomplete="address-line1" enterkeyhint="search" placeholder="Tapez votre adresse…"<?= isset($ccErr['buyer_addr']) ? ' aria-invalid="true"' : '' ?>>
+                    <div id="address-suggestions" class="address-suggestions" hidden></div>
+                  </div>
+                </label>
+                <label>Code postal <span class="cc-req" aria-hidden="true">*</span>
+                  <input type="text" name="buyer_postal" id="postal-code-value" value="<?= h($buyerPostalCode) ?>" required maxlength="12" autocomplete="postal-code" inputmode="text" placeholder="75004"<?= isset($ccErr['buyer_addr']) ? ' aria-invalid="true"' : '' ?>>
+                </label>
+                <label>Ville <span class="cc-req" aria-hidden="true">*</span>
+                  <input type="text" name="buyer_city" id="address-city" value="<?= h($buyerCity) ?>" required maxlength="80" autocomplete="address-level2" placeholder="Paris"<?= isset($ccErr['buyer_addr']) ? ' aria-invalid="true"' : '' ?>>
+                </label>
+              </div>
+              <button type="button" class="btn-small" id="geo-locate" title="Retrouver votre adresse grâce à la position de votre appareil">📍 Me localiser</button>
+              <input type="hidden" name="buyer_label" id="address-label-value" value="<?= h($buyerAddressLabel) ?>">
+              <p id="geo-status" class="geo-status" role="status" aria-live="polite"><?= $buyerAddressLabel !== '' ? 'Adresse retenue : ' . h($buyerAddressLabel) : '' ?></p>
+              <?php if (isset($ccErr['buyer_addr'])): ?><em class="cc-err" role="alert" id="addr-err"><?= h($ccErr['buyer_addr']) ?></em><?php endif; ?>
             </div>
+            <p class="cc-note" style="font-size:0.78rem;color:var(--ink-soft);">Vos coordonnées sont mémorisées sur cet appareil pendant 6 mois pour préremplir vos prochaines commandes. <a href="<?= h(legal_url('confidentialite')) ?>" target="_blank" rel="noopener">En savoir plus</a>.</p>
+          </div>
+
+          <div class="shipping-choice" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
+            <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Livraison</span>
+            <?php foreach ($shippingChoices as $opt): ?>
+              <label class="shipping-choice-option">
+                <input type="radio" name="shipping_choice" value="<?= h($opt['key']) ?>" data-price-cents="<?= (int) $opt['price'] ?>"<?= $uiChoice === $opt['key'] ? ' checked' : '' ?>>
+                <span>
+                  <?= h($opt['label']) ?>
+                  <?php if ($opt['detail'] !== ''): ?><span style="color:var(--ink-soft);font-size:0.82rem;"> (<?= h($opt['detail']) ?>)</span><?php endif; ?>
+                </span>
+                <span class="shipping-choice-price"><?= $opt['price'] > 0 ? h(format_cents($opt['price'])) : 'Gratuit' ?></span>
+              </label>
+            <?php endforeach; ?>
+            <?php if ($pickupOnly): ?>
+              <p class="pickup-only-note" style="font-size:0.9rem;color:var(--ink-soft);margin-top:8px;"><?= h(pickup_only_message($content)) ?> Pas de livraison pour <?= count($lines) > 1 ? 'ces articles' : 'cet article' ?>.</p>
+            <?php endif; ?>
+            <p style="font-size:0.78rem;color:var(--ink-soft);margin-top:10px;">Le mode choisi ici est celui qui sera facturé et utilisé pour la commande — vérifiez-le avant de payer.</p>
+          </div>
+
+          <?php if (!$pickupOnly): ?>
+          <div class="delivery-address dst-form checkout-contact" id="delivery-address"<?= $deliverySelected ? '' : ' hidden' ?>>
+            <span class="eyebrow" style="font-size:0.9rem;display:block;">Adresse de livraison</span>
+            <p style="font-size:0.82rem;color:var(--ink-soft);margin:0;" id="delivery-summary"><?= $shipOther ? 'Le colis part à l’adresse du destinataire ci-dessous.' : 'Livraison à votre adresse' . ($buyerSummary !== '' ? ' : <strong>' . h($buyerSummary) . '</strong>' : ' (renseignez-la plus haut).') ?></p>
+            <label class="cc-check"><input type="checkbox" name="ship_other" value="1" id="ship-other"<?= $shipOther ? ' checked' : '' ?>>
+              <span>Livrer à une autre adresse ou à une autre personne (cadeau, proche…)</span></label>
+            <div id="ship-other-fields"<?= $shipOther ? '' : ' hidden' ?>>
+              <div class="cc-grid" style="margin-bottom:12px;">
+                <label>Nom du destinataire <span class="cc-req" aria-hidden="true">*</span>
+                  <input type="text" name="ship_name" value="<?= h((string) ($cc['ship_name'] ?? '')) ?>" maxlength="80" autocomplete="off" placeholder="Paul Martin"<?= isset($ccErr['ship_name']) ? ' aria-invalid="true"' : '' ?>>
+                  <?php if (isset($ccErr['ship_name'])): ?><em class="cc-err" role="alert"><?= h($ccErr['ship_name']) ?></em><?php endif; ?>
+                </label>
+                <label>Téléphone du destinataire <span class="cc-req" aria-hidden="true">*</span>
+                  <input type="tel" name="ship_phone" value="<?= h((string) ($cc['ship_phone'] ?? '')) ?>" maxlength="30" autocomplete="off" inputmode="tel" placeholder="06 98 76 54 32"<?= isset($ccErr['ship_phone']) ? ' aria-invalid="true"' : '' ?>>
+                  <small>Pour joindre la personne qui reçoit le colis.</small>
+                  <?php if (isset($ccErr['ship_phone'])): ?><em class="cc-err" role="alert"><?= h($ccErr['ship_phone']) ?></em><?php endif; ?>
+                </label>
+              </div>
+              <label>Pays du destinataire
+                <select name="dest_country" id="destination-country" style="display:block;margin-top:6px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px;min-width:220px;">
+                  <?= $countryOptionsHtml($destCountry) ?>
+                </select>
+              </label>
+              <div class="dst-grid">
+                <label class="dst-wide">Adresse du destinataire (numéro, rue, complément) <span class="cc-req" aria-hidden="true">*</span>
+                  <input type="text" name="dest_line1" id="dest-line1" value="<?= h($destLine1) ?>" maxlength="120" autocomplete="address-line1" placeholder="12 rue de Rivoli, bâtiment B"<?= isset($ccErr['addr']) ? ' aria-invalid="true"' : '' ?>>
+                </label>
+                <label>Code postal <span class="cc-req" aria-hidden="true">*</span>
+                  <input type="text" name="dest_postal" id="dest-postal" value="<?= h($destPostalCode) ?>" maxlength="12" autocomplete="postal-code" inputmode="text" placeholder="75004"<?= isset($ccErr['addr']) ? ' aria-invalid="true"' : '' ?>>
+                </label>
+                <label>Ville <span class="cc-req" aria-hidden="true">*</span>
+                  <input type="text" name="dest_city" id="dest-city" value="<?= h($destCity) ?>" maxlength="80" autocomplete="address-level2" placeholder="Paris"<?= isset($ccErr['addr']) ? ' aria-invalid="true"' : '' ?>>
+                </label>
+              </div>
+              <?php if (isset($ccErr['addr'])): ?><em class="cc-err" role="alert" id="addr-err"><?= h($ccErr['addr']) ?></em><?php endif; ?>
+            </div>
+            <button type="submit" class="btn-small" id="address-refresh" name="action" value="set_destination" formaction="/cart.php" formnovalidate>Actualiser la zone de livraison</button>
+            <p style="font-size:0.78rem;color:var(--ink-soft);margin:0;">Zone tarifaire détectée : <strong><?= h(shipping_zones()[$destZone] ?? $destZone) ?></strong><?php if ($destZone === 'corse'): ?> — les codes postaux 20xxx sont reconnus comme Corse.<?php endif; ?></p>
+          </div>
+          <?php endif; ?>
+
+          <?php if (!$custSess || $socialNeedsPassword || $socialButtons !== ''): ?>
+          <div class="checkout-contact" id="checkout-account" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
+            <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Mon compte</span>
             <?php if (!$custSess): ?>
               <label class="cc-check"><input type="checkbox" name="create_account" value="1"<?= !empty($cc['create_account']) ? ' checked' : '' ?>>
-                <span>Créer mon compte client (je recevrai un e-mail pour choisir mon mot de passe) — pour suivre mes commandes et commander plus vite. <a href="/compte.php">J'ai déjà un compte</a></span></label>
+                <span>Créer mon compte client (je recevrai un e-mail pour choisir mon mot de passe) — pour suivre mes commandes et commander plus vite. <a href="/compte.php?next=cart">J'ai déjà un compte</a></span></label>
+            <?php elseif ($socialNeedsPassword): ?>
+              <label class="cc-check"><input type="checkbox" name="create_account" value="1"<?= !empty($cc['create_account']) ? ' checked' : '' ?>>
+                <span>Créer mon compte client (je recevrai un e-mail pour choisir mon mot de passe) — pour me connecter sans réseau social.</span></label>
             <?php endif; ?>
+            <?php if ($socialButtons !== ''): ?>
+              <p class="cc-note" style="margin:14px 0 8px;">…ou créez votre compte avec un réseau social :</p>
+              <?= $socialButtons ?>
+              <p class="cc-note" style="font-size:0.78rem;">Avec un réseau social, nous ne recevons que votre nom et votre adresse e-mail.</p>
+            <?php endif; ?>
+          </div>
+          <?php endif; ?>
+
+          <?php if (count($paymentMethods) > 1): ?>
+          <div class="checkout-contact" id="checkout-payment" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
+            <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Moyen de paiement</span>
+            <?php foreach ($paymentMethods as $methodKey => $methodLabel): ?>
+              <label class="cc-check"><input type="radio" name="payment_method" value="<?= h($methodKey) ?>"<?= $selectedPayment === $methodKey ? ' checked' : '' ?>>
+                <span><?= h($methodLabel) ?></span></label>
+            <?php endforeach; ?>
+            <p class="cc-note" style="font-size:0.78rem;color:var(--ink-soft);margin-top:6px;">Vous serez redirigé vers la page sécurisée du prestataire choisi.</p>
+          </div>
+          <?php elseif ($paymentMethods): ?>
+            <input type="hidden" name="payment_method" value="<?= h((string) array_key_first($paymentMethods)) ?>">
+          <?php endif; ?>
+
+          <div class="checkout-contact" id="checkout-terms" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
             <label class="cc-check"><input type="checkbox" name="accept_terms" value="1" required<?= isset($ccErr['terms']) ? ' aria-invalid="true"' : '' ?>>
               <span>J'ai lu et j'accepte les <a href="<?= h(legal_url('cgv')) ?>" target="_blank" rel="noopener">conditions générales de vente</a>, les <a href="<?= h(legal_url('cgu')) ?>" target="_blank" rel="noopener">conditions d'utilisation</a> et la <a href="<?= h(legal_url('confidentialite')) ?>" target="_blank" rel="noopener">politique de confidentialité</a>. <span class="cc-req" aria-hidden="true">*</span></span></label>
             <?php if (isset($ccErr['terms'])): ?><em class="cc-err" role="alert"><?= h($ccErr['terms']) ?></em><?php endif; ?>
@@ -290,63 +412,75 @@ include __DIR__ . '/includes/header.php';
 
 <script>
 (function () {
-  var banEligible = <?= json_encode($banEligibleCountries) ?>;
-  var countrySelect = document.getElementById('destination-country');
-  var addressWrap = document.getElementById('address-search-wrap');
-  var addressInput = document.getElementById('address-search');
-  var suggestionsBox = document.getElementById('address-suggestions');
+  var countrySelect = document.getElementById('buyer-country');
   var postalValue = document.getElementById('postal-code-value');
+  var deliveryBlock = document.getElementById('delivery-address');
+  var refreshButton = document.getElementById('address-refresh');
+  var shipOther = document.getElementById('ship-other');
+  var shipOtherFields = document.getElementById('ship-other-fields');
+  var deliverySummary = document.getElementById('delivery-summary');
+  var buyerFields = ['address-line1', 'postal-code-value', 'address-city'].map(function (id) { return document.getElementById(id); }).filter(Boolean);
 
-  function usesAutocomplete() {
-    return countrySelect && banEligible.indexOf(countrySelect.value) !== -1;
+  // Recalcul de la zone tarifaire sans valider les autres champs (bouton formnovalidate).
+  function refreshZone() {
+    if (refreshButton) refreshButton.click();
   }
 
-  function syncFieldVisibility() {
-    if (!countrySelect) return;
-    var auto = usesAutocomplete();
-    addressWrap.hidden = !auto;
+  function buyerSummary() {
+    var line1 = document.getElementById('address-line1'), postal = document.getElementById('postal-code-value'), city = document.getElementById('address-city');
+    var street = line1 ? line1.value.trim() : '', rest = postal && city ? (postal.value.trim() + ' ' + city.value.trim()).trim() : '';
+    return [street, rest].filter(Boolean).join(', ');
   }
 
-  var destinationForm = document.getElementById('destination-form');
+  function syncDeliverySummary() {
+    if (!deliverySummary) return;
+    if (shipOther && shipOther.checked) {
+      deliverySummary.textContent = 'Le colis part à l’adresse du destinataire ci-dessous.';
+      return;
+    }
+    var summary = buyerSummary();
+    deliverySummary.innerHTML = 'Livraison à votre adresse' + (summary ? ' : <strong>' + summary.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }) + '</strong>' : ' (renseignez-la plus haut).');
+  }
+
+  function syncShipOther() {
+    if (!shipOther || !shipOtherFields) return;
+    var on = shipOther.checked && !shipOther.disabled;
+    shipOtherFields.hidden = !on;
+    shipOtherFields.querySelectorAll('input, select').forEach(function (i) { i.required = on; });
+    syncDeliverySummary();
+  }
+
+  // Le destinataire (nom, téléphone, adresse) n'est demandé que si le colis part ailleurs que chez l'acheteur.
+  function syncDelivery() {
+    var checked = document.querySelector('input[name="shipping_choice"]:checked');
+    var delivery = !!checked && checked.value !== 'pickup';
+    if (deliveryBlock) deliveryBlock.hidden = !delivery;
+    if (shipOther) { shipOther.disabled = !delivery; if (!delivery) shipOther.checked = false; }
+    syncShipOther();
+  }
 
   if (countrySelect) {
-    countrySelect.addEventListener('change', function () {
-      syncFieldVisibility();
-      // Le pays seul suffit à déterminer la zone tarifaire (sauf pour la
-      // France, où le code postal distingue Corse et métropole) — pas besoin
-      // d'attendre un clic sur "Actualiser" pour refléter le changement.
-      if (destinationForm) destinationForm.submit();
-    });
-    syncFieldVisibility();
+    countrySelect.addEventListener('change', refreshZone);   // le pays seul fixe la zone (sauf Corse, distinguée par le code postal)
   }
+  if (postalValue) postalValue.addEventListener('change', refreshZone);
+  buyerFields.forEach(function (input) { input.addEventListener('input', syncDeliverySummary); });
 
-  if (postalValue) {
-    // Le code postal fixe la zone tarifaire : envoi du formulaire (qui garde aussi l'adresse saisie) dès qu'il change.
-    postalValue.addEventListener('change', function () { if (destinationForm) destinationForm.submit(); });
-  }
-
-  // Au passage à la caisse, l'adresse affichée dans « Destination » (même non « actualisée ») part avec le formulaire de paiement.
-  var checkoutForm = document.getElementById('checkout-form');
-  if (checkoutForm) checkoutForm.addEventListener('submit', function () {
-    var map = { dest_country: 'destination-country', dest_line1: 'address-line1', dest_line2: 'address-line2', dest_postal: 'postal-code-value', dest_city: 'address-city' };
-    Object.keys(map).forEach(function (k) { var src = document.getElementById(map[k]), dst = checkoutForm.elements[k]; if (src && dst) dst.value = src.value; });
-  });
-
-  var subtotalEl = document.getElementById('cart-grand-total');
   var radios = document.querySelectorAll('input[name="shipping_choice"]');
-  if (subtotalEl && radios.length) {
+  var subtotalEl = document.getElementById('cart-grand-total');
+  if (subtotalEl) {
     var subtotalCents = parseInt(subtotalEl.dataset.subtotalCents, 10) || 0;
-    function formatCents(cents) {
+    var formatCents = function (cents) {
       return (cents / 100).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' €';
-    }
-    function updateTotal() {
+    };
+    var updateTotal = function () {
       var checked = document.querySelector('input[name="shipping_choice"]:checked');
-      var shippingCents = checked ? (parseInt(checked.dataset.priceCents, 10) || 0) : 0;
-      subtotalEl.textContent = formatCents(subtotalCents + shippingCents);
-    }
-    radios.forEach(function (r) { r.addEventListener('change', updateTotal); });
+      subtotalEl.textContent = formatCents(subtotalCents + (checked ? (parseInt(checked.dataset.priceCents, 10) || 0) : 0));
+    };
+    radios.forEach(function (r) { r.addEventListener('change', function () { syncDelivery(); updateTotal(); }); });
     updateTotal();
   }
+  if (shipOther) shipOther.addEventListener('change', syncShipOther);
+  syncDelivery();
 })();
 </script>
 
@@ -367,13 +501,49 @@ include __DIR__ . '/includes/header.php';
   .checkout-contact .cc-check input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
   .checkout-contact .cc-err { display: block; color: #b3261e; font-family: var(--font-body); font-size: 0.82rem; font-style: normal; margin-top: 4px; }
   .checkout-contact .cc-note { font-size: 0.88rem; margin: 0 0 12px; } .checkout-contact .cc-req { color: #b3261e; }
+  .delivery-address[hidden], .checkout-contact .cc-grid[hidden] { display: none !important; }
+  #checkout-account .oauth-box { max-width: 340px; }
 </style>
 <script>
-(function () {   // « Livraison pour une autre personne » : champs du destinataire affichés et exigés seulement si la case est cochée
-  var box = document.getElementById('ship-other'), wrap = document.getElementById('ship-other-fields');
-  if (!box || !wrap) return;
-  function sync() { wrap.hidden = !box.checked; wrap.querySelectorAll('input').forEach(function (i) { i.required = box.checked; }); }
-  box.addEventListener('change', sync); sync();
+(function () {   // Coordonnées mémorisées dès la saisie : préremplies à la prochaine visite, même sans commande envoyée
+  var form = document.getElementById('checkout-form');
+  if (!form) return;
+  var cookieName = <?= json_encode(cart_contact_cookie_name()) ?>;
+  var cookiePath = <?= json_encode(tenant_base_path() . '/') ?>;
+  var fields = { contact_first_name: 'first_name', contact_last_name: 'last_name', contact_email: 'email', contact_phone: 'phone' };
+
+  function readCookie() {
+    var prefix = cookieName + '=';
+    var parts = document.cookie.split('; ');
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].indexOf(prefix) === 0) {
+        try { var data = JSON.parse(decodeURIComponent(parts[i].slice(prefix.length))); return data && typeof data === 'object' ? data : {}; } catch (e) { return {}; }
+      }
+    }
+    return {};
+  }
+
+  function save() {
+    var data = readCookie();
+    Object.keys(fields).forEach(function (name) {
+      var input = form.elements[name];
+      if (!input) return;
+      var value = input.value.trim();
+      if (value !== '') data[fields[name]] = value; else delete data[fields[name]];
+    });
+    if (!Object.keys(data).length) {
+      document.cookie = cookieName + '=; path=' + cookiePath + '; max-age=0; SameSite=Lax';
+      return;
+    }
+    document.cookie = cookieName + '=' + encodeURIComponent(JSON.stringify(data)) + '; path=' + cookiePath + '; max-age=' + (<?= CART_CONTACT_COOKIE_DAYS ?> * 86400) + '; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+  }
+
+  Object.keys(fields).forEach(function (name) {
+    var input = form.elements[name];
+    if (!input) return;
+    input.addEventListener('change', save);
+    input.addEventListener('blur', save);
+  });
 })();
 </script>
 <script src="/assets/cart-address.js?v=<?= (int) @filemtime(__DIR__ . '/assets/cart-address.js') ?>" defer></script>

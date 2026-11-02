@@ -175,6 +175,7 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
           <div><strong><?= e($r['shop_name'] !== '' ? $r['shop_name'] : '(nom pas encore choisi)') ?></strong> <span class="pill sent"><?= e(saas_offer_badge($r)) ?></span> <span class="pill done">Payée</span>
             <small class="meta"><?= e($r['email']) ?> · payée le <?= e($dt((int) ($r['payment']['paid_at'] ?? $r['created']))) ?></small></div>
           <?php if ($serviceQuoteLabels = saas_service_quote_names((array) ($r['service_quotes'] ?? []))): ?><p class="meta">Prestations demandées : <?= e(implode(', ', $serviceQuoteLabels)) ?> — à chiffrer</p><?php endif; ?>
+          <?php if ($pluginNames = saas_plugin_interest_names((array) ($r['plugins'] ?? []))): ?><p class="meta">Plugins cochés à l'inscription : <?= e(implode(', ', $pluginNames)) ?> — à activer après la création</p><?php endif; ?>
           <?php if (!empty($r['error'])): ?><p class="flash" data-kind="error" style="margin:0"><?= e($r['error']) ?></p><?php endif; ?>
           <div class="row">
             <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="id" value="<?= e($r['id']) ?>"><input type="hidden" name="action" value="resend"><button class="btn small" type="submit">Renvoyer le lien de création</button></form>
@@ -206,6 +207,7 @@ $dt = static fn (int $t): string => date('d/m/Y à H:i', $t);
               <?php if ($r['status'] === 'approved' && !empty($r['shop_url'])): ?> · <a href="<?= e($r['shop_url']) ?>" target="_blank" rel="noopener">ouvrir la boutique</a><?php endif; ?>
               <?php $serviceQuoteLabels = saas_service_quote_names((array) ($r['service_quotes'] ?? [])); ?>
               <?php if ($serviceQuoteLabels): ?><br><small class="meta">Prestations demandées : <?= e(implode(', ', $serviceQuoteLabels)) ?> — à chiffrer</small><?php endif; ?>
+              <?php if ($pluginNames = saas_plugin_interest_names((array) ($r['plugins'] ?? []))): ?><br><small class="meta">Plugins cochés à l'inscription : <?= e(implode(', ', $pluginNames)) ?> — à activer</small><?php endif; ?>
               <?php if ($r['status'] === 'rejected' && !empty($r['reason'])): ?><br><small class="meta">Motif : <?= e($r['reason']) ?></small><?php endif; ?></span>
             <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="id" value="<?= e($r['id']) ?>"><input type="hidden" name="action" value="forget"><button class="btn small" type="submit">Retirer de la liste</button></form>
           </div>

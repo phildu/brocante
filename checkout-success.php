@@ -8,10 +8,31 @@ if (!shop_sales_enabled()) {
 }
 
 $sessionId = (string) ($_GET['session_id'] ?? '');
+$orderId = (int) ($_GET['order_id'] ?? 0);
+$sig = (string) ($_GET['sig'] ?? '');
 $order = null;
 $error = null;
 
-if ($sessionId === '') {
+if ($sessionId === '' && $orderId > 0) {
+    // Commande payée chez Monetico ou PayPal : le lien signé remplace la
+    // session (Monetico revient par un POST sans cookie SameSite=Lax).
+    $stmt = db()->prepare('SELECT * FROM orders WHERE id = ?');
+    $stmt->execute([$orderId]);
+    $candidate = $stmt->fetch();
+    if (!$candidate) {
+        $error = 'Commande introuvable.';
+    } else {
+        $provider = payment_provider_of($candidate);
+        if ($provider === 'stripe' || !payment_return_token_valid($orderId, $provider, $sig)) {
+            $error = "Ce lien de commande n'est pas valide.";
+        } elseif ($candidate['status'] !== 'paid') {
+            $error = "Le paiement n'a pas encore été confirmé par " . payment_provider_label($provider) . ". Si vous venez de payer, patientez un instant puis rechargez cette page.";
+        } else {
+            $order = $candidate;
+            if (in_array($orderId, checkout_own_orders(), true)) cart_clear();
+        }
+    }
+} elseif ($sessionId === '') {
     $error = "Aucune commande à afficher.";
 } else {
     try {
@@ -52,14 +73,22 @@ include __DIR__ . '/includes/header.php';
           </div>
         <?php endforeach; ?>
         <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
-          <span>Livraison</span>
-          <span class="price"><?= $order['shipping_cents'] > 0 ? format_cents((int) $order['shipping_cents']) : 'Offerte' ?></span>
+          <span><?= order_is_pickup($order) ? 'Retrait sur place' : 'Livraison' ?></span>
+          <span class="price"><?= $order['shipping_cents'] > 0 ? format_cents((int) $order['shipping_cents']) : 'Gratuit' ?></span>
         </div>
         <div style="display:flex;justify-content:space-between;padding-top:16px;font-weight:600;">
           <span>Total</span>
           <span class="price"><?= format_cents((int) $order['amount_total']) ?></span>
         </div>
-        <?php if (!empty($order['shipping_address'])): ?>
+        <?php if (order_is_pickup($order)): ?>
+          <div style="margin-top:18px;padding:12px 14px;border:1px solid var(--line);">
+            <p style="margin:0;font-size:0.85rem;">Retrait sur place<?= !empty($order['shipping_label']) ? ' — ' . h($order['shipping_label']) : '' ?></p>
+            <?php if (!empty($order['pickup_code'])): ?>
+              <p style="margin:6px 0 0;font-size:0.95rem;">Code de retrait : <strong style="letter-spacing:0.14em;"><?= h($order['pickup_code']) ?></strong></p>
+            <?php endif; ?>
+            <p style="margin:6px 0 0;font-size:0.82rem;color:var(--ink-soft);">Nous vous préviendrons dès que la commande sera prête. Présentez ce code au vendeur.</p>
+          </div>
+        <?php elseif (!empty($order['shipping_address'])): ?>
           <p style="margin-top:18px;font-size:0.85rem;color:var(--ink-soft);">Expédition à : <?= h($order['shipping_address']) ?></p>
         <?php endif; ?>
       </div>

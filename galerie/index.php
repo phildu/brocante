@@ -10,6 +10,7 @@ require_once __DIR__ . '/../includes/gallery-bourse.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/promo.php';
 require_once __DIR__ . '/../includes/banner-slides.php';
+require_once __DIR__ . '/../includes/gallery-types.php';
 
 function e($s): string
 {
@@ -270,6 +271,9 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   .gcard .band { height: 10px; }
   .gcard div.in { padding: 18px; } .gcard h3 { margin: 0 0 6px; font-family: var(--display); font-size: 1.25rem; } .gcard p { margin: 0; color: var(--ink-soft); }
 
+  .gwrap { position: relative; display: flex; }
+  .gwrap > .gcard { flex: 1; }
+
   .hero-share { margin: 18px 0 0; } .hero .share-btn { color: inherit; border-color: color-mix(in srgb, currentColor 55%, transparent); } .hero .share-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); border-color: currentColor; }
   .hero.a-center .hero-share { display: flex; justify-content: center; }
   .share-dialog { --bg: var(--surface, #fff); }
@@ -315,7 +319,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <p class="hero-share"><?= share_button_html($origin . '/galerie/', 'Galeries commerciales', "Des commerçants réunis au même endroit.") ?>
       <a class="alt" href="/galerie/admin.php" rel="nofollow" style="margin-left:14px;">Se connecter</a></p>
     <?php if ($canSignup): ?>
-      <p class="hero-cta"><a class="btn-cta" href="/inscription/">Créer ma boutique</a>
+      <p class="hero-cta"><a class="btn-cta" href="/inscription/">Je veux vendre en ligne</a>
         <span class="from"><?= e(saas_grid_from_text(saas_grid(''))) ?> · sans engagement</span><a class="alt" href="/#formules">Voir les tarifs</a></p>
     <?php endif; ?>
   </div></header>
@@ -323,9 +327,17 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <section>
       <?php if ($galleries): ?>
         <div class="galleries">
-          <?php foreach ($galleries as $g): ?>
-            <a class="gcard" href="/galerie/<?= e($g['slug']) ?>/"><div class="band" style="background:<?= e($g['accent']) ?>"></div>
-              <div class="in"><h3><?= e($g['name']) ?></h3><p><?= e($g['tagline'] ?: count($g['members']) . ' commerce' . (count($g['members']) > 1 ? 's' : '')) ?></p></div></a>
+          <?php foreach ($galleries as $g):
+              $gType = gt_of($g);
+              $gCount = count($g['members'] ?? []);
+              $gDesc = trim((string) ($g['tagline'] ?? ''));
+              if ($gDesc === '') $gDesc = $gCount . ' ' . ($gCount > 1 ? $gType['vocab']['members'] : $gType['vocab']['member']);
+          ?>
+            <div class="gwrap lp-hover">
+              <a class="gcard" href="/galerie/<?= e($g['slug']) ?>/"><div class="band" style="background:<?= e($g['accent']) ?>"></div>
+                <div class="in"><h3><?= e($g['name']) ?></h3><p><?= e($g['tagline'] ?: $gCount . ' ' . ($gCount > 1 ? $gType['vocab']['members'] : $gType['vocab']['member'])) ?></p></div></a>
+              <?= gt_landing_preview_html((string) $gType['key'], $gDesc, 'Aperçu ' . $gType['name']) ?>
+            </div>
           <?php endforeach; ?>
         </div>
       <?php else: ?>
@@ -367,7 +379,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       </div>
     <?php endif; ?>
     <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
-      <p class="hero-cta"><a class="btn-cta" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><?= e($st['cta_label'] !== '' ? $st['cta_label'] : 'Créer ma boutique dans cette galerie') ?></a>
+      <p class="hero-cta"><a class="btn-cta" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><?= e($st['cta_label'] !== '' ? $st['cta_label'] : 'Je veux vendre en ligne') ?></a>
         <span class="from"><?= e(saas_grid_from_text($ebTier ? eb_discounted_grid(saas_grid($gallery['slug']), $ebTier) : saas_grid($gallery['slug']))) ?> · sans engagement</span><a class="alt" href="#cta-boutique">En savoir plus</a></p>
     <?php endif; ?>
   </div></header>
@@ -404,7 +416,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           </div>
         <?php endforeach; ?>
         <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
-          <a class="shop join" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><span>＋ <?= e($vocab['join_cta'] ?? 'Votre boutique ici') ?><br><small style="font-weight:400;color:var(--ink-soft)">Rejoindre <?= e($gallery['name']) ?></small></span></a>
+          <a class="shop join" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><span>＋ <?= e($vocab['join_cta'] ?? 'Je veux vendre en ligne') ?><br><small style="font-weight:400;color:var(--ink-soft)">Rejoindre <?= e($gallery['name']) ?></small></span></a>
         <?php endif; ?>
       </div>
     </section>
@@ -826,10 +838,10 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       <li>Vous arrivez directement sur votre boutique, à votre image (modèle au choix)</li>
       <li>Photos depuis le téléphone, fiches préparées par l'IA</li></ul>
   </div>
-  <div class="act"><a class="btn-cta" href="<?= e($ctaUrl) ?>">Créer ma boutique</a>
+  <div class="act"><a class="btn-cta" href="<?= e($ctaUrl) ?>">Je veux vendre en ligne</a>
     <span class="from"><?= e(saas_grid_from_text(saas_grid($slug))) ?> · mensuel ou annuel · sans engagement</span></div>
 </div></section>
-<a class="cta-float" href="<?= e($ctaUrl) ?>">Créer ma boutique</a>
+<a class="cta-float" href="<?= e($ctaUrl) ?>">Je veux vendre en ligne</a>
 <?php endif; ?>
 
 <?php if ($slug !== '' && $gallery && $gallery['published']): ?>
@@ -865,5 +877,6 @@ fetch('/galerie/contact.php',{method:'POST',headers:{Accept:'application/json'},
   <?php endif; ?>
 </div></footer>
 <?= banner_slides_script() ?>
+<?= gt_landing_preview_assets() ?>
 </body>
 </html>

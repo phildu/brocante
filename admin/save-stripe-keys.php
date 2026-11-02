@@ -12,6 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // devoir tout recoller à chaque fois qu'on modifie un autre réglage.
 $secret = trim((string) ($_POST['stripe_secret'] ?? ''));
 $publishable = trim((string) ($_POST['stripe_publishable'] ?? ''));
+$webhook = trim((string) ($_POST['stripe_webhook'] ?? ''));
+$webhookInvalid = $webhook !== '' && !preg_match('/^whsec_[A-Za-z0-9]+$/', $webhook);
+if ($webhookInvalid) $webhook = '';
 
 // Les deux champs sont facilement inversés au collage (les deux clés se
 // ressemblent, l'autofill du navigateur s'y mêle parfois) — le préfixe les
@@ -34,12 +37,18 @@ if ($publishable !== '') {
     file_put_contents($secretsDir . '/stripe_publishable.key', $publishable);
     chmod($secretsDir . '/stripe_publishable.key', 0600);
 }
+if ($webhook !== '') {
+    file_put_contents($secretsDir . '/stripe_webhook.key', $webhook);
+    chmod($secretsDir . '/stripe_webhook.key', 0600);
+}
 
-if ($swapped) {
+if ($webhookInvalid) {
+    flash_set('Le secret de webhook doit commencer par whsec_ — il n’a pas été enregistré.', 'error');
+} elseif ($swapped) {
     flash_set('Vos deux clés étaient inversées (secrète/publiable) — corrigé automatiquement et enregistré.');
-} elseif ($secret !== '' || $publishable !== '') {
+} elseif ($secret !== '' || $publishable !== '' || $webhook !== '') {
     $warn = ($secret !== '' && !str_starts_with($secret, 'sk_')) || ($publishable !== '' && !str_starts_with($publishable, 'pk_'));
-    flash_set('Clés Stripe enregistrées.' . ($warn ? ' Attention : une des deux ne commence pas par le préfixe attendu (sk_/pk_), vérifiez le dashboard Stripe.' : ''), $warn ? 'error' : 'ok');
+    flash_set('Réglages Stripe enregistrés.' . ($warn ? ' Attention : une des deux clés ne commence pas par le préfixe attendu (sk_/pk_), vérifiez le dashboard Stripe.' : ''), $warn ? 'error' : 'ok');
 } else {
     flash_set('Aucune clé fournie — rien de changé.');
 }

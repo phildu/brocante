@@ -100,6 +100,10 @@ $pre = (string) ($_GET['offre'] ?? $_POST['offre'] ?? 'test');
   label { display: grid; gap: 4px; font-weight: 600; font-size: .9rem; } input[type=text], input[type=email], select { padding: 11px; border: 1px solid #cfc6b4; border-radius: 8px; font: inherit; background: #fff; }
   button { padding: 13px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
   .err { color: #a4361b; font-weight: 600; } .ok { background: #e8f3ec; border: 1px solid #b9d9c4; border-radius: 10px; padding: 16px; } .info { background: #fff6e0; border: 1px solid #ecd9a0; border-radius: 10px; padding: 14px; } small.n { color: var(--soft); }
+  .type-hover { position: relative; display: flex; }
+  .type-hover > .offer { flex: 1; }
+  .type-hover:hover > .offer, .type-hover:focus-within > .offer { border-color: var(--accent); }
+  .type-hover > .offer:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -110,13 +114,16 @@ $pre = (string) ($_GET['offre'] ?? $_POST['offre'] ?? 'test');
   <p class="lede">Chaque type a son vocabulaire, ses fonctionnalités et ses tarifs. Vous pourrez ensuite tout personnaliser.</p>
   <div class="offers">
     <?php foreach ($types as $tk => $t): $cheapest = null; foreach ($t['offers'] as $o) if ($o['active'] && $o['month_cents'] > 0 && ($cheapest === null || $o['month_cents'] < $cheapest)) $cheapest = $o['month_cents']; ?>
-      <a class="offer" href="/galerie/creer.php?type=<?= e($tk) ?>" style="text-decoration:none;color:inherit;">
-        <span style="font-size:2rem;"><?= e($t['emoji']) ?></span>
-        <h2><?= e($t['name']) ?></h2>
-        <p style="margin:0;color:var(--soft);font-weight:400;"><?= e($t['tagline']) ?></p>
-        <small style="color:var(--soft);">Test gratuit<?= $cheapest ? ' · puis dès ' . e(go_price_text($cheapest)) : '' ?></small>
-        <strong style="color:var(--accent);"><?= e($t['vocab']['create_cta']) ?> →</strong>
-      </a>
+      <div class="type-hover lp-hover">
+        <a class="offer" href="/galerie/creer.php?type=<?= e($tk) ?>" style="text-decoration:none;color:inherit;">
+          <span style="font-size:2rem;"><?= e($t['emoji']) ?></span>
+          <h2><?= e($t['name']) ?></h2>
+          <p style="margin:0;color:var(--soft);font-weight:400;"><?= e($t['tagline']) ?></p>
+          <small style="color:var(--soft);">Test gratuit<?= $cheapest ? ' · puis dès ' . e(go_price_text($cheapest)) : '' ?></small>
+          <strong style="color:var(--accent);"><?= e($t['vocab']['create_cta']) ?> →</strong>
+        </a>
+        <?= gt_landing_preview_html((string) $tk, (string) $t['vocab']['create_intro'], 'Aperçu ' . $t['name']) ?>
+      </div>
     <?php endforeach; ?>
   </div>
   <?php else: ?>
@@ -165,5 +172,6 @@ $pre = (string) ($_GET['offre'] ?? $_POST['offre'] ?? 'test');
   <?php endif; ?>
   <?php endif; ?>
 </main>
+<?= gt_landing_preview_assets() ?>
 </body>
 </html>

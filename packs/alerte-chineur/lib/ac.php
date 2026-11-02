@@ -39,7 +39,7 @@ function ac_url(string $path): string
 function ac_mail(string $to, string $subject, string $body): bool
 {
     require_once dirname(__DIR__, 3) . '/includes/password-reset.php';
-    return password_reset_mail($to, $subject, $body);
+    return password_reset_mail($to, $subject, $body, 'alerte-chineur');
 }
 
 /** Inscription d'un visiteur. -> [message, erreur]. */

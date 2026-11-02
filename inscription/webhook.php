@@ -16,6 +16,33 @@ $event = json_decode($payload, true);
 if (!is_array($event) || empty($event['type'])) exit('événement illisible');
 
 $obj = $event['data']['object'] ?? [];
+
+// Commande d'une boutique payée en Connect (l'événement appartient au compte
+// relié) : retrouve le commerce, bascule sur sa base et applique le parcours
+// commande (paiement, remboursement, litige).
+if (!empty($event['account'])) {
+    $shopMeta = (string) (($obj['metadata']['shop'] ?? '') ?: '');
+    $isSessionEvent = in_array($event['type'] ?? '', ['checkout.session.completed', 'checkout.session.async_payment_succeeded',
+        'checkout.session.async_payment_failed', 'checkout.session.expired'], true) && (($obj['metadata']['type'] ?? '') === 'shop_order');
+    $isChargeEvent = in_array($event['type'] ?? '', ['charge.refunded', 'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed'], true);
+    if ($isSessionEvent || $isChargeEvent) {
+        require_once dirname(__DIR__) . '/includes/functions.php';
+        $slug = $shopMeta !== '' ? $shopMeta : order_shop_for_account((string) $event['account']);
+        if ($slug !== '') {
+            try {
+                $res = order_apply_connect_event($slug, $event);
+                error_log('webhook stripe connect ' . $slug . ' ' . $event['type'] . ' → ' . $res);
+            } catch (Throwable $ex) {
+                error_log('webhook stripe connect ' . $slug . ' : ' . $ex->getMessage());
+                http_response_code(500);
+                exit('commande à vérifier');
+            }
+            http_response_code(200);
+            exit('ok');
+        }
+    }
+}
+
 $origin = saas_origin();
 saas_event('webhook', ['note' => (string) $event['type'], 'actor' => 'stripe']);
 

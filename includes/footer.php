@@ -44,6 +44,7 @@
   <span id="quick-preview-name"></span>
 </div>
 <?= plugin_render('site_footer') ?>
+<?php require_once __DIR__ . '/feedback.php'; echo feedback_widget_html(); ?>
 <script>
 (function () {
   // Écran de bienvenue (accueil, mobile) — une seule fois par session, pour

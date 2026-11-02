@@ -48,6 +48,7 @@ final class DomainShopTest extends TestCase
         $this->assertSame('En attente de paiement', domain_shop_state_label('awaiting_payment'));
         $this->assertSame('Commande en cours', domain_shop_state_label('ordering'));
         $this->assertSame('Domaine commandé', domain_shop_state_label('ordered'));
+        $this->assertSame('Paiement de test (aucune commande OVH)', domain_shop_state_label('test_paid'));
         $this->assertSame('Vérification en cours', domain_shop_state_label('paid_needs_review'));
         $this->assertSame('État inconnu', domain_shop_state_label('nawak'));
     }
@@ -158,6 +159,167 @@ final class DomainShopTest extends TestCase
             $this->assertSame('refus', $ex->getMessage());
         }
         $this->assertSame('ordered', domain_shop_load('brocante-test')['purchase']['state']);
+    }
+
+    /** État d'une commande en attente de paiement, prête à recevoir une session Stripe. */
+    private function awaitingPayment(): void
+    {
+        domain_shop_update('plateforme', static fn (array $d): array => ['purchase' => [
+            'state' => 'awaiting_payment',
+            'quote' => ['domain' => 'brocs.fr', 'amount_cents' => 1200, 'ovh_cents' => 1000, 'cart_id' => '42'],
+            'owner' => ['email' => 'titulaire@example.com'],
+            'stripe_session' => 'cs_test_demo',
+            'created_at' => time(),
+        ]] + $d);
+    }
+
+    private function paidSession(array $overrides = []): array
+    {
+        return $overrides + [
+            'id' => 'cs_test_demo',
+            'payment_status' => 'paid',
+            'livemode' => false,
+            'client_reference_id' => 'domaine:plateforme',
+            'amount_total' => 1200,
+            'currency' => 'eur',
+            'metadata' => ['type' => 'shop_domain_purchase', 'shop' => 'plateforme', 'domain' => 'brocs.fr', 'cart_id' => '42'],
+        ];
+    }
+
+    public function testTestModePaymentIsRecordedWithoutOvhOrder(): void
+    {
+        $this->awaitingPayment();
+        $result = domain_shop_apply_session($this->paidSession());
+        $this->assertSame('test', $result['state']);
+        $this->assertSame('test_paid', domain_shop_load('plateforme')['purchase']['state']);
+
+        $again = domain_shop_apply_session($this->paidSession());
+        $this->assertSame('already', $again['state']);
+        $this->assertSame('test_paid', $again['purchase']['state']);
+    }
+
+    public function testArchiveMovesFinishedPurchaseToHistory(): void
+    {
+        domain_shop_update('plateforme', static fn (array $d): array => ['purchase' => [
+            'state' => 'ordered',
+            'quote' => ['domain' => 'brocs.fr', 'amount_cents' => 1200],
+            'stripe_session' => 'cs_live_demo',
+            'ovh_order_id' => '9911',
+            'ordered_at' => time(),
+        ]] + $d);
+        domain_shop_archive_purchase('plateforme');
+        $data = domain_shop_load('plateforme');
+        $this->assertNull($data['purchase']);
+        $this->assertSame('brocs.fr', $data['history'][0]['quote']['domain']);
+        $this->assertSame('9911', $data['history'][0]['ovh_order_id']);
+        $this->assertNotEmpty($data['history'][0]['archived_at']);
+    }
+
+    public function testArchiveRefusesUnpaidPurchase(): void
+    {
+        $this->awaitingPayment();
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('confirmée par OVH');
+        domain_shop_archive_purchase('plateforme');
+    }
+
+    public function testArchivedSessionIsAlreadyApplied(): void
+    {
+        domain_shop_update('plateforme', static fn (array $d): array => [
+            'history' => [[
+                'state' => 'ordered',
+                'quote' => ['domain' => 'brocs.fr'],
+                'stripe_session' => 'cs_test_demo',
+                'archived_at' => time(),
+            ]],
+        ] + $d);
+        $result = domain_shop_apply_session($this->paidSession());
+        $this->assertSame('already', $result['state']);
+        $this->assertSame('ordered', $result['purchase']['state']);
+        $this->assertNull(domain_shop_load('plateforme')['purchase'], 'La commande archivée ne doit pas revenir dans l’état courant.');
+    }
+
+    private function orderedState(int $orderedAt, string $domain = 'brocs.fr'): array
+    {
+        return [
+            'state' => 'ordered',
+            'quote' => ['domain' => $domain, 'amount_cents' => 1099],
+            'ovh_order_id' => '9911',
+            'owner' => ['email' => 'marie@example.com'],
+            'ordered_at' => $orderedAt,
+        ];
+    }
+
+    public function testRenewalIsDueSixtyDaysBeforeTheAnniversary(): void
+    {
+        $now = time();
+        $purchase = $this->orderedState($now - 310 * 86400);
+        domain_shop_update('plateforme', static fn (array $d): array => ['purchase' => $purchase] + $d);
+        $due = domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now);
+        $this->assertCount(1, $due);
+        $this->assertSame('brocs.fr', $due[0]['domain']);
+        $this->assertSame('plateforme', $due[0]['slug']);
+        $this->assertSame('9911', $due[0]['order_id']);
+        $this->assertSame('marie@example.com', $due[0]['owner_email']);
+    }
+
+    public function testRenewalWaitsForTheWindow(): void
+    {
+        $now = time();
+        $purchase = $this->orderedState($now - 100 * 86400);
+        domain_shop_update('plateforme', static fn (array $d): array => ['purchase' => $purchase] + $d);
+        $this->assertSame([], domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now));
+    }
+
+    public function testRenewalCoversArchivedPurchases(): void
+    {
+        $now = time();
+        $history = [$this->orderedState($now - 400 * 86400, 'brocs.net')];
+        domain_shop_update('plateforme', static fn (array $d): array => ['history' => $history] + $d);
+        $due = domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now);
+        $this->assertCount(1, $due);
+        $this->assertSame('brocs.net', $due[0]['domain']);
+    }
+
+    public function testRenewalIsAcknowledgedOnce(): void
+    {
+        $now = time();
+        $purchase = $this->orderedState($now - 320 * 86400);
+        domain_shop_update('plateforme', static fn (array $d): array => ['purchase' => $purchase] + $d);
+        domain_shop_renewals_ack(domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now));
+        $this->assertSame([], domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now));
+    }
+
+    public function testRenewalFollowsTheNextAnniversaryAfterAcknowledgingTheFirst(): void
+    {
+        $now = time();
+        $purchase = $this->orderedState($now - 310 * 86400);
+        domain_shop_update('plateforme', static fn (array $d): array => ['purchase' => $purchase] + $d);
+        domain_shop_renewals_ack(domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now));
+        $this->assertSame([], domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now));
+        $next = domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now + 365 * 86400);
+        $this->assertCount(1, $next);
+        $this->assertGreaterThan($now + 300 * 86400, $next[0]['renews_at']);
+    }
+
+    public function testOldPurchasePointsToTheUpcomingAnniversary(): void
+    {
+        $now = time();
+        $purchase = $this->orderedState($now - 1050 * 86400);
+        domain_shop_update('plateforme', static fn (array $d): array => ['purchase' => $purchase] + $d);
+        $due = domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now);
+        $this->assertCount(1, $due);
+        $this->assertGreaterThan($now, $due[0]['renews_at']);
+        $this->assertLessThanOrEqual($now + DOMAIN_SHOP_RENEWAL_WINDOW, $due[0]['renews_at']);
+    }
+
+    public function testDryRunReminderMarksNothing(): void
+    {
+        $now = time();
+        $purchase = $this->orderedState($now - 310 * 86400);
+        domain_shop_update('plateforme', static fn (array $d): array => ['purchase' => $purchase] + $d);
+        $this->assertSame(1, domain_shop_renewal_remind(true, $now));
+        $this->assertCount(1, domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now));
     }
 
     public function testCorruptFileIsReadAsEmptyState(): void

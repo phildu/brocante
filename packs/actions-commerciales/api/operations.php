@@ -86,9 +86,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
             'before_cents' => $before,
             'after_cents' => $after,
         ];
-        if (in_array($op['status'], ['scheduled', 'running'], true)) {
-            $rows[array_key_last($rows)]['notices'] = aco_notice_stats($op);
-        }
+        $rows[array_key_last($rows)]['notices'] = aco_notice_stats($op);
     }
     plugin_json(['operations' => $rows, 'now' => time(), 'notice_sources' => aco_notice_sources(), 'notice_batch' => ACO_NOTICE_BATCH,
         'channel_labels' => aco_channel_labels()]);

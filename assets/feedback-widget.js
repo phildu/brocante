@@ -33,6 +33,7 @@
   var editor = root.querySelector('[data-fbw-editor]');
   var canvas = editor ? editor.querySelector('[data-fbw-canvas]') : null;
   var capturedFile = null;
+  var capturing = false;
   var editorImage = null;
   var strokes = [];
   var drawing = null;
@@ -309,11 +310,13 @@
   }
 
   function captureScreen() {
+    if (capturing) return; // évite d'empiler plusieurs demandes (le sélecteur macOS/Chrome reviendrait)
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
       setMessage('Capture d’écran indisponible dans ce navigateur : choisissez une image dans « Joindre une capture ».', 'error');
       if (shotInput) shotInput.click();
       return;
     }
+    capturing = true;
     setCaptureLabel('Choix de la fenêtre…');
     if (captureBtn) captureBtn.disabled = true;
     navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 2 }, audio: false })
@@ -335,10 +338,11 @@
       })
       .catch(function (error) {
         setMessage(error && error.name === 'NotAllowedError'
-          ? 'Capture annulée.'
+          ? 'Capture annulée ou refusée par le système. Autorisez la capture d’écran du navigateur (macOS : Réglages Système → Confidentialité et sécurité → Enregistrement de l’écran, puis relancez Chrome), ou joignez une image ci-dessous.'
           : 'Capture impossible : choisissez une image dans « Joindre une capture ».', 'error');
       })
       .finally(function () {
+        capturing = false;
         setCaptureLabel('Capturer l’écran');
         if (captureBtn) captureBtn.disabled = false;
       });

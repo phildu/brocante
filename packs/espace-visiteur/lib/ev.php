@@ -92,7 +92,7 @@ function ev_url(string $path): string
 function ev_mail(string $to, string $subject, string $body): bool
 {
     require_once dirname(__DIR__, 3) . '/includes/password-reset.php';
-    return password_reset_mail($to, $subject, $body);
+    return password_reset_mail($to, $subject, $body, 'espace-visiteur');
 }
 
 // --- Membres ---

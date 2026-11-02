@@ -167,9 +167,9 @@ function customer_send_link(string $email, string $name, string $phone, string $
     $url = shop_abs_url('/compte.php?a=lien&t=' . $token);
     $hello = trim($name) !== '' ? 'Bonjour ' . trim($name) . ",\n\n" : "Bonjour,\n\n";
     if ($kind === 'reset') {
-        password_reset_mail($email, 'Votre mot de passe — ' . $site, $hello . "Vous avez demandé à changer le mot de passe de votre compte {$site}. Choisissez-en un nouveau (lien valable 24 h) :\n$url\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message : rien ne change.\n\n{$site}\n");
+        password_reset_mail($email, 'Votre mot de passe — ' . $site, $hello . "Vous avez demandé à changer le mot de passe de votre compte {$site}. Choisissez-en un nouveau (lien valable 24 h) :\n$url\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message : rien ne change.\n\n{$site}\n", 'compte');
     } else {
-        password_reset_mail($email, 'Créez votre compte — ' . $site, $hello . "Pour finir la création de votre compte {$site} et choisir votre mot de passe (lien valable 24 h) :\n$url\n\nVous y retrouverez vos commandes et commanderez plus vite. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : aucun compte ne sera créé.\n\n{$site}\n");
+        password_reset_mail($email, 'Créez votre compte — ' . $site, $hello . "Pour finir la création de votre compte {$site} et choisir votre mot de passe (lien valable 24 h) :\n$url\n\nVous y retrouverez vos commandes et commanderez plus vite. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : aucun compte ne sera créé.\n\n{$site}\n", 'compte');
     }
     return [$generic, null];
 }

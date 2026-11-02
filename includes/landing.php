@@ -6,6 +6,7 @@
 require_once __DIR__ . '/saas.php';
 require_once __DIR__ . '/galleries.php';
 require_once __DIR__ . '/gallery-types.php';
+require_once __DIR__ . '/marges.php';
 
 function lp_e($v): string
 {
@@ -31,6 +32,18 @@ function lp_render(array $p): void
     $V = $type['vocab'];
     $create = '/galerie/creer.php?type=' . rawurlencode($type['key']);
     $offers = array_values(array_filter($type['offers'], static fn (array $o): bool => !empty($o['active'])));
+    $margePct = marge_pct($type['key']);
+    $margeOffer = null;
+    foreach ($offers as $candidate) {
+        if (marge_monthly_cents($candidate) !== null) { $margeOffer = $candidate; break; }
+    }
+    $roi = array_values((array) ($p['roi'] ?? []));
+    $margeMonthly = $margeOffer ? marge_monthly_cents($margeOffer) : null;
+    $breakEven = marge_break_even_cents($margeMonthly, $margePct);
+    if ($margeOffer && $breakEven) {
+        $roi[] = [saas_money($breakEven), 'de ventes par mois suffisent à couvrir l\'offre ' . $margeOffer['name']
+            . ' (' . saas_money((int) $margeMonthly) . ' / mois, à ' . $margePct . ' % de marge moyenne)'];
+    }
     $live = lp_live($type['key']);
     $members = 0;
     foreach ($live as $g) $members += count($g['members'] ?? []);
@@ -65,6 +78,8 @@ function lp_render(array $p): void
       .lp-roi li { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
       .lp-roi strong { display: block; font-family: var(--display); font-size: 1.9rem; line-height: 1.1; color: var(--accent); }
       .lp-roi span { color: var(--ink-soft); font-size: .9rem; }
+      .lp-breakeven { margin: 0 0 12px; font-size: .86rem; color: var(--ink-soft); }
+      .lp-breakeven strong { color: var(--accent); }
       .lp-faq { display: grid; gap: 10px; }
       .lp-faq details { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
       .lp-faq summary { cursor: pointer; font-weight: 600; }
@@ -155,6 +170,9 @@ function lp_render(array $p): void
               <p class="price"><?= $free ? 'Gratuit' : lp_e($eur((int) $o['month_cents'])) . ' <small>/ mois</small>' ?></p>
               <?php if (!$free && (int) $o['year_cents'] > 0): ?><p class="lede" style="margin:-8px 0 12px;font-size:.9rem">ou <?= lp_e($eur((int) $o['year_cents'])) ?> / an</p><?php endif; ?>
               <?php if ($free && (int) $o['trial_days'] > 0): ?><p class="lede" style="margin:-8px 0 12px;font-size:.9rem"><?= (int) $o['trial_days'] ?> jours d'essai, sans carte bancaire</p><?php endif; ?>
+              <?php if (($planBreakEven = marge_break_even_cents(marge_monthly_cents($o), $margePct)) !== null): ?>
+                <p class="lp-breakeven">≈ <strong><?= lp_e($eur($planBreakEven)) ?></strong> de ventes / mois à <?= (int) $margePct ?> % de marge</p>
+              <?php endif; ?>
               <ul>
                 <li>Jusqu'à <?= (int) $o['max_members'] ?> <?= lp_e($V['members']) ?></li>
                 <li>Plan et <?= lp_e($V['places']) ?> sur la page publique</li>
@@ -165,15 +183,16 @@ function lp_render(array $p): void
             </article>
           <?php endforeach; ?>
         </div>
-        <p class="lp-note">TVA non applicable, article 293 B du CGI. Le prix affiché est celui de la galerie ; les vendeurs qui ont leur propre boutique gardent leur abonnement et encaissent leurs ventes.</p>
+        <p class="lp-note">TVA non applicable, article 293 B du CGI. Le prix affiché est celui de la galerie ; les vendeurs qui ont leur propre boutique gardent leur abonnement et encaissent leurs ventes. Le chiffre d'affaires de rentabilité est calculé avec le taux de marge moyen du type de commerce (<?= (int) $margePct ?> %) : il donne un ordre de grandeur, pas une garantie de résultat.</p>
       </div></section>
 
       <section class="block" id="economie"><div class="wrap">
         <div class="sec-head"><p class="eyebrow">Le calcul</p><h2><?= lp_e($p['roi_title']) ?></h2></div>
         <ul class="lp-roi">
-          <?php foreach ($p['roi'] as [$value, $label]): ?><li><strong><?= lp_e($value) ?></strong><span><?= lp_e($label) ?></span></li><?php endforeach; ?>
+          <?php foreach ($roi as [$value, $label]): ?><li><strong><?= lp_e($value) ?></strong><span><?= lp_e($label) ?></span></li><?php endforeach; ?>
         </ul>
         <p class="lede"><?= lp_e($p['roi_text']) ?></p>
+        <?php if ($breakEven): ?><p class="lp-note">Chiffre d'affaires de rentabilité = prix de la formule ÷ taux de marge moyen (<?= (int) $margePct ?> % pour ce type). Exemple : <?= lp_e($eur((int) $margeMonthly)) ?> ÷ <?= (int) $margePct ?> % = <?= lp_e($eur($breakEven)) ?> de ventes par mois. La marge est la part du prix de vente qui reste après l'achat des pièces : une pièce achetée 20 € et revendue 50 € laisse 60 % de marge.</p><?php endif; ?>
       </div></section>
 
       <section class="block" id="exemples"><div class="wrap">

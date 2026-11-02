@@ -22,6 +22,11 @@
 
 .fbw [hidden] { display: none !important; }
 
+/* Sur les pages publiques, l'assistance vendeur (packs/assistance-vendeur)
+   occupe le même angle bas-droit : le widget de retour se pose au-dessus. */
+body:has(.av) .fbw { bottom: 76px; }
+body:has(.av) .fbw-panel { bottom: 130px; }
+
 .fbw-launch {
   display: inline-flex;
   align-items: center;

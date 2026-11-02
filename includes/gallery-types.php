@@ -14,6 +14,13 @@ require_once __DIR__ . '/gallery-offers.php';
 require_once __DIR__ . '/gallery-modules.php';
 
 const GT_DEFAULT = 'marchande';
+/** Page de présentation (landing) de chaque type d'origine : adresse, couleur et accroche. Une galerie personnalisée n'en a pas. */
+const GT_LANDING_META = [
+    'marchande' => ['/galerie-marchande/', '#6a4a86', 'Une seule adresse pour les commerces qui se recommandent entre eux.'],
+    'puces' => ['/marche-aux-puces/', '#2f6b4f', 'Vos emplacements numérotés, vos tarifs par zone, vos marchands présentés.'],
+    'vide-grenier' => ['/vide-greniers/', '#b5502e', 'Le vide-grenier se prépare en ligne, pas au téléphone.'],
+    'quartier' => ['/quartier-marchand/', '#3b5fa8', 'La rue, le quartier ou le village : une adresse qui rassemble ses commerces.'],
+];
 const GT_FEATURES = [
     'plan' => 'Plan d\'implantation (carte, zones, emplacements)',
     'tarifs' => 'Tarifs par zone',
@@ -263,6 +270,101 @@ function gt_of(array $gallery): array
 function gt_active(): array
 {
     return array_filter(gt_types(), static fn ($t) => $t['active']);
+}
+
+/** Adresse de la page de présentation d'un type ('' si le type n'en a pas : galerie personnalisée ou page déplacée). */
+function gt_landing_path(string $typeKey): string
+{
+    return (string) (GT_LANDING_META[$typeKey][0] ?? '');
+}
+
+/** Couleur et accroche de la page de présentation d'un type : ['path' => …, 'accent' => …, 'headline' => …]. */
+function gt_landing_meta(string $typeKey): array
+{
+    $meta = GT_LANDING_META[$typeKey] ?? null;
+    return $meta ? ['path' => $meta[0], 'accent' => $meta[1], 'headline' => $meta[2]] : [];
+}
+
+/**
+ * Aperçu de la page de présentation d'un type : bouton « Aperçu » et panneau (vignette, accroche, description, lien).
+ * À placer dans un conteneur .lp-hover ; les pages appellent gt_landing_preview_assets() une fois. '' si le type n'a pas de page.
+ */
+function gt_landing_preview_html(string $typeKey, string $description = '', string $label = 'Aperçu de la page'): string
+{
+    $meta = gt_landing_meta($typeKey);
+    if (!$meta) return '';
+    $type = gt_type($typeKey);
+    $e = static fn ($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+    $desc = trim($description) !== '' ? $description : (string) $type['tagline'];
+    return '<button class="lp-peek" type="button" aria-expanded="false">' . $e($label) . '</button>'
+        . '<div class="lp-pop" role="tooltip">'
+        . '<div class="lp-pop-mock" style="--lp:' . $e($meta['accent']) . '">'
+        . '<span class="lp-pop-band"></span><strong>' . $e($type['name']) . '</strong><i></i><i class="short"></i>'
+        . '<span class="lp-pop-cards"><b></b><b></b><b></b></span>'
+        . '<span class="lp-pop-cta">' . $e($type['vocab']['create_cta']) . '</span></div>'
+        . '<p class="lp-pop-head">' . $e($meta['headline']) . '</p>'
+        . '<p class="lp-pop-desc">' . $e(mb_strimwidth($desc, 0, 180, '…')) . '</p>'
+        . '<a class="lp-pop-link" href="' . $e($meta['path']) . '">Visiter la page de présentation ↗</a>'
+        . '</div>';
+}
+
+/** Styles et script de l'aperçu : une fois par page, avant </body>. */
+function gt_landing_preview_assets(): string
+{
+    return '<style>' . gt_landing_preview_css() . '</style>' . "\n" . '<script>' . gt_landing_preview_js() . '</script>';
+}
+
+function gt_landing_preview_css(): string
+{
+    return <<<'CSS'
+.lp-hover { position: relative; }
+.lp-hover:hover, .lp-hover:focus-within, .lp-hover.is-open { z-index: 20; }
+.lp-peek { position: absolute; top: 8px; right: 8px; z-index: 14; padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: .74rem; font-weight: 700; line-height: 1.2; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.10); }
+.lp-peek:hover, .lp-peek:focus-visible, .lp-hover.is-open .lp-peek { border-color: var(--accent); color: var(--accent); }
+.lp-pop { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 15; display: grid; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 22px 44px -20px rgba(0,0,0,.5); opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .16s, transform .16s, visibility .16s; pointer-events: none; text-align: left; }
+.lp-hover:hover .lp-pop, .lp-hover.is-open .lp-pop, .lp-hover:has(> a:focus-visible) .lp-pop, .lp-hover:has(.lp-peek:focus-visible) .lp-pop, .lp-hover:has(.lp-pop a:focus-visible) .lp-pop { opacity: 1; visibility: visible; transform: none; pointer-events: auto; }
+.lp-pop-mock { display: grid; gap: 6px; padding: 10px; border-radius: 8px; background: color-mix(in srgb, var(--lp) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--lp) 30%, var(--surface)); }
+.lp-pop-band { display: block; width: 30px; height: 6px; border-radius: 3px; background: var(--lp); }
+.lp-pop-mock strong { font-family: var(--display); font-size: 1.05rem; line-height: 1.1; color: var(--lp); }
+.lp-pop-mock i { display: block; width: 76%; height: 4px; border-radius: 2px; background: rgba(0,0,0,.16); }
+.lp-pop-mock i.short { width: 46%; }
+.lp-pop-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 2px; }
+.lp-pop-cards b { display: block; height: 24px; border-radius: 4px; background: var(--surface); border: 1px solid rgba(0,0,0,.12); }
+.lp-pop-cta { justify-self: start; margin-top: 2px; padding: 3px 9px; border-radius: 999px; background: var(--lp); color: #fff; font-size: .68rem; font-weight: 700; }
+.lp-pop-head { margin: 0; font-size: .86rem; font-weight: 700; line-height: 1.3; }
+.lp-pop-desc { margin: 0; font-size: .82rem; line-height: 1.45; color: var(--ink-soft); }
+.lp-pop-link { font-size: .84rem; font-weight: 700; color: var(--accent); text-decoration: none; }
+.lp-pop-link:hover { text-decoration: underline; }
+@media (hover: none) { .lp-hover:not(.is-open) .lp-pop { opacity: 0; visibility: hidden; transform: translateY(-4px); pointer-events: none; } }
+@media (prefers-reduced-motion: reduce) { .lp-pop { transition: none; } }
+CSS;
+}
+
+function gt_landing_preview_js(): string
+{
+    return <<<'JS'
+(function () {
+  function close(w) { w.classList.remove('is-open'); var b = w.querySelector('.lp-peek'); if (b) b.setAttribute('aria-expanded', 'false'); }
+  document.querySelectorAll('.lp-peek').forEach(function (btn) {
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      var w = btn.closest('.lp-hover');
+      if (!w) return;
+      var open = !w.classList.contains('is-open');
+      document.querySelectorAll('.lp-hover.is-open').forEach(function (o) { if (o !== w) close(o); });
+      w.classList.toggle('is-open', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
+  document.addEventListener('click', function (ev) {
+    document.querySelectorAll('.lp-hover.is-open').forEach(function (w) { if (!w.contains(ev.target)) close(w); });
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') document.querySelectorAll('.lp-hover.is-open').forEach(close);
+  });
+})();
+JS;
 }
 
 /** Mot du vocabulaire d'une galerie ou d'un type : gt_word($gallery, 'members'). */

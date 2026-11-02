@@ -32,8 +32,9 @@ return function (E2e $e): void {
         $fields = $e->formFields($res['body'], 'checkout');
         $e->check(($fields['csrf'] ?? '') !== '', 'csrf du checkout absent');
         $post = array_merge($fields, [
-            'shipping_choice' => 'pickup', 'contact_name' => 'Cliente Test',
+            'shipping_choice' => 'pickup', 'contact_first_name' => 'Cliente', 'contact_last_name' => 'Test',
             'contact_email' => 'e2e-client@example.com', 'contact_phone' => '0612345678',
+            'buyer_country' => 'FR', 'buyer_line1' => '12 rue de Rivoli', 'buyer_postal' => '75004', 'buyer_city' => 'Paris',
             'accept_terms' => '1', 'dest_country' => 'FR',
         ]);
         $res = $e->post('/e2e-boutique-a/checkout.php', $post, $client, true);
@@ -45,6 +46,7 @@ return function (E2e $e): void {
         $cs = basename((string) parse_url($res['location'], PHP_URL_PATH));
         $order = $e->db('e2e-boutique-a')->query("SELECT * FROM orders WHERE stripe_session_id = " . $e->db('e2e-boutique-a')->quote($cs))->fetch();
         $e->check($order !== false && $order['status'] === 'pending', 'commande pending absente de la base');
+        $e->check(($order['buyer_address'] ?? '') === '12 rue de Rivoli, 75004 Paris, FR', 'adresse de l acheteur non enregistrée : ' . ($order['buyer_address'] ?? '(absente)'));
         $e->check($order['payment_via'] === 'connect', 'le paiement ne passe pas par la plateforme (Connect)');
         return "session $cs, commande #{$order['id']} pending";
     });

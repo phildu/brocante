@@ -202,7 +202,7 @@ include __DIR__ . '/includes/header.php';
     <?php elseif ($view === 'register'): ?>
       <h1 style="font-size:2rem;margin:12px 0 8px;">Créer mon compte</h1>
       <p class="lede">Retrouvez vos commandes et commandez plus vite. Nous vous envoyons un e-mail pour confirmer votre adresse et choisir votre mot de passe.</p>
-      <form method="post" class="cpt-card">
+      <form method="post" class="cpt-card" id="register-form">
         <input type="hidden" name="action" value="register"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><?= $nextField ?>
         <input type="text" name="website" class="cpt-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
         <label>Nom et prénom<input type="text" name="name" maxlength="80" autocomplete="name" placeholder="Marie Dupont"></label>
@@ -210,8 +210,23 @@ include __DIR__ . '/includes/header.php';
         <label>Téléphone <span style="color:#b3261e;">*</span><input type="tel" name="phone" required maxlength="30" autocomplete="tel" inputmode="tel" placeholder="06 12 34 56 78"><small>Pour vous joindre à propos d'une livraison.</small></label>
         <label class="cpt-check"><input type="checkbox" name="accept_terms" value="1" required> <span>J'accepte les <a href="<?= h(legal_url('cgu')) ?>" target="_blank" rel="noopener">conditions d'utilisation</a> et la <a href="<?= h(legal_url('confidentialite')) ?>" target="_blank" rel="noopener">politique de confidentialité</a>.</span></label>
         <button class="btn btn-primary" type="submit">Recevoir le lien de confirmation</button>
-        <p class="cpt-links"><a href="/compte.php">J'ai déjà un compte</a></p>
+        <?php if ($social = oauth_buttons_html('customer', ['next' => $next], false)): ?>
+          <p class="oauth-note" style="margin-top:16px;">…ou créez votre compte avec un réseau social :</p>
+          <?= $social ?>
+        <?php endif; ?>
+        <p class="cpt-links"><a href="/compte.php<?= $next === '/cart.php' ? '?next=cart' : '' ?>">J'ai déjà un compte</a></p>
       </form>
+      <?php if ($social): ?>
+      <script>
+      (function () {   // Un compte créé par réseau social engage aussi les conditions d'utilisation.
+        var form = document.getElementById('register-form'), terms = form && form.querySelector('input[name="accept_terms"]');
+        if (!form || !terms) return;
+        var buttons = form.querySelectorAll('.oauth-btn');
+        function sync() { buttons.forEach(function (b) { b.disabled = !terms.checked; b.title = terms.checked ? '' : "Cochez d'abord la case des conditions."; }); }
+        terms.addEventListener('change', sync); sync();
+      })();
+      </script>
+      <?php endif; ?>
 
     <?php elseif ($view === 'forgot'): ?>
       <h1 style="font-size:2rem;margin:12px 0 8px;">Mot de passe oublié</h1>
@@ -250,6 +265,7 @@ include __DIR__ . '/includes/header.php';
         'hidden' => ['action' => 'login', 'csrf' => $csrf, 'next' => $next === '/cart.php' ? 'cart' : ''],
         'links' => [
           ['url' => '/compte.php?creer=1' . ($next === '/cart.php' ? '&next=cart' : ''), 'label' => 'Créer mon compte'],
+          ['url' => '/connexion.php', 'label' => 'Connexion unique (boutique, galerie, portail)'],
           ['url' => '/admin/login.php', 'label' => 'Connexion à l’administration'],
         ],
         'note' => 'Avec un réseau social, nous ne recevons que votre nom et votre adresse e-mail.',

@@ -299,7 +299,7 @@ function ga_stats(string $slug, int $days): array
 function ga_mail(string $to, string $subject, string $body): bool
 {
     require_once __DIR__ . '/saas.php';
-    return saas_mail($to, $subject, $body);
+    return saas_mail($to, $subject, $body, 'galerie');
 }
 
 /** Jeton signé d'un lien de désinscription (propre à l'installation, impossible à deviner). */

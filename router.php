@@ -30,8 +30,11 @@ if (preg_match('#^/packs(?:/|$)#', $packsPath)
     return true;
 }
 
-// Racine du domaine : la page d'accueil de la plateforme, quand le portail est présent (déploiement portail).
-if ($path === '/' && !getenv('TENANT') && is_file(__DIR__ . '/portail/index.php')) {
+// Racine du domaine : la page d'accueil de la plateforme, quand le portail est présent (déploiement portail)
+// et que l'hôte n'est pas le domaine propre d'un commerce (site_url sans chemin, ex. brocante.arrimage.com).
+require_once __DIR__ . '/includes/tenant.php';
+if ($path === '/' && !getenv('TENANT') && is_file(__DIR__ . '/portail/index.php')
+    && tenant_from_host() === '' && tenant_from_domain() === '') {
     $_SERVER['SCRIPT_NAME'] = '/accueil/index.php';
     require __DIR__ . '/accueil/index.php';
     return true;

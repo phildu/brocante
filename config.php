@@ -78,6 +78,12 @@ if (is_file(__DIR__ . '/config.local.php')) {
 
 function db(): PDO
 {
+    // Traitement d'un événement Stripe Connect pour une autre boutique : les
+    // fonctions du parcours commande lisent alors la base du commerce visé
+    // (voir order_apply_connect_event() dans includes/order-flow.php).
+    if (!empty($GLOBALS['db_pdo_override']) && $GLOBALS['db_pdo_override'] instanceof PDO) {
+        return $GLOBALS['db_pdo_override'];
+    }
     static $pdo = null;
     if ($pdo === null) {
         // Première visite d'un commerce dont la base n'existe pas encore (ex.
@@ -92,6 +98,10 @@ function db(): PDO
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
         $pdo->exec('PRAGMA foreign_keys = ON');
+        // Parcours commande (P0) : mode de livraison, retrait, remboursements,
+        // journal et idempotence des webhooks Stripe.
+        require_once __DIR__ . '/includes/order-flow.php';
+        order_ensure_schema($pdo);
         // Comptes (équipe, clients, prospects) : table créée si la base date d'avant.
         require_once __DIR__ . '/includes/accounts.php';
         accounts_ensure_schema($pdo);
@@ -146,8 +156,8 @@ CREATE TABLE IF NOT EXISTS cart_discounts (
 SQL);
         // Commandes payées par la plateforme (Stripe Connect, voir includes/connect.php) : mode de paiement et commission prélevée.
         $orderColumns = $pdo->query('PRAGMA table_info(orders)')->fetchAll(PDO::FETCH_COLUMN, 1);
-        // Coordonnées recueillies au panier : téléphone, acceptation des conditions (date et version des textes), demande de création de compte.
-        foreach (['payment_via' => 'TEXT', 'connect_fee_cents' => 'INTEGER', 'connect_gallery_cents' => 'INTEGER', 'phone' => 'TEXT', 'terms_at' => 'TEXT', 'terms_version' => 'TEXT', 'create_account' => 'INTEGER NOT NULL DEFAULT 0', 'ship_name' => 'TEXT', 'ship_phone' => 'TEXT', 'declared_address' => 'TEXT'] as $extraColumn => $extraType) {
+        // Coordonnées recueillies au panier : téléphone, adresse de l'acheteur, acceptation des conditions (date et version des textes), demande de création de compte.
+        foreach (['payment_via' => 'TEXT', 'connect_fee_cents' => 'INTEGER', 'connect_gallery_cents' => 'INTEGER', 'phone' => 'TEXT', 'terms_at' => 'TEXT', 'terms_version' => 'TEXT', 'create_account' => 'INTEGER NOT NULL DEFAULT 0', 'ship_name' => 'TEXT', 'ship_phone' => 'TEXT', 'declared_address' => 'TEXT', 'buyer_address' => 'TEXT'] as $extraColumn => $extraType) {
             if ($orderColumns && !in_array($extraColumn, $orderColumns, true)) $pdo->exec('ALTER TABLE orders ADD COLUMN ' . $extraColumn . ' ' . $extraType);
         }
         // Bases créées avant l'ajout du champ « Matières » des fiches.

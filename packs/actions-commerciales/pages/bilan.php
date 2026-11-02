@@ -41,6 +41,12 @@ $h = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
     $pct = $old > 0 ? (int) round((1 - $new / $old) * 100) : 0;
     $report = aco_sales_report($op);
     $share = $report['revenue_cents'] > 0 ? (int) round($report['op_revenue_cents'] * 100 / $report['revenue_cents']) : 0;
+    $openStats = ['sent' => 0, 'opened' => 0, 'opens' => 0, 'last_open' => 0];
+    try {
+        require_once dirname(__DIR__, 3) . '/includes/mail-tracking.php';
+        $openStats = mail_open_context_summary('aco:' . (int) $op['id']);
+    } catch (Throwable $e) {
+    }
     $statusLabels = ['scheduled' => 'programmée', 'running' => 'en cours', 'ended' => 'terminée', 'canceled' => 'annulée'];
     $label = trim((string) $op['label']) ?: aco_kind_label((string) $op['kind']);
     $stopped = (int) ($op['stopped_at'] ?? 0);
@@ -95,6 +101,9 @@ $h = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
   <div class="aco-kpi"><div class="v"><?= (int) $count ?></div><div class="l">pièce(s) réduite(s)</div></div>
   <div class="aco-kpi"><div class="v"><?= $h(aco_format($old)) ?></div><div class="l">valeur avant l'opération</div></div>
   <div class="aco-kpi"><div class="v"><?= $h(aco_format($new)) ?></div><div class="l">valeur au prix de l'opération (−<?= $pct ?> %)</div></div>
+  <?php if ((int) $openStats['sent'] > 0): ?>
+    <div class="aco-kpi"><div class="v"><?= (int) $openStats['opened'] ?></div><div class="l">annonce(s) ouverte(s) sur <?= (int) $openStats['sent'] ?> envoyée(s) · <?= (int) $openStats['opens'] ?> ouverture(s)</div></div>
+  <?php endif; ?>
 </div>
 
 <h2 style="font-size:1.05rem;margin:18px 0 6px;">Ventes de pièces de l'opération, par catégorie</h2>

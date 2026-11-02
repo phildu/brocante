@@ -20,4 +20,6 @@
 .picker .op { display: block; font-weight: 600; color: var(--ink); }
 .picker .op small { display: block; color: var(--ink-soft); font-size: .78rem; font-weight: 400; }
 .picker .op.py { display: none; }
-.picker:has(#pk-by:checked) .op.py { display: block; }
+.picker .lim.py { display: none; }
+.picker:has(#pk-by:checked) .op.py, .picker:has(#pk-by:checked) .lim.py { display: block; }
+.picker:has(#pk-by:checked) .lim.pm { display: none; }

@@ -916,13 +916,18 @@ Un dispositif distinct des retours par module (`includes/addons.php`) : il recue
 boutiques testeuses, avec une capture d'écran facultative, et les suit jusqu'à la réponse.
 
 - **Le widget** (`includes/feedback.php`, `assets/feedback-widget.*`, API `admin/feedback-api.php`) apparaît en bas à droite de
-  l'administration des boutiques couvertes (`includes/admin-nav.php`). Formulaire court (nature, gravité pour un bug, message
+  l'administration des boutiques couvertes (`includes/admin-nav.php`) et dans le pied de page public (`includes/footer.php`) pour un
+  **client connecté** à la boutique (`customer_session()`). Formulaire court (nature, gravité pour un bug, message
   dictable à la voix, capture), puis onglet **Mes retours** avec le statut et les réponses de l'équipe ; une pastille signale une
   réponse non lue, sans la marquer lue avant l'ouverture de l'onglet. L'onglet reçoit le module courant (`?p=`) et la page.
+  Un client ne voit que **ses** retours (même e-mail, même boutique) et son état de lecture reste dans sa session ; l'équipe voit
+  toute la boutique. Sur les pages publiques, l'assistance vendeur occupe le même angle : le widget se pose au-dessus d'elle.
 - **Capture annotée** : « Capturer l'écran » passe par `getDisplayMedia` (HTTPS requis : l'utilisateur choisit l'onglet ou la
   fenêtre), fige l'image dans un `<canvas>` puis ouvre l'éditeur intégré — crayon, cadre, flèche, quatre couleurs, annuler le
   dernier trait, tout effacer. Le PNG annoté (re-encodé en JPEG au-delà de 3 Mo) part avec le retour. À défaut de capture, on
-  choisit une image puis « Annoter l'image ». Aucune bibliothèque externe ; l'image ne quitte le navigateur qu'à l'envoi.
+  choisit une image puis « Annoter l'image ». Une seule demande de capture à la fois (drapeau `capturing`) : le refus côté
+  macOS (Réglages Système → Enregistrement de l'écran) affiche un message d'aide et propose le repli par fichier. Aucune
+  bibliothèque externe ; l'image ne quitte le navigateur qu'à l'envoi.
 - **Dictée** : bouton « Dicter » (API Web Speech, `fr-FR`, HTTPS + autorisation du micro). La transcription s'ajoute au message,
   les résultats intermédiaires s'affichent, le moteur relance après un silence, et le bouton est masqué si le navigateur ne la
   propose pas. Un refus du micro affiche un message sans bloquer le formulaire.
@@ -937,7 +942,8 @@ boutiques testeuses, avec une capture d'écran facultative, et les suit jusqu'à
   commerce ou compte). Comme pour les modules en test, planifier le script dans la tâche cron de l'hébergeur.
 - **Données et sécurité** : `data/saas/feedback.json` (écriture sous verrou, remplacement atomique), `feedback-settings.json`,
   `feedback-reminders.json` et `feedback-media/` ne sont jamais servis directement. Boutique forcée côté serveur, jeton CSRF pour
-  l'API, limite de 10 envois par heure et par boutique, doublons (< 3 min) fusionnés, 5 000 retours conservés au maximum.
+  l'API (jeton de la session d'administration, ou jeton propre au client), limite de 10 envois par heure et par boutique pour
+  l'équipe et de 5 par client, doublons (< 3 min) fusionnés entre retours d'un même auteur, 5 000 retours conservés au maximum.
   Tests : `tests/FeedbackTest.php` (`FEEDBACK_DATA_DIR` temporaire, e-mails neutralisés).
 
 ## Pack Communication : la médiathèque, l'éditeur et la publication d'electroboy80, portés tels quels (plugin `communication`)

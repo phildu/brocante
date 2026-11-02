@@ -45,7 +45,7 @@ function ms_settings_save(array $in): void
 function ms_mail(string $to, string $subject, string $body, string $replyTo = ''): bool
 {
     require_once dirname(__DIR__, 3) . '/includes/password-reset.php';
-    return password_reset_mail($to, $subject, $body . ($replyTo !== '' ? "\n\n(Répondre à : $replyTo)" : ''));
+    return password_reset_mail($to, $subject, $body . ($replyTo !== '' ? "\n\n(Répondre à : $replyTo)" : ''), 'messagerie');
 }
 
 /** Message d'un visiteur. -> [message, erreur]. */

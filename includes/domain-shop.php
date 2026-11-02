@@ -17,6 +17,7 @@ const DOMAIN_SHOP_STATES = [
     'awaiting_payment' => 'En attente de paiement',
     'ordering' => 'Commande en cours',
     'ordered' => 'Domaine commandé',
+    'test_paid' => 'Paiement de test (aucune commande OVH)',
     'paid_needs_review' => 'Vérification en cours',
 ];
 
@@ -239,8 +240,10 @@ function domain_shop_quote(string $slug, string $domain, array $owner): array
  * Ouvre le paiement Stripe de la plateforme pour le devis en cours. Le titulaire
  * est déclaré chez OVH AVANT le paiement (le panier est validé), comme à
  * l'inscription, pour ne jamais encaisser un domaine impossible à commander.
+ * $returnUrl : adresse absolue où Stripe ramène le payeur (par défaut, la page
+ * domaine de la boutique ; le portail y met sa propre page).
  */
-function domain_shop_checkout(string $slug): array
+function domain_shop_checkout(string $slug, string $returnUrl = ''): array
 {
     $data = domain_shop_load($slug);
     $purchase = (array) ($data['purchase'] ?? []);
@@ -253,6 +256,8 @@ function domain_shop_checkout(string $slug): array
     if (!saas_stripe_configured()) {
         throw new RuntimeException('Le paiement en ligne n’est pas configuré sur ce serveur. Contactez l’exploitant de la plateforme.');
     }
+    $return = $returnUrl !== '' ? $returnUrl : shop_abs_url('/admin/domaine.php');
+    if (!preg_match('#^https?://#i', $return)) throw new InvalidArgumentException('Adresse de retour du paiement invalide.');
     $quote = (array) ($purchase['quote'] ?? []);
     $owner = (array) ($purchase['owner'] ?? []);
     $email = (string) ($owner['email'] ?? '');
@@ -290,8 +295,8 @@ function domain_shop_checkout(string $slug): array
             'domain' => $domain,
             'cart_id' => (string) ($quote['cart_id'] ?? ''),
         ],
-        'success_url' => shop_abs_url('/admin/domaine.php') . '?s={CHECKOUT_SESSION_ID}',
-        'cancel_url' => shop_abs_url('/admin/domaine.php'),
+        'success_url' => $return . '?s={CHECKOUT_SESSION_ID}',
+        'cancel_url' => $return,
     ]);
     $sessionId = (string) ($session['id'] ?? '');
     $sessionUrl = (string) ($session['url'] ?? '');
@@ -322,12 +327,23 @@ function domain_shop_apply_session(array $session): array
     if (($session['payment_status'] ?? '') !== 'paid') return ['state' => 'unpaid', 'slug' => $slug];
 
     $already = false;
+    $archived = null;
     try {
-        $data = domain_shop_update($slug, static function (array $d) use ($session, $meta, &$already): array {
+        $data = domain_shop_update($slug, static function (array $d) use ($session, $meta, $slug, &$already, &$archived): array {
             $purchase = (array) ($d['purchase'] ?? []);
             $quote = (array) ($purchase['quote'] ?? []);
             $state = (string) ($purchase['state'] ?? '');
-            if (!$purchase) throw new RuntimeException('Commande de domaine introuvable pour cette boutique.');
+            if (!$purchase) {
+                // Commande déjà archivée (un autre domaine a été acheté depuis) : ne pas la rejouer.
+                foreach ((array) ($d['history'] ?? []) as $old) {
+                    if ((string) ($old['stripe_session'] ?? '') !== '' && (string) $old['stripe_session'] === (string) ($session['id'] ?? '')) {
+                        $already = true;
+                        $archived = $old;
+                        return $d;
+                    }
+                }
+                throw new RuntimeException('Commande de domaine introuvable pour cette boutique.');
+            }
             if ((string) ($session['id'] ?? '') === '' || (string) ($session['id'] ?? '') !== (string) ($purchase['stripe_session'] ?? '')) {
                 throw new RuntimeException('Le paiement ne correspond pas à la session enregistrée pour ce domaine.');
             }
@@ -339,22 +355,25 @@ function domain_shop_apply_session(array $session): array
                 || strtolower((string) ($session['currency'] ?? '')) !== 'eur') {
                 throw new RuntimeException('Le paiement Stripe ne correspond pas au devis de domaine enregistré.');
             }
-            if (in_array($state, ['ordered', 'ordering', 'paid_needs_review'], true)) {
+            if (in_array($state, ['ordered', 'ordering', 'paid_needs_review', 'test_paid'], true)) {
                 $already = true;
                 return $d;
             }
             if ($state !== 'awaiting_payment') throw new RuntimeException('Cette commande de domaine ne peut pas être confirmée dans son état actuel.');
-            $d['purchase']['state'] = 'ordering';
             $d['purchase']['paid_at'] = time();
+            // Paiement Stripe de test : aucun argent n'a été encaissé, mais la commande
+            // chez OVH serait réelle et facturée. On s'arrête avant tout appel à OVH.
+            $d['purchase']['state'] = empty($session['livemode']) ? 'test_paid' : 'ordering';
             return $d;
         });
     } catch (RuntimeException $ex) {
         error_log('domain_shop_apply_session: ' . $ex->getMessage());
         return ['state' => 'invalid', 'slug' => $slug, 'message' => $ex->getMessage()];
     }
-    if ($already) return ['state' => 'already', 'slug' => $slug, 'purchase' => (array) ($data['purchase'] ?? [])];
+    if ($already) return ['state' => 'already', 'slug' => $slug, 'purchase' => (array) ($data['purchase'] ?? $archived ?? [])];
 
     $purchase = (array) ($data['purchase'] ?? []);
+    if (($purchase['state'] ?? '') === 'test_paid') return ['state' => 'test', 'slug' => $slug, 'purchase' => $purchase];
     try {
         $client = branding_ovh_client();
         $cartId = rawurlencode((string) ($purchase['quote']['cart_id'] ?? ''));
@@ -438,4 +457,102 @@ function domain_shop_cancel(string $slug): void
         }
     }
     domain_shop_update($slug, static fn (array $d): array => ['purchase' => null] + $d);
+}
+
+/**
+ * Archive une commande déjà confirmée par OVH pour en préparer une autre : elle
+ * passe dans l'historique (le portail peut ainsi acheter plusieurs domaines),
+ * et un webhook rejoué sur cette ancienne session la reconnaît sans recommander.
+ */
+function domain_shop_archive_purchase(string $slug): void
+{
+    domain_shop_update($slug, static function (array $d): array {
+        $purchase = (array) ($d['purchase'] ?? []);
+        if (($purchase['state'] ?? '') !== 'ordered') {
+            throw new RuntimeException('Seule une commande confirmée par OVH peut être archivée.');
+        }
+        $purchase['archived_at'] = time();
+        $d['history'] = array_values(array_merge((array) ($d['history'] ?? []), [$purchase]));
+        $d['purchase'] = null;
+        return $d;
+    });
+}
+
+/** Fenêtre avant l'échéance annuelle où le renouvellement OVH est signalé à l'exploitant. */
+const DOMAIN_SHOP_RENEWAL_WINDOW = 60 * 86400;
+
+/**
+ * Commandes confirmées par OVH dont l'échéance annuelle approche (une entrée par
+ * domaine, en cours ou archivée). Le renouvellement est facturé par OVH sur le
+ * compte de la plateforme : sans relance, il passe inaperçu.
+ */
+function domain_shop_renewals_due(int $within = DOMAIN_SHOP_RENEWAL_WINDOW, ?int $now = null): array
+{
+    $now ??= time();
+    $due = [];
+    foreach (glob(domain_shop_dir() . '/*.json') ?: [] as $file) {
+        $slug = basename($file, '.json');
+        if (!domain_shop_slug_valid($slug)) continue;
+        $data = domain_shop_load($slug);
+        $purchases = array_merge([$data['purchase'] ?? null], (array) ($data['history'] ?? []));
+        foreach ($purchases as $purchase) {
+            if (!is_array($purchase) || ($purchase['state'] ?? '') !== 'ordered') continue;
+            $domain = (string) ($purchase['quote']['domain'] ?? '');
+            $orderedAt = (int) ($purchase['ordered_at'] ?? 0);
+            if ($domain === '' || $orderedAt <= 0) continue;
+            $renewsAt = strtotime('+1 year', $orderedAt);
+            // Le domaine est renouvelé chaque année : viser la prochaine
+            // échéance au lieu de rester sur celle de la première commande. Une
+            // échéance dépassée reste signalée pendant la même fenêtre.
+            while ($renewsAt < $now - $within) $renewsAt = strtotime('+1 year', $renewsAt);
+            if ($renewsAt - $now > $within) continue;
+            if (($data['renewal_reminded'][$domain] ?? null) === $renewsAt) continue;
+            $due[$domain] = [
+                'slug' => $slug,
+                'domain' => $domain,
+                'order_id' => (string) ($purchase['ovh_order_id'] ?? ''),
+                'ordered_at' => $orderedAt,
+                'renews_at' => $renewsAt,
+                'owner_email' => (string) ($purchase['owner']['email'] ?? ''),
+            ];
+        }
+    }
+    return array_values($due);
+}
+
+/** Marque les renouvellements signalés : le même cycle n'est relancé qu'une fois. */
+function domain_shop_renewals_ack(array $due): void
+{
+    $bySlug = [];
+    foreach ($due as $item) $bySlug[(string) $item['slug']][] = $item;
+    foreach ($bySlug as $slug => $items) {
+        domain_shop_update($slug, static function (array $d) use ($items): array {
+            foreach ($items as $item) $d['renewal_reminded'][(string) $item['domain']] = (int) $item['renews_at'];
+            return $d;
+        });
+    }
+}
+
+/**
+ * Prévient l'exploitant des renouvellements à venir. Appelée par la tâche
+ * planifiée hebdomadaire ; rien n'est marqué si l'e-mail ne part pas.
+ */
+function domain_shop_renewal_remind(bool $dry = false, ?int $now = null): int
+{
+    $due = domain_shop_renewals_due(DOMAIN_SHOP_RENEWAL_WINDOW, $now);
+    if (!$due || $dry) return count($due);
+    $lines = [];
+    foreach ($due as $item) {
+        $lines[] = '- ' . $item['domain'] . ' (' . $item['slug'] . ', commande OVH '
+            . ($item['order_id'] !== '' ? $item['order_id'] : 'sans référence') . ') : échéance le '
+            . date('d/m/Y', (int) $item['renews_at']) . ', titulaire ' . $item['owner_email'];
+    }
+    $contact = (string) (saas_config()['contact'] ?? '');
+    if (!filter_var($contact, FILTER_VALIDATE_EMAIL)) return 0;
+    $sent = saas_mail($contact, 'Renouvellement de nom de domaine à prévoir',
+        "Ces domaines arrivent à échéance et seront renouvelés sur le compte OVH de la plateforme :\n\n"
+        . implode("\n", $lines) . "\n\nVérifiez le moyen de paiement et le titulaire dans le compte OVH.\n");
+    if (!$sent) return 0;
+    domain_shop_renewals_ack($due);
+    return count($due);
 }

@@ -34,38 +34,75 @@ require_once __DIR__ . '/includes/customers.php';
 require_once __DIR__ . '/includes/legal.php';
 require_once __DIR__ . '/includes/oauth.php';
 $custSess = customer_session();
+$firstName = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['contact_first_name'] ?? ''))), 0, 40);
+$lastName = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['contact_last_name'] ?? ''))), 0, 40);
+if ($firstName === '' && $lastName === '') {   // formulaire resté ouvert avant l'ajout des deux champs
+    [$firstName, $lastName] = contact_name_parts((string) ($_POST['contact_name'] ?? ''));
+    $firstName = mb_substr($firstName, 0, 40);
+    $lastName = mb_substr($lastName, 0, 40);
+}
 $contact = [
-    'name' => mb_substr(trim((string) ($_POST['contact_name'] ?? '')), 0, 80),
+    'first_name' => $firstName,
+    'last_name' => $lastName,
+    'name' => mb_substr(trim($firstName . ' ' . $lastName), 0, 80),
     'email' => mb_strtolower(trim((string) ($custSess['email'] ?? $_POST['contact_email'] ?? ''))),
     'phone' => mb_substr(trim((string) ($_POST['contact_phone'] ?? '')), 0, 30),
-    'create_account' => !$custSess && !empty($_POST['create_account']),
-    // Livraison pour une autre personne : nom et téléphone du destinataire (l'adresse, elle, se saisit chez Stripe).
+    'create_account' => !empty($_POST['create_account']),   // compte e-mail, y compris pour une session ouverte par un réseau social (sans mot de passe)
+    // Livraison pour une autre personne : nom et téléphone du destinataire (l'adresse, elle, est saisie au panier).
     'ship_other' => !empty($_POST['ship_other']),
     'ship_name' => mb_substr(trim((string) ($_POST['ship_name'] ?? '')), 0, 80),
     'ship_phone' => mb_substr(trim((string) ($_POST['ship_phone'] ?? '')), 0, 30),
 ];
 $contactErrors = [];
+if ($contact['first_name'] === '') $contactErrors['first_name'] = 'Indiquez votre prénom.';
+if ($contact['last_name'] === '') $contactErrors['last_name'] = 'Indiquez votre nom.';
 if (!filter_var($contact['email'], FILTER_VALIDATE_EMAIL) || mb_strlen($contact['email']) > 120) $contactErrors['email'] = 'Indiquez une adresse e-mail valide.';
-$phoneNorm = customer_phone_normalize($contact['phone'], (string) ($_SESSION['shipping_country'] ?? 'FR'));
+$clean = static fn (string $value, int $max): string => mb_substr(trim(preg_replace('/\s+/u', ' ', $value)), 0, $max);
+// Adresse de l'acheteur : toujours contrôlée, même pour un retrait sur place.
+$buyer = [
+    'country' => strtoupper(trim((string) ($_POST['buyer_country'] ?? ($_SESSION['buyer_country'] ?? 'FR')))) ?: 'FR',
+    'line1' => $clean((string) ($_POST['buyer_line1'] ?? ($_SESSION['buyer_line1'] ?? '')), 120),
+    'line2' => '',
+    'postal' => $clean((string) ($_POST['buyer_postal'] ?? ($_SESSION['buyer_postal'] ?? '')), 12),
+    'city' => $clean((string) ($_POST['buyer_city'] ?? ($_SESSION['buyer_city'] ?? '')), 80),
+];
+if (!array_key_exists($buyer['country'], shipping_allowed_countries())) $buyer['country'] = 'FR';
+$buyerLabel = mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['buyer_label'] ?? ($_SESSION['buyer_address_label'] ?? '')))), 0, 160);
+$_SESSION['buyer_country'] = $buyer['country'];
+$_SESSION['buyer_line1'] = $buyer['line1']; $_SESSION['buyer_postal'] = preg_replace('/[^0-9A-Za-z]/', '', $buyer['postal']); $_SESSION['buyer_city'] = $buyer['city'];
+if ($buyerLabel !== '' && $buyer['postal'] !== '') $_SESSION['buyer_address_label'] = $buyerLabel; else unset($_SESSION['buyer_address_label']);
+$buyerProblems = [];
+if (mb_strlen($buyer['line1']) < 3) $buyerProblems[] = "l'adresse (numéro et rue)";
+if ($buyer['postal'] === '' || !preg_match('/^[A-Za-z0-9][A-Za-z0-9 \-]{1,10}$/', $buyer['postal']) || ($buyer['country'] === 'FR' && !preg_match('/^\d{5}$/', $buyer['postal']))) $buyerProblems[] = 'le code postal' . ($buyer['country'] === 'FR' ? ' (5 chiffres)' : '');
+if (mb_strlen($buyer['city']) < 2) $buyerProblems[] = 'la ville';
+if ($buyerProblems) $contactErrors['buyer_addr'] = 'Complétez votre adresse : ' . implode(', ', $buyerProblems) . '.';
+
+$phoneNorm = customer_phone_normalize($contact['phone'], $buyer['country']);
 if ($phoneNorm === null) $contactErrors['phone'] = 'Indiquez un numéro de téléphone valide (par exemple 06 12 34 56 78, ou +32 470 12 34 56 hors de France).';
 $shipPhoneNorm = null;
-if ($contact['ship_other']) {
+$needsAddress = (string) ($_POST['shipping_choice'] ?? 'pickup') !== 'pickup';
+$shipOther = $contact['ship_other'] && $needsAddress;
+$contact['ship_other'] = $shipOther;
+// Adresse de livraison : celle du destinataire s'il est distinct, sinon celle de l'acheteur.
+$dest = $buyer;
+if ($shipOther) {
+    $dest = [
+        'country' => strtoupper(trim((string) ($_POST['dest_country'] ?? ''))) ?: (string) ($_SESSION['shipping_country'] ?? 'FR'),
+        'line1' => $clean((string) ($_POST['dest_line1'] ?? ($_SESSION['shipping_line1'] ?? '')), 120),
+        'line2' => '',   // rue et complément sont réunis sur la ligne 1 du panier
+        'postal' => $clean((string) (($_POST['dest_postal'] ?? '') !== '' ? $_POST['dest_postal'] : ($_SESSION['shipping_postal_code'] ?? '')), 12),
+        'city' => $clean((string) ($_POST['dest_city'] ?? ($_SESSION['shipping_city'] ?? '')), 80),
+    ];
+    if (!array_key_exists($dest['country'], shipping_allowed_countries())) $dest['country'] = 'FR';
+}
+if ($shipOther) {
     if (mb_strlen($contact['ship_name']) < 2) $contactErrors['ship_name'] = 'Indiquez le nom du destinataire.';
-    $shipPhoneNorm = customer_phone_normalize($contact['ship_phone'], (string) ($_SESSION['shipping_country'] ?? 'FR'));
+    $shipPhoneNorm = customer_phone_normalize($contact['ship_phone'], $dest['country']);
     if ($shipPhoneNorm === null) $contactErrors['ship_phone'] = 'Indiquez un téléphone valide pour le destinataire (par exemple 06 98 76 54 32).';
 }
-if (empty($_POST['accept_terms'])) $contactErrors['terms'] = "Pour payer, acceptez les conditions générales de vente, les conditions d'utilisation et la politique de confidentialité.";
-// Adresse de livraison saisie au panier (recopiée dans le formulaire de paiement ; à défaut, celle de la session). Exigée sauf retrait sur place.
-$dest = [
-    'country' => strtoupper(trim((string) ($_POST['dest_country'] ?? ''))) ?: (string) ($_SESSION['shipping_country'] ?? 'FR'),
-    'line1' => mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['dest_line1'] ?? ($_SESSION['shipping_line1'] ?? '')))), 0, 120),
-    'line2' => mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['dest_line2'] ?? ($_SESSION['shipping_line2'] ?? '')))), 0, 120),
-    'postal' => mb_substr(trim((string) (($_POST['dest_postal'] ?? '') !== '' ? $_POST['dest_postal'] : ($_SESSION['shipping_postal_code'] ?? ''))), 0, 12),
-    'city' => mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($_POST['dest_city'] ?? ($_SESSION['shipping_city'] ?? '')))), 0, 80),
-];
-if (!array_key_exists($dest['country'], shipping_allowed_countries())) $dest['country'] = 'FR';
-$needsAddress = (string) ($_POST['shipping_choice'] ?? 'pickup') !== 'pickup';
-if ($needsAddress) {
+// Le panier réaffiche l'adresse et le destinataire si le paiement revient en arrière (validation, erreur Stripe).
+$_SESSION['shipping_ui'] = $needsAddress ? (string) ($_POST['shipping_choice'] ?? 'flat') : 'pickup';
+if ($shipOther) {
     $addrProblems = [];
     if (mb_strlen($dest['line1']) < 3) $addrProblems[] = "l'adresse (numéro et rue)";
     if ($dest['postal'] === '' || !preg_match('/^[A-Za-z0-9][A-Za-z0-9 \-]{1,10}$/', $dest['postal']) || ($dest['country'] === 'FR' && !preg_match('/^\d{5}$/', $dest['postal']))) $addrProblems[] = 'le code postal' . ($dest['country'] === 'FR' ? ' (5 chiffres)' : '');
@@ -77,6 +114,7 @@ $_SESSION['shipping_country'] = $dest['country'];
 $_SESSION['shipping_line1'] = $dest['line1']; $_SESSION['shipping_line2'] = $dest['line2']; $_SESSION['shipping_city'] = $dest['city'];
 if ($dest['postal'] !== '') $_SESSION['shipping_postal_code'] = preg_replace('/[^0-9A-Za-z]/', '', $dest['postal']);
 $_SESSION['checkout_contact'] = $contact;
+cart_contact_cookie_remember($contact);
 if ($contactErrors) {
     $_SESSION['checkout_contact_errors'] = $contactErrors;
     flash_set('Vérifiez vos coordonnées : ' . implode(' ', $contactErrors), 'error');
@@ -86,7 +124,7 @@ if ($contactErrors) {
 $termsVersion = legal_terms_version();
 
 if (!shop_checkout_ready()) {
-    flash_set("Le paiement n'est pas encore configuré — ajoutez vos clés Stripe dans config.php.", 'error');
+    flash_set("Le paiement n'est pas encore configuré — ajoutez un moyen de paiement dans Administration → Réglages.", 'error');
     header('Location: /cart.php');
     exit;
 }
@@ -109,10 +147,9 @@ $pickupOnly = cart_pickup_only($lines, $content);
 $discount = cart_discount_for(cart_total_cents(), cart_total_qty($lines));
 
 // Chaque option porte une clé ('pickup', 'rate-<id>', 'flat') qui correspond
-// à la valeur du bouton radio choisi dans le panier (voir cart.php) — sert
-// uniquement à mettre l'option choisie en tête de liste, Stripe présélectionne
-// alors la première option de la liste ; le client peut toujours en changer
-// sur la page de paiement elle-même.
+// à la valeur du bouton radio choisi dans le panier (voir cart.php). Une seule
+// option est envoyée à Stripe : le client ne peut donc pas changer de mode de
+// livraison sur la page de paiement, et le mode enregistré est celui payé.
 $shippingOptions = [
     'pickup' => [
         'shipping_rate_data' => [
@@ -156,29 +193,209 @@ if ($carrierRates) {
     ];
 }
 
-// Met en tête l'option choisie dans le panier, si elle existe encore
-// (le poids a pu changer entre-temps) — sinon l'ordre par défaut reste.
+// Le tarif choisi dans le panier a pu disparaître entre-temps (poids ou zone
+// modifiés) : on ne remplace pas silencieusement le prix, on renvoie au panier.
 $chosenKey = (string) ($_POST['shipping_choice'] ?? '');
-if ($chosenKey !== '' && isset($shippingOptions[$chosenKey])) {
-    $shippingOptions = [$chosenKey => $shippingOptions[$chosenKey]] + $shippingOptions;
+if ($pickupOnly) $chosenKey = 'pickup';
+$firstShippingKey = '';
+foreach (array_keys($shippingOptions) as $optionKey) {
+    if ($optionKey !== 'pickup') { $firstShippingKey = (string) $optionKey; break; }
 }
-$shippingOptions = array_values($shippingOptions);
+if ($chosenKey === '') $chosenKey = $needsAddress ? ($firstShippingKey !== '' ? $firstShippingKey : 'pickup') : 'pickup';
+if (!isset($shippingOptions[$chosenKey])) {
+    // Tarif précis disparu : le prix ne doit pas changer à l'insu du client.
+    if (str_starts_with($chosenKey, 'rate-')) {
+        flash_set('Les frais de livraison ont changé (poids ou adresse) : vérifiez votre panier avant de payer.', 'error');
+        header('Location: /cart.php');
+        exit;
+    }
+    // Ancien tarif fixe alors que des paliers existent maintenant : premier palier.
+    $chosenKey = $firstShippingKey !== '' ? $firstShippingKey : 'pickup';
+}
+$shippingMode = $chosenKey === 'pickup' ? 'pickup' : 'shipping';
+$chosenOption = $shippingOptions[$chosenKey];
+$chosenOption['shipping_rate_data']['metadata'] = ['choice' => $chosenKey, 'mode' => $shippingMode];
+$shippingLabel = (string) ($chosenOption['shipping_rate_data']['display_name'] ?? '');
+$shippingOptionPayload = [$chosenOption];
+// Le mode retenu (et non le bouton radio d'origine) décide de l'adresse.
+$needsAddress = $shippingMode === 'shipping';
+$_SESSION['shipping_ui'] = $needsAddress ? $chosenKey : 'pickup';
+
+// Moyen de paiement : Stripe (flux historique), Monetico ou PayPal. Sans
+// sélecteur affiché (un seul moyen), le premier moyen configuré s'applique.
+$paymentMethods = shop_payment_methods();
+$paymentMethod = (string) ($_POST['payment_method'] ?? '');
+if (!isset($paymentMethods[$paymentMethod])) $paymentMethod = (string) array_key_first($paymentMethods);
+if ($paymentMethod === '') {
+    flash_set("Aucun moyen de paiement n'est disponible pour le moment.", 'error');
+    header('Location: /cart.php');
+    exit;
+}
+$_SESSION['checkout_payment_method'] = $paymentMethod;
+
+$shippingCents = (int) ($chosenOption['shipping_rate_data']['fixed_amount']['amount'] ?? 0);
+$orderTotal = max(0, cart_total_cents() - (int) $discount['cents']) + $shippingCents;
+$declaredAddress = $needsAddress ? implode(', ', array_filter([
+    $contact['ship_other'] ? $contact['ship_name'] : $contact['name'],
+    $dest['line1'], $dest['line2'], trim($dest['postal'] . ' ' . $dest['city']), $dest['country'],
+])) : null;
+
+// Paiement chez un prestataire autre que Stripe : la commande est créée ici,
+// puis le client est envoyé sur la page sécurisée du prestataire. Le retour
+// (et l'IPN Monetico) confirme le paiement — voir monetico-return.php,
+// monetico-ipn.php et paypal-return.php.
+if ($paymentMethod !== 'stripe') {
+    $provider = $paymentMethod;
+    $reference = payment_reference();
+    $externalItems = array_map(static function ($line) {
+        return [
+            'ref' => $line['product']['ref'],
+            'name' => $line['product']['name'],
+            'qty' => $line['qty'],
+            'unit_cents' => $line['unit_cents'],
+        ];
+    }, $lines);
+
+    try {
+        $stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, shipping_cents, status, items, payment_provider, payment_reference, provider_checkout_id, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, shop_slug, shipping_mode, shipping_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([
+            $provider . ':' . $reference,
+            $orderTotal,
+            $shippingCents,
+            'pending',
+            json_encode($externalItems, JSON_UNESCAPED_UNICODE),
+            $provider,
+            $reference,
+            $reference,
+            $contact['email'],
+            $phoneNorm,
+            gmdate('c'),
+            $termsVersion,
+            $contact['create_account'] ? 1 : 0,
+            $contact['ship_other'] ? $contact['ship_name'] : null,
+            $contact['ship_other'] ? $shipPhoneNorm : null,
+            $declaredAddress,
+            tenant_slug(),
+            $shippingMode,
+            $shippingLabel,
+        ]);
+    } catch (Throwable $e) {
+        flash_set('Impossible de créer la commande : ' . $e->getMessage(), 'error');
+        header('Location: /cart.php');
+        exit;
+    }
+    $orderId = (int) db()->lastInsertId();
+    checkout_remember_order($orderId);
+    if ($contact['create_account']) {
+        try {
+            $existingAcc = customer_account($contact['email']);
+            if (!$existingAcc || empty($existingAcc['password_hash'])) customer_send_link($contact['email'], $contact['name'], (string) $phoneNorm, 'setup');
+        } catch (Throwable $e) {
+            error_log('checkout create_account : ' . $e->getMessage());
+        }
+    }
+    plugin_fire('checkout_created', ['order_id' => $orderId, 'code' => (string) ($_SESSION['reward_code'] ?? '')]);
+
+    $order = order_get($orderId);
+    $cancelExternal = static function (int $id, string $provider, string $reason): void {
+        db()->prepare("UPDATE orders SET status = 'cancelled', cancelled_at = ? WHERE id = ? AND status = 'pending'")->execute([gmdate('c'), $id]);
+        order_event($id, 'annulee', 'Ouverture du paiement impossible : ' . $reason, $provider);
+    };
+
+    if ($provider === 'monetico') {
+        $monetico = monetico_config();
+        if (!$monetico || !$order) {
+            $cancelExternal($orderId, 'monetico', 'réglages absents');
+            flash_set("Monetico n'est pas configuré pour cette boutique.", 'error');
+            header('Location: /cart.php');
+            exit;
+        }
+        $fields = monetico_payment_fields($order, $monetico, $orderTotal, $reference, $contact['email'], (string) ($content['site_name'] ?? 'Boutique'), rtrim(SITE_URL, '/'));
+        ?><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paiement sécurisé</title>
+<style>
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f2ec;color:#2a2420;font-family:system-ui,-apple-system,sans-serif;}
+  .box{max-width:420px;padding:28px;text-align:center}
+  .spinner{width:34px;height:34px;margin:0 auto 18px;border:3px solid #d8d0c4;border-top-color:#8a5a2b;border-radius:50%;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  button{margin-top:18px;padding:12px 22px;border:0;border-radius:8px;background:#2a2420;color:#fff;font-size:1rem;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="spinner" aria-hidden="true"></div>
+  <h1 style="font-size:1.2rem;margin:0 0 8px;">Redirection vers le paiement sécurisé</h1>
+  <p style="margin:0;color:#6b6259;">Vous allez être redirigé vers Monetico. Ne fermez pas cette page.</p>
+  <form method="post" action="<?= h(monetico_payment_url($monetico)) ?>" id="monetico-form">
+    <?php foreach ($fields as $fieldName => $fieldValue): ?>
+      <input type="hidden" name="<?= h($fieldName) ?>" value="<?= h($fieldValue) ?>">
+    <?php endforeach; ?>
+    <noscript><button type="submit">Payer maintenant</button></noscript>
+  </form>
+</div>
+<script>document.getElementById('monetico-form').submit();</script>
+</body>
+</html><?php
+        exit;
+    }
+
+    if ($provider === 'paypal') {
+        $paypal = paypal_config();
+        if (!$paypal || !$order) {
+            $cancelExternal($orderId, 'paypal', 'réglages absents');
+            flash_set("PayPal n'est pas configuré pour cette boutique.", 'error');
+            header('Location: /cart.php');
+            exit;
+        }
+        try {
+            $returnUrl = rtrim(SITE_URL, '/') . '/paypal-return.php?order=' . $orderId . '&sig=' . rawurlencode(payment_return_token($orderId, 'paypal'));
+            $paypalOrder = paypal_create_order(
+                $paypal,
+                $orderTotal,
+                $reference,
+                $returnUrl,
+                rtrim(SITE_URL, '/') . '/cart.php?payment=cancelled',
+                (string) ($content['site_name'] ?? 'Boutique')
+            );
+            $paypalId = (string) ($paypalOrder['id'] ?? '');
+            $approve = paypal_approve_url($paypalOrder);
+            if ($paypalId === '' || $approve === '') throw new RuntimeException("PayPal n'a pas renvoyé de lien de paiement.");
+            db()->prepare('UPDATE orders SET provider_checkout_id = ? WHERE id = ?')->execute([$paypalId, $orderId]);
+            header('Location: ' . $approve, true, 303);
+            exit;
+        } catch (Throwable $e) {
+            $cancelExternal($orderId, 'paypal', $e->getMessage());
+            flash_set("Le paiement PayPal n'a pas pu être ouvert : " . $e->getMessage(), 'error');
+            header('Location: /cart.php');
+            exit;
+        }
+    }
+}
 
 $params = [
     'mode' => 'payment',
     'success_url' => SITE_URL . '/checkout-success.php?session_id={CHECKOUT_SESSION_ID}',
     'cancel_url' => SITE_URL . '/cart.php',
-    'shipping_address_collection' => ['allowed_countries' => array_keys(shipping_allowed_countries())],
-    'shipping_options' => $shippingOptions,
+    'metadata' => ['type' => 'shop_order', 'shop' => tenant_slug(), 'shipping_mode' => $shippingMode, 'shipping_choice' => $chosenKey],
+    // L'adresse n'est demandée que pour une expédition ; un retrait n'en a pas besoin.
+    'shipping_options' => $shippingOptionPayload,
     // Page de paiement fermée après CHECKOUT_HOLD_MINUTES : la réservation des pièces ne dure pas plus longtemps.
     'expires_at' => time() + CHECKOUT_HOLD_MINUTES * 60,
 ];
+if ($needsAddress) {
+    $params['shipping_address_collection'] = ['allowed_countries' => array_keys(shipping_allowed_countries())];
+}
 
 // Stripe Connect : si le compte Stripe de la boutique est relié à la plateforme, le paiement passe par la plateforme qui reverse la vente au commerçant
 // et garde la commission (includes/connect.php). Sinon, paiement habituel avec les clés de la boutique.
 $connect = connect_plan(cart_total_cents() - $discount['cents']);
 if ($connect) {
-    $params['payment_intent_data'] = ['application_fee_amount' => $connect['fee'], 'transfer_data' => ['destination' => $connect['account']], 'metadata' => ['shop' => tenant_slug()]];
+    $params['payment_intent_data'] = ['application_fee_amount' => $connect['fee'], 'transfer_data' => ['destination' => $connect['account']],
+        'metadata' => ['type' => 'shop_order', 'shop' => tenant_slug(), 'shipping_mode' => $shippingMode]];
 }
 
 if ($discount['cents'] > 0) {
@@ -197,23 +414,26 @@ if ($discount['cents'] > 0) {
 
 // Client connecté par un réseau social : son adresse e-mail est préremplie sur la page de paiement.
 require_once __DIR__ . '/includes/oauth.php';
-// L'e-mail et l'adresse de livraison saisis au panier sont préremplis sur la page de paiement (client Stripe portant l'adresse ; modifiable par le client).
+// L'e-mail, l'adresse de l'acheteur et, pour une expédition, l'adresse de livraison sont préremplis sur la page de paiement
+// (client Stripe ; le client peut les modifier).
 $params['customer_email'] = $contact['email'];
-if ($needsAddress) {
-    try {
+$buyerAddressText = implode(', ', array_filter([$buyer['line1'], $buyer['line2'], trim($buyer['postal'] . ' ' . $buyer['city']), $buyer['country']]));
+try {
+    $cust = ['email' => $contact['email'], 'name' => $contact['name'], 'phone' => $phoneNorm,
+        'address' => ['line1' => $buyer['line1'], 'line2' => $buyer['line2'], 'city' => $buyer['city'], 'postal_code' => $buyer['postal'], 'country' => $buyer['country']]];
+    if ($needsAddress) {
         $recipient = $contact['ship_other'] ? $contact['ship_name'] : $contact['name'];
-        $cust = ['email' => $contact['email'], 'name' => $contact['name'], 'phone' => $phoneNorm,
-            'shipping' => ['name' => $recipient !== '' ? $recipient : $contact['email'], 'phone' => $contact['ship_other'] ? $shipPhoneNorm : $phoneNorm,
-                'address' => ['line1' => $dest['line1'], 'line2' => $dest['line2'], 'city' => $dest['city'], 'postal_code' => $dest['postal'], 'country' => $dest['country']]]];
-        $stripeCustomer = stripe_request('POST', '/customers', $cust, (bool) $connect);
-        if (!empty($stripeCustomer['id'])) {
-            unset($params['customer_email']);
-            $params['customer'] = $stripeCustomer['id'];
-            $params['customer_update'] = ['shipping' => 'auto'];
-        }
-    } catch (Throwable $e) {
-        error_log('checkout prefill client Stripe : ' . $e->getMessage());       // sans incidence : la page de paiement redemande l'adresse
+        $cust['shipping'] = ['name' => $recipient !== '' ? $recipient : $contact['email'], 'phone' => $contact['ship_other'] ? $shipPhoneNorm : $phoneNorm,
+            'address' => ['line1' => $dest['line1'], 'line2' => $dest['line2'], 'city' => $dest['city'], 'postal_code' => $dest['postal'], 'country' => $dest['country']]];
     }
+    $stripeCustomer = stripe_request('POST', '/customers', $cust, (bool) $connect);
+    if (!empty($stripeCustomer['id'])) {
+        unset($params['customer_email']);
+        $params['customer'] = $stripeCustomer['id'];
+        if ($needsAddress) $params['customer_update'] = ['shipping' => 'auto'];
+    }
+} catch (Throwable $e) {
+    error_log('checkout prefill client Stripe : ' . $e->getMessage());       // sans incidence : la page de paiement redemande l'adresse
 }
 $declaredAddress = $needsAddress ? implode(', ', array_filter([$contact['ship_other'] ? $contact['ship_name'] : $contact['name'], $dest['line1'], $dest['line2'], trim($dest['postal'] . ' ' . $dest['city']), $dest['country']])) : null;
 
@@ -247,7 +467,7 @@ $itemsSnapshot = array_map(function ($line) {
     ];
 }, $lines);
 
-$stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, status, items, payment_via, connect_fee_cents, connect_gallery_cents, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+$stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, status, items, payment_via, connect_fee_cents, connect_gallery_cents, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, buyer_address, shop_slug, shipping_mode, shipping_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 $stmt->execute([
     $session['id'],
     cart_total_cents() - $discount['cents'],
@@ -264,6 +484,10 @@ $stmt->execute([
     $contact['ship_other'] ? $contact['ship_name'] : null,
     $contact['ship_other'] ? $shipPhoneNorm : null,
     $declaredAddress,
+    $buyerAddressText,
+    tenant_slug(),
+    $shippingMode,
+    $shippingLabel,
 ]);
 $orderId = (int) db()->lastInsertId();
 checkout_remember_order($orderId);

@@ -9,7 +9,8 @@ use Valet\Drivers\BasicValetDriver;
  * le .htaccess : sans ce pilote, /galerie/<identifiant>/ et /<commerce>/… ne mènent nulle part, et la base SQLite, les clés
  * (.secrets/) et la configuration des commerces seraient téléchargeables en clair. Ce pilote reprend les règles du .htaccess :
  *
- *   /                          → la page d'accueil de la plateforme (sauf sur un sous-domaine de commerce : sa boutique) ;
+ *   /                          → la page d'accueil de la plateforme (sauf sur un sous-domaine de commerce ou sur le domaine
+ *                                propre qu'un tenant.php déclare en site_url, ex. brocante.arrimage.com : sa boutique) ;
  *                                /annuaire/, /inscription/ et /portail/ sont des dossiers servis tels quels
  *   /galerie/, /galerie/<id>/  → galerie/index.php (galeries commerciales)
  *   /<commerce>/…              → la boutique tenants/<commerce>/ servie sous le domaine du portail
@@ -48,12 +49,11 @@ class LocalValetDriver extends BasicValetDriver
         return is_file($sitePath . '/tenants/' . $m[1] . '/tenant.php') && !file_exists($sitePath . '/' . $m[1]) ? $m[1] : '';
     }
 
-    /** Le domaine demandé porte-t-il un sous-domaine de commerce (naty.brocenstock.test) ? */
+    /** Le domaine demandé porte-t-il un commerce (sous-domaine naty.brocenstock.test ou site_url d'un tenant.php) ? */
     private function hostHasTenant(string $sitePath): bool
     {
-        $host = strtolower(preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')));
-        $labels = explode('.', $host);
-        return count($labels) >= 3 && preg_match('/^[a-z0-9][a-z0-9_-]*$/', $labels[0]) && is_file($sitePath . '/tenants/' . $labels[0] . '/tenant.php');
+        require_once $sitePath . '/includes/tenant.php';
+        return tenant_from_host() !== '' || tenant_from_domain() !== '';
     }
 
     public function isStaticFile(string $sitePath, string $siteName, string $uri)
@@ -82,7 +82,7 @@ class LocalValetDriver extends BasicValetDriver
         }
         $query = (string) ($_SERVER['QUERY_STRING'] ?? '');
 
-        // Racine du domaine : la page d'accueil de la plateforme (déploiement portail), sauf sur le sous-domaine d'un commerce.
+        // Racine du domaine : la page d'accueil de la plateforme (déploiement portail), sauf sur le domaine d'un commerce.
         if ($uri === '/' && is_file($sitePath . '/portail/index.php') && !$this->hostHasTenant($sitePath) && !getenv('TENANT')) {
             return $this->run($sitePath, '/accueil/index.php', $query);
         }

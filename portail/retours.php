@@ -310,6 +310,7 @@ if (function_exists('saas_config')) {
               <span class="fb-chip" data-tone="<?= e($statusTone($f['status'])) ?>"><?= e(FEEDBACK_STATUS_LABELS[$f['status']] ?? $f['status']) ?></span>
               <?php if (in_array($f['priority'], ['high', 'urgent'], true)): ?><span class="fb-chip fb-chip--prio" data-prio="<?= e($f['priority']) ?>"><?= e(FEEDBACK_PRIORITY_LABELS[$f['priority']] ?? $f['priority']) ?></span><?php endif; ?>
               <?php if (!empty($f['attachment'])): ?><span class="fb-chip">Capture</span><?php endif; ?>
+              <?php if (($f['source'] ?? 'equipe') === 'client'): ?><span class="fb-chip">Client</span><?php endif; ?>
               <span class="fb-summary-shop"><?= e($f['shop_name']) ?></span>
               <?php if ($f['account'] !== ''): ?><span class="muted">· <?= e($f['account']) ?></span><?php endif; ?>
               <span class="fb-summary-date"><?= e($dt((string) $f['at'])) ?></span>

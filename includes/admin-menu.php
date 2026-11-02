@@ -50,7 +50,7 @@ function admin_menu_default_groups(): array
 function admin_menu_default_order(): array
 {
     return [
-        'pilotage' => ['dashboard'],
+        'pilotage' => ['dashboard', 'emails'],
         'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'assistant', 'batch'],
         'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
         'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal'],
@@ -108,6 +108,7 @@ function admin_menu_icons(): array
         'users' => '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16 14.2A5.5 5.5 0 0 1 21.5 20"/>',
         'grid' => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
         'gauge' => '<path d="M3.5 18a8.5 8.5 0 1 1 17 0"/><path d="m12 14 4-4"/><circle cx="12" cy="15" r="1.5"/>',
+        'at' => '<circle cx="12" cy="12" r="4"/><path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1"/>',
         'upload' => '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
         'receipt' => '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/>',
         'image' => '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
@@ -143,6 +144,7 @@ function admin_menu_core_items(): array
 {
     return [
         'dashboard' => ['/admin/dashboard.php', 'Tableau de bord', 'gauge'],
+        'emails' => ['/admin/emails.php', 'Ouvertures d’e-mails', 'at'],
         'catalogue' => ['/admin/catalog.php', 'Catalogue', 'grid'],
         'univers' => ['/admin/universes.php', 'Univers', 'folder'],
         'etiquettes' => ['/admin/labels.php', 'Étiquettes (impression)', 'receipt'],

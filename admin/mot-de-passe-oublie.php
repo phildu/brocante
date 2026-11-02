@@ -8,6 +8,7 @@ require_once __DIR__ . '/../includes/login-otp.php';
 $from = (string) ($_GET['from'] ?? $_POST['from'] ?? '') === 'studio' ? 'studio' : '';
 $back = $from === 'studio' ? '/studio.php' : '/admin/login.php';
 $sent = false;
+$resetTo = null;
 $error = '';
 if (isset($_GET['reset'])) unset($_SESSION['admin_otp']);
 $otp = $_SESSION['admin_otp'] ?? null;
@@ -36,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = (string) $res['error'];
         }
     } else {
-        password_reset_request((string) ($_POST['login'] ?? ''), $from);
+        $resetTo = password_reset_request((string) ($_POST['login'] ?? ''), $from);
         $sent = true;
     }
 }
@@ -47,6 +48,13 @@ ob_start();
     <h1><?= $otp ? 'Code par SMS' : 'Mot de passe oublié' ?></h1>
 <?php if ($sent): ?>
     <p class="login-ok" role="status">Si un compte correspond à cet identifiant, un e-mail vient d'être envoyé avec un lien pour choisir un nouveau mot de passe (valable 1 heure). Pensez à vérifier vos courriers indésirables.</p>
+    <?php if (password_reset_is_local_host()): ?>
+      <?php if ($resetTo !== null): ?>
+        <p class="login-ok" role="status">En local, aucun e-mail ne part réellement : le message est recopié pour <strong><?= h($resetTo) ?></strong> dans <code>data/mail-outbox.log</code>. <a href="/portail/journal-local.php?canal=mail">Ouvrir la boîte locale</a> pour récupérer le lien.</p>
+      <?php else: ?>
+        <p class="login-ok" role="status">En local, aucun message n'a été déposé : aucune adresse e-mail n'est rattachée à ce compte (ou plusieurs demandes viennent d'être faites). Renseignez <code>admin_email</code> dans <code>tenants/&lt;identifiant&gt;/tenant.php</code> ou créez un compte administrateur avec un e-mail.</p>
+      <?php endif; ?>
+    <?php endif; ?>
     <p class="login-links"><a href="<?= h($back) ?>">← Retour à la connexion</a></p>
 <?php elseif ($otp): ?>
     <p class="lede">Saisissez le code reçu au <?= h((string) ($otp['phone'] ?? '')) ?> et choisissez un nouveau mot de passe (10 minutes).</p>

@@ -254,7 +254,7 @@ function ai_provider_http(string $method, string $url, array $headers = [], $bod
     $raw = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $body = is_string($raw) ? $raw : '';
-    curl_close($ch);
+    if (PHP_VERSION_ID < 80000) curl_close($ch);
     if (in_array($status, [0, 401, 402, 403, 429], true)) {
         if (!function_exists('wd_note_ai') && is_file(__DIR__ . '/watchdog.php')) require_once __DIR__ . '/watchdog.php';
         if (function_exists('wd_note_ai')) wd_note_ai($status, $url, $body);

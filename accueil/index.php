@@ -67,6 +67,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
   .path.p1 { --c: #b5502e; } .path.p2 { --c: #2f6b4f; } .path.p3 { --c: #3b5fa8; } .path.p4 { --c: #8a5a9e; }
   .sec-tag { display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 4px 12px; border-radius: 999px; background: var(--c, var(--accent)); color: #fff; margin-bottom: 10px; }
   .types { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .types > .lp-hover { display: flex; } .types > .lp-hover > .type { flex: 1; }
   .type { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; display: grid; gap: 10px; align-content: start; }
   .type .emo { font-size: 2.2rem; line-height: 1; } .type h3 { margin: 0; font-family: var(--display); font-size: 1.3rem; } .type > p { margin: 0; color: var(--ink-soft); }
   .type .price { font-size: .92rem; color: var(--ink-soft); } .type .price b { color: var(--ink); font-size: 1.15rem; }
@@ -107,7 +108,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
   <h1><?= $e($homeTitle) ?></h1>
   <p class="lede"><?= $e($homeLede) ?></p>
   <div class="actions">
-    <a class="btn light" href="/inscription/">Créer ma boutique</a>
+    <a class="btn light" href="/inscription/">Je veux vendre en ligne</a>
     <a class="btn ghost" href="/galerie/creer.php">Organiser un marché ou une galerie</a>
     <a class="btn ghost" href="/portail/login.php">Se connecter</a>
     <a class="btn ghost" href="#parcours">Que souhaitez-vous faire ?</a>
@@ -159,14 +160,17 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
     <p class="lede">Chaque type a son vocabulaire, ses fonctionnalités et ses tarifs. Test gratuit sans carte bancaire, puis un abonnement selon le nombre de participants.</p></div>
   <div class="types">
     <?php foreach ($types as $tk => $t): $from = $fromPrice($t); $test = $t['offers']['test'] ?? null; ?>
-      <article class="type" id="type-<?= $e($tk) ?>">
-        <span class="emo" aria-hidden="true"><?= $e($t['emoji']) ?></span>
-        <h3><?= $e($t['name']) ?></h3>
-        <p><?= $e($t['tagline']) ?></p>
-        <ul class="chips" aria-label="Fonctionnalités"><?php foreach (GT_FEATURES as $fk => $fl): if (!empty($t['features'][$fk])): ?><li><?= $e(explode(' (', $fl)[0]) ?></li><?php endif; endforeach; ?></ul>
-        <p class="price">Pour des <b><?= $e($t['vocab']['members']) ?></b><br><?= $test && $test['active'] ? 'Test gratuit ' . (int) $test['trial_days'] . ' jours' : '' ?><?= $from ? ($test && $test['active'] ? ' · puis ' : '') . 'dès <b>' . $e($eur($from)) . '</b> / mois' : '' ?></p>
-        <a class="btn" href="/galerie/creer.php?type=<?= $e($tk) ?>"><?= $e($t['vocab']['create_cta']) ?></a>
-      </article>
+      <div class="lp-hover">
+        <article class="type" id="type-<?= $e($tk) ?>">
+          <span class="emo" aria-hidden="true"><?= $e($t['emoji']) ?></span>
+          <h3><?= $e($t['name']) ?></h3>
+          <p><?= $e($t['tagline']) ?></p>
+          <ul class="chips" aria-label="Fonctionnalités"><?php foreach (GT_FEATURES as $fk => $fl): if (!empty($t['features'][$fk])): ?><li><?= $e(explode(' (', $fl)[0]) ?></li><?php endif; endforeach; ?></ul>
+          <p class="price">Pour des <b><?= $e($t['vocab']['members']) ?></b><br><?= $test && $test['active'] ? 'Test gratuit ' . (int) $test['trial_days'] . ' jours' : '' ?><?= $from ? ($test && $test['active'] ? ' · puis ' : '') . 'dès <b>' . $e($eur($from)) . '</b> / mois' : '' ?></p>
+          <a class="btn" href="/galerie/creer.php?type=<?= $e($tk) ?>"><?= $e($t['vocab']['create_cta']) ?></a>
+        </article>
+        <?= gt_landing_preview_html((string) $tk, (string) $t['tagline'], 'Aperçu ' . $t['name']) ?>
+      </div>
     <?php endforeach; ?>
   </div>
   <?php if (count($types) > 1): ?>
@@ -267,8 +271,9 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
   <div class="cta-band">
     <h2>Prêt à commencer ?</h2>
     <p>Une boutique pour vendre, ou un lieu à organiser : lancez-vous en quelques minutes.</p>
-    <a class="btn" href="/inscription/">Créer ma boutique</a> <a class="btn ghost" style="border-color:var(--accent);color:var(--accent)" href="/galerie/creer.php">Organiser un marché ou une galerie</a>
+    <a class="btn" href="/inscription/">Je veux vendre en ligne</a> <a class="btn ghost" style="border-color:var(--accent);color:var(--accent)" href="/galerie/creer.php">Organiser un marché ou une galerie</a>
   </div>
 </div>
 <?= banner_slides_script() ?>
+<?= gt_landing_preview_assets() ?>
 <?php saas_page_end(); ?>

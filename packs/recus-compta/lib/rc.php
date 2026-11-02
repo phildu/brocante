@@ -159,7 +159,7 @@ function rc_send(array $r): bool
     if ($r['email'] === '' || !filter_var($r['email'], FILTER_VALIDATE_EMAIL)) return false;
     require_once dirname(__DIR__, 3) . '/includes/password-reset.php';
     $d = json_decode((string) $r['data'], true) ?: [];
-    $ok = password_reset_mail($r['email'], 'Votre reçu ' . $r['number'] . ' — ' . ($d['seller']['name'] ?? ''), rc_text($r));
+    $ok = password_reset_mail($r['email'], 'Votre reçu ' . $r['number'] . ' — ' . ($d['seller']['name'] ?? ''), rc_text($r), 'recu');
     if ($ok) db()->prepare('UPDATE rc_receipts SET emailed_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([$r['id']]);
     return $ok;
 }

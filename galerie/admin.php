@@ -69,7 +69,7 @@ $social = oauth_buttons_html('gadmin', ['csrf' => $_SESSION['ga_csrf']]);
   <?php if ($social): ?>
     <p class="oauth-note">Avec un réseau social, l'adresse e-mail doit être celle de votre compte d'administrateur de galerie.</p>
   <?php endif; ?>
-  <p class="login-foot">Compte créé par l'exploitant de la plateforme.</p>
+  <p class="login-foot">Compte créé par l'exploitant de la plateforme.<br><a href="/connexion.php">Connexion unique — boutique, galerie, portail</a></p>
 </main>
 <script src="/assets/pwd-toggle.js" defer></script>
 </body>

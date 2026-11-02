@@ -163,6 +163,79 @@ form.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; back
   .step2-summary { position: static; grid-row: 1; }
 }
 
+/* Bloc « sticker » : résumé de la commande à droite du formulaire */
+.order-sticker { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 16px; }
+.order-sticker .sticker-eyebrow { margin: 0 0 4px; font-size: .72rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.order-sticker h2 { margin: 0 0 16px; }
+.sticker-list { display: grid; gap: 10px; margin: 0; padding: 0 0 14px; border-bottom: 1px solid var(--line); }
+.sticker-list > div { display: grid; gap: 1px; }
+.sticker-list dt { color: var(--ink-soft); font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.sticker-list dd { margin: 0; font-size: .92rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.sticker-total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 14px 0 0; }
+.sticker-total span { color: var(--ink-soft); font-size: .86rem; }
+.sticker-total strong { font-family: var(--display); font-size: 1.45rem; line-height: 1.15; color: var(--accent); }
+.sticker-badge { display: inline-block; margin: 12px 0 0; padding: 4px 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: .76rem; font-weight: 700; }
+.sticker-note { margin: 14px 0 0; font-size: .8rem; line-height: 1.5; color: var(--ink-soft); }
+
+/* Plugins (replié) et prestations sur devis de l'inscription */
+.plugin-block, .service-block { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 14px 16px; }
+.plugin-block > summary, .service-block > summary { cursor: pointer; list-style: none; }
+.plugin-block > summary::-webkit-details-marker, .service-block > summary::-webkit-details-marker { display: none; }
+.plugin-block-summary { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.plugin-block-summary strong { font-size: 1rem; }
+.plugin-block-summary small { color: var(--ink-soft); font-weight: 400; font-size: .8rem; }
+.plugin-block-summary::after { content: "+"; color: var(--accent); font-weight: 700; }
+.plugin-block[open] .plugin-block-summary::after, .service-block[open] .plugin-block-summary::after { content: "−"; }
+.plugin-block-count { color: var(--ink-soft); font-size: .82rem; }
+.plugin-block-intro, .plugin-block-foot { margin: 12px 0 0; color: var(--ink-soft); font-size: .86rem; }
+.plugin-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+.plugin-choice { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; }
+.plugin-choice:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--bg)); }
+.plugin-choice input { width: 17px; height: 17px; margin: 2px 0 0; accent-color: var(--accent); }
+.plugin-choice.is-off { opacity: .55; cursor: not-allowed; }
+.plugin-choice-body { display: grid; gap: 4px; min-width: 0; }
+.plugin-choice-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; align-items: baseline; }
+.plugin-choice-head strong { font-size: .94rem; }
+.service-choice .plugin-choice-head { display: grid; gap: 2px; }
+.service-choice .plugin-price { text-align: left; color: var(--accent); font-weight: 700; }
+.plugin-price { color: var(--ink); font-size: .82rem; font-weight: 600; text-align: right; }
+.plugin-desc { color: var(--ink-soft); font-size: .84rem; line-height: 1.4; }
+.plugin-trial { color: var(--ok); font-size: .78rem; font-weight: 700; }
+/* Type de site : deux boutons radio (le choix recharge la grille de tarifs) */
+.mode-field { border: 0; padding: 0; margin: 0; min-width: 0; }
+.mode-field > legend { padding: 0; margin: 0 0 6px; font-size: .82rem; font-weight: 600; }
+.mode-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.mode-choice { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); cursor: pointer; }
+.mode-choice:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--bg)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.mode-choice input { width: 17px; height: 17px; margin: 2px 0 0; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+.mode-choice strong { display: block; font-size: .94rem; }
+.mode-choice small { display: block; margin-top: 2px; color: var(--ink-soft); font-size: .82rem; line-height: 1.4; }
+
+/* Où voulez-vous vendre ? Galeries du type choisi : vignette, description, visite et choix. */
+.place-galleries { display: grid; gap: 8px; }
+.place-galleries-title { margin: 0; font-size: .9rem; }
+.place-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.place-card { display: grid; grid-template-rows: auto 1fr; border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.place-card.is-on { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.place-shot { display: grid; gap: 5px; padding: 12px; background: color-mix(in srgb, var(--shot) 12%, var(--bg)); color: var(--ink); text-decoration: none; }
+.place-shot-band { display: block; height: 6px; border-radius: 3px; background: var(--shot); }
+.place-shot strong { font-size: .9rem; }
+.place-shot i { display: block; height: 5px; border-radius: 3px; background: var(--ink); opacity: .22; }
+.place-shot i.short { width: 60%; }
+.place-shot-chips { display: flex; gap: 6px; margin-top: 4px; }
+.place-shot-chips b { flex: 1; min-width: 0; height: 34px; overflow: hidden; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--shot) 35%, transparent); background: color-mix(in srgb, var(--shot) 20%, var(--surface)); display: grid; place-items: center; padding: 0 4px; font-size: .62rem; font-weight: 700; color: color-mix(in srgb, var(--shot) 75%, var(--ink)); text-align: center; }
+.place-body { display: grid; gap: 6px; padding: 12px; align-content: start; }
+.place-body h3 { margin: 0; font-size: 1rem; }
+.place-body p { margin: 0; color: var(--ink-soft); font-size: .84rem; line-height: 1.4; }
+.place-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.place-actions .btn { width: auto; }
+.place-selected { color: var(--ok); font-size: .8rem; font-weight: 700; }
+
+/* Ligne « total avec les plugins » du sticker */
+.sticker-total-all { margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.sticker-total-all strong { font-size: 1.15rem; }
+.sticker-estimate-note { margin: 4px 0 0; font-size: .78rem; line-height: 1.4; color: var(--ink-soft); }
+
 /* Choix du modèle de design (inscription/index.php) */
 .tpl-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 6px; }
 .tpl-pick > label { position: relative; display: grid; gap: 8px; cursor: pointer; }

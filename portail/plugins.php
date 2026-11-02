@@ -11,6 +11,7 @@ require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas-events.php';
 require_once PORTAIL_ROOT . '/includes/plugins.php';
 require_once PORTAIL_ROOT . '/includes/addons.php';
+require_once PORTAIL_ROOT . '/includes/branding-services.php';
 
 // Catégories livrées par défaut au premier chargement (ensuite modifiables dans la page).
 const PLUGIN_CATEGORY_DEFAULTS = [
@@ -78,6 +79,8 @@ $shops = tenant_list();
 $catalog = plugin_catalog();
 $catData = plugins_categories_load();
 $catIds = array_column($catData['categories'], 'id');
+$rules = plugin_rules_load();
+$activityLabels = branding_activity_catalog();
 
 /** Situation d'un plugin dans une boutique : ['status', 'row', 'error']. */
 function plugins_shop_situation(string $slug, array $m): array
@@ -225,6 +228,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         $back('categories');
+    } elseif ($action === 'save_rules') {
+        $sent = (array) ($_POST['rules'] ?? []);
+        if (!$sent) {
+            portail_flash('Aucun plugin reçu : le catalogue n’a pas été modifié.', 'error');
+            $back('catalogue');
+        }
+        foreach ($catalog as $pid => $pm) {
+            if (!isset($sent[$pid]) || !is_array($sent[$pid])) continue;
+            $row = $sent[$pid];
+            $rules[$pid] = plugin_rule_normalize([
+                'listed' => !empty($row['listed']),
+                'stage' => (string) ($row['stage'] ?? 'live'),
+                'free' => !empty($row['free']),
+                'activities' => (array) ($row['activities'] ?? []),
+                'online_sales' => !empty($row['online_sales']),
+                'default_install' => !empty($row['default_install']),
+            ], plugin_rule_defaults($pid));
+        }
+        try {
+            plugin_rules_save($rules);
+            $free = count(array_filter($rules, static fn (array $r): bool => plugin_rule_free($r)));
+            saas_event('config_changed', ['note' => 'Catalogue des plugins : ' . count($rules) . ' plugin(s), ' . $free . ' gratuit(s)']);
+            portail_flash('Catalogue enregistré : il est appliqué à la prochaine inscription. Les boutiques existantes gardent leurs plugins.');
+        } catch (Throwable $e) {
+            portail_flash($e->getMessage(), 'error');
+        }
+        $back('catalogue');
     } elseif (!$m) {
         portail_flash('Plugin introuvable.', 'error');
         $back();
@@ -380,6 +410,7 @@ $catLabel = static function (string $id) use ($catData): string {
       <span class="acts">
         <button type="button" class="btn small" data-fold="open">Tout déplier</button>
         <button type="button" class="btn small" data-fold="close">Tout replier</button>
+        <a class="btn small" href="#catalogue">Catalogue et profils</a>
         <a class="btn small" href="#categories">Gérer les catégories</a>
       </span>
     </div>
@@ -438,6 +469,57 @@ $catLabel = static function (string $id) use ($catData): string {
       </div>
     </details>
 
+    <details class="ocard" id="catalogue">
+      <summary><span class="sum-name">Catalogue et profils</span>
+        <span class="sum-meta"><?= count(array_filter($rules, static fn (array $r): bool => !empty($r['listed']))) ?> proposé(s) à l’inscription · <?= count(array_filter($rules, static fn (array $r): bool => !empty($r['default_install']))) ?> installé(s) d’office</span>
+        <span class="sum-where">qui voit quoi, à quel prix</span></summary>
+      <div class="ocard-body">
+        <p class="hint">Décidez pour chaque plugin s’il est proposé pendant l’inscription, et à quel profil il s’adresse.
+          Un plugin <strong>en test</strong> est affiché gratuitement jusqu’à sa mise en service : il peut être proposé et installé sans facturation.
+          Les restrictions par activité ne s’appliquent qu’une fois l’activité connue (étape 2) ; une sélection incompatible est retirée avant le paiement.
+          Les boutiques déjà créées gardent leurs plugins et leur tarif, quel que soit ce réglage.</p>
+        <p class="hint"><strong>Ventes flash :</strong> retirée du catalogue d’inscription, car les <em>actions commerciales</em> couvrent déjà la vente flash programmée.
+          Les boutiques qui l’ont conservent sa baisse de prix progressive automatique, que les actions commerciales ne font pas.</p>
+        <form method="post" action="/portail/plugins.php">
+          <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+          <input type="hidden" name="action" value="save_rules">
+          <div class="scroll">
+            <table class="t">
+              <thead><tr><th>Plugin</th><th>Proposé</th><th>État</th><th>Gratuit</th><th>Réservé aux activités</th><th>Vente en ligne</th><th>D’office</th></tr></thead>
+              <tbody>
+              <?php foreach ($catalog as $id => $m): $rule = $rules[$id] ?? plugin_rule_defaults($id); ?>
+                <tr>
+                  <td><strong><?= e($m['name']) ?></strong> <span class="hint"><?= e($id) ?></span></td>
+                  <td><input type="checkbox" name="rules[<?= e($id) ?>][listed]" value="1"<?= !empty($rule['listed']) ? ' checked' : '' ?> aria-label="Proposer <?= e($m['name']) ?> à l’inscription"></td>
+                  <td>
+                    <select name="rules[<?= e($id) ?>][stage]" aria-label="État de <?= e($m['name']) ?>">
+                      <option value="live"<?= $rule['stage'] === 'live' ? ' selected' : '' ?>>En service</option>
+                      <option value="test"<?= $rule['stage'] === 'test' ? ' selected' : '' ?>>En test (gratuit)</option>
+                    </select>
+                  </td>
+                  <td><input type="checkbox" name="rules[<?= e($id) ?>][free]" value="1"<?= !empty($rule['free']) ? ' checked' : '' ?> aria-label="Rendre <?= e($m['name']) ?> gratuit"></td>
+                  <td>
+                    <select name="rules[<?= e($id) ?>][activities][]" multiple size="4" aria-label="Activités autorisées pour <?= e($m['name']) ?>" style="min-width:210px;">
+                      <?php foreach ($activityLabels as $key => $label): ?>
+                        <option value="<?= e($key) ?>"<?= in_array($key, (array) $rule['activities'], true) ? ' selected' : '' ?>><?= e($label) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                    <div class="hint">Aucune sélection = toutes les activités.</div>
+                  </td>
+                  <td><input type="checkbox" name="rules[<?= e($id) ?>][online_sales]" value="1"<?= !empty($rule['online_sales']) ? ' checked' : '' ?> aria-label="<?= e($m['name']) ?> réservé à la vente en ligne"></td>
+                  <td><input type="checkbox" name="rules[<?= e($id) ?>][default_install]" value="1"<?= !empty($rule['default_install']) ? ' checked' : '' ?> aria-label="Installer <?= e($m['name']) ?> d’office"></td>
+                </tr>
+              <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+          <p class="hint" style="margin-top:10px;">Une activité n’est retenue que si elle figure dans l’activité principale ou secondaire déclarée à l’étape 2.
+            « D’office » installe le plugin dans chaque nouvelle boutique, sans passer par la sélection du client.</p>
+          <p><button type="submit" class="btn small btn-primary">Enregistrer le catalogue</button></p>
+        </form>
+      </div>
+    </details>
+
     <?php if (!$visible): ?>
       <section class="ocard" style="padding:16px;"><p class="hint">Aucun plugin dans cette catégorie. <a href="/portail/plugins.php">Voir tous les plugins</a>.</p></section>
     <?php endif; ?>
@@ -455,6 +537,12 @@ $catLabel = static function (string $id) use ($catData): string {
           <?php if ($mCat !== ''): ?><span class="tag"><?= e($catLabel($mCat)) ?></span><?php endif; ?>
           <span class="sum-meta"><?= e($id) ?> · v<?= e($m['version']) ?> · <?= count($m['migrations']) ?> migration(s)</span>
           <?php if (isset(addon_defaults()[$id]) && (addon_info($id)['stage'] ?? 'live') === 'beta'): ?><span class="tag">En test</span><?php endif; ?>
+          <?php $rule = $rules[$id] ?? plugin_rule_defaults($id); ?>
+          <?php if (empty($rule['listed'])): ?><span class="tag warn">Non proposé</span><?php endif; ?>
+          <?php if (!empty($rule['default_install'])): ?><span class="tag ok">Installé d’office</span><?php endif; ?>
+          <?php if (plugin_rule_free($rule)): ?><span class="tag ok"><?= $rule['stage'] === 'test' ? 'En test — gratuit' : 'Gratuit' ?></span><?php endif; ?>
+          <?php if ((array) $rule['activities']): ?><span class="tag"><?= e(implode(', ', array_map(static fn ($a): string => $activityLabels[$a] ?? $a, (array) $rule['activities']))) ?></span><?php endif; ?>
+          <?php if (!empty($rule['online_sales'])): ?><span class="tag">Vente en ligne</span><?php endif; ?>
           <span class="sum-where">
             <?= $active ?> boutique(s) active(s)<?= $toUpdate ? ' · ' . $toUpdate . ' à mettre à jour' : '' ?>
             <?php if ($toUpdate): ?><span class="tag warn">mise à jour</span><?php endif; ?>

@@ -200,6 +200,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 branding_save_request($request);
                 $purchase = [];
                 $notice = 'Le paiement précédent a été fermé. Vous pouvez demander un nouveau devis.';
+            } elseif ($action === 'request_quotes') {
+                $catalog = saas_service_quotes_active();
+                $picked = $_POST['service_quotes'] ?? [];
+                if (!is_array($picked)) throw new InvalidArgumentException('La sélection des prestations est invalide.');
+                $services = [];
+                foreach ($picked as $key) {
+                    if (!is_string($key) || !isset($catalog[$key])) throw new InvalidArgumentException('Une prestation sélectionnée n’est pas reconnue.');
+                    $services[] = $key;
+                }
+                $services = array_values(array_unique($services));
+                if (!$services) throw new InvalidArgumentException('Choisissez au moins une prestation pour votre demande de devis.');
+                $message = mb_substr(trim((string) ($_POST['service_quotes_message'] ?? '')), 0, 1200);
+                if (mb_strlen($message) < 10) throw new InvalidArgumentException('Précisez votre besoin en une phrase (10 caractères minimum).');
+                $quoteEmail = mb_strtolower(trim((string) ($_POST['quote_email'] ?? $request['email'] ?? '')));
+                if (!filter_var($quoteEmail, FILTER_VALIDATE_EMAIL) || strlen($quoteEmail) > 254) {
+                    throw new InvalidArgumentException('Indiquez une adresse e-mail valide pour recevoir le devis.');
+                }
+                $quotePhone = mb_substr(trim((string) ($_POST['quote_phone'] ?? '')), 0, 30);
+                $request['service_quotes'] = $services;
+                $request['service_quotes_message'] = $message;
+                $request['service_quotes_email'] = $quoteEmail;
+                $request['service_quotes_phone'] = $quotePhone;
+                $request['service_quotes_at'] = time();
+                branding_save_request($request);
+                $labels = saas_service_quote_names($services);
+                $cfg = saas_config();
+                if ($cfg['contact'] !== '') {
+                    saas_mail($cfg['contact'], 'Demande de devis : ' . $request['shop_name'] . ' (' . $quoteEmail . ')',
+                        "Une boutique demande un devis après sa création.\n\n"
+                        . 'Boutique : ' . $request['shop_name'] . "\n"
+                        . 'Adresse : ' . (string) ($request['shop_url'] ?? '') . "\n"
+                        . 'Contact : ' . $quoteEmail . ($quotePhone !== '' ? ' · ' . $quotePhone : '') . "\n"
+                        . 'Prestations : ' . implode(', ', $labels) . "\n\n"
+                        . "Message :\n" . $message . "\n\n"
+                        . $origin . "/portail/services-devis.php\n");
+                }
+                saas_event('quote_requested', ['ref' => (string) $request['id'], 'email' => $quoteEmail, 'plan' => (string) ($request['plan'] ?? ''),
+                    'gallery' => (string) ($request['gallery'] ?? ''), 'actor' => 'client', 'note' => implode(', ', $labels)]);
+                $notice = 'Demande de devis envoyée : nous revenons vers vous à l’adresse ' . $quoteEmail . ' sous 2 jours ouvrés.';
             } else {
                 throw new InvalidArgumentException('Action inconnue.');
             }
@@ -249,6 +288,9 @@ saas_page_start('Nom, logo et domaine — ' . saas_config()['name'], 'Personnali
   .brand-form { display:grid; gap:12px; margin-top:18px; }
   .brand-form label { display:grid; gap:5px; font-size:.9rem; }
   .brand-form input, .brand-form select { width:100%; min-height:42px; border:1px solid #d5cec5; border-radius:7px; padding:8px 10px; font:inherit; }
+  .brand-form textarea { width:100%; border:1px solid #d5cec5; border-radius:7px; padding:9px 10px; font:inherit; resize:vertical; }
+  .quote-services { border:0; margin:0; padding:0; min-width:0; }
+  .quote-services legend { padding:0; margin-bottom:8px; font-size:.9rem; font-weight:600; color:#221f1a; }
   .brand-form input[type=checkbox] { width:auto; min-height:auto; }
   .brand-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
   .brand-names { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
@@ -429,6 +471,41 @@ saas_page_start('Nom, logo et domaine — ' . saas_config()['name'], 'Personnali
         <?php endif; ?>
       <?php endif; ?>
     </section>
+
+    <?php $quoteCatalog = saas_service_quotes_active(); ?>
+    <?php if ($quoteCatalog): ?>
+      <section class="brand-card brand-design" id="devis">
+        <h2>Prestations sur devis</h2>
+        <?php if (!empty($request['service_quotes_at'])): ?>
+          <div class="notice ok" role="status">Demande envoyée le <?= $e(date('d/m/Y', (int) $request['service_quotes_at'])) ?> : nous répondons à <strong><?= $e((string) ($request['service_quotes_email'] ?? '')) ?></strong> sous 2 jours ouvrés. Vous pouvez la compléter ci-dessous.</div>
+        <?php endif; ?>
+        <p>Choisissez ce dont vous avez besoin. Les fourchettes ci-dessous sont indicatives : chaque devis est établi sur mesure et gratuitement, et aucun paiement n’est déclenché par cette demande.</p>
+        <form class="brand-form" method="post" action="/inscription/identite.php<?= $link ?>">
+          <input type="hidden" name="csrf" value="<?= $e($csrf) ?>">
+          <input type="hidden" name="action" value="request_quotes">
+          <fieldset class="quote-services">
+            <legend>Prestations souhaitées</legend>
+            <div class="plugin-picks">
+              <?php foreach ($quoteCatalog as $key => $service): ?>
+                <label class="plugin-choice">
+                  <input type="checkbox" name="service_quotes[]" value="<?= $e($key) ?>"<?= in_array($key, (array) ($request['service_quotes'] ?? []), true) ? ' checked' : '' ?>>
+                  <span class="plugin-choice-body">
+                    <span class="plugin-choice-head"><strong><?= $e($service['name']) ?></strong><span class="plugin-price"><?= $e(saas_service_quote_price($service)) ?></span></span>
+                    <span class="plugin-desc"><?= $e($service['description']) ?></span>
+                  </span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          </fieldset>
+          <label>Votre besoin<textarea name="service_quotes_message" rows="4" minlength="10" maxlength="1200" required placeholder="Ex. : refonte du design et installation du logo avant l’ouverture."><?= $e((string) ($request['service_quotes_message'] ?? '')) ?></textarea></label>
+          <div class="brand-grid">
+            <label>E-mail pour le devis<input type="email" name="quote_email" maxlength="254" required value="<?= $e((string) ($request['service_quotes_email'] ?? $request['email'] ?? '')) ?>"></label>
+            <label>Téléphone (facultatif)<input type="tel" name="quote_phone" maxlength="30" autocomplete="tel" value="<?= $e((string) ($request['service_quotes_phone'] ?? $request['phone'] ?? '')) ?>"></label>
+          </div>
+          <button class="btn" type="submit"><?= empty($request['service_quotes_at']) ? 'Envoyer ma demande de devis' : 'Mettre à jour ma demande' ?></button>
+        </form>
+      </section>
+    <?php endif; ?>
   </div>
   <p style="margin:22px 0"><a class="btn ghost" href="<?= $e($shopUrl) ?>">Continuer vers ma boutique</a></p>
 </div>

@@ -223,11 +223,35 @@ function cm_shop_orders(string $shop, int $afterId, int $sinceTs): array
         $pdo->exec('PRAGMA query_only = 1');
         $cols = $pdo->query('PRAGMA table_info(orders)')->fetchAll(PDO::FETCH_COLUMN, 1);
         $sel = 'id, strftime(\'%s\', created_at) AS ts, amount_total, shipping_cents, ' . (in_array('payment_via', $cols, true) ? 'payment_via, connect_fee_cents, connect_gallery_cents' : "NULL AS payment_via, NULL AS connect_fee_cents, NULL AS connect_gallery_cents") . ', shipping_method';
-        $st = $pdo->prepare("SELECT $sel FROM orders WHERE status = 'paid' AND id > ? AND CAST(strftime('%s', created_at) AS INTEGER) >= ? ORDER BY id");
+        $st = $pdo->prepare("SELECT $sel FROM orders WHERE status IN ('paid', 'refunded') AND id > ? AND CAST(strftime('%s', created_at) AS INTEGER) >= ? ORDER BY id");
         $st->execute([$afterId, $sinceTs]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         error_log("cm_shop_orders($shop): " . $e->getMessage());
+        return [];
+    }
+}
+
+/** Commandes remboursées (même partielles) d'un commerce : de quoi annuler la commission au prorata. */
+function cm_shop_refunds(string $shop, int $sinceTs): array
+{
+    if (!is_file(tenant_dir($shop) . '/tenant.php')) return [];
+    try {
+        $file = tenant_file(tenant_load($shop), 'db_file');
+        if (!is_file($file)) return [];
+        $pdo = new PDO('sqlite:' . $file);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('PRAGMA query_only = 1');
+        $cols = $pdo->query('PRAGMA table_info(orders)')->fetchAll(PDO::FETCH_COLUMN, 1);
+        if (!in_array('refunded_cents', $cols, true)) return [];
+        $connectCols = in_array('payment_via', $cols, true) ? 'payment_via, connect_fee_cents, connect_gallery_cents' : "NULL AS payment_via, NULL AS connect_fee_cents, NULL AS connect_gallery_cents";
+        $tsCol = in_array('refunded_at', $cols, true) ? "COALESCE(strftime('%s', refunded_at), strftime('%s', 'now'))" : "strftime('%s', 'now')";
+        $st = $pdo->prepare("SELECT id, $tsCol AS ts, amount_total, shipping_cents, refunded_cents, $connectCols
+            FROM orders WHERE refunded_cents > 0 AND status IN ('paid', 'refunded') AND CAST(strftime('%s', created_at) AS INTEGER) >= ? ORDER BY id");
+        $st->execute([$sinceTs]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        error_log("cm_shop_refunds($shop): " . $e->getMessage());
         return [];
     }
 }
@@ -257,6 +281,34 @@ function cm_sync(): int
             if ($platformCents + $galleryCents === 0) continue;
             $rows[] = ['id' => 'o:' . $shop . ':' . $o['id'], 'ts' => (int) $o['ts'], 'kind' => 'sale', 'shop' => $shop, 'gallery' => $gallery, 'ref' => (string) $o['id'], 'base' => $base,
                 'platform' => $platformCents, 'gallery_cents' => $galleryCents, 'collected' => $connect];
+        }
+        // Remboursements (totaux ou partiels) : la commission déjà comptée est annulée au prorata.
+        // Suivi séparé du curseur de ventes, car un remboursement peut arriver sur une vieille commande.
+        foreach (cm_shop_refunds($shop, $c['since']) as $o) {
+            $refunded = (int) $o['refunded_cents'];
+            $done = (int) ($state['refunds'][$shop][$o['id']] ?? 0);
+            if ($refunded <= $done) continue;
+            $delta = $refunded - $done;
+            $state['refunds'][$shop][$o['id']] = $refunded;
+            $total = (int) $o['amount_total'];
+            if ($total <= 0) continue;
+            $base = max(0, $total - (int) $o['shipping_cents']);
+            $refundBase = $delta >= $total ? $base : (int) round($base * $delta / $total);
+            $connect = ($o['payment_via'] ?? '') === 'connect' && (int) $o['connect_fee_cents'] > 0;
+            if ($connect) {
+                $fee = (int) $o['connect_fee_cents'];
+                $refundFee = $delta >= $total ? $fee : (int) round($fee * $delta / $total);
+                $galleryTotal = min((int) $o['connect_gallery_cents'], $fee);
+                $galleryCut = $fee > 0 ? (int) round($galleryTotal * $refundFee / $fee) : 0;
+                $platformCents = -($refundFee - $galleryCut);
+                $galleryCents = -$galleryCut;
+            } else {
+                $platformCents = -(int) round($refundBase * $c['rates']['sales_platform_pct'] / 100);
+                $galleryCents = $gallery !== '' ? -(int) round($refundBase * cm_rate($gallery, 'sales_gallery_pct') / 100) : 0;
+            }
+            if ($platformCents + $galleryCents === 0) continue;
+            $rows[] = ['id' => 'r:' . $shop . ':' . $o['id'] . ':' . $refunded, 'ts' => (int) $o['ts'], 'kind' => 'refund', 'shop' => $shop, 'gallery' => $gallery, 'ref' => (string) $o['id'],
+                'base' => $refundBase, 'platform' => $platformCents, 'gallery_cents' => $galleryCents, 'collected' => $connect];
         }
     }
     $maxTs = (int) $state['events_ts'];
@@ -303,17 +355,19 @@ function cm_summary(int $from, int $to): array
     foreach (cm_lines() as $l) {
         $in = $l['ts'] >= $from && $l['ts'] <= $to;
         if ($in) {
-            if ($l['kind'] === 'sale') {
+            if ($l['kind'] === 'sale' || $l['kind'] === 'refund') {
                 $platform[$l['collected'] ? 'collected' : 'to_invoice'] += $l['platform'];
                 $s = $shops[$l['shop']] ?? ['count' => 0, 'base' => 0, 'platform' => 0, 'gallery' => 0, 'collected' => 0];
-                $s['count']++; $s['base'] += $l['base']; $s['platform'] += $l['platform']; $s['gallery'] += $l['gallery_cents']; $s['collected'] += $l['collected'] ? 1 : 0;
+                if ($l['kind'] === 'sale') { $s['count']++; $s['collected'] += $l['collected'] ? 1 : 0; }
+                $s['base'] += $l['kind'] === 'refund' ? -$l['base'] : $l['base'];
+                $s['platform'] += $l['platform']; $s['gallery'] += $l['gallery_cents'];
                 $shops[$l['shop']] = $s;
             }
         }
         $g = $l['gallery'];
         if ($g === '') continue;
         $galleries[$g] ??= ['sales' => 0, 'subs' => 0, 'period' => 0, 'due' => 0, 'due_collected' => 0, 'due_tracked' => 0, 'paid' => 0, 'lines' => 0];
-        if ($in) { $galleries[$g][$l['kind'] === 'sale' ? 'sales' : 'subs'] += $l['gallery_cents']; $galleries[$g]['period'] += $l['gallery_cents']; $galleries[$g]['lines']++; }
+        if ($in) { $salesBucket = $l['kind'] === 'sale' || str_starts_with((string) $l['id'], 'r:'); $galleries[$g][$salesBucket ? 'sales' : 'subs'] += $l['gallery_cents']; $galleries[$g]['period'] += $l['gallery_cents']; $galleries[$g]['lines']++; }
         if (isset($paid[$l['id']])) { $galleries[$g]['paid'] += $l['gallery_cents']; continue; }
         $galleries[$g]['due'] += $l['gallery_cents'];
         $galleries[$g][$l['collected'] ? 'due_collected' : 'due_tracked'] += $l['gallery_cents'];

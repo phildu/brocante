@@ -258,7 +258,7 @@ function av_mail(string $to, string $subject, string $body): bool
 {
     require_once dirname(__DIR__, 3) . '/includes/password-reset.php';
     try {
-        return password_reset_mail($to, $subject, $body);
+        return password_reset_mail($to, $subject, $body, 'assistance-vendeur');
     } catch (Throwable $e) {
         error_log('Assistance vendeur (e-mail) : ' . $e->getMessage());
         return false;

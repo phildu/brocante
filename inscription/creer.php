@@ -88,10 +88,12 @@ if (!$req) {
                     $manual = ($req['payment']['state'] ?? '') === 'manual';
                     if ($cfg['contact'] !== '') {
                         $serviceQuoteLabels = saas_service_quote_names((array) ($req['service_quotes'] ?? []));
+                        $pluginLabels = saas_plugin_interest_names((array) ($req['plugins'] ?? []));
                         saas_mail($cfg['contact'], 'Nouvelle boutique créée : ' . $req['shop_name'],
                             "Une boutique vient d'être créée.\n\nBoutique : {$req['shop_name']} ({$generated['shop_url']})\nContact : {$req['first_name']} {$req['last_name']} — {$req['email']} {$req['phone']}\nFormule : $planName"
                             . ($status === 'paid' ? ' — payée' : ($manual ? ' — ⚠ paiement à régler avec le client (' . ($req['payment']['note'] ?? '') . ')' : ' — gratuite'))
                             . ($serviceQuoteLabels ? "\nPrestations demandées sur devis : " . implode(', ', $serviceQuoteLabels) : '')
+                            . ($pluginLabels ? "\nPlugins cochés à l'inscription (à activer) : " . implode(', ', $pluginLabels) : '')
                             . "\nDesign initial : " . (SHOP_TEMPLATES[$req['template']]['label'] ?? $req['template']) . "\n" . ($req['gallery'] !== '' ? "Galerie : {$req['gallery']}\n" : '') . "\n$origin/portail/inscriptions.php\n");
                     }
                     $brandingUrl = $origin . '/inscription/identite.php?r=' . rawurlencode((string) $req['id'])
@@ -214,7 +216,7 @@ saas_page_start('Ma boutique — ' . $cfg['name'], 'Dernière étape : le nom et
             <label class="field<?= isset($errors['password2']) ? ' has-error' : '' ?>"><span>Confirmer le mot de passe</span><input type="password" name="password2"<?= $social ? '' : ' required' ?> minlength="8" autocomplete="new-password"><?= $err('password2') ?></label>
             <label class="field full password-visibility"><input type="checkbox" id="show-passwords"><span>Afficher les mots de passe</span></label>
             <label class="field full"><span>Que vendez-vous ? (facultatif)</span><textarea name="about" maxlength="400" placeholder="Vêtements de seconde main, objets de brocante, livres anciens…"><?= saas_e($v['about']) ?></textarea></label>
-            <?php if (autofeed_api_key() !== '' && autofeed_key((array) ($req['activity_details'] ?? [])) !== ''): ?>
+            <?php if (($req['ai_mode'] ?? 'with') !== 'without' && autofeed_api_key() !== '' && autofeed_key((array) ($req['activity_details'] ?? [])) !== ''): ?>
               <label class="field full password-visibility" style="grid-template-columns:auto 1fr;align-items:start;gap:10px">
                 <input type="checkbox" name="autofeed" value="1"<?= !empty($_POST['autofeed']) || (!empty($req['autofeed']) && $_SERVER['REQUEST_METHOD'] !== 'POST') ? ' checked' : '' ?>>
                 <span><strong>Pré-remplir ma boutique (facultatif)</strong><br><small>Une image de bandeau et <?= (int) AUTOFEED_PRODUCTS ?> articles d’exemple, générés par IA selon votre activité. Vous pourrez les modifier, les supprimer ou régénérer les images depuis votre administration.</small></span>
@@ -225,13 +227,20 @@ saas_page_start('Ma boutique — ' . $cfg['name'], 'Dernière étape : le nom et
               <p class="field full oauth-note" style="margin:0">Votre boutique sera créée sans être ajoutée automatiquement à <strong><?= saas_e($galleries[$req['gallery']]['name']) ?></strong>. Après sa création, vous pourrez tester son affichage dans cette galerie et décider si vous souhaitez la rejoindre.</p>
             <?php endif; ?>
             <?php if (empty($req['terms_accepted'])): ?>
-              <label class="field full<?= isset($errors['terms']) ? ' has-error' : '' ?>" style="grid-template-columns:auto 1fr;align-items:start;gap:10px">
+              <?php
+            $creerType = !empty($req['gallery']) && isset($galleries[$req['gallery']])
+                ? (string) ($galleries[$req['gallery']]['type'] ?? '')
+                : (string) ($req['place_type'] ?? '');
+            $creerWord = $creerType === 'vide-grenier' ? 'stand' : 'boutique';
+            ?>
+            <label class="field full<?= isset($errors['terms']) ? ' has-error' : '' ?>" style="grid-template-columns:auto 1fr;align-items:start;gap:10px">
                 <input type="checkbox" name="terms" value="1" style="width:auto;margin-top:4px"<?= !empty($_POST['terms']) ? ' checked' : '' ?>>
-                <span style="font-weight:400">J'accepte d'être contacté(e) pour la création de ma boutique et que mes informations servent à ce seul usage.<?= $err('terms') ?></span>
+                <span style="font-weight:400">J'accepte d'être contacté(e) pour la création de mon <?= $creerWord ?> et que mes informations servent à ce seul usage.<?= $err('terms') ?></span>
               </label>
             <?php endif; ?>
           </div>
-          <p style="margin:22px 0 0"><button class="btn" type="submit">Créer ma boutique</button></p>
+          <p style="margin:22px 0 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button class="btn" type="submit">Créer mon <?= $creerWord ?></button>
+            <?php if ($status === 'draft'): ?><a class="btn ghost" href="/inscription/design.php?r=<?= rawurlencode((string) $req['id']) ?>&amp;k=<?= rawurlencode((string) $req['token']) ?>">← Retour au design</a><?php endif; ?></p>
         </form>
         <?php if ($status === 'draft'): ?>
           <form class="form-card" method="post" action="/inscription/creer.php" onsubmit="return confirm('Annuler cette demande non payée ? Vous pourrez recommencer immédiatement avec cette adresse e-mail.');" style="margin-top:12px">

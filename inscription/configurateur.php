@@ -2,12 +2,15 @@
 // ÉTAPE 2 : e-mail ou compte Google pour une offre payable, puis Stripe Checkout.
 require_once __DIR__ . '/../includes/saas.php';
 require_once __DIR__ . '/../includes/branding-services.php';
+require_once __DIR__ . '/../includes/plugins.php';
 
 session_start();
 if (empty($_SESSION['saas_csrf'])) $_SESSION['saas_csrf'] = bin2hex(random_bytes(16));
 
 $origin = saas_origin();
 $req = saas_request_by_link((string) ($_REQUEST['r'] ?? ''), (string) ($_REQUEST['k'] ?? ''));
+$owner = saas_owner_input($_POST, $req ?: []);
+$ownerErrors = saas_owner_validate($owner);
 $errors = [];
 $email = trim((string) ($_POST['email'] ?? ''));
 $brandingStep = (array) ($req['branding']['step2'] ?? []);
@@ -81,6 +84,7 @@ if (!$req || ($req['status'] ?? '') !== 'draft' || !saas_request_active($req)) {
                     $req['about'] = $about;
                     $req['location'] = $location;
                     $req['activity_details'] = $activity;
+                    $req = array_merge($req, saas_owner_input($_POST, $req));
                     $req['branding']['step2'] = ['availability' => $search, 'name_suggestions' => (array) ($brandingStep['name_suggestions'] ?? [])];
                     $chosen = (array) ($req['branding']['domain_choice'] ?? []);
                     if (($chosen['name'] ?? '') !== $shopName) unset($req['branding']['domain_choice']);
@@ -110,6 +114,7 @@ if (!$req || ($req['status'] ?? '') !== 'draft' || !saas_request_active($req)) {
             $req['activity_details'] = $activity;
             $req['about'] = $about;
             $req['location'] = $location;
+            $req = array_merge($req, saas_owner_input($_POST, $req));
             if ($shopName !== '') {
                 $req['preferred_shop_name'] = $shopName;
                 $req['shop_name'] = $shopName;
@@ -139,6 +144,9 @@ if (!$req || ($req['status'] ?? '') !== 'draft' || !saas_request_active($req)) {
             }
             if (!saas_request_save($req)) $errors['form'] = 'Impossible d’enregistrer votre choix de domaine.';
         } elseif ($action === 'suggest_names') {
+            if (($req['ai_mode'] ?? 'with') === 'without') {
+                $errors['form'] = 'Vous avez choisi une boutique sans IA : les suggestions de noms par IA sont désactivées. Choisissez votre nom vous-même.';
+            } else {
             $shopName = trim((string) ($_POST['shop_name'] ?? $req['preferred_shop_name'] ?? ''));
             $about = trim((string) ($_POST['about'] ?? ''));
             $location = trim((string) ($_POST['location'] ?? ''));
@@ -159,6 +167,7 @@ if (!$req || ($req['status'] ?? '') !== 'draft' || !saas_request_active($req)) {
                     $req['about'] = $about;
                     $req['location'] = $location;
                     $req['activity_details'] = $activity;
+                    $req = array_merge($req, saas_owner_input($_POST, $req));
                     $names = branding_generate_names($req);
                     $priorAvailability = (array) ($brandingStep['availability'] ?? []);
                     if (($priorAvailability['primary'] ?? '') !== trim(saas_slug($shopName), '-')) $priorAvailability = [];
@@ -169,6 +178,7 @@ if (!$req || ($req['status'] ?? '') !== 'draft' || !saas_request_active($req)) {
                 } catch (InvalidArgumentException | RuntimeException $ex) {
                     $errors['form'] = $ex->getMessage();
                 }
+            }
             }
         } elseif ($action === 'continue_payment') {
             $shopName = trim((string) ($_POST['shop_name'] ?? ''));
@@ -188,6 +198,8 @@ if (!$req || ($req['status'] ?? '') !== 'draft' || !saas_request_active($req)) {
                 $errors['terms'] = 'Acceptez les conditions pour continuer.';
             } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254) {
                 $errors['email'] = 'Indiquez une adresse e-mail valide.';
+            } elseif ($ownerErrors) {
+                $errors += $ownerErrors;
             } elseif ($errors) {
                 // Conserve l’erreur de sélection déjà ajoutée ci-dessus.
             } else {
@@ -196,6 +208,12 @@ if (!$req || ($req['status'] ?? '') !== 'draft' || !saas_request_active($req)) {
                 $req['about'] = mb_substr($about, 0, 400);
                 $req['location'] = mb_substr($location, 0, 100);
                 $req['activity_details'] = $activity;
+                // Les plugins réservés à une activité (registre de police, QR story) ne suivent que si l'activité choisie y figure.
+                if (!empty($req['plugins'])) {
+                    $req['plugins'] = plugin_filter_selection((array) $req['plugins'], (string) ($req['site_mode'] ?? 'sales'),
+                        (string) ($req['shop_presence'] ?? 'store'), $activity);
+                }
+                $req = array_merge($req, saas_owner_input($_POST, $req));
                 if (($req['branding']['domain_choice']['name'] ?? '') !== $shopName) unset($req['branding']['domain_choice']);
                 $req['email'] = strtolower($email);
                 $req['contact_method'] = 'email';
@@ -271,6 +289,15 @@ $social = $req ? oauth_buttons_html('signup', [
     'about' => $about,
     'location' => $location,
     'activity_json' => (string) $activityJson,
+    'owner_kind' => $owner['owner_kind'],
+    'company_name' => $owner['company_name'],
+    'siret' => $owner['siret'],
+    'vat' => $owner['vat'],
+    'address' => $owner['address'],
+    'postal_code' => $owner['postal_code'],
+    'city' => $owner['city'],
+    'address_lat' => $owner['address_lat'],
+    'address_lng' => $owner['address_lng'],
 ], false, ['google']) : '';
 $isPayable = $req && saas_req_payable($req);
 $rawHost = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'brocs.arrimage.com'));
@@ -278,25 +305,30 @@ $baseDomain = tenant_base_host($rawHost);
 $defaultSlug = trim(saas_slug($shopName !== '' ? $shopName : 'ma-boutique'), '-');
 if ($defaultSlug === '') $defaultSlug = 'ma-boutique';
 $escape = static fn (string $value): string => saas_e($value);
+// Un vide-grenier accueille des stands : les titres de l'étape suivent le lieu choisi à l'étape 1.
+$reqGallery = $req && !empty($req['gallery']) ? gallery_load((string) $req['gallery']) : null;
+$reqPlaceType = (string) ($req['place_type'] ?? ($reqGallery['type'] ?? ''));
+$shopWord = (($reqGallery && (string) ($reqGallery['type'] ?? '') === 'vide-grenier') || $reqPlaceType === 'vide-grenier') ? 'stand' : 'boutique';
+$shopWordCap = ucfirst($shopWord);
 
-saas_page_start('Préconfiguration — ' . saas_config()['name'], 'Configurez le nom de votre boutique, son activité et vos options de nom de domaine.', 'inscription');
+saas_page_start(($shopWord === 'stand' ? 'Mon stand' : 'Ma boutique') . ' — ' . saas_config()['name'], 'Choisissez le nom de votre ' . $shopWord . ', son activité et vos options de nom de domaine.', 'inscription');
 ?>
 <div class="wrap">
   <div class="page-title">
-    <p class="eyebrow">Création de boutique</p>
-    <h1>Préconfiguration de ma boutique</h1>
+    <p class="eyebrow"><?= $shopWord === 'stand' ? 'Création de mon stand' : 'Création de ma boutique' ?></p>
+    <h1>Je crée mon <?= $shopWord ?></h1>
     <ol class="stepper" aria-label="Étapes">
-      <li class="is-done"><?php if ($req): ?><a class="stepper-link" href="<?= $escape($backToPlan) ?>" aria-label="Revenir à l’étape Ma formule"><b>✓</b> Ma formule</a><?php else: ?><b>✓</b> Ma formule<?php endif; ?></li>
-      <li class="is-current" aria-current="step"><b>2</b> Préconfiguration</li>
+      <li class="is-done"><?php if ($req): ?><a class="stepper-link" href="<?= $escape($backToPlan) ?>" aria-label="Revenir à l’étape Où je vends"><b>✓</b> Où je vends</a><?php else: ?><b>✓</b> Où je vends<?php endif; ?></li>
+      <li class="is-current" aria-current="step"><b>2</b> Mon <?= $shopWord ?></li>
       <li><b>3</b> Design</li>
       <?php if ($isPayable): ?>
         <li><b>4</b> Paiement</li>
-        <li><b>5</b> Ma boutique</li>
+        <li><b>5</b> En ligne</li>
       <?php else: ?>
-        <li><b>4</b> Ma boutique</li>
+        <li><b>4</b> En ligne</li>
       <?php endif; ?>
     </ol>
-    <p class="lede">Choisissez le nom de votre boutique, son activité et vérifiez les domaines associés avant de passer au design de votre boutique.</p>
+    <p class="lede">Choisissez le nom de votre <?= $shopWord ?>, son activité et vérifiez les domaines associés avant de passer au design de votre <?= $shopWord ?>.</p>
   </div>
   <?php if (!$req): ?>
     <div class="form-card"><div class="notice error" role="alert"><strong>Cette étape n’est plus disponible.</strong> Le lien a expiré ou a déjà été utilisé.</div>
@@ -305,7 +337,7 @@ saas_page_start('Préconfiguration — ' . saas_config()['name'], 'Configurez le
     <div class="step2-layout">
       <div class="step2-main">
     <section class="form-card" style="margin-bottom:20px">
-      <h2 style="margin-top:0">Nom de la boutique et nom de domaine</h2>
+      <h2 style="margin-top:0">Nom du <?= $shopWord ?> et nom de domaine</h2>
       <p>Un nom de domaine personnalisé facilite la mémorisation. Vérifiez la disponibilité auprès d’OVH pour les extensions .fr, .com, .net et .shop ; des variantes proches sont également proposées si le nom exact est déjà pris.</p>
       <form method="post" action="/inscription/configurateur.php" class="form-grid">
         <input type="hidden" name="csrf" value="<?= $escape($_SESSION['saas_csrf']) ?>">
@@ -313,7 +345,7 @@ saas_page_start('Préconfiguration — ' . saas_config()['name'], 'Configurez le
         <input type="hidden" name="k" value="<?= $escape($req['token']) ?>">
         <input type="hidden" name="action" value="check_domains">
         <input type="hidden" name="activity_json" value="<?= $escape((string) $activityJson) ?>" data-activity-json>
-        <label class="field full<?= isset($errors['shop_name']) ? ' has-error' : '' ?>"><span>Nom envisagé pour la boutique</span>
+        <label class="field full<?= isset($errors['shop_name']) ? ' has-error' : '' ?>"><span>Nom envisagé pour le <?= $shopWord ?></span>
           <input type="text" id="step2-shop-name-search" name="shop_name" value="<?= $escape($shopName) ?>" required maxlength="60" autocomplete="organization">
           <?php if (isset($errors['shop_name'])): ?><span class="err" role="alert"><?= $escape($errors['shop_name']) ?></span><?php endif; ?>
         </label>
@@ -369,6 +401,7 @@ saas_page_start('Préconfiguration — ' . saas_config()['name'], 'Configurez le
         </div>
         <p class="field full"><button class="btn" type="submit">Rechercher les domaines disponibles</button></p>
       </form>
+      <?php if (($req['ai_mode'] ?? 'with') !== 'without'): ?>
       <form method="post" action="/inscription/configurateur.php" style="margin-top:12px">
         <input type="hidden" name="csrf" value="<?= $escape($_SESSION['saas_csrf']) ?>">
         <input type="hidden" name="r" value="<?= $escape($req['id']) ?>">
@@ -381,6 +414,9 @@ saas_page_start('Préconfiguration — ' . saas_config()['name'], 'Configurez le
         <p style="margin:0 0 6px"><strong>Besoin d’idées pour votre nom ?</strong> L’IA peut proposer des alternatives selon votre activité et votre emplacement. Choisissez une activité principale et décrivez votre métier en au moins 10 caractères.</p>
         <button class="btn ghost" type="submit">Aidez-moi à trouver un autre nom avec l’IA</button>
       </form>
+      <?php else: ?>
+      <p class="notice" role="status" style="margin-top:12px">Vous avez choisi une boutique <strong>sans IA</strong> : les suggestions de noms automatiques sont désactivées. Choisissez votre nom vous-même ci-dessus.</p>
+      <?php endif; ?>
       <?php if ($notice !== ''): ?><div class="notice ok" role="status"><?= $escape($notice) ?></div><?php endif; ?>
       <?php if (isset($errors['form'])): ?><div class="notice error" role="alert"><?= $escape($errors['form']) ?></div><?php endif; ?>
       <?php if (isset($errors['domain_prices'])): ?><div class="notice error" role="alert"><?= $escape($errors['domain_prices']) ?></div><?php endif; ?>
@@ -460,6 +496,54 @@ saas_page_start('Préconfiguration — ' . saas_config()['name'], 'Configurez le
       <input type="hidden" name="k" value="<?= $escape($req['token']) ?>">
       <input type="hidden" name="action" value="continue_payment">
       <input type="hidden" name="activity_json" value="<?= $escape((string) $activityJson) ?>" data-activity-json>
+      <fieldset class="field full step2-owner-kind" style="border:0;padding:0;margin:0 0 4px">
+        <legend style="padding:0;font-size:.82rem;font-weight:600;margin-bottom:6px">Vous êtes</legend>
+        <div class="mode-picks">
+          <label class="mode-choice">
+            <input type="radio" name="owner_kind" value="particulier" data-owner-kind<?= $owner['owner_kind'] !== 'professionnel' ? ' checked' : '' ?>>
+            <span><strong>Un particulier</strong><small>Vous vendez à titre personnel, sans entreprise déclarée.</small></span>
+          </label>
+          <label class="mode-choice">
+            <input type="radio" name="owner_kind" value="professionnel" data-owner-kind<?= $owner['owner_kind'] === 'professionnel' ? ' checked' : '' ?>>
+            <span><strong>Un professionnel</strong><small>Entreprise, association ou statut déclaré : raison sociale et SIRET nécessaires.</small></span>
+          </label>
+        </div>
+      </fieldset>
+      <div class="step2-pro-only" data-owner-pro<?= $owner['owner_kind'] === 'professionnel' ? '' : ' hidden' ?> style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+        <label class="field<?= isset($errors['company_name']) ? ' has-error' : '' ?>"><span>Raison sociale</span>
+          <input type="text" name="company_name" value="<?= $escape($owner['company_name']) ?>" maxlength="100" autocomplete="organization"<?= $owner['owner_kind'] === 'professionnel' ? '' : ' disabled' ?>>
+          <?php if (isset($errors['company_name'])): ?><span class="err" role="alert"><?= $escape($errors['company_name']) ?></span><?php endif; ?>
+        </label>
+        <label class="field<?= isset($errors['siret']) ? ' has-error' : '' ?>"><span>SIRET</span>
+          <input type="text" name="siret" value="<?= $escape($owner['siret']) ?>" maxlength="30" inputmode="numeric" autocomplete="off"<?= $owner['owner_kind'] === 'professionnel' ? '' : ' disabled' ?>>
+          <?php if (isset($errors['siret'])): ?><span class="err" role="alert"><?= $escape($errors['siret']) ?></span><?php endif; ?>
+        </label>
+        <label class="field"><span>N° de TVA <small>(facultatif)</small></span>
+          <input type="text" name="vat" value="<?= $escape($owner['vat']) ?>" maxlength="20" autocomplete="off"<?= $owner['owner_kind'] === 'professionnel' ? '' : ' disabled' ?>>
+        </label>
+      </div>
+      <label class="field full<?= isset($errors['address']) ? ' has-error' : '' ?>"><span>Adresse postale</span>
+        <span style="display:flex;gap:8px;align-items:stretch">
+          <input type="text" id="step2-owner-address" name="address" value="<?= $escape($owner['address']) ?>" maxlength="160" autocomplete="street-address" placeholder="Numéro et rue" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="step2-owner-address-suggestions">
+          <button type="button" class="btn ghost" id="step2-owner-locate" style="padding:8px 12px;white-space:nowrap">Me localiser</button>
+        </span>
+        <span id="step2-owner-address-suggestions" role="listbox" hidden style="display:grid;border:1px solid var(--line);border-radius:8px;background:var(--surface);max-height:210px;overflow:auto"></span>
+        <small id="step2-owner-address-status" role="status" aria-live="polite"></small>
+        <?php if (isset($errors['address'])): ?><span class="err" role="alert"><?= $escape($errors['address']) ?></span><?php endif; ?>
+      </label>
+      <div style="display:grid;gap:10px;grid-template-columns:minmax(110px,160px) 1fr">
+        <label class="field<?= isset($errors['postal_code']) ? ' has-error' : '' ?>"><span>Code postal</span>
+          <input type="text" id="step2-owner-postal" name="postal_code" value="<?= $escape($owner['postal_code']) ?>" maxlength="12" inputmode="numeric" autocomplete="postal-code">
+          <?php if (isset($errors['postal_code'])): ?><span class="err" role="alert"><?= $escape($errors['postal_code']) ?></span><?php endif; ?>
+        </label>
+        <label class="field<?= isset($errors['city']) ? ' has-error' : '' ?>"><span>Ville</span>
+          <input type="text" id="step2-owner-city" name="city" value="<?= $escape($owner['city']) ?>" maxlength="80" autocomplete="address-level2">
+          <?php if (isset($errors['city'])): ?><span class="err" role="alert"><?= $escape($errors['city']) ?></span><?php endif; ?>
+        </label>
+      </div>
+      <input type="hidden" name="address_lat" value="<?= $escape($owner['address_lat']) ?>" data-owner-lat>
+      <input type="hidden" name="address_lng" value="<?= $escape($owner['address_lng']) ?>" data-owner-lng>
+      <p class="meta" style="margin:0">L’adresse sert aux documents de la boutique et à son référencement local. La saisie utilise la Base Adresse Nationale en France et OpenStreetMap ailleurs ; « Me localiser » transmet votre position au service d’adresse pour retrouver l’adresse, et les coordonnées GPS sont conservées pour situer la boutique.</p>
       <label class="field full<?= isset($errors['shop_name']) ? ' has-error' : '' ?>"><span>Nom de la boutique</span>
         <input type="text" id="step2-shop-name-checkout" name="shop_name" value="<?= $escape($shopName) ?>" required maxlength="60" autocomplete="organization">
         <?php if (isset($errors['shop_name'])): ?><span class="err" role="alert"><?= $escape($errors['shop_name']) ?></span><?php endif; ?>
@@ -484,6 +568,7 @@ saas_page_start('Préconfiguration — ' . saas_config()['name'], 'Configurez le
       <p class="step2-payment-actions">
         <button class="btn" type="submit">Continuer vers le design</button>
         <button class="btn ghost" type="submit" name="defer_domain" value="1">Je choisirai mon domaine plus tard</button>
+        <?php if ($backToPlan !== ''): ?><a class="btn ghost" href="<?= $escape($backToPlan) ?>">← Retour à ma formule</a><?php endif; ?>
       </p>
       <?php if ($social !== ''): ?>
         <div class="oauth-sep"><span>ou</span></div>
@@ -612,6 +697,244 @@ saas_page_start('Préconfiguration — ' . saas_config()['name'], 'Configurez le
     });
     if (other) other.addEventListener('input', syncActivity);
     syncActivity();
+
+    // Particulier / professionnel : les champs d'entreprise ne sont affichés et exigés que pour un professionnel.
+    var ownerKindRadios = Array.prototype.slice.call(document.querySelectorAll('[data-owner-kind]'));
+    var proBox = document.querySelector('[data-owner-pro]');
+    function syncOwnerKind() {
+      if (!proBox) return;
+      var pro = ownerKindRadios.some(function (radio) { return radio.value === 'professionnel' && radio.checked; });
+      proBox.hidden = !pro;
+      proBox.style.display = pro ? 'grid' : 'none';
+      proBox.querySelectorAll('input').forEach(function (input) { input.disabled = !pro; });
+    }
+    ownerKindRadios.forEach(function (radio) { radio.addEventListener('change', syncOwnerKind); });
+    syncOwnerKind();
+
+    // Recopie des coordonnées saisies vers les autres formulaires de la page (recherche de domaine, noms, retour).
+    var ownerSource = document.querySelector('input[name="owner_kind"]');
+    var ownerForm = ownerSource ? ownerSource.closest('form') : null;
+    var ownerNames = ['owner_kind', 'company_name', 'siret', 'vat', 'address', 'postal_code', 'city', 'address_lat', 'address_lng'];
+    function ownerValue(name) {
+      if (!ownerForm) return '';
+      if (name === 'owner_kind') {
+        var checked = ownerForm.querySelector('input[name="owner_kind"]:checked');
+        return checked ? checked.value : '';
+      }
+      var input = ownerForm.querySelector('[name="' + name + '"]');
+      return input ? input.value : '';
+    }
+    function syncOwnerFields() {
+      if (!ownerForm) return;
+      ownerNames.forEach(function (name) {
+        var value = ownerValue(name);
+        document.querySelectorAll('form').forEach(function (form) {
+          if (form === ownerForm) return;
+          var mirror = form.querySelector('[data-owner-mirror="' + name + '"]');
+          if (!mirror) {
+            mirror = document.createElement('input');
+            mirror.type = 'hidden';
+            mirror.name = name;
+            mirror.setAttribute('data-owner-mirror', name);
+            form.appendChild(mirror);
+          }
+          mirror.value = value;
+        });
+      });
+    }
+    if (ownerForm) {
+      ownerForm.addEventListener('input', syncOwnerFields);
+      ownerForm.addEventListener('change', syncOwnerFields);
+      syncOwnerFields();
+    }
+
+    // Adresse postale : autocomplétion BAN (France) puis OpenStreetMap, et découverte par géolocalisation.
+    var addressInput = document.getElementById('step2-owner-address');
+    var addressBox = document.getElementById('step2-owner-address-suggestions');
+    var addressStatus = document.getElementById('step2-owner-address-status');
+    var addressLocate = document.getElementById('step2-owner-locate');
+    var postalInput = document.getElementById('step2-owner-postal');
+    var cityInput = document.getElementById('step2-owner-city');
+    var latInput = document.querySelector('[data-owner-lat]');
+    var lngInput = document.querySelector('[data-owner-lng]');
+    if (addressInput && addressBox && addressStatus && addressLocate) {
+      var addressTimer = null, addressSequence = 0, addressOptions = [], addressSelected = -1, lastAddressOsm = 0;
+      function setAddressStatus(text, error) {
+        addressStatus.textContent = text;
+        addressStatus.dataset.kind = error ? 'error' : '';
+      }
+      function closeAddressList() {
+        addressBox.hidden = true;
+        addressBox.textContent = '';
+        addressOptions = [];
+        addressSelected = -1;
+        addressInput.setAttribute('aria-expanded', 'false');
+        addressInput.removeAttribute('aria-activedescendant');
+      }
+      function fillAddress(street, zip, town, latitude, longitude) {
+        if (street) addressInput.value = street;
+        if (zip && postalInput) postalInput.value = zip;
+        if (town && cityInput) cityInput.value = town;
+        if (latInput) latInput.value = latitude || '';
+        if (lngInput) lngInput.value = longitude || '';
+        closeAddressList();
+        setAddressStatus('Adresse reprise. Vérifiez le code postal et la ville.', false);
+        if (postalInput) postalInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      function renderAddresses(options) {
+        addressBox.textContent = '';
+        addressOptions = [];
+        options.forEach(function (option, index) {
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.id = 'step2-owner-address-option-' + index;
+          button.setAttribute('role', 'option');
+          button.setAttribute('aria-selected', 'false');
+          button.style.cssText = 'border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;text-align:left;padding:10px;cursor:pointer;font:inherit';
+          button.textContent = option.label;
+          button.addEventListener('mousedown', function (event) { event.preventDefault(); });
+          button.addEventListener('click', function () {
+            fillAddress(option.street, option.zip, option.city, option.lat, option.lng);
+          });
+          addressBox.appendChild(button);
+          addressOptions.push(button);
+        });
+        addressBox.hidden = addressOptions.length === 0;
+        addressInput.setAttribute('aria-expanded', addressOptions.length ? 'true' : 'false');
+        addressSelected = -1;
+        if (addressOptions.length) setAddressStatus(addressOptions.length + ' adresses proposées. Utilisez les flèches pour choisir.', false);
+      }
+      function addressOsm(query, sequence) {
+        var wait = Math.max(0, 1100 - (Date.now() - lastAddressOsm));
+        window.setTimeout(function () {
+          if (sequence !== addressSequence) return;
+          lastAddressOsm = Date.now();
+          fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&accept-language=fr&q=' + encodeURIComponent(query))
+            .then(function (response) { if (!response.ok) throw new Error('Adresse indisponible'); return response.json(); })
+            .then(function (results) {
+              if (sequence !== addressSequence) return;
+              renderAddresses(results.map(function (result) {
+                var address = result.address || {};
+                return {
+                  label: result.display_name,
+                  street: [address.house_number, address.road].filter(Boolean).join(' ') || result.display_name,
+                  zip: address.postcode || '',
+                  city: address.city || address.town || address.village || address.municipality || '',
+                  lat: result.lat || '', lng: result.lon || ''
+                };
+              }));
+              if (!addressOptions.length) setAddressStatus('Aucune adresse trouvée. Vous pouvez la saisir librement.', false);
+            })
+            .catch(function () {
+              if (sequence === addressSequence) setAddressStatus('Recherche d’adresse indisponible. Vous pouvez la saisir librement.', true);
+            });
+        }, wait);
+      }
+      addressInput.addEventListener('input', function () {
+        window.clearTimeout(addressTimer);
+        var query = addressInput.value.trim();
+        var sequence = ++addressSequence;
+        if (query.length < 3) { closeAddressList(); return; }
+        addressTimer = window.setTimeout(function () {
+          fetch('https://api-adresse.data.gouv.fr/search/?autocomplete=1&limit=6&q=' + encodeURIComponent(query))
+            .then(function (response) { if (!response.ok) throw new Error('BAN unavailable'); return response.json(); })
+            .then(function (data) {
+              if (sequence !== addressSequence) return;
+              var features = (data && data.features) || [];
+              if (features.length) {
+                renderAddresses(features.map(function (feature) {
+                  var properties = feature.properties || {};
+                  var coordinates = (feature.geometry && feature.geometry.coordinates) || [];
+                  return {
+                    label: properties.label || '',
+                    street: properties.name || properties.label || '',
+                    zip: properties.postcode || '',
+                    city: properties.city || '',
+                    lat: coordinates[1] ? String(coordinates[1]) : '',
+                    lng: coordinates[0] ? String(coordinates[0]) : ''
+                  };
+                }).filter(function (option) { return option.label !== ''; }));
+              } else {
+                addressOsm(query, sequence);
+              }
+            })
+            .catch(function () { if (sequence === addressSequence) addressOsm(query, sequence); });
+        }, 350);
+      });
+      addressInput.addEventListener('keydown', function (event) {
+        if (!addressOptions.length) return;
+        if (event.key === 'ArrowDown') addressSelected = (addressSelected + 1) % addressOptions.length;
+        else if (event.key === 'ArrowUp') addressSelected = (addressSelected - 1 + addressOptions.length) % addressOptions.length;
+        else if (event.key === 'Escape') { closeAddressList(); return; }
+        else if (event.key === 'Enter' && addressSelected >= 0) { event.preventDefault(); addressOptions[addressSelected].click(); return; }
+        else return;
+        event.preventDefault();
+        addressOptions.forEach(function (option, index) {
+          option.setAttribute('aria-selected', index === addressSelected ? 'true' : 'false');
+          if (index === addressSelected) {
+            option.scrollIntoView({ block: 'nearest' });
+            addressInput.setAttribute('aria-activedescendant', option.id);
+          }
+        });
+      });
+      document.addEventListener('click', function (event) {
+        if (event.target !== addressInput && !addressBox.contains(event.target)) closeAddressList();
+      });
+      function reverseAddress(latitude, longitude, sequence) {
+        fetch('https://api-adresse.data.gouv.fr/reverse/?lat=' + latitude + '&lon=' + longitude)
+          .then(function (response) { if (!response.ok) throw new Error('BAN unavailable'); return response.json(); })
+          .then(function (data) {
+            var feature = data && data.features && data.features[0];
+            if (!feature) throw new Error('No address found');
+            var properties = feature.properties || {};
+            var coordinates = (feature.geometry && feature.geometry.coordinates) || [];
+            return {
+              street: [properties.name, properties.city].filter(Boolean).join(', ') || properties.label || '',
+              zip: properties.postcode || '',
+              city: properties.city || '',
+              lat: coordinates[1] ? String(coordinates[1]) : latitude,
+              lng: coordinates[0] ? String(coordinates[0]) : longitude
+            };
+          })
+          .catch(function () {
+            return fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&accept-language=fr&lat=' + latitude + '&lon=' + longitude)
+              .then(function (response) { if (!response.ok) throw new Error('OSM unavailable'); return response.json(); })
+              .then(function (result) {
+                var address = result.address || {};
+                return {
+                  street: [address.house_number, address.road].filter(Boolean).join(' ') || result.display_name || '',
+                  zip: address.postcode || '',
+                  city: address.city || address.town || address.village || address.municipality || '',
+                  lat: result.lat || latitude, lng: result.lon || longitude
+                };
+              });
+          })
+          .then(function (value) {
+            if (sequence !== addressSequence) return;
+            if (!value.street) throw new Error('No address found');
+            fillAddress(value.street, value.zip, value.city, value.lat, value.lng);
+          })
+          .catch(function () {
+            if (sequence === addressSequence) setAddressStatus('Adresse introuvable. Vous pouvez la saisir manuellement.', true);
+          })
+          .finally(function () { addressLocate.disabled = false; });
+      }
+      addressLocate.addEventListener('click', function () {
+        if (!navigator.geolocation) { setAddressStatus('La découverte automatique n’est pas disponible sur cet appareil.', true); return; }
+        addressLocate.disabled = true;
+        setAddressStatus('Demande de localisation au navigateur…', false);
+        var sequence = ++addressSequence;
+        navigator.geolocation.getCurrentPosition(function (position) {
+          if (sequence !== addressSequence) { addressLocate.disabled = false; return; }
+          setAddressStatus('Recherche de votre adresse…', false);
+          reverseAddress(position.coords.latitude.toFixed(6), position.coords.longitude.toFixed(6), sequence);
+        }, function (error) {
+          addressLocate.disabled = false;
+          if (sequence !== addressSequence) return;
+          setAddressStatus(error.code === 1 ? 'Localisation refusée. Vous pouvez saisir l’adresse manuellement.' : 'Position introuvable. Vous pouvez saisir l’adresse manuellement.', true);
+        }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+      });
+    }
 
     var locationInput = document.getElementById('step2-location-search');
     var suggestionBox = document.getElementById('step2-location-suggestions');

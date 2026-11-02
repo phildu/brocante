@@ -83,43 +83,57 @@ function password_reset_set_target(array $target, string $password): void
     }
 }
 
-/** Message e-mail simple (UTF-8). En local (hôte « localhost », « .test », adresse IP), le message est aussi écrit dans data/mail-outbox.log. */
-function password_reset_mail(string $to, string $subject, string $body): bool
+/** Requête servie en local (hôte sans point, « .test », « .localhost », adresse IP) : aucune boîte réelle ne reçoit le message. */
+function password_reset_is_local_host(): bool
 {
     $host = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    $local = !str_contains($host, '.') || str_ends_with($host, '.test') || str_ends_with($host, '.localhost') || filter_var($host, FILTER_VALIDATE_IP);
+    return !str_contains($host, '.') || str_ends_with($host, '.test') || str_ends_with($host, '.localhost') || filter_var($host, FILTER_VALIDATE_IP) !== false;
+}
+
+/**
+ * Message e-mail simple (UTF-8), avec un pixel de suivi d'ouverture.
+ * En local, le message est recopié dans data/mail-outbox.log et compte comme envoyé : mail() n'est pas fiable en développement.
+ * $source et $context servent à ranger les envois dans le suivi (voir includes/mail-tracking.php).
+ */
+function password_reset_mail(string $to, string $subject, string $body, string $source = 'boutique', string $context = ''): bool
+{
+    require_once __DIR__ . '/mail-tracking.php';
+    $local = password_reset_is_local_host();
+    $host = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
     $site = (string) (get_content()['site_name'] ?: tenant('name'));
     $from = 'noreply@' . (!$local ? preg_replace('/^[^.]+\.(?=[^.]+\.[^.]+$)/', '', $host) : 'localhost.localdomain');
-    if ($local) {
-        @file_put_contents(__DIR__ . '/../data/mail-outbox.log', '[' . date('c') . "] À : $to\nObjet : $subject\n$body\n----\n", FILE_APPEND | LOCK_EX);
-    }
-    $headers = 'From: ' . str_replace(['"', "\r", "\n"], '', $site) . " <$from>\r\nContent-Type: text/plain; charset=UTF-8\r\nMIME-Version: 1.0";
-    return function_exists('mail') && @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers);
+    return mail_open_send($to, $subject, $body, $source, [
+        'from' => 'From: ' . str_replace(['"', "\r", "\n"], '', $site) . " <$from>",
+        'log' => __DIR__ . '/../data/mail-outbox.log',
+        'local' => $local,
+        'context' => $context,
+    ]);
 }
 
 /**
  * Traite une demande : crée le jeton et envoie le lien si le compte existe et si les limites le permettent.
- * Ne retourne rien : l'appelant affiche toujours le même message.
+ * Retourne l'adresse à qui le lien a été envoyé, ou null (compte inconnu, aucune adresse ou demande limitée).
+ * La page garde le même message public ; en local, elle peut afficher cette adresse pour aider à retrouver le lien.
  */
-function password_reset_request(string $login, string $returnTo = ''): void
+function password_reset_request(string $login, string $returnTo = ''): ?string
 {
     password_reset_ensure_schema();
     $now = time();
     $ip = substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
     $perIp = db()->prepare('SELECT COUNT(*) FROM password_resets WHERE ip = ? AND created_at > ?');
     $perIp->execute([$ip, $now - 3600]);
-    if ((int) $perIp->fetchColumn() >= 10) return;
+    if ((int) $perIp->fetchColumn() >= 10) return null;
 
     $target = password_reset_target($login);
     if (!$target) {
         // Demande enregistrée quand même (compte inconnu) : la limite par IP joue aussi contre l'énumération.
         db()->prepare('INSERT INTO password_resets (token_hash, account_id, email, ip, expires_at, used_at, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?)')
             ->execute([hash('sha256', random_bytes(16)), '', $ip, $now, $now, $now]);
-        return;
+        return null;
     }
     $recent = db()->prepare('SELECT COUNT(*) FROM password_resets WHERE email = ? AND created_at > ?');
     $recent->execute([$target['email'], $now - 900]);
-    if ((int) $recent->fetchColumn() >= 3) return;
+    if ((int) $recent->fetchColumn() >= 3) return null;
 
     $token = bin2hex(random_bytes(32));
     db()->prepare('INSERT INTO password_resets (token_hash, account_id, email, ip, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -130,7 +144,8 @@ function password_reset_request(string $login, string $returnTo = ''): void
     $body = "Bonjour,\n\nVous avez demandé à réinitialiser le mot de passe de l'administration de « $site ».\n\n"
         . "Choisissez un nouveau mot de passe avec ce lien (valable 1 heure, utilisable une seule fois) :\n" . shop_abs_url($path) . "\n\n"
         . "Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe actuel reste valable.\n";
-    password_reset_mail($target['email'], "Réinitialiser votre mot de passe — $site", $body);
+    password_reset_mail($target['email'], "Réinitialiser votre mot de passe — $site", $body, 'compte');
+    return (string) $target['email'];
 }
 
 /** Demande valable (ni expirée ni utilisée) pour ce jeton, ou null. */

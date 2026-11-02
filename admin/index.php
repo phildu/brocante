@@ -219,7 +219,7 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
 
         <div data-panel="paiement" id="shipping-settings">
         <h2>Frais de port</h2>
-        <p class="hint">Les deux modes de livraison proposés au client au moment du paiement Stripe.</p>
+        <p class="hint">Les deux modes de livraison proposés au client au moment du paiement, quel que soit le moyen choisi.</p>
         <div class="field-row-3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
           <div class="field"><label>Libellé retrait (gratuit)</label><input type="text" name="pickup_label" value="<?= h($content['pickup_label']) ?>"></div>
           <div class="field"><label>Libellé envoi</label><input type="text" name="shipping_label" value="<?= h($content['shipping_label']) ?>"></div>
@@ -368,8 +368,24 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
             <input type="text" name="stripe_publishable" autocomplete="off" placeholder="<?= STRIPE_PUBLISHABLE_KEY ? 'Déjà enregistrée — ' . h(substr(STRIPE_PUBLISHABLE_KEY, 0, 7)) . '…' . h(substr(STRIPE_PUBLISHABLE_KEY, -4)) : 'pk_test_...' ?>">
           </div>
         </div>
-        <p class="publish-status" data-kind="<?= shop_checkout_ready() ? '' : 'error' ?>" style="margin-top:10px;">
-          <?= shop_checkout_ready() ? 'Paiement Stripe configuré et actif.' : 'Aucune clé secrète valide enregistrée — le paiement est désactivé sur le site.' ?>
+        <?php
+        $webhookFile = SECRETS_DIR . '/stripe_webhook.key';
+        $webhookSet = is_file($webhookFile) && str_starts_with(trim((string) file_get_contents($webhookFile)), 'whsec_');
+        $webhookUrl = rtrim(tenant_site_url(), '/') . '/stripe-webhook.php';
+        ?>
+        <div class="field" style="margin-top:12px;">
+          <label>Secret de signature du webhook (whsec_...)</label>
+          <input type="password" name="stripe_webhook" autocomplete="off" placeholder="<?= $webhookSet ? 'Déjà enregistré' : 'whsec_...' ?>">
+        </div>
+        <p class="hint" style="margin-top:6px;">
+          Dans Stripe → Développeurs → Webhooks, ajoutez l'adresse <code><?= h($webhookUrl) ?></code> et copiez son secret de signature ici.
+          Événements à écouter : <code>checkout.session.completed</code>, <code>checkout.session.async_payment_succeeded</code>,
+          <code>checkout.session.async_payment_failed</code>, <code>checkout.session.expired</code>, <code>charge.refunded</code>,
+          <code>charge.dispute.created</code> (et <code>updated</code> / <code>closed</code>).
+          <?= $webhookSet ? 'Webhook actif : les commandes payées sont confirmées même si le client ferme l’onglet.' : 'Sans ce secret, une commande peut rester « en attente » si le client ne revient pas sur le site.' ?>
+        </p>
+        <p class="publish-status" data-kind="<?= stripe_checkout_ready() ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= stripe_checkout_ready() ? 'Paiement Stripe configuré et actif.' : 'Aucune clé secrète Stripe valide — Stripe est désactivé (les autres moyens de paiement restent disponibles s’ils sont réglés).' ?>
         </p>
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer les clés</button>
       <?php if (STRIPE_SECRET_KEY !== ''): ?>
@@ -377,6 +393,92 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
         <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
         <button type="submit" class="btn" style="margin-top:6px;" formaction="/admin/key-check.php" name="service" value="stripe" formnovalidate>Tester la clé Stripe</button>
         <?php endif; ?>
+      </form>
+
+      <?php
+      $moneticoConfig = monetico_config() ?? payment_config('monetico') ?? [];
+      $paypalConfig = paypal_config() ?? payment_config('paypal') ?? [];
+      $availableMethods = shop_payment_methods_available();
+      $enabledSetting = trim(shop_setting('payment_methods', ''));
+      $enabledMethods = $enabledSetting === '' ? array_keys($availableMethods) : array_filter(array_map('trim', explode(',', $enabledSetting)));
+      $moneticoKeySet = trim((string) ($moneticoConfig['key'] ?? '')) !== '';
+      $paypalSecretSet = trim((string) ($paypalConfig['secret'] ?? '')) !== '';
+      ?>
+      <form class="admin-block" method="post" action="/admin/save-payment-keys.php" id="payment-settings" data-panel="paiement">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>Autres moyens de paiement</h2>
+        <p class="hint">Stripe reste le moyen par défaut. Monetico (CIC / Crédit Mutuel / OBC) et PayPal servent de solution de secours si le compte Stripe est suspendu ou refuse un dossier. Chaque fournisseur utilise le compte du commerçant : les fonds sont versés directement sur son compte bancaire ou PayPal, sans commission de la plateforme.</p>
+
+        <h3 style="margin-top:24px;">Monetico Paiement</h3>
+        <p class="hint">Identifiants remis par votre banque. La clé de sécurité fait 40 caractères hexadécimaux. En mode test, utilisez les identifiants de test fournis par la banque.</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Numéro de TPE (7 chiffres)</label>
+            <input type="text" name="monetico_tpe" inputmode="numeric" pattern="[0-9]{7}" maxlength="7" value="<?= h((string) ($moneticoConfig['tpe'] ?? '')) ?>" placeholder="1234567">
+          </div>
+          <div class="field">
+            <label>Société (societe)</label>
+            <input type="text" name="monetico_societe" maxlength="8" value="<?= h((string) ($moneticoConfig['societe'] ?? '')) ?>" placeholder="ex. BROC01">
+          </div>
+        </div>
+        <div class="field-row-2" style="margin-top:12px;">
+          <div class="field">
+            <label>Clé de sécurité (40 caractères hexadécimaux)</label>
+            <input type="password" name="monetico_key" autocomplete="off" placeholder="<?= $moneticoKeySet ? 'Déjà enregistrée' : 'ex. 0123456789ABCDEF…' ?>">
+          </div>
+          <div class="field">
+            <label>Mode</label>
+            <select name="monetico_mode">
+              <option value="test"<?= ($moneticoConfig['mode'] ?? 'test') === 'test' ? ' selected' : '' ?>>Test</option>
+              <option value="production"<?= ($moneticoConfig['mode'] ?? '') === 'production' ? ' selected' : '' ?>>Production</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint" style="margin-top:8px;">
+          URL de confirmation à déclarer dans le back-office Monetico (champ « URL de confirmation CGI2 ») :
+          <code><?= h(rtrim(tenant_site_url(), '/') . '/monetico-ipn.php') ?></code>.
+          Le remboursement automatique exige que votre banque active l’option « re-crédit » sur le contrat Monetico ; sinon, remboursez depuis le back-office de la banque.
+        </p>
+
+        <h3 style="margin-top:24px;">PayPal</h3>
+        <p class="hint">Identifiants d’une application REST créée sur <a href="https://developer.paypal.com/dashboard/applications" target="_blank" rel="noopener">developer.paypal.com</a>. L’argent est capturé au retour de l’acheteur ; une commande approuvée mais non capturée peut être confirmée depuis la fiche commande.</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Client ID</label>
+            <input type="text" name="paypal_client_id" autocomplete="off" value="<?= h((string) ($paypalConfig['client_id'] ?? '')) ?>" placeholder="AY…">
+          </div>
+          <div class="field">
+            <label>Secret</label>
+            <input type="password" name="paypal_secret" autocomplete="off" placeholder="<?= $paypalSecretSet ? 'Déjà enregistré' : 'EJ…' ?>">
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px;max-width:240px;">
+          <label>Mode</label>
+          <select name="paypal_mode">
+            <option value="sandbox"<?= ($paypalConfig['mode'] ?? 'sandbox') === 'sandbox' ? ' selected' : '' ?>>Bac à sable (sandbox)</option>
+            <option value="live"<?= ($paypalConfig['mode'] ?? '') === 'live' ? ' selected' : '' ?>>Production (live)</option>
+          </select>
+        </div>
+
+        <h3 style="margin-top:24px;">Moyens proposés au client</h3>
+        <?php if (!$availableMethods): ?>
+          <p class="hint">Aucun moyen de paiement n’est encore configuré. Renseignez les identifiants ci-dessus (ou les clés Stripe) pour activer le paiement.</p>
+        <?php else: ?>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;">
+            <?php foreach ($availableMethods as $methodKey => $methodLabel): ?>
+              <label style="font-size:0.9rem;display:inline-flex;align-items:center;gap:6px;">
+                <input type="checkbox" name="payment_methods[]" value="<?= h($methodKey) ?>"<?= in_array($methodKey, $enabledMethods, true) ? ' checked' : '' ?>>
+                <?= h($methodLabel) ?>
+              </label>
+            <?php endforeach; ?>
+          </div>
+          <p class="hint" style="margin-top:6px;">Décochez un moyen pour le masquer sans effacer ses identifiants. Si tous sont décochés, le paiement est désactivé sur la boutique.</p>
+        <?php endif; ?>
+
+        <p class="publish-status" data-kind="<?= shop_checkout_ready() ? '' : 'error' ?>" style="margin-top:10px;">
+          <?= shop_checkout_ready() ? 'Moyens de paiement actifs : ' . h(implode(', ', shop_payment_methods())) . '.' : 'Aucun moyen de paiement actif — le paiement est désactivé sur le site.' ?>
+        </p>
+        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer les moyens de paiement</button>
       </form>
 
       <form class="admin-block" method="post" action="/admin/save-photo-visibility.php" id="photo-visibility-settings" data-panel="general">

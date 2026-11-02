@@ -51,7 +51,7 @@ function rt_eur(int $c): string
 function rt_mail(string $to, string $subject, string $body): bool
 {
     require_once dirname(__DIR__, 3) . '/includes/password-reset.php';
-    return password_reset_mail($to, $subject, $body);
+    return password_reset_mail($to, $subject, $body, 'retrait');
 }
 
 function rt_ticket_url(array $r): string

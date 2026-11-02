@@ -343,7 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($err) { portail_flash($err, 'error'); break; }
             $mailed = ga_mail(mb_strtolower(trim($adminEmail)), "Votre accès d'administrateur — " . $gallery['name'],
                 "Bonjour,\n\nVous pouvez administrer la galerie « {$gallery['name']} » (présentation, commerces, tableau de bord, prospects).\n\nConnexion : $origin/galerie/admin.php\nIdentifiant : " . mb_strtolower(trim($adminEmail)) . "\nMot de passe provisoire : $tempPassword\n\nVous devrez le remplacer à votre première connexion.\n");
-            $_SESSION['ga_new_password'] = ['email' => mb_strtolower(trim($adminEmail)), 'password' => $tempPassword, 'mailed' => $mailed];
+            $_SESSION['ga_new_password'] = ['email' => mb_strtolower(trim($adminEmail)), 'password' => $tempPassword, 'mailed' => $mailed, 'local' => $portailLocal];
             portail_flash($action === 'admin_add' ? 'Administrateur ajouté.' : 'Nouveau mot de passe généré.');
             break;
 
@@ -434,7 +434,7 @@ $confirmDelete = !$limited && $edit && ($_GET['supprimer'] ?? '') === '1';
 <div class="app">
 <?php
 $gaNavHtml = '';
-if ($limited) {
+if ($limited || $edit) {
     ob_start();
     include __DIR__ . '/_galerie-nav.php';
     $gaNavHtml = ob_get_clean();
@@ -472,6 +472,8 @@ portail_page_start([
             <small class="meta"><?= count($g['members']) ?> <?= e(count($g['members']) > 1 ? gt_word($g, 'members') : gt_word($g, 'member')) ?> · <code class="url"><?= e($url) ?></code></small>
           </div>
           <div class="row"><a class="btn small btn-primary" href="/portail/galeries.php?g=<?= e($g['slug']) ?>">Gérer</a>
+            <?php if (gt_feature($g, 'plan')): ?><a class="btn small" href="/portail/galerie-plan.php?g=<?= e($g['slug']) ?>">Plan</a><?php endif; ?>
+            <?php if (!$limited): ?><a class="btn small" href="/portail/galeries.php?g=<?= e($g['slug']) ?>#admins">Comptes admin</a><?php endif; ?>
             <form method="post" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>"><button class="btn small" type="submit" name="action" value="export">Exporter JSON</button></form>
             <a class="btn small" href="<?= e($url . ($g['published'] && empty($g['paused']) ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener"><?= $g['published'] && empty($g['paused']) ? 'Voir' : 'Aperçu' ?></a></div>
         </div>
@@ -537,11 +539,12 @@ portail_page_start([
     </section>
 
     <?php if (!$limited): $newPw = $_SESSION['ga_new_password'] ?? null; unset($_SESSION['ga_new_password']); ?>
-    <section class="gcard">
+    <section class="gcard" id="admins">
       <h2>Administrateurs de la galerie</h2>
       <p class="meta">Ils se connectent sur <code class="url"><?= e($origin) ?>/galerie/admin.php</code> et gèrent cette galerie seulement : présentation, commerces membres, publication, tableau de bord et prospects.</p>
+      <?php if ($portailLocal): ?><p class="meta">En local, aucun e-mail ne part réellement : les messages sont recopiés dans <code>data/mail-outbox.log</code> — <a href="/portail/journal-local.php?canal=mail">ouvrir la boîte locale</a> (recherche par adresse, objet ou lien).</p><?php endif; ?>
       <?php if ($newPw): ?>
-        <p class="flash" data-kind="ok" role="status">Mot de passe provisoire de <strong><?= e($newPw['email']) ?></strong> : <code><?= e($newPw['password']) ?></code> — <?= $newPw['mailed'] ? "envoyé par e-mail ; il ne sera plus affiché." : "l'e-mail n'a pas pu partir : transmettez-le-lui vous-même, il ne sera plus affiché." ?></p>
+        <p class="flash" data-kind="ok" role="status">Mot de passe provisoire de <strong><?= e($newPw['email']) ?></strong> : <code><?= e($newPw['password']) ?></code> — <?= !empty($newPw['local']) ? "recopié dans <code>data/mail-outbox.log</code> ; il ne sera plus affiché." : ($newPw['mailed'] ? "envoyé par e-mail ; il ne sera plus affiché." : "l'e-mail n'a pas pu partir : transmettez-le-lui vous-même, il ne sera plus affiché.") ?></p>
       <?php endif; ?>
       <?php foreach ($g['admins'] as $a): ?>
         <div class="member">
@@ -558,6 +561,8 @@ portail_page_start([
         <button class="btn btn-primary" type="submit">Ajouter et envoyer l'accès</button>
       </form>
     </section>
+    <?php else: ?>
+    <p class="meta">Les comptes administrateurs de la galerie se gèrent depuis le compte exploitant du portail : un administrateur de galerie ne peut pas modifier ses pairs.</p>
     <?php endif; ?>
 
     <form class="gcard" method="post" autocomplete="off">

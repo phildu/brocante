@@ -1,15 +1,16 @@
-// Panier : saisie assistée de l'adresse de livraison et localisation.
+// Panier : saisie assistée de l'adresse de l'acheteur et localisation.
 //  - auto-complétion (Base Adresse Nationale, La Poste) pour la France et l'outre-mer : clavier (↑ ↓ Entrée Échap) et tactile ;
 //  - « Me localiser » : position du téléphone → adresse (BAN en France, sinon OpenStreetMap/Nominatim) → pays, code postal et adresse renseignés.
 // Seuls l'adresse choisie et son code postal sont gardés (session) : la position elle-même n'est ni envoyée à la boutique ni enregistrée.
 (function () {
-  var form = document.getElementById('destination-form');
-  if (!form) return;
+  var section = document.getElementById('buyer-address');
+  if (!section) return;
   var $ = function (id) { return document.getElementById(id); };
-  var country = $('destination-country'), input = $('address-search'), box = $('address-suggestions'), postal = $('postal-code-value'), manual = $('postal-code-manual'),
-      label = $('address-label-value'), status = $('geo-status'), locBtn = $('geo-locate'), line1 = $('address-line1'), city = $('address-city');
+  var country = $('buyer-country'), box = $('address-suggestions'), postal = $('postal-code-value'), manual = $('postal-code-manual'),
+      label = $('address-label-value'), status = $('geo-status'), locBtn = $('geo-locate'), line1 = $('address-line1'), city = $('address-city'),
+      refreshBtn = $('address-refresh'), input = line1;   // l'adresse elle-même sert de champ de recherche BAN
   if (!country || !postal || !label) return;
-  var ban = (form.dataset.ban || '').split(',');
+  var ban = (section.dataset.ban || '').split(',');
   if (!country || !postal) return;
   var DOM = { '971': 'GP', '972': 'MQ', '973': 'GF', '974': 'RE', '976': 'YT' };
   var timer = null, items = [], active = -1, seq = 0;
@@ -19,9 +20,10 @@
   function closeList() { if (!box) return; box.hidden = true; box.textContent = ''; items = []; active = -1; if (input) input.setAttribute('aria-expanded', 'false'); }
   function apply(code, text, postcode, street, town) {   // renseigne pays, rue, code postal et ville, puis recalcule la zone tarifaire
     text = tidy(text); country.value = code; label.value = text || ''; postal.value = (postcode || '').replace(/[^0-9A-Za-z -]/g, '');
-    if (line1) line1.value = street || ''; if (city) city.value = town || '';
-    if (input) input.value = '';
-    closeList(); say('Adresse retenue : ' + (text || postcode) + '. Calcul des frais de livraison…', 'ok'); form.submit();
+    if (line1) line1.value = street || (text || '');
+    if (city) city.value = town || '';
+    closeList(); say('Adresse retenue : ' + (text || postcode) + '. Calcul des frais de livraison…', 'ok');
+    if (refreshBtn) refreshBtn.click();   // le bouton porte le retour vers cart.php (le formulaire de paiement n'est pas soumis)
   }
   function tidy(t) { var p = String(t || '').split(','); return /\d{5}/.test(p[0]) ? p[0].trim() : String(t || '').trim(); }   // « Place Bellecour 69002 Lyon,Lyon 2e Arrondissement » → sans le complément
   function countryOf(postcode) { return DOM[(postcode || '').slice(0, 3)] || 'FR'; }
@@ -48,6 +50,7 @@
     input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-expanded', 'false'); input.setAttribute('aria-controls', 'address-suggestions'); box.setAttribute('role', 'listbox');
     input.addEventListener('input', function () {
       clearTimeout(timer);
+      if (ban.indexOf(country.value) === -1) { closeList(); return; }   // pas de BAN hors France et outre-mer
       var q = input.value.trim(); if (q.length < 3) { closeList(); return; }
       var mine = ++seq;
       timer = setTimeout(function () {

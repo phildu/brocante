@@ -632,7 +632,7 @@ function aco_notice_short(array $op, string $stopUrl): string
 function aco_channel_deliver(string $channel, string $email, string $phone, string $subject, string $body, array $op, string $stopUrl): bool
 {
     try {
-        if ($channel === 'mail') return aco_mail($email, $subject, $body);
+        if ($channel === 'mail') return aco_mail($email, $subject, $body, 'aco:' . (int) $op['id']);
         if ($channel === 'sms') {
             require_once dirname(__DIR__, 3) . '/includes/login-otp.php';
             return login_otp_send_sms($phone, aco_notice_short($op, $stopUrl));
@@ -735,10 +735,10 @@ function aco_notice_send(array $op, array $channels = ['mail']): array
     return $out;
 }
 
-function aco_mail(string $to, string $subject, string $body): bool
+function aco_mail(string $to, string $subject, string $body, string $context = ''): bool
 {
     try {
-        return password_reset_mail($to, $subject, $body);
+        return password_reset_mail($to, $subject, $body, 'action-commerciale', $context);
     } catch (Throwable $e) {
         error_log('Actions commerciales (annonce) : ' . $e->getMessage());
         return false;
@@ -762,8 +762,15 @@ function aco_notice_stats(array $op): array
             $stopped = $a['stopped'];
         }
     }
+    $opens = ['sent' => 0, 'opened' => 0, 'opens' => 0, 'last_open' => 0];
+    try {
+        require_once dirname(__DIR__, 3) . '/includes/mail-tracking.php';
+        $opens = mail_open_context_summary('aco:' . (int) $op['id']);
+    } catch (Throwable $e) {
+    }
     return ['audience' => $audience, 'sent' => $channels['mail']['already'], 'pending' => $channels['mail']['eligible'],
-        'stopped' => $stopped, 'by_source' => $bySource, 'channels' => $channels];
+        'stopped' => $stopped, 'by_source' => $bySource, 'channels' => $channels,
+        'opened' => (int) $opens['opened'], 'opens' => (int) $opens['opens'], 'last_open' => (int) $opens['last_open']];
 }
 
 /** Contacts avec listes, numéro et accords par canal (fiche de consentement créée au premier enregistrement). */

@@ -211,7 +211,7 @@ function portail_login_page(): never
     'submit' => 'Se connecter',
     'hidden' => ['action' => 'portail_login'],
   ]) ?>
-  <p class="login-foot">Accès réservé à l’exploitant de la plateforme.</p>
+  <p class="login-foot">Accès réservé à l’exploitant de la plateforme.<br><a href="/connexion.php">Connexion unique — boutique, galerie, portail</a></p>
 </main>
 <script src="/assets/pwd-toggle.js" defer></script>
 </body>

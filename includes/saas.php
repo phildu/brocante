@@ -268,17 +268,84 @@ function saas_slug_taken(string $slug, string $exceptId = ''): bool
     return false;
 }
 
+/** Unités d'une prestation sur devis (le prix est une fourchette, jamais un prix ferme). */
+const SAAS_SERVICE_QUOTE_UNITS = ['forfait' => 'forfait', 'seance' => 'la séance', 'mois' => 'par mois', 'intervention' => 'l’intervention'];
+
 /** Prestations personnalisées proposées comme demandes de devis à la création d'une boutique. */
-function saas_service_quote_catalog(): array
+function saas_service_quote_defaults(): array
 {
     return [
-        'design-personnalise' => ['name' => 'Design personnalisé', 'description' => 'Identité visuelle et mise en page adaptées à votre activité. Tarif indicatif communiqué après étude, sur devis.'],
-        'setup' => ['name' => 'Accompagnement au setup', 'description' => 'Aide à la configuration initiale de votre boutique et de ses réglages. Sur devis.'],
-        'formation-distance' => ['name' => 'Formation à distance', 'description' => 'Prise en main guidée de votre boutique en visioconférence. Sur devis.'],
-        'formation-presentiel' => ['name' => 'Formation en présentiel', 'description' => 'Formation personnalisée dans vos locaux ou à proximité. Déplacement et tarif sur devis.'],
-        'hotline' => ['name' => 'Hotline', 'description' => 'Assistance téléphonique selon vos besoins. Modalités et tarif sur devis.'],
-        'chatbot' => ['name' => 'Chatbot', 'description' => 'Étude d’un assistant conversationnel adapté à votre site. Modalités et tarif sur devis.'],
+        'design-personnalise' => ['name' => 'Design personnalisé', 'description' => 'Identité visuelle et mise en page adaptées à votre activité.', 'min_cents' => 15000, 'max_cents' => 60000, 'unit' => 'forfait', 'active' => true],
+        'setup' => ['name' => 'Accompagnement au setup', 'description' => 'Aide à la configuration initiale de votre boutique et de ses réglages.', 'min_cents' => 9000, 'max_cents' => 25000, 'unit' => 'forfait', 'active' => true],
+        'formation-distance' => ['name' => 'Formation à distance', 'description' => 'Prise en main guidée de votre boutique en visioconférence.', 'min_cents' => 6000, 'max_cents' => 15000, 'unit' => 'seance', 'active' => true],
+        'formation-presentiel' => ['name' => 'Formation en présentiel', 'description' => 'Formation personnalisée dans vos locaux ou à proximité, déplacement compris.', 'min_cents' => 25000, 'max_cents' => 70000, 'unit' => 'seance', 'active' => true],
+        'hotline' => ['name' => 'Hotline', 'description' => 'Assistance téléphonique selon vos besoins.', 'min_cents' => 4000, 'max_cents' => 12000, 'unit' => 'mois', 'active' => true],
+        'chatbot' => ['name' => 'Chatbot', 'description' => 'Étude d’un assistant conversationnel adapté à votre site.', 'min_cents' => 20000, 'max_cents' => 90000, 'unit' => 'forfait', 'active' => true],
     ];
+}
+
+function saas_service_quote_file(): string
+{
+    return saas_data_dir() . '/saas/services-devis.json';
+}
+
+/**
+ * Catalogue des prestations sur devis, fourchettes comprises : les tarifs réglés dans le portail remplacent les valeurs de départ.
+ * Une fourchette n'est jamais un prix ferme : elle informe le client avant sa demande de devis, faite en fin de parcours.
+ */
+function saas_service_quote_catalog(): array
+{
+    $saved = is_file(saas_service_quote_file()) ? (json_decode((string) file_get_contents(saas_service_quote_file()), true) ?: []) : [];
+    $out = [];
+    foreach (saas_service_quote_defaults() as $key => $base) {
+        $row = is_array($saved[$key] ?? null) ? $saved[$key] : [];
+        $min = max(0, min(10000000, (int) ($row['min_cents'] ?? $base['min_cents'])));
+        $max = max(0, min(10000000, (int) ($row['max_cents'] ?? $base['max_cents'])));
+        if ($max < $min) [$min, $max] = [$max, $min];
+        $out[$key] = [
+            'name' => mb_substr(trim((string) ($row['name'] ?? $base['name'])), 0, 60) ?: $base['name'],
+            'description' => mb_substr(trim((string) ($row['description'] ?? $base['description'])), 0, 300),
+            'min_cents' => $min,
+            'max_cents' => $max,
+            'unit' => isset(SAAS_SERVICE_QUOTE_UNITS[(string) ($row['unit'] ?? '')]) ? (string) $row['unit'] : $base['unit'],
+            'active' => array_key_exists('active', $row) ? !empty($row['active']) : true,
+        ];
+    }
+    return $out;
+}
+
+/** Enregistre les fourchettes (toutes les lignes du formulaire du portail). */
+function saas_service_quote_save(array $rows): bool
+{
+    $clean = [];
+    foreach (saas_service_quote_defaults() as $key => $base) {
+        $row = is_array($rows[$key] ?? null) ? $rows[$key] : [];
+        $min = max(0, min(10000000, (int) ($row['min_cents'] ?? $base['min_cents'])));
+        $max = max(0, min(10000000, (int) ($row['max_cents'] ?? $base['max_cents'])));
+        if ($max < $min) [$min, $max] = [$max, $min];
+        $clean[$key] = [
+            'name' => mb_substr(trim((string) ($row['name'] ?? $base['name'])), 0, 60) ?: $base['name'],
+            'description' => mb_substr(trim((string) ($row['description'] ?? '')), 0, 300),
+            'min_cents' => $min,
+            'max_cents' => $max,
+            'unit' => isset(SAAS_SERVICE_QUOTE_UNITS[(string) ($row['unit'] ?? '')]) ? (string) $row['unit'] : 'forfait',
+            'active' => !empty($row['active']),
+        ];
+    }
+    $dir = dirname(saas_service_quote_file());
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) return false;
+    return @file_put_contents(saas_service_quote_file(), json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)) !== false;
+}
+
+/** « 150 € – 600 € · forfait », « dès 40 € / mois » : fourchette lisible d'une prestation. */
+function saas_service_quote_price(array $service): string
+{
+    $min = (int) ($service['min_cents'] ?? 0);
+    $max = (int) ($service['max_cents'] ?? 0);
+    $unit = SAAS_SERVICE_QUOTE_UNITS[(string) ($service['unit'] ?? '')] ?? '';
+    if ($min <= 0 && $max <= 0) return 'Sur devis';
+    $range = $min > 0 && $max > $min ? saas_money($min) . ' – ' . saas_money($max) : ($min > 0 ? saas_money($min) : saas_money($max));
+    return $range . ($unit !== '' ? ' · ' . $unit : '');
 }
 
 function saas_service_quote_names(array $keys): array
@@ -287,6 +354,25 @@ function saas_service_quote_names(array $keys): array
     $names = [];
     foreach ($keys as $key) {
         if (is_string($key) && isset($catalog[$key])) $names[] = $catalog[$key]['name'];
+    }
+    return array_values(array_unique($names));
+}
+
+/** Prestations actives, dans l'ordre du catalogue : la demande de devis ne propose que celles-là. */
+function saas_service_quotes_active(): array
+{
+    return array_filter(saas_service_quote_catalog(), static fn (array $s): bool => !empty($s['active']));
+}
+
+/** Noms lisibles des plugins cochés à l'inscription : c'est un intérêt déclaré, pas encore un abonnement. */
+function saas_plugin_interest_names(array $ids): array
+{
+    if (!$ids) return [];
+    require_once __DIR__ . '/plugins.php';
+    $catalog = plugin_catalog();
+    $names = [];
+    foreach ($ids as $id) {
+        if (is_string($id) && isset($catalog[$id])) $names[] = (string) $catalog[$id]['name'];
     }
     return array_values(array_unique($names));
 }
@@ -323,6 +409,42 @@ function saas_free_cap_reached(): bool
  * ÉTAPE 1 — formule. Crée une demande « draft » avec un jeton secret (lien de reprise) : Stripe recueille l'e-mail pour une formule payante,
  * sinon il est demandé à l'étape de création de boutique. Retourne ['ok' => true, 'request' => …] ou ['ok' => false, 'errors' => …].
  */
+/**
+ * Champs du titulaire (particulier ou professionnel) et adresse postale, saisis à l'étape Préconfiguration.
+ * Les valeurs absentes du formulaire sont reprises de la demande existante ; rien n'est validé ici.
+ */
+function saas_owner_input(array $in, array $base = []): array
+{
+    $kind = (string) ($in['owner_kind'] ?? $base['owner_kind'] ?? 'particulier');
+    if (!in_array($kind, ['particulier', 'professionnel'], true)) $kind = 'particulier';
+    $str = static fn (string $key, int $max): string => mb_substr(trim((string) ($in[$key] ?? $base[$key] ?? '')), 0, $max);
+    return [
+        'owner_kind' => $kind,
+        'company_name' => $str('company_name', 100),
+        'siret' => preg_replace('/\s+/', '', $str('siret', 30)),
+        'vat' => $str('vat', 20),
+        'address' => $str('address', 160),
+        'postal_code' => $str('postal_code', 12),
+        'city' => $str('city', 80),
+        'address_lat' => $str('address_lat', 20),
+        'address_lng' => $str('address_lng', 20),
+    ];
+}
+
+/** Contrôles du titulaire et de l'adresse postale, retournés par nom de champ (vide si tout est valide). */
+function saas_owner_validate(array $owner): array
+{
+    $err = [];
+    if (mb_strlen($owner['address']) < 5) $err['address'] = 'Indiquez l’adresse postale (numéro et rue).';
+    if (!preg_match('/^[0-9A-Za-z][0-9A-Za-z -]{2,11}$/', $owner['postal_code'])) $err['postal_code'] = 'Indiquez un code postal valide.';
+    if ($owner['city'] === '') $err['city'] = 'Indiquez la ville.';
+    if ($owner['owner_kind'] === 'professionnel') {
+        if ($owner['company_name'] === '') $err['company_name'] = 'Indiquez la raison sociale.';
+        if (!preg_match('/^\d{14}$/', $owner['siret'])) $err['siret'] = 'Le SIRET doit comporter 14 chiffres.';
+    }
+    return $err;
+}
+
 function saas_request_start(array $in): array
 {
     $err = [];
@@ -333,6 +455,18 @@ function saas_request_start(array $in): array
     $gallery = strtolower(trim((string) ($in['galerie'] ?? '')));
     if ($gallery !== '' && !isset(saas_signup_galleries()[$gallery])) $gallery = '';
     if (!in_array($mode, ['sales', 'showcase'], true)) $mode = 'sales';
+    $presence = (string) ($in['shop_presence'] ?? 'store');
+    if (!in_array($presence, ['store', 'online'], true)) $presence = 'store';
+    // Lieu de vente choisi à l'étape 1 : conservé même sans galerie précise, il règle le vocabulaire boutique/stand.
+    $placeType = strtolower(trim((string) ($in['lieu'] ?? '')));
+    if ($placeType === 'solo' || !preg_match('/^[a-z0-9][a-z0-9-]{1,23}$/', $placeType)) $placeType = '';
+    if ($placeType === '' && $gallery !== '') {
+        $placeGallery = gallery_load($gallery);
+        $placeType = (string) ($placeGallery['type'] ?? '');
+    }
+    // IA de la boutique : avec (nom, textes et pré-remplissage assistés) ou sans (aucune génération).
+    $aiMode = (string) ($in['ai_mode'] ?? 'with');
+    if (!in_array($aiMode, ['with', 'without'], true)) $aiMode = 'with';
     $offer = saas_offer_snapshot($gallery, $plan, (string) ($in['facturation'] ?? 'month'), $mode);
     $quoteCatalog = saas_service_quote_catalog();
     $quoteInput = $in['service_quotes'] ?? [];
@@ -349,6 +483,18 @@ function saas_request_start(array $in): array
         }
         $serviceQuotes = array_values(array_unique($serviceQuotes));
     }
+    // Plugins cochés à l'étape 1 : c'est un intérêt, pas un achat. Ils restent réglés après la création de la boutique.
+    $pluginCatalog = function_exists('plugin_catalog') ? plugin_catalog() : [];
+    $plugins = [];
+    $pluginInput = $in['plugins'] ?? [];
+    if (is_array($pluginInput)) {
+        foreach ($pluginInput as $pluginId) {
+            if (is_string($pluginId) && isset($pluginCatalog[$pluginId]) && !in_array($pluginId, $plugins, true)) $plugins[] = $pluginId;
+        }
+    }
+    if ($presence === 'online' && function_exists('plugin_requires_store')) {
+        $plugins = array_values(array_filter($plugins, static fn (string $id): bool => !plugin_requires_store($id)));
+    }
     if ($email !== '' && (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254)) $err['email'] = 'Indiquez une adresse e-mail valide.';
     if (!$offer) $err['plan'] = 'Choisissez une formule.';
     if ($err) return ['ok' => false, 'errors' => $err];
@@ -357,8 +503,8 @@ function saas_request_start(array $in): array
     $lock = function_exists('eb_lock_offer') ? eb_lock_offer($gallery, $offer) : ['offer' => $offer, 'earlybird' => null];
     $offer = $lock['offer'];
     $req = ['id' => bin2hex(random_bytes(8)), 'token' => bin2hex(random_bytes(16)), 'created' => time(), 'status' => 'draft', 'email' => $email, 'plan' => $plan, 'site_mode' => $mode,
-        'offer' => $offer, 'shop_name' => '', 'slug' => '', 'first_name' => '', 'last_name' => '', 'phone' => '', 'about' => '', 'gallery' => $gallery, 'template' => SHOP_TEMPLATE_DEFAULT,
-        'service_quotes' => $serviceQuotes, 'payment' => []];
+        'shop_presence' => $presence, 'ai_mode' => $aiMode, 'place_type' => $placeType, 'offer' => $offer, 'shop_name' => '', 'slug' => '', 'first_name' => '', 'last_name' => '', 'phone' => '', 'about' => '', 'gallery' => $gallery, 'template' => SHOP_TEMPLATE_DEFAULT,
+        'service_quotes' => $serviceQuotes, 'plugins' => $plugins, 'payment' => []];
     if (!empty($lock['earlybird'])) $req['earlybird'] = $lock['earlybird'];
     if (!saas_request_save($req)) return ['ok' => false, 'errors' => ['form' => "Impossible d'enregistrer la demande pour le moment : réessayez dans quelques minutes."]];
     saas_event('signup_started', ['ref' => $req['id'], 'email' => $email, 'plan' => $plan, 'gallery' => $gallery, 'actor' => 'client', 'note' => saas_offer_note($offer, $req['earlybird'] ?? null)]);
@@ -479,8 +625,20 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
         throw new InvalidArgumentException("L'adresse « $slug » est déjà prise.");
     }
     $login = saas_admin_login($req);
-    $feed = !empty($req['autofeed']) ? autofeed_form_fields($req) : [];   // bandeau et articles d'exemple (facultatif)
+    $noAi = ($req['ai_mode'] ?? 'with') === 'without';
+    // Bandeau et articles d'exemple (facultatif) : jamais pour une boutique « sans IA ».
+    $feed = !$noAi && !empty($req['autofeed']) ? autofeed_form_fields($req) : [];
     $tpl = shop_template_valid($req['template'] ?? null) ? (string) $req['template'] : SHOP_TEMPLATE_DEFAULT;
+    // Coordonnées et identité saisies à l'étape 2 (particulier ou professionnel) : contact, pages légales et référencement local.
+    $ownerAddress = trim((string) ($req['address'] ?? '') . ' ' . trim(trim((string) ($req['postal_code'] ?? '')) . ' ' . trim((string) ($req['city'] ?? ''))));
+    $ownerLegal = [
+        'legal_email' => (string) $req['email'],
+        'legal_director' => trim((string) ($req['first_name'] ?? '') . ' ' . (string) ($req['last_name'] ?? '')),
+    ];
+    if (($req['owner_kind'] ?? 'particulier') === 'professionnel') {
+        $ownerLegal['legal_company'] = (string) ($req['company_name'] ?? '');
+        $ownerLegal['legal_siret'] = (string) ($req['siret'] ?? '');
+    }
     create_tenant_from_form([
         'name' => $req['shop_name'], 'slug' => $slug, 'url' => saas_is_local_host() ? '' : $origin . '/' . $slug, 'template' => $tpl,
         'sales_enabled' => ($req['site_mode'] ?? saas_req_offer($req)['mode'] ?? 'sales') !== 'showcase',
@@ -498,7 +656,8 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
         'pr1' => 'Un envoi soigné', 'pr1t' => 'Vos achats sont emballés avec attention.',
         'pr2' => 'Un échange direct', 'pr2t' => 'Une question ? Écrivez-nous, nous répondons.',
         'delivery' => 'Retrait sur place ou envoi postal.',
-    ] + $feed, null);
+        'address' => $ownerAddress,
+    ] + $ownerLegal + $feed, null);
     if (!saas_set_admin_hash($slug, $login, (string) $req['password_hash'])) {
         throw new RuntimeException("La boutique est créée mais le compte du commerçant n'a pas pu être installé : utilisez « Nouvel accès » dans le portail.");
     }
@@ -521,9 +680,36 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
             error_log('saas_generate_shop: impossible d’ajouter ' . $slug . ' à la galerie ' . $gallerySlug);
         }
     }
+    // Plugins installés d'office (catalogue des plugins → « installé d'office ») : médiathèque, tableau de bord.
+    // Ceux qui se vendent à part reçoivent un accès offert, sans quoi leur page resterait fermée.
+    require_once __DIR__ . '/plugins.php';
+    require_once __DIR__ . '/addons.php';
+    try {
+        [$defaultPdo, $defaultDb] = plugin_open_tenant_db($slug);
+        foreach (plugin_default_installs() as $defaultPluginId) {
+            $defaultPlugin = plugin_manifest($defaultPluginId);
+            if (!$defaultPlugin) continue;
+            plugin_enable($defaultPdo, $defaultDb, $defaultPlugin);
+            if (isset(addon_defaults()[$defaultPluginId])) {
+                addon_save($defaultPluginId, ['status' => 'complimentary', 'billing_mode' => 'free',
+                    'subscribed_at' => gmdate('c'), 'canceled_at' => ''], $defaultPdo);
+            }
+        }
+        $defaultPdo = null;
+    } catch (Throwable $e) {
+        error_log('saas_generate_shop: plugins par défaut : ' . $e->getMessage());
+    }
     // IA gratuite de l'offre choisie : le quota mensuel de la boutique (sans quota dans l'offre, l'IA reste illimitée).
-    $aiQuota = saas_req_offer($req)['ai_quota_eur'] ?? null;
+    // Une boutique « sans IA » n'a aucun quota et l'IA y est coupée (portail → Fournisseurs d'IA, réactivable).
+    $aiQuota = $noAi ? null : (saas_req_offer($req)['ai_quota_eur'] ?? null);
     if ($aiQuota !== null) saas_ai_policy_set($slug, (float) $aiQuota, 'offre');
+    if ($noAi) {
+        require_once __DIR__ . '/ai-providers.php';
+        ai_provider_update(static function (array $settings) use ($slug): array {
+            $settings['shops'][$slug] = false;
+            return $settings;
+        });
+    }
     @unlink(saas_data_dir() . '/saas/cache.json');
     $shopUrl = rtrim(gallery_local_shop_url($slug, tenant_load($slug), $origin), '/') . '/';
     $adminUrl = $shopUrl . 'admin/';
@@ -746,13 +932,23 @@ function saas_set_admin_hash(string $slug, string $login, string $hash): bool
     return $saved['admin_user'] === $login && $saved['admin_password'] === $hash;
 }
 
-/** Message e-mail simple (UTF-8). Silencieux en cas d'échec : l'inscription ne dépend pas de l'envoi. */
-function saas_mail(string $to, string $subject, string $body): bool
+/**
+ * Message e-mail simple (UTF-8), avec un pixel de suivi d'ouverture.
+ * Silencieux en cas d'échec : l'inscription ne dépend pas de l'envoi.
+ * $source et $context rangent l'envoi dans le suivi (voir includes/mail-tracking.php).
+ */
+function saas_mail(string $to, string $subject, string $body, string $source = 'plateforme', string $context = ''): bool
 {
+    require_once __DIR__ . '/mail-tracking.php';
     $host = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    $from = 'noreply@' . (str_contains($host, '.') && !str_ends_with($host, '.test') ? preg_replace('/^[^.]+\.(?=[^.]+\.[^.]+$)/', '', $host) : 'localhost.localdomain');
-    $headers = "From: " . saas_config()['name'] . " <$from>\r\nContent-Type: text/plain; charset=UTF-8\r\nMIME-Version: 1.0";
-    return function_exists('mail') && @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers);
+    $local = !str_contains($host, '.') || str_ends_with($host, '.test') || str_ends_with($host, '.localhost') || filter_var($host, FILTER_VALIDATE_IP);
+    $from = 'noreply@' . (!$local ? preg_replace('/^[^.]+\.(?=[^.]+\.[^.]+$)/', '', $host) : 'localhost.localdomain');
+    return mail_open_send($to, $subject, $body, $source, [
+        'from' => 'From: ' . saas_config()['name'] . " <$from>",
+        'log' => __DIR__ . '/../data/mail-outbox.log',
+        'local' => $local,
+        'context' => $context,
+    ]);
 }
 
 const SAAS_DOMAIN_FOLLOWUP_DELAY = 7 * 86400;
@@ -862,7 +1058,7 @@ function saas_page_start(string $title, string $description, string $active = ''
   <nav aria-label="Navigation principale">
     <?php foreach ($nav as $k => [$href, $label]): ?><a href="<?= $href ?>"<?= $active === $k ? ' aria-current="page"' : '' ?>><?= $label ?></a><?php endforeach; ?>
     <a href="/#connexion">Se connecter</a>
-    <a class="cta" href="/inscription/"<?= $active === 'inscription' ? ' aria-current="page"' : '' ?>>Créer ma boutique</a>
+    <a class="cta" href="/inscription/"<?= $active === 'inscription' ? ' aria-current="page"' : '' ?>>Je veux vendre en ligne</a>
   </nav>
 </div></header>
 <main id="contenu">
@@ -876,7 +1072,7 @@ function saas_page_end(): void
 </main>
 <footer class="site-foot"><div class="wrap foot">
   <div><strong><?= saas_e($cfg['name']) ?></strong><br><span><?= saas_e($cfg['tagline']) ?></span></div>
-  <nav aria-label="Pied de page"><a href="/">Accueil</a><a href="/vide-greniers/">Organiser un vide-grenier</a><a href="/marche-aux-puces/">Gérer un marché aux puces</a><a href="/galerie-marchande/">Créer une galerie marchande</a><a href="/quartier-marchand/">Créer un quartier marchand</a><a href="/galerie/">Galeries</a><a href="/annuaire/">Annuaire</a><a href="/inscription/">Créer ma boutique</a><a href="/dossier/">Dossier de subvention</a><?php if ($cfg['contact'] !== ''): ?><a href="mailto:<?= saas_e($cfg['contact']) ?>">Contact</a><?php endif; ?></nav>
+  <nav aria-label="Pied de page"><a href="/">Accueil</a><a href="/vide-greniers/">Organiser un vide-grenier</a><a href="/marche-aux-puces/">Gérer un marché aux puces</a><a href="/galerie-marchande/">Créer une galerie marchande</a><a href="/quartier-marchand/">Créer un quartier marchand</a><a href="/galerie/">Galeries</a><a href="/annuaire/">Annuaire</a><a href="/inscription/">Je veux vendre en ligne</a><a href="/dossier/">Dossier de subvention</a><?php if ($cfg['contact'] !== ''): ?><a href="mailto:<?= saas_e($cfg['contact']) ?>">Contact</a><?php endif; ?></nav>
 </div></footer>
 <script src="/assets/pwd-toggle.js" defer></script>
 </body>

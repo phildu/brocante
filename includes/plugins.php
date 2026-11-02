@@ -157,6 +157,131 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
     ];
 }
 
+/** Plugins pensés pour un point de vente physique : masqués à l'inscription d'une boutique en ligne uniquement. */
+const PLUGIN_STORE_ONLY = ['retrait-stand', 'assistance-vendeur', 'qr-story', 'registre-police'];
+
+function plugin_requires_store(string $id): bool
+{
+    return in_array($id, PLUGIN_STORE_ONLY, true);
+}
+
+// ── Catalogue proposé à l'inscription (profils) ─────────────────────────────
+// Réglages par serveur : data/saas/plugins-catalog.json (hors déploiement). Pour chaque plugin :
+//   listed          proposé à l'inscription (false : le plugin reste gérable ici et actif dans les boutiques qui l'ont) ;
+//   stage           « live » (en service) ou « test » (en développement : gratuit jusqu'à sa mise en service) ;
+//   free            gratuité forcée (sans attendre la mise en service) ;
+//   activities      activités autorisées, clés de branding_activity_catalog() (vide : toutes) ;
+//   online_sales    réservé aux boutiques qui vendent en ligne (paiement en ligne) ;
+//   default_install installé d'office dans chaque nouvelle boutique.
+// Seules les valeurs différentes des réglages d'origine sont écrites dans le fichier.
+const PLUGIN_RULE_DEFAULTS = [
+    // Doublon fonctionnel : les actions commerciales portent déjà la vente flash programmée. Les boutiques qui ont
+    // ventes-flash le gardent (baisse progressive automatique, absente des actions commerciales).
+    'ventes-flash' => ['listed' => false],
+    'registre-police' => ['activities' => ['brocante']],   // antiquaires et brocanteurs
+    'qr-story' => ['activities' => ['brocante']],          // antiquaires et brocanteurs
+    'reservation-arrhes' => ['online_sales' => true],      // vente en ligne avec paiement
+    'communication' => ['default_install' => true],        // médiathèque installée d'office
+    'tableau-de-bord' => ['default_install' => true],      // tableau de bord installé d'office
+];
+
+function plugin_rules_file(): string
+{
+    return dirname(__DIR__) . '/data/saas/plugins-catalog.json';
+}
+
+/** Réglages d'origine d'un plugin (les valeurs du code, avant le fichier du serveur). */
+function plugin_rule_defaults(string $id): array
+{
+    return array_merge([
+        'listed' => true, 'stage' => 'live', 'free' => false, 'activities' => [], 'online_sales' => false, 'default_install' => false,
+    ], PLUGIN_RULE_DEFAULTS[$id] ?? []);
+}
+
+/** Une entrée lue dans le fichier, ramenée aux valeurs et types autorisés. */
+function plugin_rule_normalize(mixed $raw, array $base): array
+{
+    if (!is_array($raw)) return $base;
+    $out = $base;
+    if (array_key_exists('listed', $raw)) $out['listed'] = !empty($raw['listed']);
+    if (isset($raw['stage']) && in_array($raw['stage'], ['live', 'test'], true)) $out['stage'] = $raw['stage'];
+    if (array_key_exists('free', $raw)) $out['free'] = !empty($raw['free']);
+    if (array_key_exists('activities', $raw)) {
+        $activities = is_array($raw['activities']) ? $raw['activities'] : [];
+        $out['activities'] = array_values(array_unique(array_filter($activities,
+            static fn ($a): bool => is_string($a) && preg_match('/^[a-z][a-z0-9_-]{0,30}$/', $a))));
+    }
+    if (array_key_exists('online_sales', $raw)) $out['online_sales'] = !empty($raw['online_sales']);
+    if (array_key_exists('default_install', $raw)) $out['default_install'] = !empty($raw['default_install']);
+    return $out;
+}
+
+/** Réglages du catalogue par identifiant de plugin (code puis fichier du serveur). */
+function plugin_rules_load(): array
+{
+    $out = [];
+    foreach (plugin_catalog() as $id => $m) $out[$id] = plugin_rule_defaults($id);
+    $raw = json_decode((string) @file_get_contents(plugin_rules_file()), true);
+    foreach ((array) ($raw['plugins'] ?? []) as $id => $rule) {
+        if (isset($out[$id])) $out[$id] = plugin_rule_normalize($rule, $out[$id]);
+    }
+    return $out;
+}
+
+/** Enregistre les réglages en n'écrivant que les écarts aux valeurs d'origine. */
+function plugin_rules_save(array $rules): void
+{
+    $file = plugin_rules_file();
+    if (!is_dir(dirname($file))) @mkdir(dirname($file), 0755, true);
+    $saved = [];
+    foreach ($rules as $id => $rule) {
+        $default = plugin_rule_defaults((string) $id);
+        $diff = [];
+        foreach ($rule as $key => $value) {
+            if (array_key_exists($key, $default) && $value !== $default[$key]) $diff[$key] = $value;
+        }
+        if ($diff) $saved[(string) $id] = $diff;
+    }
+    $json = json_encode(['version' => 1, 'plugins' => $saved], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    $tmp = $file . '.tmp';
+    if ($json === false || @file_put_contents($tmp, $json . "\n") === false || !@rename($tmp, $file)) {
+        throw new RuntimeException("Impossible d'enregistrer le catalogue des plugins (écriture refusée dans data/saas/).");
+    }
+}
+
+/** Le plugin convient-il à ce profil ? (vente en ligne, activités ; la présence physique est vue par plugin_requires_store). */
+function plugin_rule_matches(string $id, array $rule, string $mode, string $presence, array $activity = []): bool
+{
+    if ($presence === 'online' && plugin_requires_store($id)) return false;
+    if (!empty($rule['online_sales']) && $mode !== 'sales') return false;
+    if (empty($rule['activities'])) return true;
+    $known = array_filter(array_merge([(string) ($activity['primary'] ?? '')], array_map('strval', (array) ($activity['secondary'] ?? []))));
+    return !$known || (bool) array_intersect($rule['activities'], $known);
+}
+
+/** Plugin gratuit (en test, ou gratuité forcée) : prix affiché à 0 et aucune facturation. */
+function plugin_rule_free(array $rule): bool
+{
+    return !empty($rule['free']) || $rule['stage'] === 'test';
+}
+
+/** Plugins que chaque nouvelle boutique reçoit installés d'office. */
+function plugin_default_installs(): array
+{
+    return array_keys(array_filter(plugin_rules_load(), static fn (array $rule): bool => !empty($rule['default_install'])));
+}
+
+/** Sélection d'un client ramenée aux plugins autorisés par son profil. */
+function plugin_filter_selection(array $ids, string $mode, string $presence, array $activity = []): array
+{
+    $rules = plugin_rules_load();
+    $kept = [];
+    foreach ($ids as $id) {
+        if (is_string($id) && isset($rules[$id]) && plugin_rule_matches($id, $rules[$id], $mode, $presence, $activity)) $kept[] = $id;
+    }
+    return array_values(array_unique($kept));
+}
+
 /** Plugins disponibles (manifestes valides de packs/*), par identifiant, triés par nom. Un manifeste invalide est ignoré et journalisé. */
 function plugin_catalog(): array
 {

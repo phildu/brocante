@@ -1,4 +1,15 @@
 <?php
+require_once __DIR__ . '/includes/tenant.php';
+
+// Déploiement portail : la racine du domaine du portail ouvre l'accueil de la
+// plateforme. Le domaine propre d'un commerce (site_url sans chemin, ex.
+// brocante.arrimage.com) ouvre sa boutique, comme sous /<identifiant>/.
+if (tenant_from_path() === '' && tenant_from_host() === '' && tenant_from_domain() === ''
+    && is_file(__DIR__ . '/portail/index.php')) {
+    require __DIR__ . '/accueil/index.php';
+    return;
+}
+
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/hero.php';
 

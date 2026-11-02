@@ -7,8 +7,11 @@
 //   1. la variable d'environnement TENANT (session cloud, SetEnv Apache) ;
 //   2. le sous-domaine, s'il porte le nom d'un commerce : naty.brocenstock.test
 //      affiche tenants/naty (tests locaux avec Herd) ;
-//   3. le fichier .tenant à la racine (écrit par le script de déploiement) ;
-//   4. petit-chalet (comportement historique).
+//   3. le premier segment de l'adresse (brocs.arrimage.com/naty/) ;
+//   4. le domaine déclaré par un tenant.php (site_url sans chemin, ex.
+//      brocante.arrimage.com) ;
+//   5. le fichier .tenant à la racine (écrit par le script de déploiement) ;
+//   6. petit-chalet (comportement historique).
 
 const TENANT_DEFAULT = 'petit-chalet';
 require_once __DIR__ . '/business-presence.php';
@@ -35,6 +38,44 @@ function tenant_base_host(?string $host = null): string
 {
     $host = strtolower($host ?? ($_SERVER['HTTP_HOST'] ?? ''));
     return tenant_from_host($host) !== '' ? substr($host, strpos($host, '.') + 1) : $host;
+}
+
+/**
+ * Commerce dont le tenant.php déclare ce domaine comme site_url (domaine propre
+ * servi à la racine, ex. brocante.arrimage.com), ou ''. Seule une adresse sans
+ * chemin compte : site_url = https://brocs.arrimage.com/<identifiant> désigne
+ * une boutique sous le domaine du portail, pas le domaine lui-même.
+ */
+function tenant_from_domain(?string $host = null): string
+{
+    static $cache = [];
+    $host = strtolower(preg_replace('/:\d+$/', '', $host ?? ($_SERVER['HTTP_HOST'] ?? '')));
+    $host = (string) preg_replace('/^www\./', '', $host);
+    if ($host === '') {
+        return '';
+    }
+    if (array_key_exists($host, $cache)) {
+        return $cache[$host];
+    }
+    $cache[$host] = '';
+    try {
+        $shops = tenant_list();
+    } catch (Throwable $e) {
+        return ''; // une configuration de commerce invalide ne doit pas fermer les autres hôtes
+    }
+    foreach ($shops as $slug => $config) {
+        $url = rtrim((string) ($config['site_url'] ?? ''), '/');
+        $path = (string) parse_url($url, PHP_URL_PATH);
+        if ($url === '' || ($path !== '' && $path !== '/')) {
+            continue;
+        }
+        $declared = strtolower((string) parse_url($url, PHP_URL_HOST));
+        if ($declared !== '' && preg_replace('/^www\./', '', $declared) === $host) {
+            $cache[$host] = $slug;
+            break;
+        }
+    }
+    return $cache[$host];
 }
 
 /**
@@ -69,6 +110,9 @@ function tenant_resolve(): array
         if ($slug === '') {
             $slug = tenant_from_path();
             $base = $slug !== '' ? '/' . $slug : '';
+        }
+        if ($slug === '') {
+            $slug = tenant_from_domain();
         }
         $file = __DIR__ . '/../.tenant';
         if ($slug === '' && is_file($file)) {

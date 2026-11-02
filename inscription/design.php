@@ -163,6 +163,7 @@ saas_page_start('Aide au design — ' . saas_config()['name'], 'Choisissez le st
           <div class="step2-payment-actions" style="margin-top:24px">
             <button class="btn" type="submit"><?= $isPayable ? 'Valider et continuer vers le paiement' : 'Valider et créer ma boutique' ?></button>
             <button class="btn ghost" type="submit" name="skip_design" value="1">Je choisirai plus tard (passer cette étape)</button>
+            <?php if ($backToConfig !== ''): ?><a class="btn ghost" href="<?= $escape($backToConfig) ?>">← Retour à la préconfiguration</a><?php endif; ?>
           </div>
         </form>
       </div>
