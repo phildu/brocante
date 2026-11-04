@@ -92,6 +92,7 @@ $itemWord = static fn (int $n): string => tenant_text($n === 1 ? 'item_singular'
         <li><b>Horaires</b><span><?= h($content['contact_hours']) ?></span></li>
         <li><b>Livraison</b><span><?= h($content['contact_delivery']) ?></span></li>
       </ul>
+      <?= shop_locate_actions_html(['class' => 'shop-locate-contact-actions']) ?>
     </div>
     <div class="mk-newsletter">
       <p class="mk-kicker">La lettre</p>

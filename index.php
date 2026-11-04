@@ -12,6 +12,7 @@ if (tenant_from_path() === '' && tenant_from_host() === '' && tenant_from_domain
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/hero.php';
+require_once __DIR__ . '/includes/recommendations.php';
 
 $content = get_content();
 $products = get_products();
@@ -48,10 +49,27 @@ $followPhotos = array_slice($followPhotos, 0, 6);
 $activeNav = 'accueil';
 $pageTitle = null;
 include __DIR__ . '/includes/header.php';
-
+?>
+<?php // Le lien de suivi mémorisé par /suivi.php (appli installée) reste à portée de main sur l'accueil. ?>
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('brocs_track');
+    if (!t || t.indexOf('/suivi.php?') === -1) return;
+    var a = document.createElement('a');
+    a.href = t;
+    a.className = 'btn btn-ghost';
+    a.textContent = 'Suivre ma commande';
+    a.style.cssText = 'display:block;max-width:1080px;margin:14px auto 0;padding:10px 16px;';
+    document.querySelector('main').prepend(a);
+  } catch (e) {}
+})();
+</script>
+<?php
 // Modèle à mise en page propre (views/<modèle>/home.php) : il remplace l'accueil d'origine, avec les mêmes données.
 if ($view = shop_view('home')) {
     include $view;
+    echo rec_for_you_section_html(array_merge(array_column($promo, 'ref'), array_column($featured, 'ref')));
     include __DIR__ . '/includes/footer.php';
     return;
 }
@@ -81,6 +99,7 @@ if ($view = shop_view('home')) {
           <p><?= h($content['story_photo_caption']) ?></p>
         </div>
       <?php endif; ?>
+      <p style="margin-top:22px;"><a class="btn btn-ghost" href="/notre-histoire.php">Lire notre histoire</a></p>
     </div>
     <div class="principles">
       <?php for ($i = 1; $i <= 3; $i++): ?>
@@ -145,6 +164,8 @@ if ($view = shop_view('home')) {
   </div>
 </section>
 
+<?= rec_for_you_section_html(array_merge(array_column($promo, 'ref'), array_column($featured, 'ref'))) ?>
+
 <?php if ($followPhotos): ?>
 <section class="follow tight">
   <div class="wrap">
@@ -192,6 +213,7 @@ if ($view = shop_view('home')) {
         <li><strong>Horaires</strong> <?= h($content['contact_hours']) ?></li>
         <li><strong>Livraison</strong> <?= h($content['contact_delivery']) ?></li>
       </ul>
+      <?= shop_locate_actions_html(['class' => 'shop-locate-contact-actions']) ?>
     </div>
   </div>
 </section>

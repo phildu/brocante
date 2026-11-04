@@ -231,11 +231,11 @@ saas_page_start('Ma boutique — ' . $cfg['name'], 'Dernière étape : le nom et
             $creerType = !empty($req['gallery']) && isset($galleries[$req['gallery']])
                 ? (string) ($galleries[$req['gallery']]['type'] ?? '')
                 : (string) ($req['place_type'] ?? '');
-            $creerWord = $creerType === 'vide-grenier' ? 'stand' : 'boutique';
+            $creerWord = in_array($creerType, ['vide-grenier', 'marche-de-noel', 'marche-producteurs'], true) ? 'stand' : 'boutique';
             ?>
             <label class="field full<?= isset($errors['terms']) ? ' has-error' : '' ?>" style="grid-template-columns:auto 1fr;align-items:start;gap:10px">
                 <input type="checkbox" name="terms" value="1" style="width:auto;margin-top:4px"<?= !empty($_POST['terms']) ? ' checked' : '' ?>>
-                <span style="font-weight:400">J'accepte d'être contacté(e) pour la création de mon <?= $creerWord ?> et que mes informations servent à ce seul usage.<?= $err('terms') ?></span>
+                <span style="font-weight:400">J'accepte les <a href="/accueil/conditions.php" target="_blank" rel="noopener">conditions d'utilisation de la plateforme</a>, d'être contacté(e) pour la création de mon <?= $creerWord ?> et que mes informations servent à ce seul usage.<?= $err('terms') ?></span>
               </label>
             <?php endif; ?>
           </div>

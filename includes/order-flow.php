@@ -34,7 +34,20 @@ function order_ensure_schema(PDO $pdo): void
             'payment_authorization' => 'TEXT',        // numéro d'autorisation Monetico (nécessaire au re-crédit)
             'payment_detail' => 'TEXT',               // libellé lisible (carte masquée, 3DS…)
             'payment_date' => 'TEXT',                 // date du paiement, heure de Paris
+            'stock_reserved_at' => 'TEXT',            // articles déduits dès la commande (virement en attente)
+            'payment_deadline' => 'TEXT',             // date limite pour recevoir un virement SEPA
             'confirmation_sent_at' => 'TEXT',
+            'track_token' => 'TEXT',                  // jeton public de suivi (lien de l'e-mail et QR du reçu)
+            // Validation de disponibilité avant paiement : commande « awaiting » en attente de réponse du vendeur.
+            'availability_status' => 'TEXT',          // pending, available, refused, expired, cancelled, converted
+            'availability_channel' => 'TEXT',         // whatsapp, sms ou email (canal réellement utilisé)
+            'availability_payload' => 'TEXT',         // panier + coordonnées JSON pour reprendre la commande après validation
+            'availability_confirmed_at' => 'TEXT',
+            'availability_deadline' => 'TEXT',        // fin du délai de paiement accordé après validation
+            'availability_order_id' => 'INTEGER',     // commande payée issue de cette demande
+            'gift_wrap' => 'INTEGER NOT NULL DEFAULT 0',        // 1 : emballage cadeau demandé
+            'gift_wrap_cents' => 'INTEGER NOT NULL DEFAULT 0',  // montant facturé pour l'emballage
+            'gift_message' => 'TEXT',                           // petit mot du client pour le destinataire
         ];
         foreach ($extra as $column => $type) {
             if (!in_array($column, $columns, true)) {
@@ -147,14 +160,36 @@ function order_prepare_after_payment(array $order, array $session): void
     }
     $code = (string) ($order['pickup_code'] ?? '');
     if ($code === '' && $mode === 'pickup') $code = order_pickup_code();
+    $track = (string) ($order['track_token'] ?? '');
+    if ($track === '') $track = bin2hex(random_bytes(16));
     $firstStep = $mode === 'pickup' ? 'a_confirmer' : 'a_preparer';
     db()->prepare("UPDATE orders SET
             stripe_payment_intent = COALESCE(NULLIF(stripe_payment_intent, ''), ?),
             shipping_mode = CASE WHEN shipping_mode IS NULL OR shipping_mode = '' THEN ? ELSE shipping_mode END,
             pickup_code = COALESCE(NULLIF(pickup_code, ''), ?),
+            track_token = COALESCE(NULLIF(track_token, ''), ?),
             fulfillment_status = CASE WHEN fulfillment_status IS NULL OR fulfillment_status = '' OR fulfillment_status = 'a_preparer' THEN ? ELSE fulfillment_status END
         WHERE id = ?")
-        ->execute([$pi !== '' ? $pi : null, $mode, $code !== '' ? $code : null, $firstStep, (int) $order['id']]);
+        ->execute([$pi !== '' ? $pi : null, $mode, $code !== '' ? $code : null, $track, $firstStep, (int) $order['id']]);
+}
+
+/**
+ * Vente réglée par le QR de la fiche produit : le client est dans la boutique,
+ * la pièce lui est remise sur place. Elle est donc marquée vendue et livrée
+ * dès la confirmation du paiement.
+ */
+function order_mark_shop_qr_sold(array $order): void
+{
+    if (!str_starts_with((string) ($order['shipping_method'] ?? ''), 'Vente en boutique — QR')) return;
+    $id = (int) ($order['id'] ?? 0);
+    if ($id <= 0) return;
+    $st = db()->prepare("UPDATE products SET sold_channel = 'boutique', sold_at = COALESCE(sold_at, CURRENT_TIMESTAMP)
+        WHERE ref = ? AND stock <= 0 AND (sold_channel IS NULL OR sold_channel = '')");
+    foreach (json_decode((string) ($order['items'] ?? ''), true) ?: [] as $item) {
+        $st->execute([(string) ($item['ref'] ?? '')]);
+    }
+    db()->prepare("UPDATE orders SET fulfillment_status = 'livree', picked_up_at = COALESCE(picked_up_at, CURRENT_TIMESTAMP),
+        picked_up_by = COALESCE(picked_up_by, 'QR fiche produit') WHERE id = ? AND status = 'paid'")->execute([$id]);
 }
 
 // ── E-mails ────────────────────────────────────────────────────────────────
@@ -184,6 +219,17 @@ function order_mail_body_lines(array $order): string
         $lines[] = (int) $item['qty'] . ' × ' . $item['name'] . ' — ' . format_cents((int) $item['unit_cents'] * (int) $item['qty']);
     }
     return implode("\n", $lines);
+}
+
+/** Résumé lisible de l'emballage cadeau d'une commande, ou '' si aucun. */
+function order_gift_summary(array $order): string
+{
+    if (empty($order['gift_wrap'])) return '';
+    $parts = ['Emballage cadeau'];
+    if ((int) ($order['gift_wrap_cents'] ?? 0) > 0) $parts[] = '+' . format_cents((int) $order['gift_wrap_cents']);
+    $message = trim((string) ($order['gift_message'] ?? ''));
+    if ($message !== '') $parts[] = 'petit mot : « ' . $message . ' »';
+    return implode(' — ', $parts);
 }
 
 function order_mail_signature(array $order): string
@@ -230,10 +276,12 @@ function order_send_confirmation(int $orderId, bool $force = false): bool
     [$name] = order_mail_identity($order);
     $pickup = order_is_pickup($order);
     $content = function_exists('get_content') ? get_content() : [];
+    $trackUrl = order_track_url($order);
     $body = "Bonjour,\n\nMerci pour votre commande n° " . (int) $order['id'] . " sur $name.\n\n"
         . order_mail_body_lines($order) . "\n\n"
         . 'Total payé : ' . format_cents((int) $order['amount_total'])
-        . ((int) $order['shipping_cents'] > 0 ? ' (dont ' . format_cents((int) $order['shipping_cents']) . ' de livraison)' : '') . "\n\n"
+        . ((int) $order['shipping_cents'] > 0 ? ' (dont ' . format_cents((int) $order['shipping_cents']) . ' de livraison)' : '') . "\n"
+        . (order_gift_summary($order) !== '' ? order_gift_summary($order) . "\n" : '') . "\n"
         . ($pickup
             ? "Mode : retrait sur place" . (!empty($content['pickup_label']) ? ' — ' . $content['pickup_label'] : '') . "\n"
                 . (!empty($order['pickup_code']) ? "Code de retrait : " . $order['pickup_code'] . "\n" : '')
@@ -241,6 +289,7 @@ function order_send_confirmation(int $orderId, bool $force = false): bool
             : 'Mode : ' . ($order['shipping_label'] ?: 'expédition') . "\n"
                 . (!empty($order['shipping_address']) ? "Adresse : " . $order['shipping_address'] . "\n" : '')
                 . "Nous vous préviendrons dès que le colis sera expédié.\n")
+        . ($trackUrl !== '' ? "\nSuivez votre commande — lieu et délai de collecte, avancement :\n$trackUrl\nCelui-ci vous permet aussi d'installer l'appli client sur votre téléphone.\n" : '')
         . order_mail_signature($order);
     return order_send_email($orderId, 'confirmation', "Votre commande n° " . (int) $order['id'] . " — $name", $body, $force);
 }
@@ -252,11 +301,13 @@ function order_send_ready(int $orderId): bool
     [$name] = order_mail_identity($order);
     $content = function_exists('get_content') ? get_content() : [];
     $deadline = !empty($order['pickup_deadline']) ? date('d/m/Y', strtotime((string) $order['pickup_deadline'])) : '';
+    $trackUrl = order_track_url($order);
     $body = "Bonjour,\n\nVotre commande n° " . (int) $order['id'] . " est prête à être retirée.\n\n"
         . (!empty($order['pickup_code']) ? "Code de retrait : " . $order['pickup_code'] . "\n" : '')
         . (!empty($content['pickup_label']) ? 'Lieu : ' . $content['pickup_label'] . "\n" : '')
         . ($deadline !== '' ? "Merci de venir avant le $deadline.\n" : '')
         . "\nPrésentez ce code au vendeur pour retirer votre commande."
+        . ($trackUrl !== '' ? "\n\nSuivi de la commande et itinéraire :\n$trackUrl" : '')
         . order_mail_signature($order);
     return order_send_email($orderId, 'pret_retrait', "Votre commande n° " . (int) $order['id'] . " est prête — $name", $body);
 }
@@ -303,11 +354,14 @@ function order_send_refund(int $orderId, int $cents, bool $full): bool
     $order = order_get($orderId);
     if (!$order) return false;
     [$name] = order_mail_identity($order);
+    $sepa = payment_provider_of($order) === 'sepa';
     $body = "Bonjour,\n\nUn remboursement de " . format_cents($cents) . " a été effectué pour votre commande n° " . (int) $order['id'] . ".\n\n"
         . ($full
             ? "La commande est intégralement remboursée.\n"
             : 'Montant total remboursé : ' . format_cents((int) $order['refunded_cents']) . ' sur ' . format_cents((int) $order['amount_total']) . ".\n")
-        . "\nLe montant est recrédité sur votre moyen de paiement d'origine. Selon la banque, cela peut prendre 5 à 10 jours ouvrés."
+        . ($sepa
+            ? "\nLe montant vous est reversé par virement bancaire sur le compte ayant effectué le virement d'origine. Comptez quelques jours ouvrés."
+            : "\nLe montant est recrédité sur votre moyen de paiement d'origine. Selon la banque, cela peut prendre 5 à 10 jours ouvrés.")
         . order_mail_signature($order);
     return order_send_email($orderId, 'remboursement_' . (int) ($order['refunded_cents'] ?? $cents), "Remboursement de votre commande n° " . (int) $order['id'] . " — $name", $body);
 }
@@ -377,7 +431,60 @@ function order_cancel(int $orderId, string $reason = ''): array
     }
     db()->prepare("UPDATE orders SET status = 'cancelled', cancelled_at = ? WHERE id = ?")->execute([gmdate('c'), $orderId]);
     order_event($orderId, 'annulee', $reason !== '' ? $reason : 'Commande annulée avant paiement', 'admin');
+    // Un virement SEPA a réservé les pièces dès la commande : elles reviennent en vente.
+    if (!empty($order['stock_reserved_at'])) order_release_stock($orderId);
     return ['ok' => true, 'message' => 'Commande annulée.'];
+}
+
+/**
+ * Réserve les articles dès la commande, pour un paiement qui arrive plus tard
+ * (virement SEPA). Le stock est déduit une seule fois (colonne réservée
+ * atomiquement) ; order_finalize_external ne le redéduit pas.
+ */
+function order_reserve_stock(int $orderId): bool
+{
+    $order = order_get($orderId);
+    if (!$order || $order['status'] !== 'pending' || !empty($order['stock_reserved_at'])) return false;
+    $upd = db()->prepare("UPDATE orders SET stock_reserved_at = ? WHERE id = ? AND status = 'pending' AND stock_reserved_at IS NULL");
+    $upd->execute([gmdate('c'), $orderId]);
+    if ($upd->rowCount() === 0) return false;
+    decrement_stock_for_order(json_decode((string) $order['items'], true) ?: []);
+    order_event($orderId, 'stock_reserve', 'Articles réservés en attendant le virement', 'system');
+    return true;
+}
+
+/** Libère les articles d'une commande annulée qui les avait réservés. */
+function order_release_stock(int $orderId): void
+{
+    $order = order_get($orderId);
+    if (!$order || empty($order['stock_reserved_at'])) return;
+    db()->prepare('UPDATE orders SET stock_reserved_at = NULL WHERE id = ?')->execute([$orderId]);
+    order_restock($orderId);
+}
+
+/**
+ * Annule les commandes SEPA restées sans virement au-delà du délai réglé et
+ * remet les pièces en vente. Appelé à l'ouverture de la liste des commandes
+ * côté administration (pas de tâche planifiée nécessaire).
+ */
+function order_expire_pending_transfers(): int
+{
+    $maxDays = sepa_config()['delay_days'];
+    $stmt = db()->prepare("SELECT * FROM orders WHERE status = 'pending' AND payment_provider = 'sepa'
+        AND (payment_deadline <= ? OR (payment_deadline IS NULL AND created_at <= datetime('now', ?)))");
+    $stmt->execute([gmdate('c'), '-' . max(1, $maxDays) . ' days']);
+    $count = 0;
+    foreach ($stmt->fetchAll() as $order) {
+        $result = order_cancel((int) $order['id'], 'Virement SEPA non reçu dans le délai de ' . $maxDays . ' jours');
+        if (!$result['ok']) continue;
+        $count++;
+        try {
+            order_send_transfer_expired((int) $order['id']);
+        } catch (Throwable $e) {
+            error_log('e-mail virement annulé ' . (int) $order['id'] . ' : ' . $e->getMessage());
+        }
+    }
+    return $count;
 }
 
 /** Remette les articles d'une commande en stock (une seule fois par commande). */
@@ -422,6 +529,16 @@ function order_refund(int $orderId, int $cents, string $reason = '', bool $resto
             $paypal = paypal_config();
             if (!$paypal) throw new RuntimeException("PayPal n'est plus configuré pour cette boutique.");
             $refundId = paypal_refund($order, $cents, $paypal);
+        } elseif ($provider === 'revolut') {
+            $revolut = revolut_config();
+            if (!$revolut) throw new RuntimeException("Revolut n'est plus configuré pour cette boutique.");
+            $refundId = revolut_refund($order, $cents, $revolut);
+        } elseif ($provider === 'sepa') {
+            // Virement manuel : aucun prestataire à appeler. Le remboursement est
+            // noté ici, le commerçant effectue le virement depuis sa banque.
+            if (!sepa_configured()) throw new RuntimeException("Les coordonnées bancaires de la boutique ne sont plus renseignées.");
+            $refundId = 'VIR-' . strtoupper(bin2hex(random_bytes(4)));
+            order_event($orderId, 'remboursement_virement', 'À virer au client : ' . format_cents($cents) . ' — référence ' . $refundId, $actor);
         } else {
             $pi = trim((string) ($order['stripe_payment_intent'] ?? ''));
             $connect = ($order['payment_via'] ?? '') === 'connect';
@@ -491,6 +608,84 @@ function order_by_payment_intent(string $paymentIntent, ?PDO $pdo = null): ?arra
     $st = ($pdo ?? db())->prepare('SELECT * FROM orders WHERE stripe_payment_intent = ? ORDER BY id DESC LIMIT 1');
     $st->execute([$paymentIntent]);
     return $st->fetch() ?: null;
+}
+
+/** Jeton public de suivi de la commande, créé au paiement (16 octets aléatoires) ; complété pour une commande antérieure. */
+function order_track_token(array $order): string
+{
+    $token = trim((string) ($order['track_token'] ?? ''));
+    if ($token !== '') return $token;
+    $id = (int) ($order['id'] ?? 0);
+    if ($id <= 0) return '';
+    db()->prepare("UPDATE orders SET track_token = COALESCE(NULLIF(track_token, ''), ?) WHERE id = ?")
+        ->execute([bin2hex(random_bytes(16)), $id]);
+    $st = db()->prepare('SELECT track_token FROM orders WHERE id = ?');
+    $st->execute([$id]);
+    return trim((string) $st->fetchColumn());
+}
+
+/** Adresse absolue de la page de suivi ; $fromQr signale un scan et propose d'installer l'appli. */
+function order_track_url(array $order, bool $fromQr = false): string
+{
+    $token = order_track_token($order);
+    if ($token === '') return '';
+    $path = '/suivi.php?t=' . rawurlencode($token) . ($fromQr ? '&from=qr' : '');
+    // Commande traitée hors de sa boutique (webhook de la plateforme) : l'adresse vient du site du commerce,
+    // sinon le lien renverrait vers l'hôte de la plateforme.
+    $slug = trim((string) ($order['shop_slug'] ?? ''));
+    $current = function_exists('tenant_slug') ? tenant_slug() : '';
+    if ($slug !== '' && $slug !== $current && function_exists('tenant_load')) {
+        try {
+            $site = rtrim((string) (tenant_load($slug)['site_url'] ?? ''), '/');
+        } catch (Throwable $e) {
+            $site = '';
+        }
+        if ($site !== '') return $site . $path;
+    }
+    if (!function_exists('shop_abs_url')) require_once __DIR__ . '/share.php';
+    return shop_abs_url($path);
+}
+
+/** Commande correspondant au jeton de suivi, ou null. */
+function order_by_track_token(string $token): ?array
+{
+    $token = trim($token);
+    if (!preg_match('/^[a-f0-9]{32}$/i', $token)) return null;
+    $st = db()->prepare('SELECT * FROM orders WHERE track_token = ? LIMIT 1');
+    $st->execute([$token]);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * Ce que l'acheteur voit de sa commande : étape, mode, lieu et horaires de
+ * retrait, code et date limite, ou transporteur, délai et numéro de suivi.
+ * Les informations de retrait viennent du contenu du site (aucun module annexe).
+ */
+function order_buyer_tracking(array $order): array
+{
+    $content = function_exists('get_content') ? get_content() : [];
+    $locate = function_exists('shop_locate_info') ? shop_locate_info() : [];
+    $pickup = order_is_pickup($order);
+    $status = (string) ($order['fulfillment_status'] ?? '');
+    $deadline = !empty($order['pickup_deadline']) ? date('d/m/Y', strtotime((string) $order['pickup_deadline'])) : '';
+    return [
+        'pickup' => $pickup,
+        'status' => $status,
+        'step' => function_exists('fulfillment_label') ? fulfillment_label($status) : $status,
+        'pickup_label' => trim((string) ($content['pickup_label'] ?? '')),
+        'address' => trim((string) ($locate['address_full'] ?? ($content['contact_address'] ?? ''))),
+        'hours' => trim((string) ($locate['hours'] ?? ($content['contact_hours'] ?? ''))),
+        'delivery_note' => trim((string) ($locate['delivery'] ?? ($content['contact_delivery'] ?? ''))),
+        'maps_google' => (string) ($locate['maps_google'] ?? ''),
+        'directions' => (string) ($locate['directions_google'] ?? ''),
+        'code' => $pickup ? trim((string) ($order['pickup_code'] ?? '')) : '',
+        'deadline' => $pickup ? $deadline : '',
+        'ready' => $status === 'pret_retrait',
+        'picked_up' => !empty($order['picked_up_at']),
+        'shipping_label' => $pickup ? '' : trim((string) ($order['shipping_label'] ?? '')),
+        'shipping_address' => $pickup ? '' : trim((string) ($order['shipping_address'] ?? '')),
+        'tracking_number' => $pickup ? '' : trim((string) ($order['tracking_number'] ?? '')),
+    ];
 }
 
 /**

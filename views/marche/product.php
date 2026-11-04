@@ -68,6 +68,7 @@ $details['Référence'] = 'N°' . h($product['ref']);
         <?php endif; ?>
         <div class="mk-pdp-buy"><?= $buyHtml() ?></div>
         <div class="mk-pdp-share"><?= $shareBtn ?></div>
+        <?= $qrHtml ?>
         <?php if (trim((string) ($fc['contact_delivery'] ?? '')) !== ''): ?><p class="mk-pdp-note"><?= h($fc['contact_delivery']) ?></p><?php endif; ?>
         <dl class="mk-details">
           <?php foreach ($details as $label => $value): ?><div><dt><?= h($label) ?></dt><dd><?= $value ?></dd></div><?php endforeach; ?>

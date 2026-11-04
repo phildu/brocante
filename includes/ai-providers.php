@@ -349,7 +349,7 @@ function ai_provider_text(array $provider, string $prompt, array $imagePaths = [
             $in = (int) ($data['usage']['prompt_tokens'] ?? 0);
             $out = (int) ($data['usage']['completion_tokens'] ?? 0);
             $pricing = ai_pricing();
-            ai_usage_record('text', ($in * $pricing['text_in'] + $out * $pricing['text_out']) / 1e6, $model, $in, $out);
+            ai_usage_record('text', ($in * $pricing['text_in'] + $out * $pricing['text_out']) / 1e6, $model, $in, $out, (string) ($provider['label'] ?? ''));
         }
         return $text;
     }
@@ -412,14 +412,14 @@ function ai_provider_image(array $provider, string $srcAbsPath, string $prompt, 
                 $data = json_decode($raw, true) ?: [];
                 $b64 = (string) ($data['data'][0]['b64_json'] ?? '');
                 if ($b64 !== '') {
-                    if (function_exists('ai_usage_record') && function_exists('ai_pricing')) ai_usage_record('image', ai_pricing()['image'], $model);
+                    if (function_exists('ai_usage_record') && function_exists('ai_pricing')) ai_usage_record('image', ai_pricing()['image'], $model, 0, 0, (string) ($provider['label'] ?? ''));
                     return base64_decode($b64);
                 }
                 $url = (string) ($data['data'][0]['url'] ?? '');
                 if ($url !== '') {
                     [$code, $bytes] = ai_provider_http('GET', $url, [], null, 60);
                     if ($code === 200 && $bytes !== '') {
-                        if (function_exists('ai_usage_record') && function_exists('ai_pricing')) ai_usage_record('image', ai_pricing()['image'], $model);
+                        if (function_exists('ai_usage_record') && function_exists('ai_pricing')) ai_usage_record('image', ai_pricing()['image'], $model, 0, 0, (string) ($provider['label'] ?? ''));
                         return $bytes;
                     }
                 }

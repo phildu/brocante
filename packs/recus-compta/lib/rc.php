@@ -112,6 +112,31 @@ function rc_public_url(array $r): string
     return shop_abs_url('/api/recu/' . $r['token']);
 }
 
+/**
+ * Lien de suivi de la commande (page publique et appli client) et informations
+ * de retrait ou de livraison. Vide si la commande n'existe plus.
+ * -> url, label
+ */
+function rc_tracking(array $r): array
+{
+    $out = ['url' => '', 'label' => ''];
+    if (!function_exists('order_get') || !function_exists('order_track_url')) {
+        require_once dirname(__DIR__, 3) . '/includes/order-flow.php';
+    }
+    $order = order_get((int) ($r['order_id'] ?? 0));
+    if (!$order) return $out;
+    $out['url'] = order_track_url($order, true);
+    $t = order_buyer_tracking($order);
+    if ($t['pickup']) {
+        $place = trim(implode(' — ', array_filter([$t['pickup_label'], $t['address']])));
+        $out['label'] = 'Retrait sur place' . ($place !== '' ? ' : ' . $place : '')
+            . ($t['deadline'] !== '' ? ', à retirer avant le ' . $t['deadline'] : ($t['hours'] !== '' ? ' (' . $t['hours'] . ')' : ''));
+    } elseif ($t['shipping_label'] !== '') {
+        $out['label'] = 'Livraison : ' . $t['shipping_label'];
+    }
+    return $out;
+}
+
 /** Reçu en texte (corps de l'e-mail). */
 function rc_text(array $r): string
 {
@@ -127,8 +152,14 @@ function rc_text(array $r): string
     $out[] = '';
     $out[] = (string) ($d['mention'] ?? '');
     if (!empty($d['footer'])) $out[] = (string) $d['footer'];
+    $tk = rc_tracking($r);
+    if ($tk['label'] !== '') {
+        $out[] = '';
+        $out[] = $tk['label'];
+    }
     $out[] = '';
     $out[] = 'Reçu imprimable : ' . rc_public_url($r);
+    if ($tk['url'] !== '') $out[] = 'Suivre votre commande (lieu, délai et appli client) : ' . $tk['url'];
     return implode("\n", $out);
 }
 
@@ -143,12 +174,23 @@ function rc_html(array $r): string
     }
     if (!empty($d['shipping_cents'])) $rows .= '<tr><td>Livraison</td><td class="n">1</td><td class="n">' . $h(rc_eur((int) $d['shipping_cents'])) . '</td><td class="n">' . $h(rc_eur((int) $d['shipping_cents'])) . '</td></tr>';
     $vat = !empty($d['vat_cents']) ? '<p class="n">dont TVA : ' . $h(rc_eur((int) $d['vat_cents'])) . '</p>' : '';
+    $tk = rc_tracking($r);
+    $collect = $tk['label'] !== '' ? '<p class="collect"><strong>' . $h($tk['label']) . '</strong></p>' : '';
+    $qr = '';
+    if ($tk['url'] !== '') {
+        $asset = function_exists('shop_abs_url') ? shop_abs_url('/assets/vendor/qrcode-generator.js') : '/assets/vendor/qrcode-generator.js';
+        $qr = '<div class="trk"><div id="rc-qr" aria-hidden="true"></div><p><strong>Suivez votre commande</strong><br>Scannez ce code avec le téléphone : lieu et délai de collecte, avancement, et installation de l\'appli client.<br><a href="' . $h($tk['url']) . '">' . $h($tk['url']) . '</a></p></div>'
+            . '<script src="' . $h($asset) . '"></script>'
+            . '<script>(function(){var b=document.getElementById("rc-qr");if(!b)return;if(typeof qrcode!=="function"){b.style.display="none";return;}try{var q=qrcode(0,"M");q.addData(' . json_encode($tk['url'], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');q.make();b.innerHTML=q.createSvgTag({cellSize:4,margin:4,scalable:true});}catch(e){b.style.display="none";}})();</script>';
+    }
     return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Reçu ' . $h($r['number']) . '</title>'
-        . '<style>body{font:15px/1.5 system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#222}h1{font-size:1.4rem;margin:0}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}.n{text-align:right}small{color:#666}.tot{font-size:1.2rem;font-weight:700;text-align:right}.mention{border:1px solid #ccc;padding:10px;font-size:.85rem;background:#f8f8f8}@media print{.noprint{display:none}}</style></head><body>'
+        . '<style>body{font:15px/1.5 system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#222}h1{font-size:1.4rem;margin:0}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}.n{text-align:right}small{color:#666}.tot{font-size:1.2rem;font-weight:700;text-align:right}.mention{border:1px solid #ccc;padding:10px;font-size:.85rem;background:#f8f8f8}.collect{margin:14px 0 0;font-size:.9rem}.trk{display:flex;gap:16px;align-items:center;margin:18px 0;padding:12px;border:1px solid #ccc;break-inside:avoid}.trk svg{width:128px;height:128px;flex:none}.trk p{margin:0;font-size:.82rem}.trk a{word-break:break-all}@media print{.noprint{display:none}}</style></head><body>'
         . '<h1>Reçu d\'achat ' . $h($r['number']) . '</h1><p>Date : ' . $h(date('d/m/Y', strtotime((string) ($d['paid_at'] ?? 'now')))) . '</p>'
         . '<p><strong>' . $h($s['name'] ?? '') . '</strong><br>' . $h($s['address'] ?? '') . ($s['siret'] ? '<br>SIRET ' . $h($s['siret']) : '') . (!empty($s['vat']) ? '<br>N° TVA ' . $h($s['vat']) : '') . '</p>'
         . '<table><thead><tr><th>Désignation</th><th class="n">Qté</th><th class="n">Prix</th><th class="n">Total</th></tr></thead><tbody>' . $rows . '</tbody></table>'
         . '<p class="tot">Total payé : ' . $h(rc_eur((int) ($d['total_cents'] ?? 0))) . '</p>' . $vat
+        . $collect
+        . $qr
         . '<p class="mention">' . $h($d['mention'] ?? '') . ($d['footer'] ? '<br>' . $h($d['footer']) : '') . '</p>'
         . '<p class="noprint"><button onclick="print()">Imprimer / enregistrer en PDF</button></p></body></html>';
 }

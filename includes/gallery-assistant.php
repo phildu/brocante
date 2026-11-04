@@ -12,7 +12,8 @@
 //   security    réponses au questionnaire de sécurité ;
 //   dates       dates candidates, date retenue, événements concurrents saisis à la main ;
 //   survey      réglages du sondage (les réponses sont dans <id>.sondage.json) ;
-//   aid         budget et plan de financement de la numérisation.
+//   aid         budget et plan de financement de la numérisation ;
+//   rules       conditions de vente : remboursement en cas d'annulation ou de désistement.
 //
 // Les documents sont dans includes/gallery-assistant-docs.php. La page d'administration est portail/galerie-assistant.php ;
 // le sondage public est galerie/sondage.php.
@@ -20,6 +21,7 @@
 require_once __DIR__ . '/gallery-admin.php';
 require_once __DIR__ . '/gallery-event.php';
 require_once __DIR__ . '/gallery-booking.php';
+require_once __DIR__ . '/gallery-cancellation.php';
 require_once __DIR__ . '/gallery-types.php';
 
 const GASS_MAX_CANDIDATES = 12;
@@ -34,7 +36,7 @@ function gass_document_catalog(): array
     return [
         'mairie' => ['label' => "Demande d'autorisation (mairie)", 'hint' => "Courrier pour occuper le domaine public, avec les caractéristiques de la manifestation.", 'audience' => 'Commune', 'pro' => false],
         'securite' => ['label' => 'Notice de sécurité', 'hint' => 'Synthèse du questionnaire : jauge, secours, évacuation, risques et recommandations.', 'audience' => 'Mairie / secours', 'pro' => false],
-        'reglement' => ['label' => 'Règlement intérieur exposants', 'hint' => 'Conditions d’inscription, horaires, emplacements, sécurité, propreté, sanctions.', 'audience' => 'Exposants', 'pro' => false],
+        'reglement' => ['label' => 'Règlement intérieur exposants', 'hint' => 'Conditions d’inscription, horaires, emplacements, sécurité, propreté, sanctions, annulation et remboursement.', 'audience' => 'Exposants', 'pro' => false],
         'convention' => ['label' => 'Convention avec la commune', 'hint' => 'Modèle de convention d’occupation et de partenariat, à adapter au règlement local.', 'audience' => 'Commune', 'pro' => false],
         'exposants' => ['label' => 'Courrier aux anciens exposants', 'hint' => 'Message de mobilisation avec le lien du sondage et les informations pratiques.', 'audience' => 'Exposants', 'pro' => false],
         'sondage' => ['label' => 'Invitation au sondage', 'hint' => 'Message court à envoyer aux prospects avec le lien du sondage.', 'audience' => 'Prospects', 'pro' => false],
@@ -100,6 +102,7 @@ function gass_defaults(): array
         'survey' => ['enabled' => false, 'open' => false, 'title' => 'Votre avis pour la prochaine édition', 'intro' => 'Deux minutes pour nous aider à choisir la date, les services et les tarifs.', 'questions' => [], 'created' => 0],
         'aid' => ['project' => '', 'needs' => '', 'budget' => [], 'requested_cents' => 0, 'own_cents' => 0, 'other_cents' => 0,
             'commune' => '', 'region' => '', 'contact' => ''],
+        'rules' => gcn_default_rules(),
         'updated' => 0,
     ];
 }
@@ -208,6 +211,8 @@ function gass_normalize(array $d): array
         'contact' => gass_text($a['contact'] ?? '', 160),
     ];
 
+    $rules = gcn_rules((array) ($d['rules'] ?? []));
+
     return [
         'profile' => $profile,
         'tasks' => $tasks,
@@ -216,6 +221,7 @@ function gass_normalize(array $d): array
         'dates' => ['candidates' => $candidates, 'competitors' => $competitors, 'chosen' => $chosen],
         'survey' => $survey,
         'aid' => $aid,
+        'rules' => $rules,
         'updated' => (int) ($d['updated'] ?? time()),
     ];
 }
@@ -533,7 +539,7 @@ function gass_checklist(array $gallery, array $data): array
 {
     $slug = (string) $gallery['slug'];
     $event = gass_event($gallery);
-    $isOrg = in_array((string) $gallery['type'], ['vide-grenier', 'puces'], true) || $event;
+    $isOrg = in_array((string) $gallery['type'], ['vide-grenier', 'puces', 'marche-de-noel', 'marche-producteurs'], true) || $event;
     $places = $event ? ge_place_count($event) : 0;
     $price = $event ? ge_place_price($event) : null;
     $former = count(gass_former_exhibitors($gallery));
@@ -564,6 +570,7 @@ function gass_checklist(array $gallery, array $data): array
     $add('Contacts et communication', 'survey', 'Créer le sondage', 'Date, budget, produits et services attendus.', !empty($data['survey']['enabled']) && !empty($data['survey']['questions']), gass_assistant_link($slug, 'contacts'), $responses > 0 ? (string) $responses : '');
     $add('Sécurité et administratif', 'securite', 'Évaluer les besoins de sécurité', 'Jauge, secours, évacuation, extincteurs, circulation.', $security['answered'] === $security['total'], gass_assistant_link($slug, 'securite'), $security['answered'] . '/' . $security['total']);
     $add('Sécurité et administratif', 'documents', 'Préparer les documents', 'Autorisation, notice sécurité, règlement, convention.', count($data['docs']) >= 2, gass_assistant_link($slug, 'documents'), (string) count($data['docs']));
+    $add('Sécurité et administratif', 'regles', 'Fixer les conditions de remboursement', 'Annulation, météo, désistement : ce que chaque exposant récupère.', !empty($data['rules']['saved']), gass_assistant_link($slug, 'regles'));
     $add('Sécurité et administratif', 'planning', 'Valider le rétroplanning', 'Fixez la date de travail : l’assistant calcule J-120 à J+7.', gass_target_date($gallery, $data) !== '', gass_assistant_link($slug, 'planning'));
     if (in_array((string) $gallery['type'], ['puces', 'marchande', 'quartier'], true)) {
         $aid = gass_aid_plan($data);

@@ -100,6 +100,7 @@ if ($shipOther) {
     $shipPhoneNorm = customer_phone_normalize($contact['ship_phone'], $dest['country']);
     if ($shipPhoneNorm === null) $contactErrors['ship_phone'] = 'Indiquez un téléphone valide pour le destinataire (par exemple 06 98 76 54 32).';
 }
+if (empty($_POST['accept_terms'])) $contactErrors['terms'] = "Pour payer, acceptez les conditions générales de vente, les conditions d'utilisation et la politique de confidentialité.";
 // Le panier réaffiche l'adresse et le destinataire si le paiement revient en arrière (validation, erreur Stripe).
 $_SESSION['shipping_ui'] = $needsAddress ? (string) ($_POST['shipping_choice'] ?? 'flat') : 'pickup';
 if ($shipOther) {
@@ -141,6 +142,16 @@ foreach ($lines as $line) {
 checkout_expire_own_sessions();
 
 $content = get_content();
+// Emballage cadeau : l'option doit être active et le prix est recalculé ici, jamais repris du formulaire.
+$giftWrapEnabled = gift_wrap_enabled($content);
+$giftWrap = $giftWrapEnabled && !empty($_POST['gift_wrap']);
+$giftWrapCents = $giftWrap ? gift_wrap_price_cents($content) : 0;
+$giftMessage = '';
+if ($giftWrap) {
+    $giftMessage = mb_substr(trim(str_replace(["\r\n", "\r"], "\n", (string) ($_POST['gift_message'] ?? ''))), 0, 200);
+}
+$_SESSION['gift_wrap'] = $giftWrap ? 1 : 0;
+if ($giftWrap && $giftMessage !== '') $_SESSION['gift_message'] = $giftMessage; else unset($_SESSION['gift_message']);
 // Dons (0 €) et articles sous le seuil de l'administration : retrait uniquement, jamais d'envoi (contrôle côté serveur).
 $pickupOnly = cart_pickup_only($lines, $content);
 // Remise du panier (paliers de l'administration) : appliquée à Stripe comme un bon de réduction à usage unique.
@@ -234,11 +245,87 @@ if ($paymentMethod === '') {
 $_SESSION['checkout_payment_method'] = $paymentMethod;
 
 $shippingCents = (int) ($chosenOption['shipping_rate_data']['fixed_amount']['amount'] ?? 0);
-$orderTotal = max(0, cart_total_cents() - (int) $discount['cents']) + $shippingCents;
+$orderTotal = max(0, cart_total_cents() - (int) $discount['cents']) + $shippingCents + $giftWrapCents;
 $declaredAddress = $needsAddress ? implode(', ', array_filter([
     $contact['ship_other'] ? $contact['ship_name'] : $contact['name'],
     $dest['line1'], $dest['line2'], trim($dest['postal'] . ' ' . $dest['city']), $dest['country'],
 ])) : null;
+
+// Reprise d'une demande déjà validée par le vendeur : on paie normalement.
+$resumeRequestId = (int) ($_SESSION['checkout_resume_order'] ?? 0);
+
+// Validation de la disponibilité avant paiement : aucun paiement n'est ouvert,
+// le vendeur est prévenu (SMS, WhatsApp ou e-mail) et la commande attend sa
+// réponse. Le client paie ensuite depuis le lien qu'il reçoit.
+if (oa_enabled() && $resumeRequestId <= 0) {
+    $requestItems = array_map(static function ($line) {
+        return [
+            'ref' => $line['product']['ref'],
+            'name' => $line['product']['name'],
+            'qty' => $line['qty'],
+            'unit_cents' => $line['unit_cents'],
+        ];
+    }, $lines);
+    $payload = [
+        'cart' => cart_get(),
+        'contact' => $contact,
+        'buyer' => $buyer,
+        'dest' => $dest,
+        'buyer_country' => (string) ($_SESSION['buyer_country'] ?? $buyer['country']),
+        'buyer_line1' => (string) ($_SESSION['buyer_line1'] ?? $buyer['line1']),
+        'buyer_postal' => (string) ($_SESSION['buyer_postal'] ?? $buyer['postal']),
+        'buyer_city' => (string) ($_SESSION['buyer_city'] ?? $buyer['city']),
+        'buyer_address_label' => (string) ($_SESSION['buyer_address_label'] ?? ''),
+        'shipping_country' => (string) ($_SESSION['shipping_country'] ?? 'FR'),
+        'shipping_line1' => (string) ($_SESSION['shipping_line1'] ?? ''),
+        'shipping_line2' => '',
+        'shipping_postal_code' => (string) ($_SESSION['shipping_postal_code'] ?? ''),
+        'shipping_city' => (string) ($_SESSION['shipping_city'] ?? ''),
+        'shipping_ui' => $needsAddress ? $chosenKey : 'pickup',
+        'payment_method' => $paymentMethod,
+        'reward_code' => (string) ($_SESSION['reward_code'] ?? ''),
+        'gift_wrap' => $giftWrap,
+        'gift_wrap_cents' => $giftWrapCents,
+        'gift_message' => $giftMessage,
+    ];
+    try {
+        $requestId = oa_create([
+            'amount_total' => $orderTotal,
+            'shipping_cents' => $shippingCents,
+            'gift_wrap' => $giftWrap,
+            'gift_wrap_cents' => $giftWrapCents,
+            'gift_message' => $giftMessage,
+            'items' => $requestItems,
+            'email' => $contact['email'],
+            'phone' => $phoneNorm,
+            'terms_at' => gmdate('c'),
+            'terms_version' => $termsVersion,
+            'create_account' => $contact['create_account'],
+            'ship_name' => $contact['ship_other'] ? $contact['ship_name'] : '',
+            'ship_phone' => $contact['ship_other'] ? (string) $shipPhoneNorm : '',
+            'declared_address' => $declaredAddress,
+            'buyer_address' => implode(', ', array_filter([$buyer['line1'], trim($buyer['postal'] . ' ' . $buyer['city']), $buyer['country']])),
+            'shop_slug' => tenant_slug(),
+            'shipping_mode' => $shippingMode,
+            'shipping_label' => $shippingLabel,
+        ], $payload);
+    } catch (Throwable $e) {
+        flash_set('Impossible d\'enregistrer votre demande : ' . $e->getMessage(), 'error');
+        header('Location: /cart.php');
+        exit;
+    }
+    checkout_remember_order($requestId);
+    oa_notify_seller($requestId);
+    try {
+        oa_send_buyer_received($requestId);
+    } catch (Throwable $e) {
+        error_log('validation disponibilité (accusé client) : ' . $e->getMessage());
+    }
+    cart_clear();
+    $request = order_get($requestId);
+    header('Location: ' . ($request ? oa_buyer_url($request) : '/demande.php?o=' . $requestId), true, 303);
+    exit;
+}
 
 // Paiement chez un prestataire autre que Stripe : la commande est créée ici,
 // puis le client est envoyé sur la page sécurisée du prestataire. Le retour
@@ -257,7 +344,7 @@ if ($paymentMethod !== 'stripe') {
     }, $lines);
 
     try {
-        $stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, shipping_cents, status, items, payment_provider, payment_reference, provider_checkout_id, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, shop_slug, shipping_mode, shipping_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, shipping_cents, status, items, payment_provider, payment_reference, provider_checkout_id, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, shop_slug, shipping_mode, shipping_label, gift_wrap, gift_wrap_cents, gift_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $provider . ':' . $reference,
             $orderTotal,
@@ -278,6 +365,9 @@ if ($paymentMethod !== 'stripe') {
             tenant_slug(),
             $shippingMode,
             $shippingLabel,
+            $giftWrap ? 1 : 0,
+            $giftWrapCents,
+            $giftMessage !== '' ? $giftMessage : null,
         ]);
     } catch (Throwable $e) {
         flash_set('Impossible de créer la commande : ' . $e->getMessage(), 'error');
@@ -286,6 +376,7 @@ if ($paymentMethod !== 'stripe') {
     }
     $orderId = (int) db()->lastInsertId();
     checkout_remember_order($orderId);
+    if ($resumeRequestId > 0) oa_mark_converted($orderId);
     if ($contact['create_account']) {
         try {
             $existingAcc = customer_account($contact['email']);
@@ -301,6 +392,63 @@ if ($paymentMethod !== 'stripe') {
         db()->prepare("UPDATE orders SET status = 'cancelled', cancelled_at = ? WHERE id = ? AND status = 'pending'")->execute([gmdate('c'), $id]);
         order_event($id, 'annulee', 'Ouverture du paiement impossible : ' . $reason, $provider);
     };
+
+    if ($provider === 'sepa') {
+        // Virement SEPA : la commande est créée tout de suite, les pièces sont
+        // réservées et le client reçoit les coordonnées bancaires. Le paiement
+        // n'est confirmé que lorsque le commerçant a constaté le virement.
+        if (!sepa_configured() || !$order) {
+            $cancelExternal($orderId, 'sepa', 'coordonnées bancaires absentes');
+            flash_set("Le virement SEPA n'est pas disponible pour cette boutique.", 'error');
+            header('Location: /cart.php');
+            exit;
+        }
+        order_reserve_stock($orderId);
+        db()->prepare('UPDATE orders SET payment_deadline = ? WHERE id = ?')
+            ->execute([gmdate('c', time() + sepa_config()['delay_days'] * 86400), $orderId]);
+        $order = order_get($orderId) ?: $order;
+        cart_clear();
+        try {
+            order_send_transfer_instructions($orderId);
+        } catch (Throwable $e) {
+            error_log('instructions virement ' . $orderId . ' : ' . $e->getMessage());
+        }
+        $sig = payment_return_token($orderId, 'sepa');
+        header('Location: /sepa-instructions.php?order=' . $orderId . ($sig !== '' ? '&sig=' . rawurlencode($sig) : ''), true, 303);
+        exit;
+    }
+
+    if ($provider === 'revolut') {
+        $revolut = revolut_config();
+        if (!$revolut || !$order) {
+            $cancelExternal($orderId, 'revolut', 'réglages absents');
+            flash_set("Revolut n'est pas configuré pour cette boutique.", 'error');
+            header('Location: /cart.php');
+            exit;
+        }
+        try {
+            $returnUrl = rtrim(tenant_site_url(), '/') . '/revolut-return.php?order=' . $orderId . '&sig=' . rawurlencode(payment_return_token($orderId, 'revolut'));
+            $revolutOrder = revolut_create_order(
+                $revolut,
+                $orderTotal,
+                $reference,
+                $returnUrl,
+                $contact['email'],
+                (string) ($content['site_name'] ?? 'Boutique')
+            );
+            $checkoutUrl = revolut_checkout_url($revolutOrder);
+            $revolutId = (string) ($revolutOrder['id'] ?? '');
+            if ($revolutId === '' || $checkoutUrl === '') throw new RuntimeException("Revolut n'a pas renvoyé de lien de paiement.");
+            db()->prepare('UPDATE orders SET provider_checkout_id = ? WHERE id = ?')->execute([$revolutId, $orderId]);
+            header('Location: ' . $checkoutUrl, true, 303);
+            exit;
+        } catch (Throwable $e) {
+            $cancelExternal($orderId, 'revolut', $e->getMessage());
+            flash_set("Le paiement Revolut n'a pas pu être ouvert : " . $e->getMessage(), 'error');
+            header('Location: /cart.php');
+            exit;
+        }
+    }
 
     if ($provider === 'monetico') {
         $monetico = monetico_config();
@@ -380,7 +528,7 @@ $params = [
     'mode' => 'payment',
     'success_url' => SITE_URL . '/checkout-success.php?session_id={CHECKOUT_SESSION_ID}',
     'cancel_url' => SITE_URL . '/cart.php',
-    'metadata' => ['type' => 'shop_order', 'shop' => tenant_slug(), 'shipping_mode' => $shippingMode, 'shipping_choice' => $chosenKey],
+    'metadata' => ['type' => 'shop_order', 'shop' => tenant_slug(), 'shipping_mode' => $shippingMode, 'shipping_choice' => $chosenKey, 'gift_wrap' => $giftWrap ? '1' : '0'],
     // L'adresse n'est demandée que pour une expédition ; un retrait n'en a pas besoin.
     'shipping_options' => $shippingOptionPayload,
     // Page de paiement fermée après CHECKOUT_HOLD_MINUTES : la réservation des pièces ne dure pas plus longtemps.
@@ -449,6 +597,13 @@ foreach ($lines as $line) {
     }
     $i++;
 }
+if ($giftWrapCents > 0) {
+    $params['line_items'][$i]['quantity'] = 1;
+    $params['line_items'][$i]['price_data']['currency'] = 'eur';
+    $params['line_items'][$i]['price_data']['unit_amount'] = $giftWrapCents;
+    $params['line_items'][$i]['price_data']['product_data']['name'] = gift_wrap_label($content);
+    $i++;
+}
 
 try {
     $session = stripe_request('POST', '/checkout/sessions', $params, (bool) $connect);
@@ -467,7 +622,7 @@ $itemsSnapshot = array_map(function ($line) {
     ];
 }, $lines);
 
-$stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, status, items, payment_via, connect_fee_cents, connect_gallery_cents, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, buyer_address, shop_slug, shipping_mode, shipping_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+$stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, status, items, payment_via, connect_fee_cents, connect_gallery_cents, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, buyer_address, shop_slug, shipping_mode, shipping_label, gift_wrap, gift_wrap_cents, gift_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 $stmt->execute([
     $session['id'],
     cart_total_cents() - $discount['cents'],
@@ -488,9 +643,13 @@ $stmt->execute([
     tenant_slug(),
     $shippingMode,
     $shippingLabel,
+    $giftWrap ? 1 : 0,
+    $giftWrapCents,
+    $giftMessage !== '' ? $giftMessage : null,
 ]);
 $orderId = (int) db()->lastInsertId();
 checkout_remember_order($orderId);
+if ($resumeRequestId > 0) oa_mark_converted($orderId);
 // « Créer mon compte » : lien pour choisir son mot de passe (le compte n'existe qu'une fois l'adresse confirmée par ce lien).
 if ($contact['create_account']) {
     try {

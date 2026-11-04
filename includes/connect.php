@@ -14,7 +14,7 @@ function connect_platform(): ?array
 {
     $file = dirname(__DIR__) . '/.secrets/stripe_plateforme.json';
     $d = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
-    if (!is_array($d) || !preg_match('/^sk_(test|live)_[A-Za-z0-9]+$/', (string) ($d['secret_key'] ?? ''))) return null;
+    if (!is_array($d) || !preg_match('/^(?:sk|rk)_(test|live)_[A-Za-z0-9]+$/', (string) ($d['secret_key'] ?? ''))) return null;
     $base = 'https://api.stripe.com/v1';
     if (is_file(dirname(__DIR__) . '/config.local.php') && preg_match('#^https?://(localhost|127\.0\.0\.1)(:\d+)?/v1$#', (string) ($d['api_base'] ?? ''))) $base = (string) $d['api_base'];
     return ['key' => (string) $d['secret_key'], 'base' => $base];

@@ -80,7 +80,12 @@
     });
     if (name !== 'batch') stopCamera(); else resumeCameraIfShooting();
     if (name === 'pieces') { loadList(); if (window.studioRunVariants) window.studioRunVariants(); }
-    if (location.hash.replace('#', '') !== (name === 'single' ? '' : name)) history.replaceState(null, '', name === 'single' ? location.pathname + location.search : '#' + name);
+    // L'onglet Caisse se reconnaît aussi à ?tab=pos : l'application installée « Vente » démarre ainsi.
+    var nextUrl = new URL(location.href);
+    if (name === 'pos') nextUrl.searchParams.set('tab', 'pos'); else nextUrl.searchParams.delete('tab');
+    nextUrl.hash = name === 'single' ? '' : name;
+    var nextState = nextUrl.pathname + nextUrl.search + nextUrl.hash;
+    if (nextState !== location.pathname + location.search + location.hash) history.replaceState(null, '', nextState);
     window.scrollTo(0, 0);
   }
   document.querySelectorAll('.st-tabs [data-go]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.go); }); });
@@ -896,7 +901,7 @@
 
   // ── Démarrage ─────────────────────────────────────────────────────────────
   try { if (sessionStorage.getItem('studio-queued')) { sessionStorage.removeItem('studio-queued'); toast('Pièce enregistrée : à traiter plus tard. Photographiez la suivante.'); } } catch (e) {}
-  go(location.hash.replace('#', '') || 'single');
+  go(new URLSearchParams(location.search).get('tab') || location.hash.replace('#', '') || 'single');
   refreshCount();
   runVariants();
   renderShoot();

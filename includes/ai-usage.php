@@ -14,22 +14,52 @@ require_once __DIR__ . '/ai-providers.php';
 const AI_PRICING_DEFAULTS = ['usd_eur' => 0.92, 'image' => 0.039, 'text_in' => 0.30, 'text_out' => 2.50, 'search' => 0.035, 'cutout' => 0.001, 'veo_lite' => 0.05, 'veo_fast' => 0.10, 'veo_std' => 0.40, 'wan22' => 0.29, 'modal_video' => 0.07, 'claude_in' => 5.00, 'claude_out' => 25.00];
 const AI_KINDS = ['image' => 'Images générées', 'text' => 'Texte et vision', 'search' => 'Recherches web', 'cutout' => 'Détourages (fal.ai, Modal)', 'video' => 'Vidéos IA (Veo, Wan)'];
 
+/** Fournisseur lisible d'un appel, déduit du modèle quand l'appelant ne le précise pas. */
+function ai_usage_provider(string $model, string $kind = ''): string
+{
+    $m = strtolower(trim($model));
+    if ($m === '') return $kind === 'image' ? 'Google Gemini' : 'Non précisé';
+    if (str_contains($m, 'claude') || str_contains($m, 'anthropic')) return 'Anthropic Claude';
+    if (str_contains($m, 'rembg')) return str_contains($m, 'modal') ? 'Modal' : 'fal.ai';
+    if (str_contains($m, 'fal-ai') || str_contains($m, 'fal.ai')) return 'fal.ai';
+    if (str_contains($m, 'modal')) return 'Modal';
+    if (str_contains($m, 'veo')) return 'Google Veo';
+    if (str_contains($m, 'wan') || str_contains($m, 'siliconflow')) return 'SiliconFlow';
+    if (str_contains($m, 'gemini')) return 'Google Gemini';
+    if (preg_match('/\b(gpt|openai|dall-e|o[34])\b/', $m)) return 'OpenAI';
+    if (str_contains($m, 'deepseek')) return 'DeepSeek';
+    if (str_contains($m, 'mistral')) return 'Mistral AI';
+    return 'Autre';
+}
+
 function ai_usage_ensure_schema(PDO $pdo): void
 {
     $exists = $pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_usage'")->fetchColumn();
-    if ($exists) return;
-    $pdo->exec("CREATE TABLE IF NOT EXISTS ai_usage (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      kind TEXT NOT NULL,
-      model TEXT NOT NULL DEFAULT '',
-      tokens_in INTEGER NOT NULL DEFAULT 0,
-      tokens_out INTEGER NOT NULL DEFAULT 0,
-      cost_usd REAL NOT NULL DEFAULT 0,
-      script TEXT NOT NULL DEFAULT '',
-      ref TEXT
-    )");
+    if (!$exists) {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS ai_usage (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          kind TEXT NOT NULL,
+          provider TEXT NOT NULL DEFAULT '',
+          model TEXT NOT NULL DEFAULT '',
+          tokens_in INTEGER NOT NULL DEFAULT 0,
+          tokens_out INTEGER NOT NULL DEFAULT 0,
+          cost_usd REAL NOT NULL DEFAULT 0,
+          script TEXT NOT NULL DEFAULT '',
+          ref TEXT
+        )");
+    } else {
+        $columns = $pdo->query('PRAGMA table_info(ai_usage)')->fetchAll(PDO::FETCH_COLUMN, 1);
+        if (!in_array('provider', $columns, true)) {
+            $pdo->exec("ALTER TABLE ai_usage ADD COLUMN provider TEXT NOT NULL DEFAULT ''");
+            // Reprise des appels antérieurs : le fournisseur est déduit du modèle déjà consigné.
+            $models = $pdo->query('SELECT DISTINCT kind, model FROM ai_usage')->fetchAll();
+            $update = $pdo->prepare('UPDATE ai_usage SET provider = ? WHERE kind = ? AND model = ?');
+            foreach ($models as $row) $update->execute([ai_usage_provider((string) $row['model'], (string) $row['kind']), (string) $row['kind'], (string) $row['model']]);
+        }
+    }
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ai_usage_at ON ai_usage(at)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_ai_usage_provider ON ai_usage(provider)');
 }
 
 /** Tarifs en vigueur : ceux enregistrés pour le commerce, complétés par les valeurs par défaut. */
@@ -72,11 +102,12 @@ function ai_usage_context(?string $ref = null): ?string
 }
 
 /** Consigne un appel. Ne casse jamais l'appel de l'IA : toute erreur d'écriture est ignorée. */
-function ai_usage_record(string $kind, float $costUsd, string $model = '', int $tokensIn = 0, int $tokensOut = 0): void
+function ai_usage_record(string $kind, float $costUsd, string $model = '', int $tokensIn = 0, int $tokensOut = 0, string $provider = ''): void
 {
     try {
-        db()->prepare('INSERT INTO ai_usage (kind, model, tokens_in, tokens_out, cost_usd, script, ref) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            ->execute([$kind, $model, $tokensIn, $tokensOut, round($costUsd, 6), basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'cli')), ai_usage_context()]);
+        $provider = trim($provider) !== '' ? trim($provider) : ai_usage_provider($model, $kind);
+        db()->prepare('INSERT INTO ai_usage (kind, provider, model, tokens_in, tokens_out, cost_usd, script, ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$kind, $provider, $model, $tokensIn, $tokensOut, round($costUsd, 6), basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'cli')), ai_usage_context()]);
         ai_check_low_balance_alert(str_starts_with($model, 'fal') ? 'fal' : 'gemini');
     } catch (Throwable $e) {
     }
@@ -103,19 +134,19 @@ function ai_usage_log_claude(array $usage, string $model = 'claude'): void
     $p = ai_pricing();
     $in = (int) ($usage['input_tokens'] ?? 0) + (int) ($usage['cache_creation_input_tokens'] ?? 0) + (int) ($usage['cache_read_input_tokens'] ?? 0);
     $out = (int) ($usage['output_tokens'] ?? 0);
-    ai_usage_record('text', $in * $p['claude_in'] / 1e6 + $out * $p['claude_out'] / 1e6, $model, $in, $out);
+    ai_usage_record('text', $in * $p['claude_in'] / 1e6 + $out * $p['claude_out'] / 1e6, $model, $in, $out, 'Anthropic Claude');
 }
 
 function ai_usage_log_image(array $usage = []): void
 {
-    ai_usage_record('image', ai_pricing()['image'], 'gemini-2.5-flash-image', (int) ($usage['promptTokenCount'] ?? 0), (int) ($usage['candidatesTokenCount'] ?? 0));
+    ai_usage_record('image', ai_pricing()['image'], 'gemini-2.5-flash-image', (int) ($usage['promptTokenCount'] ?? 0), (int) ($usage['candidatesTokenCount'] ?? 0), 'Google Gemini');
 }
 
 /** Recherche web : le tarif d'une requête avec recherche, plus les tokens. */
 function ai_usage_log_search(array $usage, bool $grounded): void
 {
     [$cost, $in, $out] = ai_usage_text_cost($usage);
-    ai_usage_record('search', $cost + ($grounded ? ai_pricing()['search'] : 0), 'gemini-2.5-flash + Google Search', $in, $out);
+    ai_usage_record('search', $cost + ($grounded ? ai_pricing()['search'] : 0), 'gemini-2.5-flash + Google Search', $in, $out, 'Google Gemini');
 }
 
 /** Vidéo IA terminée (Veo : facturé à la seconde ; Wan 2.2 : au prix d'une vidéo). */
@@ -123,19 +154,19 @@ function ai_usage_log_video(string $modelKey, int $seconds): void
 {
     if (str_starts_with($modelKey, 'sf:')) {
         $provider = ai_provider_video_by_key($modelKey);
-        ai_usage_record('video', veo_cost_usd($modelKey, $seconds), $provider ? (($provider['model'] ?: $provider['label'])) : 'Wan 2.2');
+        ai_usage_record('video', veo_cost_usd($modelKey, $seconds), $provider ? (($provider['model'] ?: $provider['label'])) : 'Wan 2.2', 0, 0, (string) ($provider['label'] ?? 'SiliconFlow'));
         return;
     }
     if ($modelKey === SF_MODEL_KEY) {
-        ai_usage_record('video', veo_cost_usd($modelKey, $seconds), SF_VIDEO_MODEL);
+        ai_usage_record('video', veo_cost_usd($modelKey, $seconds), SF_VIDEO_MODEL, 0, 0, 'SiliconFlow');
         return;
     }
     if ($modelKey === MODAL_MODEL_KEY) {
-        ai_usage_record('video', veo_cost_usd($modelKey, $seconds), 'Wan 2.2 5B (Modal)');
+        ai_usage_record('video', veo_cost_usd($modelKey, $seconds), 'Wan 2.2 5B (Modal)', 0, 0, 'Modal');
         return;
     }
     $model = VEO_MODELS[$modelKey] ?? VEO_MODELS['fast'];
-    ai_usage_record('video', veo_cost_usd($modelKey, $seconds), $model['id'] . " ({$seconds} s)");
+    ai_usage_record('video', veo_cost_usd($modelKey, $seconds), $model['id'] . " ({$seconds} s)", 0, 0, 'Google Veo');
 }
 
 function ai_usage_log_cutout(string $model = 'fal-ai/imageutils/rembg'): void
@@ -209,6 +240,33 @@ function ai_usage_spent(?string $since = null): float
         return ai_eur((float) $stmt->fetchColumn());
     } catch (Throwable $e) {
         return 0.0;
+    }
+}
+
+/** Nombre de requêtes IA consignées depuis $since, ou depuis toujours. */
+function ai_usage_requests(?string $since = null): int
+{
+    try {
+        $stmt = db()->prepare('SELECT COUNT(*) FROM ai_usage' . ($since ? ' WHERE at >= ?' : ''));
+        $stmt->execute($since ? [$since] : []);
+        return (int) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/** Appels et coûts par fournisseur depuis $since (tout l'historique si null) : fournisseur => ['n', 'usd', 'tin', 'tout']. */
+function ai_usage_by_provider(?string $since = null): array
+{
+    try {
+        $stmt = db()->prepare("SELECT COALESCE(NULLIF(provider, ''), 'Non précisé') AS provider, COUNT(*) AS n, SUM(cost_usd) AS usd,
+                SUM(tokens_in) AS tin, SUM(tokens_out) AS tout FROM ai_usage" . ($since ? ' WHERE at >= ?' : '') . ' GROUP BY provider ORDER BY usd DESC');
+        $stmt->execute($since ? [$since] : []);
+        $out = [];
+        foreach ($stmt->fetchAll() as $row) $out[(string) $row['provider']] = $row;
+        return $out;
+    } catch (Throwable $e) {
+        return [];
     }
 }
 

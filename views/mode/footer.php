@@ -19,6 +19,8 @@ $fc = get_content();
           <?php if (trim((string) ($fc['contact_address'] ?? '')) !== ''): ?><li><?= h($fc['contact_address']) ?></li><?php endif; ?>
           <?php if (trim((string) ($fc['contact_hours'] ?? '')) !== ''): ?><li><?= h($fc['contact_hours']) ?></li><?php endif; ?>
           <?php if (trim((string) ($fc['contact_delivery'] ?? '')) !== ''): ?><li><?= h($fc['contact_delivery']) ?></li><?php endif; ?>
+          <li><a href="/visite.php">Visite virtuelle</a></li>
+          <li><a href="/nous-trouver.php">Carte et itinéraire</a></li>
         </ul>
       </div>
       <div>

@@ -97,6 +97,35 @@ switch ($action) {
         break;
     }
 
+    case 'add_products': {
+        db(); // charge shop_setting() (includes/recto-verso.php)
+        $refs = $_POST['refs'] ?? [];
+        if (!is_array($refs)) $refs = [];
+        $duration = max(1, min(120, (int) ($_POST['duration_seconds'] ?? 8)));
+        $added = 0;
+        foreach (array_unique(array_map('strval', $refs)) as $ref) {
+            $product = get_product($ref);
+            if (!$product) continue;
+            add_slideshow_slide('product', null, $product['ref'], '', $duration);
+            $added++;
+        }
+        if ($added > 0) flash_set($added . ' pièce' . ($added > 1 ? 's ajoutées' : ' ajoutée') . ' au diaporama.');
+        else flash_set('Aucune pièce sélectionnée.', 'error');
+        break;
+    }
+
+    case 'set_idle': {
+        db(); // charge shop_setting_set() (includes/recto-verso.php)
+        $enabled = ($_POST['idle_enabled'] ?? '') === '1' ? '1' : '0';
+        $minutes = max(1, min(120, (int) ($_POST['idle_minutes'] ?? 3)));
+        $autoPromos = ($_POST['auto_promos'] ?? '') === '1' ? '1' : '0';
+        shop_setting_set('slideshow_idle_enabled', $enabled);
+        shop_setting_set('slideshow_idle_minutes', (string) $minutes);
+        shop_setting_set('slideshow_auto_promos', $autoPromos);
+        flash_set('Réglages du diaporama enregistrés.');
+        break;
+    }
+
     case 'set_orientation': {
         $orientation = ($_POST['orientation'] ?? '') === 'vertical' ? 'vertical' : 'horizontal';
         db()->prepare('UPDATE content SET slideshow_orientation = ? WHERE id = 1')->execute([$orientation]);

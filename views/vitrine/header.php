@@ -10,8 +10,9 @@ $accountLink = oauth_enabled_providers('customer') || customer_session();
     <nav class="primary vt-nav" id="primary-nav" aria-label="Navigation principale">
       <a href="/index.php"<?= $activeNav === 'accueil' ? ' aria-current="page"' : '' ?>><small>01</small><span>Accueil</span></a>
       <a href="/boutique.php"<?= $activeNav === 'boutique' ? ' aria-current="page"' : '' ?>><small>02</small><span>Collection</span></a>
-      <a href="/index.php#histoire"><small>03</small><span>Maison</span></a>
-      <a href="/index.php#contact"><small>04</small><span>Contact</span></a>
+      <a href="/notre-histoire.php"<?= $activeNav === 'histoire' ? ' aria-current="page"' : '' ?>><small>03</small><span>Maison</span></a>
+      <a href="/nous-trouver.php"<?= $activeNav === 'nous-trouver' ? ' aria-current="page"' : '' ?>><small>04</small><span>Contact</span></a>
+      <a href="/visite.php"<?= $activeNav === 'visite' ? ' aria-current="page"' : '' ?>><small>05</small><span>Visite</span></a>
       <span class="vt-nav-extra">
         <?php if ($accountLink): ?><a href="/compte.php">Mon compte</a><?php endif; ?>
         <?php if (shop_sales_enabled()): ?><a href="/cart.php">Panier<?= $cartCount ? ' (' . (int) $cartCount . ')' : '' ?></a><?php endif; ?>

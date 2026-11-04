@@ -14,7 +14,7 @@ $itemWord = static fn (int $n): string => tenant_text($n === 1 ? 'item_singular'
     <p class="vt-kicker"><?= h($content['hero_eyebrow']) ?></p>
     <h1><?= h($content['hero_title']) ?></h1>
     <p class="vt-lede"><?= h($content['hero_subtitle']) ?></p>
-    <p class="vt-hero-links"><a class="vt-btn" href="/boutique.php">Entrer dans la collection</a><a class="vt-link" href="#histoire">La maison</a></p>
+    <p class="vt-hero-links"><a class="vt-btn" href="/boutique.php">Entrer dans la collection</a><a class="vt-link" href="/notre-histoire.php">La maison</a></p>
     <p class="vt-share"><?= share_page_button((string) ($content['site_name'] ?: tenant('name')), (string) $content['hero_subtitle']) ?></p>
   </div>
   <div class="vt-hero-media">
@@ -96,6 +96,7 @@ $itemWord = static fn (int $n): string => tenant_text($n === 1 ? 'item_singular'
         <div><dt>Horaires</dt><dd><?= h($content['contact_hours']) ?></dd></div>
         <div><dt>Livraison</dt><dd><?= h($content['contact_delivery']) ?></dd></div>
       </dl>
+      <?= shop_locate_actions_html(['class' => 'shop-locate-contact-actions']) ?>
     </div>
     <div class="vt-letter">
       <p class="vt-kicker">La lettre</p>

@@ -60,6 +60,63 @@ if (($paypal['client_id'] ?? '') !== '' || ($paypal['secret'] ?? '') !== '') {
     }
 }
 
+// ── Revolut Merchant ─────────────────────────────────────────────────────
+$revolut = payment_config('revolut') ?? [];
+$revolutKey = trim((string) ($_POST['revolut_api_key'] ?? ''));
+$revolutWebhook = trim((string) ($_POST['revolut_webhook_secret'] ?? ''));
+$revolutMode = (string) ($_POST['revolut_mode'] ?? 'sandbox');
+
+if ($revolutKey !== '') $revolut['api_key'] = $revolutKey;
+if ($revolutWebhook !== '') $revolut['webhook_secret'] = $revolutWebhook;
+$revolut['mode'] = in_array($revolutMode, ['sandbox', 'production'], true) ? $revolutMode : 'sandbox';
+unset($revolut['api_base']);
+
+if (($revolut['api_key'] ?? '') !== '') {
+    if (!payment_config_save('revolut', $revolut)) {
+        $errors[] = 'Impossible d’enregistrer les réglages Revolut (dossier .secrets non inscriptible).';
+    } else {
+        $messages[] = 'Revolut enregistré';
+    }
+}
+
+// ── Virement SEPA ────────────────────────────────────────────────────────
+$sepaOld = sepa_config();
+$sepaHolder = trim((string) ($_POST['sepa_holder'] ?? ''));
+$sepaIbanRaw = trim((string) ($_POST['sepa_iban'] ?? ''));
+$sepaIban = sepa_iban_normalize($sepaIbanRaw);
+$sepaBic = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) ($_POST['sepa_bic'] ?? '')) ?? '');
+$sepaBank = trim((string) ($_POST['sepa_bank'] ?? ''));
+$sepaDelay = (int) ($_POST['sepa_delay_days'] ?? 7);
+$sepaNote = trim((string) ($_POST['sepa_note'] ?? ''));
+$sepaOk = true;
+
+if ($sepaIban !== '' && !sepa_iban_valid($sepaIban)) {
+    $errors[] = 'L’IBAN du virement SEPA est invalide (vérifiez la saisie, espaces acceptés).';
+    $sepaOk = false;
+}
+if ($sepaIban !== '' && $sepaHolder === '') {
+    $errors[] = 'Indiquez le titulaire du compte pour le virement SEPA.';
+    $sepaOk = false;
+}
+if (!sepa_bic_valid($sepaBic)) {
+    $errors[] = 'Le BIC doit comporter 8 ou 11 caractères (lettres et chiffres).';
+    $sepaOk = false;
+}
+if (!in_array($sepaDelay, range(1, 30), true)) $sepaDelay = $sepaOld['delay_days'];
+if (mb_strlen($sepaNote) > 300) {
+    $errors[] = 'La consigne du virement SEPA est limitée à 300 caractères.';
+    $sepaOk = false;
+}
+if ($sepaOk) {
+    shop_setting_set('sepa_holder', mb_substr($sepaHolder, 0, 80));
+    shop_setting_set('sepa_iban', $sepaIban);
+    shop_setting_set('sepa_bic', $sepaBic);
+    shop_setting_set('sepa_bank', mb_substr($sepaBank, 0, 80));
+    shop_setting_set('sepa_delay_days', (string) $sepaDelay);
+    shop_setting_set('sepa_instructions', mb_substr($sepaNote, 0, 300));
+    $messages[] = sepa_configured() ? 'virement SEPA activé' : 'virement SEPA inactif (titulaire ou IBAN manquant)';
+}
+
 // ── Moyens proposés au client ────────────────────────────────────────────
 // La liste enregistrée ne contient que des fournisseurs réellement configurés.
 // Une valeur sentinelle « - » signifie « aucun » (une chaîne vide, elle, veut

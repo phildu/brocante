@@ -33,4 +33,31 @@ return function (E2e $e): void {
         $e->check($res['status'] === 302 && str_contains($res['location'], 'login.php'), 'attendu 302 vers login, reçu ' . $res['status'] . ' → ' . $res['location']);
         return 'anonyme → login';
     });
+
+    $e->step('La page de connexion propose « Rester connecté »', function () use ($e) {
+        $res = $e->get('/e2e-boutique-a/admin/login.php', 'rememberA');
+        $e->check($res['status'] === 200, 'login → HTTP ' . $res['status']);
+        $e->check(str_contains($res['body'], 'name="remember"'), 'case « Rester connecté » absente du formulaire');
+        return 'case présente';
+    });
+
+    $e->step('Sans l option, le cookie reste un cookie de session', function () use ($e) {
+        $res = $e->post('/e2e-boutique-a/admin/login.php', ['username' => 'admin', 'password' => 'boutique-e2e'], 'sessionA', true);
+        $e->check($res['status'] === 302, 'login → HTTP ' . $res['status'] . ' (attendu 302)');
+        $e->check(preg_match('/sess_e2e-boutique-a=[^;\s]+/', $res['headers']) === 1, 'cookie de session absent de la réponse');
+        $e->check(!preg_match('/sess_e2e-boutique-a=[^;\s]+;\s*expires=/i', $res['headers']), 'cookie daté alors que la case n était pas cochée');
+        return 'cookie sans date d expiration';
+    });
+
+    $e->step('« Rester connecté » : le cookie est daté de ~30 jours', function () use ($e) {
+        $res = $e->post('/e2e-boutique-a/admin/login.php', ['username' => 'admin', 'password' => 'boutique-e2e', 'remember' => '1'], 'rememberA', true);
+        $e->check($res['status'] === 302, 'login → HTTP ' . $res['status'] . ' (attendu 302)');
+        $e->check(preg_match('/sess_e2e-boutique-a=[^;\s]+;\s*expires=/i', $res['headers']) === 1, 'aucun cookie daté dans la réponse');
+        preg_match('/sess_e2e-boutique-a=[^;\s]+;\s*expires=([^;]+)/i', $res['headers'], $m);
+        $days = ((strtotime(trim($m[1])) - time()) ?: 0) / 86400;
+        $e->check($days > 28 && $days <= 31, 'expiration à ' . round($days, 1) . ' jours (attendu ~30)');
+        $res = $e->get('/e2e-boutique-a/admin/catalog.php', 'rememberA');
+        $e->check($res['status'] === 200, 'admin inaccessible avec le cookie mémorisé : HTTP ' . $res['status']);
+        return 'cookie à ' . round($days, 1) . ' jours, admin accessible';
+    });
 };

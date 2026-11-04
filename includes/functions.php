@@ -9,6 +9,8 @@ require_once __DIR__ . '/prompts.php';
 require_once __DIR__ . '/universes.php';
 require_once __DIR__ . '/comparables.php';
 require_once __DIR__ . '/ai-usage.php';
+require_once __DIR__ . '/omniroute.php';
+require_once __DIR__ . '/ai-rating.php';
 require_once __DIR__ . '/price-research.php';
 require_once __DIR__ . '/pricing-extras.php';
 require_once __DIR__ . '/condition-pricing.php';
@@ -20,7 +22,9 @@ require_once __DIR__ . '/siliconflow-video.php';
 require_once __DIR__ . '/modal-video.php';
 require_once __DIR__ . '/shop-hours.php';
 require_once __DIR__ . '/order-flow.php';
+require_once __DIR__ . '/locate.php';
 require_once __DIR__ . '/payments.php';
+require_once __DIR__ . '/order-availability.php';
 
 function h($s): string
 {
@@ -199,6 +203,7 @@ function order_mark_paid(array $order, array $session): bool
     decrement_stock_for_order(json_decode((string) $order['items'], true) ?: []);
     // Mode de livraison définitif, code de retrait et étape de préparation.
     order_prepare_after_payment($order, $session);
+    order_mark_shop_qr_sold($order);
     order_event((int) $order['id'], 'paiement', 'Paiement confirmé (' . format_cents((int) ($session['amount_total'] ?? $order['amount_total'])) . ')', 'stripe', 'paid');
     // Le client rejoint la liste des comptes (Administration → Comptes) ; un prospect inscrit à la newsletter passe en client.
     account_upsert_contact(
@@ -246,13 +251,32 @@ function cart_held_by_others(): array
 {
     $own = checkout_own_orders();
     $held = [];
-    $rows = db()->query("SELECT id, items FROM orders WHERE status = 'pending' AND created_at >= datetime('now', '-" . CHECKOUT_HOLD_MINUTES . " minutes')")->fetchAll();
+    // Les commandes ayant déjà déduit le stock (virement SEPA) ne sont pas une
+    // réservation temporaire de plus.
+    $rows = db()->query("SELECT id, items FROM orders WHERE status = 'pending' AND stock_reserved_at IS NULL AND created_at >= datetime('now', '-" . CHECKOUT_HOLD_MINUTES . " minutes')")->fetchAll();
     foreach ($rows as $row) {
         if (in_array((int) $row['id'], $own, true)) continue;
         foreach (json_decode((string) $row['items'], true) ?: [] as $item) {
             $ref = (string) ($item['ref'] ?? '');
             $held[$ref] = ($held[$ref] ?? 0) + (int) ($item['qty'] ?? 0);
         }
+    }
+    // Pièces dont la disponibilité a été validée mais pas encore payées : mises de côté
+    // jusqu'à la fin du délai de paiement, pour ne pas les vendre deux fois.
+    try {
+        $rows = db()->query("SELECT id, items, availability_deadline FROM orders WHERE status = 'awaiting' AND availability_status = 'available'")->fetchAll();
+        $now = time();
+        foreach ($rows as $row) {
+            if (in_array((int) $row['id'], $own, true)) continue;
+            $deadline = (int) strtotime((string) $row['availability_deadline']);
+            if ($deadline <= 0 || $deadline <= $now) continue;
+            foreach (json_decode((string) $row['items'], true) ?: [] as $item) {
+                $ref = (string) ($item['ref'] ?? '');
+                $held[$ref] = ($held[$ref] ?? 0) + (int) ($item['qty'] ?? 0);
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('réservations de disponibilité : ' . $e->getMessage());
     }
     // Pièces retenues par les plugins (ex. réservations avec arrhes).
     try {
@@ -395,6 +419,56 @@ function slideshow_render_data(array $slide): ?array
     }
     if (!$slide['path']) return null;
     return ['slide' => $slide, 'product' => null];
+}
+
+/** Articles en promotion affichables en boutique : visibles, en stock, avec un prix promo fixe. */
+function slideshow_promo_products(int $limit = 20): array
+{
+    $limit = max(1, min(50, $limit));
+    $rows = db()->query("SELECT * FROM products
+        WHERE badge = 'Promo' AND is_hidden = 0 AND stock > 0 AND TRIM(COALESCE(promo_price, '')) <> ''
+        ORDER BY sort_order, ref LIMIT " . $limit)->fetchAll();
+    return array_values(array_filter($rows, static fn (array $p): bool => has_promo_price($p)));
+}
+
+/** Remise en pourcentage entre le prix normal et le prix promo (0 si incalculable). */
+function slideshow_promo_discount(array $product): int
+{
+    $old = price_to_cents($product['price'] ?? '');
+    $new = price_to_cents($product['promo_price'] ?? '');
+    if ($old === null || $new === null || $old <= 0 || $new >= $old) return 0;
+    return (int) round(($old - $new) / $old * 100);
+}
+
+/**
+ * Diapositives réellement diffusées : les promos en cours d'abord (automatiques),
+ * puis la sélection manuelle, sans répéter une pièce déjà montrée en promo.
+ */
+function slideshow_public_slides(): array
+{
+    db(); // charge aussi shop_setting()
+    $out = [];
+    $shownRefs = [];
+    if (shop_sales_enabled() && shop_setting('slideshow_auto_promos', '1') !== '0') {
+        foreach (slideshow_promo_products() as $p) {
+            $out[] = [
+                'slide' => ['kind' => 'product', 'path' => null, 'product_ref' => $p['ref'], 'caption' => '', 'duration_seconds' => 8, 'sort_order' => 0],
+                'product' => $p,
+                'promo' => true,
+                'discount' => slideshow_promo_discount($p),
+            ];
+            $shownRefs[(string) $p['ref']] = true;
+        }
+    }
+    foreach (slideshow_slides_list() as $s) {
+        $data = slideshow_render_data($s);
+        if (!$data) continue;
+        if ($s['kind'] === 'product' && isset($shownRefs[(string) $s['product_ref']])) continue;
+        $data['promo'] = false;
+        $data['discount'] = 0;
+        $out[] = $data;
+    }
+    return $out;
 }
 
 /* ---------- Bandeaux photo/vidéo en haut de page ---------- */
@@ -987,7 +1061,8 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
     if ($provider && ($provider['driver'] ?? 'gemini') !== 'gemini') {
         return ai_provider_image($provider, $srcAbsPath, $prompt, $aspectRatio, $extraAbsPaths);
     }
-    if (!GEMINI_API_KEY) return null;
+    // Sans clé Gemini, la passerelle locale peut retoucher l'image (si une route image y est réglée).
+    if (!GEMINI_API_KEY) return omniroute_image($srcAbsPath, $prompt, $aspectRatio);
     $imageModel = $provider && trim((string) ($provider['model'] ?? '')) !== '' ? (string) $provider['model'] : 'gemini-2.5-flash-image';
     $geminiBase = $provider && trim((string) ($provider['base_url'] ?? '')) !== '' ? rtrim((string) $provider['base_url'], '/') : 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -1030,7 +1105,7 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
         if ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))) {
             error_log("gemini_generate_image: HTTP 402 prepayment depleted");
             if (function_exists('ai_trigger_depleted_alert')) ai_trigger_depleted_alert('gemini', 'HTTP 402 Prepayment depleted');
-            return null;
+            return omniroute_image($srcAbsPath, $prompt, $aspectRatio);
         }
 
         if ($body !== false && $status < 400) {
@@ -1054,7 +1129,7 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
         if ($attempt < $retries) sleep(4 + $attempt * 4);
     }
 
-    return null;
+    return omniroute_image($srcAbsPath, $prompt, $aspectRatio);
 }
 
 /** Formats des visuels générés : ordinateur (3:2) et smartphone (9:16). */
@@ -1619,13 +1694,14 @@ function gemini_text_model(): string
 function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1, array $extraAbsPaths = []): ?string
 {
     if (ai_gate() !== null) return null;
+    $paths = array_merge($srcAbsPath !== '' ? [$srcAbsPath] : [], $extraAbsPaths);
     // Fournisseur de texte choisi dans le portail : un service compatible OpenAI ou Claude prend le relais de Gemini.
     $provider = ai_provider_active('text');
     if ($provider && in_array($provider['driver'], ['openai', 'anthropic'], true)) {
-        $paths = array_merge($srcAbsPath !== '' ? [$srcAbsPath] : [], $extraAbsPaths);
         return ai_provider_text($provider, $prompt, $paths, 90);
     }
-    if (!GEMINI_API_KEY) return null;
+    // Sans clé Gemini (ou clé épuisée), la passerelle locale relit l'image à sa place.
+    if (!GEMINI_API_KEY) return omniroute_text($prompt, $paths, 90);
     $textModel = $provider && trim((string) ($provider['model'] ?? '')) !== '' ? (string) $provider['model'] : gemini_text_model();
     $geminiBase = $provider && trim((string) ($provider['base_url'] ?? '')) !== '' ? rtrim((string) $provider['base_url'], '/') : 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -1664,7 +1740,7 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
         if ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))) {
             error_log("gemini_generate_image: HTTP 402 prepayment depleted");
             if (function_exists('ai_trigger_depleted_alert')) ai_trigger_depleted_alert('gemini', 'HTTP 402 Prepayment depleted');
-            return null;
+            return omniroute_text($prompt, $paths, 90);
         }
 
         if ($body !== false && $status < 400) {
@@ -1682,7 +1758,7 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
         if ($attempt < $retries) sleep(2);
     }
 
-    return null;
+    return omniroute_text($prompt, $paths, 90);
 }
 
 /** Prompt demandant un JSON strict {label, tags} décrivant honnêtement l'image. */
@@ -3660,6 +3736,30 @@ function cart_discount_hint(int $subtotalCents, int $qty, ?array $tiers = null, 
         : "Ajoutez encore " . format_cents($gap) . " d'achats pour obtenir " . $effect;
 }
 
+/* ---------- Emballage cadeau ---------- */
+
+/** L'emballage cadeau est-il proposé au panier ? (Administration → Paiement & livraison) */
+function gift_wrap_enabled(?array $content = null): bool
+{
+    $content = $content ?? get_content();
+    return (string) ($content['gift_wrap_enabled'] ?? '0') === '1';
+}
+
+/** Prix de l'emballage cadeau en centimes (0 = offert). */
+function gift_wrap_price_cents(?array $content = null): int
+{
+    $content = $content ?? get_content();
+    return price_to_cents(trim((string) ($content['gift_wrap_price'] ?? ''))) ?? 0;
+}
+
+/** Libellé de l'emballage cadeau tel qu'affiché au client. */
+function gift_wrap_label(?array $content = null): string
+{
+    $content = $content ?? get_content();
+    $label = trim((string) ($content['gift_wrap_label'] ?? ''));
+    return $label !== '' ? $label : 'Emballage cadeau';
+}
+
 /* ---------- Retrait seul (dons et petits prix) ---------- */
 
 /** Seuil (en centimes) sous lequel un article n'est pas livré, réglé dans l'administration (0 = seuls les dons à 0 € sont concernés). */
@@ -3896,7 +3996,7 @@ function shop_checkout_ready(): bool
 
 function stripe_configured(): bool
 {
-    return str_starts_with(STRIPE_SECRET_KEY, 'sk_');
+    return str_starts_with(STRIPE_SECRET_KEY, 'sk_') || str_starts_with(STRIPE_SECRET_KEY, 'rk_');
 }
 
 function fulfillment_label(string $status): string

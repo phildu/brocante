@@ -55,6 +55,7 @@ $details['Référence'] = 'N°' . h($product['ref']);
         <div class="vt-pdp-desc"><?= nl2br(h($product['description'])) ?></div>
         <div class="vt-pdp-buy"><?= $buyHtml() ?></div>
         <div class="vt-pdp-share"><?= $shareBtn ?></div>
+        <?= $qrHtml ?>
         <?php if (trim((string) ($fc['contact_delivery'] ?? '')) !== '' || trim((string) ($fc['pickup_label'] ?? '')) !== ''): ?>
           <ul class="vt-assure">
             <?php if (trim((string) ($fc['contact_delivery'] ?? '')) !== ''): ?><li><b>Livraison</b> <?= h($fc['contact_delivery']) ?></li><?php endif; ?>

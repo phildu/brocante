@@ -1,0 +1,25 @@
+{
+    "hero": "assets/autofeed/brocante/hero.jpg",
+    "products": [
+        {
+            "name": "Table Basse Scandinave",
+            "desc": "Apportez une touche de design rétro à votre salon avec cette authentique table basse des années 60. Son bois clair et ses lignes épurées s'intégreront parfaitement dans un intérieur moderne ou vintage.",
+            "price": "280 €",
+            "photo": "assets/autofeed/brocante/produit-0.jpg"
+        },
+        {
+            "name": "Service à Café Floral Ancien",
+            "desc": "Un charmant service à café en porcelaine fine, orné de délicats motifs floraux peints à la main. Idéal pour vos moments conviviaux ou comme pièce de collection sur un buffet d'époque.",
+            "price": "120 €",
+            "photo": "assets/autofeed/brocante/produit-1.jpg"
+        },
+        {
+            "name": "Miroir Soleil Doré Vintage",
+            "desc": "Sublimez votre intérieur avec ce miroir soleil emblématique des années 50-60, doté d'un cadre doré vieilli et de rayons finement travaillés. Une pièce maîtresse intemporelle pour un hall d'entrée ou un salon.",
+            "price": "195 €",
+            "photo": "assets/autofeed/brocante/produit-2.jpg"
+        }
+    ],
+    "label": "Brocante, vintage et collection, Déco et maison",
+    "created": 1793259945
+}

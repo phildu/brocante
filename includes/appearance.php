@@ -375,6 +375,99 @@ function logo_store_upload(string $variant, array $file): string
     return 'uploads/' . $name;
 }
 
+/**
+ * Reprend un visuel de la médiathèque comme logo d'une déclinaison. Le fichier
+ * est copié dans uploads/logo-… : le logo garde ainsi son propre cycle de vie,
+ * indépendant de la médiathèque.
+ */
+function logo_store_media(string $variant, string $relPath): string
+{
+    if (!isset(LOGO_VARIANTS[$variant])) {
+        throw new InvalidArgumentException('Déclinaison de logo inconnue.');
+    }
+    $relPath = ltrim(trim($relPath), '/');
+    $stmt = db()->prepare('SELECT type FROM media_library WHERE path = ? LIMIT 1');
+    $stmt->execute([$relPath]);
+    $type = $stmt->fetchColumn();
+    if ($type === false) {
+        throw new InvalidArgumentException('Ce visuel ne figure pas dans la médiathèque : rechargez la page et réessayez.');
+    }
+    if ((string) $type !== 'photo') {
+        throw new InvalidArgumentException('Choisissez une image : une vidéo ne peut pas servir de logo.');
+    }
+    $abs = dirname(__DIR__) . '/' . $relPath;
+    if (!preg_match('#^uploads/[A-Za-z0-9/_.-]+\.(png|jpe?g|webp)$#i', $relPath) || !is_file($abs)) {
+        throw new InvalidArgumentException('Le fichier de ce visuel est introuvable.');
+    }
+    if (filesize($abs) > 3 * 1024 * 1024) {
+        throw new InvalidArgumentException('Visuel trop lourd pour un logo : 3 Mo maximum.');
+    }
+    $info = @getimagesize($abs);
+    $ext = [IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg', IMAGETYPE_WEBP => 'webp'][$info[2] ?? 0] ?? null;
+    if (!$ext) {
+        throw new InvalidArgumentException('Formats acceptés depuis la médiathèque : PNG, JPG ou WebP.');
+    }
+    $dir = dirname(__DIR__) . '/uploads';
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    $name = 'logo-' . tenant_slug() . '-' . $variant . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
+    if (!@copy($abs, "$dir/$name")) {
+        throw new RuntimeException("Impossible de copier ce visuel dans uploads/.");
+    }
+    return 'uploads/' . $name;
+}
+
+/**
+ * Agrandit ×2 le fichier du logo enregistré (jusqu'à 4 096 px de côté), sans
+ * IA ni crédit : les pixels sont interpolés, le piqué d'origine est conservé.
+ * -> ['path', 'width', 'height', 'from_width', 'from_height'].
+ */
+function logo_enlarge(string $variant): array
+{
+    if (!isset(LOGO_VARIANTS[$variant])) {
+        throw new InvalidArgumentException('Déclinaison de logo inconnue.');
+    }
+    $src = logo_url($variant);
+    $abs = dirname(__DIR__) . '/' . ltrim($src, '/');
+    if ($src === '' || !is_file($abs)) {
+        throw new RuntimeException('Aucun logo à agrandir pour cette déclinaison.');
+    }
+    if (str_ends_with(strtolower($abs), '.svg')) {
+        throw new RuntimeException('Un logo SVG est vectoriel : il s’agrandit déjà sans perte. Gardez-le tel quel, ou importez un PNG/JPG pour créer une version agrandie.');
+    }
+    $info = @getimagesize($abs);
+    if (!$info || !in_array($info[2] ?? null, [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) {
+        throw new RuntimeException('Ce logo n’est pas une image PNG, JPG ou WebP : il ne peut pas être agrandi ici.');
+    }
+    $img = @imagecreatefromstring((string) @file_get_contents($abs));
+    if (!$img) {
+        throw new RuntimeException('Ce logo n’a pas pu être lu : réimportez-le, ou utilisez « Améliorer le logo » avec l’IA.');
+    }
+    $w = imagesx($img);
+    $h = imagesy($img);
+    if (max($w, $h) >= 4096) {
+        throw new RuntimeException('Ce logo mesure déjà ' . $w . ' × ' . $h . ' px : il est assez grand pour l’impression.');
+    }
+    $scale = min(2, 4096 / max($w, $h));
+    $nw = max(1, (int) round($w * $scale));
+    $nh = max(1, (int) round($h * $scale));
+    $dst = imagecreatetruecolor($nw, $nh);
+    imagealphablending($dst, false);
+    imagesavealpha($dst, true);
+    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 0, 0, 0, 127));
+    imagecopyresampled($dst, $img, 0, 0, 0, 0, $nw, $nh, $w, $h);
+
+    $dir = dirname(__DIR__) . '/uploads';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $path = 'uploads/logo-' . tenant_slug() . '-' . $variant . '-' . bin2hex(random_bytes(4)) . '.png';
+    if (!imagepng($dst, dirname(__DIR__) . '/' . $path, 9)) {
+        throw new RuntimeException('Impossible d’enregistrer le logo agrandi.');
+    }
+    $logos = logos_saved();
+    $logos[$variant] = $path;
+    logos_save($logos);
+    return ['path' => $path, 'width' => $nw, 'height' => $nh, 'from_width' => $w, 'from_height' => $h];
+}
+
 /** Enregistre la liste des logos (chemins ou null pour revenir au logo par défaut). */
 function logos_save(array $logos): void
 {

@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "langue": "fr",
+  "mis_a_jour": "2026-11-03",
+  "note": "Storyboards et sous-titres prêts à produire. Les fichiers vidéo ne sont pas fournis : aucun média factice n'est livré. Voix off facultative ; les sous-titres suffisent.",
+  "regles": [
+    "Durée 60 à 90 secondes, format 16:9, 1280 × 720, MP4 H.264.",
+    "Pas de musique sous droits ; une musique libre ou aucun son.",
+    "Sous-titres incrustés et fichier .vtt séparé.",
+    "Flouter les noms, e-mails, téléphones et IBAN.",
+    "Tourner sur le serveur local avec des données de démonstration."
+  ],
+  "videos": [
+    {
+      "slug": "creer-son-plan",
+      "titre": "Créer le plan d'implantation",
+      "duree_s": 90,
+      "format": "16:9, 1280×720, MP4 H.264",
+      "voix_off": false,
+      "sous_titres": "videos/creer-son-plan.vtt",
+      "storyboard": [
+        {"debut": "00:00", "fin": "00:04", "plan": "Titre plein écran", "action": "Fondu depuis le portail", "texte_ecran": "Créer le plan d'implantation"},
+        {"debut": "00:04", "fin": "00:12", "plan": "Vue bureau du portail", "action": "Ouvrir Galerie puis Plan", "texte_ecran": "Portail > Galerie > Plan"},
+        {"debut": "00:12", "fin": "00:24", "plan": "Barre d'adresse et carte", "action": "Saisir l'adresse, centrer, ou cliquer sur Ma position", "texte_ecran": "Cadrez le lieu"},
+        {"debut": "00:24", "fin": "00:36", "plan": "Sélecteur de fond", "action": "Basculer Plan IGN / Satellite IGN", "texte_ecran": "Plan ou satellite IGN"},
+        {"debut": "00:36", "fin": "00:48", "plan": "Catalogue et carte", "action": "Créer une surface, cliquer sur Poser, placer un stand", "texte_ecran": "Posez les surfaces"},
+        {"debut": "00:48", "fin": "01:00", "plan": "Fiche d'un emplacement", "action": "Saisir un numéro puis utiliser Numéroter tout", "texte_ecran": "Numérotez les emplacements"},
+        {"debut": "01:00", "fin": "01:12", "plan": "Fiche d'une zone", "action": "Ouvrir Tarifs de cette zone et saisir les prix", "texte_ecran": "Réglez les tarifs"},
+        {"debut": "01:12", "fin": "01:22", "plan": "Barre d'actions", "action": "Cliquer sur Enregistrer le plan", "texte_ecran": "Enregistrez le plan"},
+        {"debut": "01:22", "fin": "01:30", "plan": "Page publique", "action": "Cliquer sur Voir sur la page publique", "texte_ecran": "Vérifiez la page publique"}
+      ],
+      "vtt": [
+        {"debut": "00:00.000", "fin": "00:04.000", "texte": "Créer le plan d'implantation d'un événement."},
+        {"debut": "00:04.000", "fin": "00:12.000", "texte": "Dans le portail, ouvrez votre galerie, puis Plan."},
+        {"debut": "00:12.000", "fin": "00:18.000", "texte": "Tapez l'adresse du lieu et centrez la carte."},
+        {"debut": "00:18.000", "fin": "00:24.000", "texte": "Ou utilisez Ma position si vous êtes sur place."},
+        {"debut": "00:24.000", "fin": "00:30.000", "texte": "Choisissez le fond : plan IGN ou satellite."},
+        {"debut": "00:30.000", "fin": "00:36.000", "texte": "Pour un plan intérieur, masquez le fond de carte."},
+        {"debut": "00:36.000", "fin": "00:42.000", "texte": "Créez vos surfaces dans le catalogue."},
+        {"debut": "00:42.000", "fin": "00:48.000", "texte": "Cliquez sur Poser, puis placez l'emplacement."},
+        {"debut": "00:48.000", "fin": "00:54.000", "texte": "Saisissez un numéro dans la fiche."},
+        {"debut": "00:54.000", "fin": "01:00.000", "texte": "Ou numérotez tout d'un coup."},
+        {"debut": "01:00.000", "fin": "01:06.000", "texte": "Sélectionnez une zone pour régler ses tarifs."},
+        {"debut": "01:06.000", "fin": "01:12.000", "texte": "Particulier, entreprise, au mètre ou au mètre carré."},
+        {"debut": "01:12.000", "fin": "01:18.000", "texte": "Reliez chaque place à un commerce si besoin."},
+        {"debut": "01:18.000", "fin": "01:22.000", "texte": "Rien n'est conservé avant Enregistrer le plan."},
+        {"debut": "01:22.000", "fin": "01:30.000", "texte": "Vérifiez enfin le rendu sur la page publique."}
+      ]
+    },
+    {
+      "slug": "ouvrir-les-demandes",
+      "titre": "Ouvrir les demandes d'emplacement",
+      "duree_s": 75,
+      "format": "16:9, 1280×720, MP4 H.264",
+      "voix_off": false,
+      "sous_titres": "videos/ouvrir-les-demandes.vtt",
+      "storyboard": [
+        {"debut": "00:00", "fin": "00:04", "plan": "Titre plein écran", "action": "Ouverture", "texte_ecran": "Ouvrir les demandes d'emplacement"},
+        {"debut": "00:04", "fin": "00:14", "plan": "Formulaire Événement", "action": "Remplir nom, date, lieu et horaires", "texte_ecran": "Renseignez l'événement"},
+        {"debut": "00:14", "fin": "00:24", "plan": "Section places et tarifs", "action": "Saisir le nombre de places et les prix", "texte_ecran": "Places et tarifs"},
+        {"debut": "00:24", "fin": "00:38", "plan": "Section Réserver en ligne", "action": "Cocher Accepter les demandes d'emplacement en ligne", "texte_ecran": "Activez les demandes"},
+        {"debut": "00:38", "fin": "00:48", "plan": "Champ du délai", "action": "Fixer le nombre de jours de réservation", "texte_ecran": "Une demande retient la place"},
+        {"debut": "00:48", "fin": "00:58", "plan": "Bouton de publication", "action": "Publier puis copier le lien public", "texte_ecran": "Publiez et partagez"},
+        {"debut": "00:58", "fin": "01:08", "plan": "Page Exposants", "action": "Ouvrir Demandes d'emplacement et cliquer sur Accepter", "texte_ecran": "Validez les demandes"},
+        {"debut": "01:08", "fin": "01:15", "plan": "Espace exposant", "action": "Afficher le pass et le QR code", "texte_ecran": "Le pass confirme la place"}
+      ],
+      "vtt": [
+        {"debut": "00:00.000", "fin": "00:04.000", "texte": "Ouvrir les demandes d'emplacement aux exposants."},
+        {"debut": "00:04.000", "fin": "00:14.000", "texte": "Dans Événement, renseignez le nom, la date et le lieu."},
+        {"debut": "00:14.000", "fin": "00:24.000", "texte": "Indiquez le nombre de places et les tarifs."},
+        {"debut": "00:24.000", "fin": "00:31.000", "texte": "Dans Réserver en ligne, cochez Accepter les demandes."},
+        {"debut": "00:31.000", "fin": "00:38.000", "texte": "Les exposants choisiront une place sur le plan public."},
+        {"debut": "00:38.000", "fin": "00:48.000", "texte": "Fixez le délai pendant lequel une demande retient la place."},
+        {"debut": "00:48.000", "fin": "00:58.000", "texte": "Publiez l'événement et partagez le lien."},
+        {"debut": "00:58.000", "fin": "01:08.000", "texte": "Dans Exposants, acceptez ou refusez chaque demande."},
+        {"debut": "01:08.000", "fin": "01:15.000", "texte": "Une place confirmée donne un pass avec QR code."}
+      ]
+    },
+    {
+      "slug": "publier-une-piece-studio",
+      "titre": "Publier une pièce avec le Studio",
+      "duree_s": 80,
+      "format": "9:16 ou 16:9, 720p, MP4 H.264",
+      "voix_off": false,
+      "sous_titres": "videos/publier-une-piece-studio.vtt",
+      "storyboard": [
+        {"debut": "00:00", "fin": "00:04", "plan": "Titre plein écran", "action": "Ouverture", "texte_ecran": "Publier une pièce avec le Studio"},
+        {"debut": "00:04", "fin": "00:14", "plan": "Téléphone, navigateur", "action": "Ouvrir /studio.php et se connecter", "texte_ecran": "Ouvrez le Studio sur le téléphone"},
+        {"debut": "00:14", "fin": "00:28", "plan": "Appareil photo", "action": "Prendre la photo de face, puis un gros plan", "texte_ecran": "Au moins la photo de face"},
+        {"debut": "00:28", "fin": "00:42", "plan": "Fiche proposée", "action": "Laisser l'IA préparer le titre et la description", "texte_ecran": "L'IA prépare la fiche"},
+        {"debut": "00:42", "fin": "00:55", "plan": "Champs de la fiche", "action": "Corriger le prix, l'état et les dimensions", "texte_ecran": "Relisez et corrigez"},
+        {"debut": "00:55", "fin": "01:08", "plan": "Validation", "action": "Publier la pièce", "texte_ecran": "Publiez la pièce"},
+        {"debut": "01:08", "fin": "01:20", "plan": "Catalogue", "action": "Retrouver la pièce dans Catalogue, ou utiliser le lot", "texte_ecran": "Retrouvez-la dans le catalogue"}
+      ],
+      "vtt": [
+        {"debut": "00:00.000", "fin": "00:04.000", "texte": "Publier une pièce avec le Studio."},
+        {"debut": "00:04.000", "fin": "00:14.000", "texte": "Sur le téléphone, ouvrez /studio.php et connectez-vous."},
+        {"debut": "00:14.000", "fin": "00:21.000", "texte": "Choisissez Ouvrir l'appareil photo."},
+        {"debut": "00:21.000", "fin": "00:28.000", "texte": "Prenez au moins la photo de face."},
+        {"debut": "00:28.000", "fin": "00:35.000", "texte": "Ajoutez un gros plan ou une mesure si utile."},
+        {"debut": "00:35.000", "fin": "00:42.000", "texte": "L'IA détoure la pièce et prépare la fiche."},
+        {"debut": "00:42.000", "fin": "00:48.000", "texte": "Elle n'invente ni prix, ni date, ni chiffre."},
+        {"debut": "00:48.000", "fin": "00:55.000", "texte": "Relisez le titre, l'état, les dimensions et le prix."},
+        {"debut": "00:55.000", "fin": "01:02.000", "texte": "Corrigez ce qui est faux ou imprécis."},
+        {"debut": "01:02.000", "fin": "01:08.000", "texte": "Validez la pièce pour la publier."},
+        {"debut": "01:08.000", "fin": "01:14.000", "texte": "Elle apparaît dans le catalogue de la boutique."},
+        {"debut": "01:14.000", "fin": "01:20.000", "texte": "Pour plusieurs pièces, utilisez le shooting en lot."}
+      ]
+    },
+    {
+      "slug": "encaisser",
+      "titre": "Encaisser les paiements",
+      "duree_s": 90,
+      "format": "16:9, 1280×720, MP4 H.264",
+      "voix_off": false,
+      "sous_titres": "videos/encaisser.vtt",
+      "storyboard": [
+        {"debut": "00:00", "fin": "00:04", "plan": "Titre plein écran", "action": "Ouverture", "texte_ecran": "Encaisser les paiements"},
+        {"debut": "00:04", "fin": "00:15", "plan": "Réglages de la boutique", "action": "Ouvrir Paiement & livraison", "texte_ecran": "Réglages > Paiement & livraison"},
+        {"debut": "00:15", "fin": "00:30", "plan": "Section Stripe", "action": "Choisir Connect ou coller ses clés", "texte_ecran": "Stripe Connect ou vos clés"},
+        {"debut": "00:30", "fin": "00:45", "plan": "Webhook et mode test", "action": "Vérifier l'URL du webhook et le secret", "texte_ecran": "Déclarez le webhook"},
+        {"debut": "00:45", "fin": "01:00", "plan": "Commande de test", "action": "Payer avec une carte de test et vérifier la commande", "texte_ecran": "Testez avant le réel"},
+        {"debut": "01:00", "fin": "01:12", "plan": "Bascule de mode", "action": "Passer en mode réel", "texte_ecran": "Passez en mode réel"},
+        {"debut": "01:12", "fin": "01:22", "plan": "Commandes", "action": "Suivre les paiements et les versements", "texte_ecran": "Suivez les commandes"},
+        {"debut": "01:22", "fin": "01:30", "plan": "Autres prestataires", "action": "Montrer Monetico, PayPal, Revolut et SEPA", "texte_ecran": "Ou un autre prestataire"}
+      ],
+      "vtt": [
+        {"debut": "00:00.000", "fin": "00:04.000", "texte": "Encaisser les paiements de sa boutique."},
+        {"debut": "00:04.000", "fin": "00:15.000", "texte": "Ouvrez Réglages, puis Paiement & livraison."},
+        {"debut": "00:15.000", "fin": "00:23.000", "texte": "Avec Stripe Connect, la plateforme vous envoie une invitation."},
+        {"debut": "00:23.000", "fin": "00:30.000", "texte": "Sinon, collez vos propres clés Stripe."},
+        {"debut": "00:30.000", "fin": "00:38.000", "texte": "Déclarez l'URL /stripe-webhook.php et son secret."},
+        {"debut": "00:38.000", "fin": "00:45.000", "texte": "Les modes test et réel gardent chacun leurs clés."},
+        {"debut": "00:45.000", "fin": "00:53.000", "texte": "En mode test, payez avec une carte de test."},
+        {"debut": "00:53.000", "fin": "01:00.000", "texte": "Vérifiez que la commande passe en Payée."},
+        {"debut": "01:00.000", "fin": "01:08.000", "texte": "Basculez en mode réel quand tout fonctionne."},
+        {"debut": "01:08.000", "fin": "01:15.000", "texte": "Suivez les commandes et les versements."},
+        {"debut": "01:15.000", "fin": "01:22.000", "texte": "Un virement SEPA se confirme à la main."},
+        {"debut": "01:22.000", "fin": "01:30.000", "texte": "Monetico, PayPal et Revolut sont aussi disponibles."}
+      ]
+    },
+    {
+      "slug": "exporter-un-plan",
+      "titre": "Exporter la liste et le registre",
+      "duree_s": 60,
+      "format": "16:9, 1280×720, MP4 H.264",
+      "voix_off": false,
+      "sous_titres": "videos/exporter-un-plan.vtt",
+      "storyboard": [
+        {"debut": "00:00", "fin": "00:04", "plan": "Titre plein écran", "action": "Ouverture", "texte_ecran": "Exporter la liste et le registre"},
+        {"debut": "00:04", "fin": "00:15", "plan": "Page Exposants", "action": "Cliquer sur Exporter (CSV)", "texte_ecran": "Exporter la liste en CSV"},
+        {"debut": "00:15", "fin": "00:28", "plan": "Page Registre", "action": "Montrer Télécharger Excel et CSV", "texte_ecran": "Registre en Excel ou CSV"},
+        {"debut": "00:28", "fin": "00:40", "plan": "Aperçu du registre", "action": "Cliquer sur Imprimer / PDF", "texte_ecran": "Imprimer le registre"},
+        {"debut": "00:40", "fin": "00:50", "plan": "Boîte d'impression", "action": "Choisir Enregistrer au format PDF, A4 paysage", "texte_ecran": "Enregistrer en PDF"},
+        {"debut": "00:50", "fin": "01:00", "plan": "Page publique", "action": "Rappeler qu'il n'y a pas d'export direct du plan", "texte_ecran": "Le plan s'imprime depuis la page publique"}
+      ],
+      "vtt": [
+        {"debut": "00:00.000", "fin": "00:04.000", "texte": "Exporter la liste des exposants et le registre."},
+        {"debut": "00:04.000", "fin": "00:15.000", "texte": "Dans Exposants, cliquez sur Exporter (CSV)."},
+        {"debut": "00:15.000", "fin": "00:22.000", "texte": "Le fichier s'ouvre dans votre tableur."},
+        {"debut": "00:22.000", "fin": "00:28.000", "texte": "Dans Registre, téléchargez Excel ou CSV."},
+        {"debut": "00:28.000", "fin": "00:35.000", "texte": "La feuille Excel est prête à imprimer et à signer."},
+        {"debut": "00:35.000", "fin": "00:40.000", "texte": "Ou cliquez sur Imprimer / PDF."},
+        {"debut": "00:40.000", "fin": "00:46.000", "texte": "Dans la boîte d'impression, choisissez A4 paysage."},
+        {"debut": "00:46.000", "fin": "00:50.000", "texte": "Puis Enregistrer au format PDF."},
+        {"debut": "00:50.000", "fin": "00:55.000", "texte": "Déposez le registre en mairie dans les 8 jours."},
+        {"debut": "00:55.000", "fin": "01:00.000", "texte": "Le plan, lui, s'imprime depuis la page publique."}
+      ]
+    }
+  ]
+}

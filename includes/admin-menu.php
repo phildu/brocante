@@ -191,7 +191,7 @@ function admin_menu_items(string $role): array
     // du lieu (boutique, stand). Les deux se rejoignent par des onglets ; le
     // photographe, qui n'a pas les pièces, arrive directement sur le lieu.
     if (!admin_role_can_access($role, '/admin/shooting-assistant.php')) {
-        $items['assistant'] = ['/admin/shop-shooting.php', 'Shooting boutique / stand', 'camera'];
+        $items['assistant'] = ['/admin/shop-shooting.php', 'Reportage boutique', 'camera'];
     }
     // Offres de prix à traiter, en regard du menu.
     try {

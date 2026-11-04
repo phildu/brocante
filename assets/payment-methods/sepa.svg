@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 44" role="img" aria-label="Virement SEPA">
+  <rect x="0.5" y="0.5" width="71" height="43" rx="6" fill="#fff" stroke="#d8d8d8"/>
+  <text x="36" y="26" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="1" fill="#102a56">SEPA</text>
+  <text x="36" y="34" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.6" letter-spacing="0.6" fill="#5b6b84">VIREMENT</text>
+</svg>

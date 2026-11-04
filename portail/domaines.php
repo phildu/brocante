@@ -5,6 +5,7 @@
 require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas.php';
 require_once PORTAIL_ROOT . '/includes/domain-shop.php';
+require_once PORTAIL_ROOT . '/includes/domain-custom.php';
 
 if (defined('GA_LIMITED')) { header('Location: /portail/galerie-tableau.php'); exit; }
 
@@ -87,6 +88,14 @@ foreach ((array) ($search['domains'] ?? []) as $candidate) {
 $available = (int) array_sum(array_map(static fn ($c): int => !empty($c['available']) ? 1 : 0, (array) ($search['domains'] ?? [])));
 $searchStale = $search !== null && time() - (int) ($search['searched_at'] ?? 0) > 86400;
 $platformHost = preg_replace('#^https?://#', '', saas_origin());
+
+// Domaines déjà achetés par les marchands et rattachés à leur boutique.
+$customDomains = domain_custom_list();
+$domainIp = (string) (saas_config()['domain_ip'] ?? '');
+$shopNames = [];
+foreach (array_keys(tenant_list()) as $shopSlug) {
+    $shopNames[$shopSlug] = (string) tenant_load($shopSlug)['name'];
+}
 
 $owner = (array) ($purchase['owner'] ?? []);
 if (!$owner) {
@@ -355,6 +364,65 @@ if (!$owner) {
         </section>
       <?php endif; ?>
     <?php endif; ?>
+
+    <section class="dmcard">
+      <h2>Domaines déjà achetés par les boutiques</h2>
+      <p class="meta">Une boutique peut rattacher un domaine qu’elle possède déjà : elle prouve la propriété par un enregistrement TXT, pointe le domaine vers le serveur, puis demande la mise en service. Avant d’activer, déclarez le domaine comme alias d’hébergement (le certificat HTTPS est alors émis) et vérifiez que <code>https://&lt;domaine&gt;/</code> affiche la boutique.</p>
+      <?php if (!$customDomains): ?>
+        <p class="meta">Aucune boutique n’a rattaché de domaine existant pour le moment.</p>
+      <?php else: ?>
+        <table class="dmtable">
+          <thead><tr><th>Boutique</th><th>Adresse</th><th>État</th><th>Dernier contrôle</th><th></th></tr></thead>
+          <tbody>
+            <?php foreach ($customDomains as $item): ?>
+              <?php
+                $itemSlug = (string) $item['slug'];
+                $itemState = (string) ($item['state'] ?? '');
+                $itemDomain = (string) ($item['domain'] ?? '');
+                $itemChecked = (int) ($item['checked_at'] ?? 0);
+              ?>
+              <tr>
+                <td><strong><?= e($shopNames[$itemSlug] ?? $itemSlug) ?></strong><br><span class="meta"><?= e($itemSlug) ?></span></td>
+                <td><code><?= e($itemDomain) ?></code></td>
+                <td><span class="pill <?= $itemState === 'active' ? 'done' : ($itemState === 'ready' ? 'sent' : '') ?>"><?= e(domain_custom_state_label($itemState)) ?></span></td>
+                <td><?= $itemChecked > 0 ? e(date('d/m/Y à H:i', $itemChecked)) : '<span class="dmno">—</span>' ?></td>
+                <td>
+                  <div class="dmactions">
+                    <?php if ($itemState === 'ready'): ?>
+                      <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Activer <?= e($itemDomain) ?> pour la boutique <?= e($itemSlug) ?> ? Vérifiez d’abord que https://<?= e($itemDomain) ?>/ affiche bien la boutique.');">
+                        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="custom_activate">
+                        <input type="hidden" name="shop" value="<?= e($itemSlug) ?>">
+                        <button type="submit" class="btn btn-primary small">Activer</button>
+                      </form>
+                    <?php endif; ?>
+                    <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Détacher <?= e($itemDomain) ?> de la boutique <?= e($itemSlug) ?> ?<?= $itemState === 'active' ? ' La boutique ne répondra plus à cette adresse ; retirez aussi l’alias d’hébergement et le certificat.' : '' ?>');">
+                      <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                      <input type="hidden" name="action" value="custom_remove">
+                      <input type="hidden" name="shop" value="<?= e($itemSlug) ?>">
+                      <button type="submit" class="btn small">Détacher</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+      <form class="dmform" method="post" action="/portail/domaines-action.php" style="margin-top:6px;">
+        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="save_custom_ip">
+        <div class="dmrow">
+          <label class="dmfield">Adresse IP du serveur (enregistrement A)
+            <input type="text" name="domain_ip" maxlength="45" value="<?= e($domainIp) ?>" placeholder="Ex. 213.186.33.3">
+          </label>
+          <div class="dmactions" style="align-self:end;">
+            <button type="submit" class="btn">Enregistrer l’adresse</button>
+          </div>
+        </div>
+        <p class="meta">Adresse donnée aux boutiques dans les consignes DNS et utilisée pour confirmer le pointage du domaine. Sur un hébergement mutualisé OVH, c’est l’adresse IP mutualisée du compte. Vide : l’adresse du serveur qui répond est proposée.</p>
+      </form>
+    </section>
 
     <?php if ($history): ?>
       <section class="dmcard">

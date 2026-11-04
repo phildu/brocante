@@ -18,8 +18,10 @@
     <div>
       <h4>Maison</h4>
       <ul>
-        <li><a href="/index.php#histoire">Notre histoire</a></li>
+        <li><a href="/notre-histoire.php">Notre histoire</a></li>
+        <li><a href="/visite.php">Visite virtuelle</a></li>
         <li><a href="/index.php#contact">Contact</a></li>
+        <li><a href="/nous-trouver.php">Carte et itinéraire</a></li>
         <?php if (!function_exists('shop_member_galleries')) require_once __DIR__ . '/galleries.php'; foreach (shop_member_galleries() as $g): ?>
           <li><a href="<?= h($g['url']) ?>">Galerie « <?= h($g['name']) ?> »</a></li>
         <?php endforeach; ?>
@@ -37,6 +39,10 @@
   </div>
 </footer>
 <?php endif; ?>
+<?php require_once __DIR__ . '/payment-badges.php'; ?>
+<?php if (($__paymentBadges = payment_badges_html()) !== ''): ?>
+  <div class="wrap payment-badges-bar" style="display:flex;justify-content:center;padding:18px 0 4px;"><?= $__paymentBadges ?></div>
+<?php endif; ?>
 <?php require_once __DIR__ . '/legal.php'; ?>
 <nav class="legal-bar" aria-label="Informations légales"><div class="wrap"><?= legal_links_html() ?></div></nav>
 <div class="quick-preview-overlay" id="quick-preview-overlay" aria-hidden="true">
@@ -44,6 +50,7 @@
   <span id="quick-preview-name"></span>
 </div>
 <?= plugin_render('site_footer') ?>
+<?php require_once __DIR__ . '/slideshow-idle.php'; echo slideshow_idle_html(); ?>
 <?php require_once __DIR__ . '/feedback.php'; echo feedback_widget_html(); ?>
 <script>
 (function () {

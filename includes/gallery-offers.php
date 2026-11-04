@@ -60,11 +60,64 @@ function go_price_text(int $cents, string $billing = 'month'): string
 
 // ── Plan d'une galerie ──────────────────────────────────────────────────────
 
+/** Geste d'accès en cours (gratuité totale ou jusqu'à une date) : il maintient la galerie ouverte malgré l'offre. */
+function go_gesture_active(array $gallery): bool
+{
+    $g = $gallery['gesture'] ?? null;
+    if (!is_array($g) || empty($g['kind'])) return false;
+    return $g['kind'] === 'forever' || ($g['kind'] === 'until' && (int) ($g['until'] ?? 0) > time());
+}
+
+/** Le geste est-il encore en cours (accès ou avantage de facturation) ? */
+function go_gesture_current(array $gallery): bool
+{
+    $g = $gallery['gesture'] ?? null;
+    if (!is_array($g) || empty($g['kind'])) return false;
+    if ($g['kind'] === 'forever') return true;
+    $until = (int) ($g['until'] ?? 0);
+    return $until <= 0 || $until > time();
+}
+
+/** Le geste porte-t-il sur la facturation (avoir ou remise) plutôt que sur l'accès ? */
+function go_gesture_is_billing(array $gallery): bool
+{
+    return in_array((string) ($gallery['gesture']['kind'] ?? ''), ['credit', 'discount'], true);
+}
+
+/** Période d'un avoir ou d'une remise, ou '' si aucune date. */
+function go_gesture_period(int $until): string
+{
+    if ($until <= 0) return '';
+    return ($until > time() ? ' — valable jusqu’au ' : ' — expiré le ') . date('d/m/Y', $until);
+}
+
+/** Libellé du geste : « Gratuité totale », « Avoir commercial de 19,90 € », « Remise commerciale de 20 % », ou ''. */
+function go_gesture_label(array $gallery): string
+{
+    $g = $gallery['gesture'] ?? null;
+    if (!is_array($g) || empty($g['kind'])) return '';
+    if ($g['kind'] === 'forever') return 'Gratuité totale';
+    if ($g['kind'] === 'until') {
+        $until = (int) ($g['until'] ?? 0);
+        if ($until <= 0) return '';
+        return ($until > time() ? 'Gratuit jusqu’au ' : 'Gratuité terminée le ') . date('d/m/Y', $until);
+    }
+    if ($g['kind'] === 'credit') {
+        $amount = number_format(((int) ($g['amount_cents'] ?? 0)) / 100, 2, ',', ' ');
+        return 'Avoir commercial de ' . $amount . ' €' . go_gesture_period((int) ($g['until'] ?? 0));
+    }
+    if ($g['kind'] === 'discount') {
+        return 'Remise commerciale de ' . (int) ($g['percent'] ?? 0) . ' %' . go_gesture_period((int) ($g['until'] ?? 0));
+    }
+    return '';
+}
+
 /** Statut du plan : 'manual' (galerie sans plan : créée à la main, active sans limite), trial, active, expired, canceled. */
 function go_status(array $gallery): string
 {
     $p = $gallery['plan'] ?? null;
     if (!$p || empty($p['offer'])) return 'manual';
+    if (go_gesture_active($gallery)) return 'active';
     if ($p['status'] === 'trial' && (int) $p['trial_until'] <= time()) return 'expired';
     return (string) $p['status'];
 }

@@ -65,7 +65,10 @@ ga_head('Fiche exposant');
     <section class="gcard">
       <div class="row" style="justify-content:space-between;">
         <h2 style="margin:0;"><?= e($row['name']) ?> — <?= e(ct_label($kind)) ?></h2>
-        <a class="btn" href="<?= e($list) ?>">← Exposants</a>
+        <div class="row" style="gap:6px;">
+          <a class="btn" href="/portail/galerie-messages.php<?= $limited ? '' : '?g=' . e(urlencode($gaSlug)) . '&' ?>new=slot:<?= e(urlencode($slotId)) ?>">Écrire un message</a>
+          <a class="btn" href="<?= e($list) ?>">← Exposants</a>
+        </div>
       </div>
       <p class="meta"><?= e($slotLabel) ?> · <?= e($row['email']) ?><?= $row['phone'] !== '' ? ' · ' . e($row['phone']) : '' ?> · <?= e($priceLabel) ?></p>
       <p>

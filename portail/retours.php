@@ -321,7 +321,8 @@ if (function_exists('saas_config')) {
             <p class="fb-message"><?= nl2br(e((string) $f['message'])) ?></p>
             <div class="fb-meta">
               <span>Réf. <code><?= e($f['id']) ?></code></span>
-              <?php if ($f['page'] !== ''): ?><span>Page <code><?= e($f['page']) ?></code></span><?php endif; ?>
+              <?php $fbUrl = trim((string) ($f['url'] ?? '')); ?>
+              <?php if ($fbUrl !== ''): ?><span>Page <a class="fb-link" href="<?= e($fbUrl) ?>" target="_blank" rel="noopener"><?= e($f['page'] !== '' ? $f['page'] : $fbUrl) ?></a></span><?php elseif ($f['page'] !== ''): ?><span>Page <code><?= e($f['page']) ?></code></span><?php endif; ?>
               <?php if ($f['module'] !== ''): ?><span>Module <code><?= e($f['module']) ?></code></span><?php endif; ?>
               <?php if (!empty($f['context']['viewport'])): ?><span>Écran <?= e((string) $f['context']['viewport']) ?></span><?php endif; ?>
               <?php if ($f['email'] !== ''): ?><span>E-mail <a class="fb-link" href="mailto:<?= e($f['email']) ?>"><?= e($f['email']) ?></a></span><?php else: ?><span class="fb-warn">Aucune adresse e-mail</span><?php endif; ?>

@@ -1,0 +1,377 @@
+{
+  "version": 1,
+  "langue": "fr",
+  "mis_a_jour": "2026-11-03",
+  "note": "Les réponses sont volontairement courtes. Les liens pointent vers les pages réelles ; l'adresse de contact est toujours saas_config()['contact'], jamais codée en dur.",
+  "questions": [
+    {
+      "id": "vendeur-ouvrir-boutique",
+      "role": "vendeur",
+      "question": "Comment ouvrir ma boutique sur Brocs ?",
+      "reponse": "Ouvrez /inscription/ et choisissez « Je veux vendre en ligne ». Indiquez où vous vendez (chez vous, dans une galerie, sur un marché ou un vide-grenier), remplissez votre identité et votre design, puis choisissez une offre. Vos accès arrivent par e-mail ; l'administration de la boutique se trouve ensuite sur /admin/.",
+      "mots_cles": ["ouvrir", "créer", "boutique", "inscription", "compte", "vendeur", "offre", "essai"],
+      "liens": [
+        {"libelle": "Créer ma boutique", "url": "/inscription/"},
+        {"libelle": "Voir les offres", "url": "/offre.php"}
+      ]
+    },
+    {
+      "id": "vendeur-publier-piece",
+      "role": "vendeur",
+      "question": "Comment publier une pièce ?",
+      "reponse": "Le plus simple est le Studio sur votre téléphone : ouvrez /studio.php, connectez-vous, photographiez la pièce au moins de face et laissez l'IA préparer la fiche si elle est configurée. Relisez le titre, la description, les dimensions, l'état et le prix, puis publiez. La pièce apparaît ensuite dans Catalogue, dans l'administration.",
+      "mots_cles": ["publier", "pièce", "produit", "photo", "studio", "fiche", "catalogue", "IA"],
+      "liens": [
+        {"libelle": "Ouvrir le Studio", "url": "/studio.php"},
+        {"libelle": "Voir le catalogue", "url": "/admin/catalog.php"}
+      ],
+      "tutoriel": "publier-une-piece-studio"
+    },
+    {
+      "id": "vendeur-encaisser",
+      "role": "vendeur",
+      "question": "Comment encaisser les paiements de ma boutique ?",
+      "reponse": "Ouvrez Réglages → Paiement & livraison et configurez au moins un moyen de paiement : Stripe (compte Connect ou vos propres clés), Monetico, PayPal, Revolut ou virement SEPA. Commencez en mode test, vérifiez une commande, puis basculez en mode réel. Sans aucun moyen configuré, les clients ne peuvent pas payer.",
+      "mots_cles": ["encaisser", "paiement", "stripe", "monetico", "paypal", "revolut", "sepa", "carte", "webhook"],
+      "liens": [
+        {"libelle": "Réglages Paiement & livraison", "url": "/admin/index.php?s=paiement"}
+      ],
+      "tutoriel": "encaisser"
+    },
+    {
+      "id": "vendeur-commandes",
+      "role": "vendeur",
+      "question": "Comment suivre et préparer une commande ?",
+      "reponse": "Les commandes arrivent dans Commandes, dans l'administration. Ouvrez la commande pour voir le paiement, l'adresse et le mode choisi. Pour un retrait sur place, utilisez « Valider le retrait » ; pour une expédition, renseignez le transporteur et le numéro de suivi. Le client reçoit les e-mails correspondants.",
+      "mots_cles": ["commande", "préparer", "expédier", "retrait", "suivi", "transporteur", "client"],
+      "liens": [
+        {"libelle": "Gérer les commandes", "url": "/admin/orders.php"}
+      ]
+    },
+    {
+      "id": "vendeur-frais-vente",
+      "role": "vendeur",
+      "question": "Quels frais sont prélevés sur une vente ?",
+      "reponse": "Trois choses peuvent intervenir : l'abonnement de votre offre, les frais du prestataire de paiement et, si un montage Stripe Connect avec commission est activé, la commission prélevée à l'encaissement. Les taux exacts figurent dans votre offre et dans les réglages de commission ; le détail d'une vente est visible dans la commande et dans le relevé du prestataire.",
+      "mots_cles": ["frais", "commission", "abonnement", "coût", "stripe", "reversement", "marge"],
+      "liens": [
+        {"libelle": "Voir les offres", "url": "/offre.php"},
+        {"libelle": "Conditions d'utilisation", "url": "/accueil/conditions.php"}
+      ]
+    },
+    {
+      "id": "vendeur-studio-mobile",
+      "role": "vendeur",
+      "question": "Comment installer le Studio sur mon téléphone ?",
+      "reponse": "Ouvrez /studio.php dans le navigateur du téléphone, connectez-vous, puis choisissez « Ajouter à l'écran d'accueil ». La connexion peut être mémorisée 30 jours. La caméra ne fonctionne que sur une adresse sécurisée (https) : une adresse locale de test ne s'ouvre pas depuis un téléphone.",
+      "mots_cles": ["studio", "téléphone", "mobile", "installer", "caméra", "https", "application"],
+      "liens": [
+        {"libelle": "Ouvrir le Studio", "url": "/studio.php"},
+        {"libelle": "Nouvelle pièce depuis l'administration", "url": "/admin/quick-add.php"}
+      ]
+    },
+    {
+      "id": "vendeur-credit-ia",
+      "role": "vendeur",
+      "question": "Qu'est-ce qu'un crédit IA et comment le recharger ?",
+      "reponse": "Un crédit IA paie une génération : détourage ou mise en situation d'une photo, rédaction d'un texte, analyse d'image. Chaque appel est décompté et consigné dans la page Crédit IA, qui affiche aussi le quota gratuit et le solde prépayé. Quand le solde est épuisé, vous pouvez acheter un pack depuis cette même page.",
+      "mots_cles": ["crédit", "IA", "gemini", "image", "détourage", "quota", "recharge", "pack"],
+      "liens": [
+        {"libelle": "Suivre mon crédit IA", "url": "/admin/ai-usage.php"}
+      ]
+    },
+    {
+      "id": "vendeur-domaine",
+      "role": "vendeur",
+      "question": "Comment acheter un nom de domaine pour ma boutique ?",
+      "reponse": "Ouvrez la page Domaine dans l'administration, cherchez le nom souhaité et demandez un devis. Le paiement se fait par Stripe ; la commande n'est transmise qu'après confirmation, puis le domaine est rattaché à la boutique. Un rappel est envoyé avant l'échéance annuelle.",
+      "mots_cles": ["domaine", "nom", "adresse", "ovh", "achat", "renouvellement", "devis"],
+      "liens": [
+        {"libelle": "Gérer mon domaine", "url": "/admin/domaine.php"}
+      ]
+    },
+    {
+      "id": "organisateur-creer",
+      "role": "organisateur",
+      "question": "Comment créer une galerie, un marché ou un vide-grenier ?",
+      "reponse": "Ouvrez /galerie/creer.php et choisissez le type : galerie marchande, marché aux puces, vide-grenier ou quartier marchand. Donnez un nom, une adresse e-mail et choisissez l'offre ; un test gratuit peut être proposé. Les accès arrivent par e-mail et la connexion se fait sur /galerie/admin.php.",
+      "mots_cles": ["créer", "galerie", "marché", "vide-grenier", "quartier", "organisateur", "offre", "essai"],
+      "liens": [
+        {"libelle": "Créer ma galerie", "url": "/galerie/creer.php"},
+        {"libelle": "Se connecter à l'espace galerie", "url": "/galerie/admin.php"}
+      ]
+    },
+    {
+      "id": "organisateur-plan",
+      "role": "organisateur",
+      "question": "Comment dessiner le plan des emplacements ?",
+      "reponse": "Dans le portail de votre galerie, ouvrez Plan. Centrez la carte sur l'adresse, créez vos surfaces dans le catalogue, posez-les, numérotez-les et reliez chaque emplacement à un commerce. Les tarifs se règlent par zone. Cliquez sur « Enregistrer le plan » : rien n'est conservé avant cet enregistrement.",
+      "mots_cles": ["plan", "dessiner", "emplacement", "stand", "numéro", "tarif", "carte", "adresse"],
+      "liens": [
+        {"libelle": "Ouvrir le plan", "url": "/portail/galerie-plan.php"}
+      ],
+      "tutoriel": "creer-son-plan"
+    },
+    {
+      "id": "organisateur-demandes",
+      "role": "organisateur",
+      "question": "Comment ouvrir les demandes d'emplacement aux exposants ?",
+      "reponse": "Publiez l'événement et cochez « Accepter les demandes d'emplacement en ligne » dans la section Réserver en ligne, ou activez le bloc « Exposants : choisir son emplacement » sur le plan. Fixez le nombre de jours pendant lesquels une demande retient la place, puis partagez la page publique. Les demandes se valident ensuite dans Exposants.",
+      "mots_cles": ["demande", "emplacement", "exposant", "réserver", "ouvrir", "place", "validation"],
+      "liens": [
+        {"libelle": "Événement et réservations", "url": "/portail/galerie-evenement.php"},
+        {"libelle": "Demandes d'emplacement", "url": "/portail/galerie-exposants.php"}
+      ],
+      "tutoriel": "ouvrir-les-demandes"
+    },
+    {
+      "id": "organisateur-exposants",
+      "role": "organisateur",
+      "question": "Comment accepter ou refuser un exposant ?",
+      "reponse": "Ouvrez Exposants → Demandes d'emplacement. Chaque demande affiche l'exposant, la place et son état. Acceptez, refusez ou libérez la place ; une demande acceptée devient définitive jusqu'à libération. Les références de pièce d'identité sont obligatoires pour le registre, la copie reste facultative.",
+      "mots_cles": ["exposant", "accepter", "refuser", "libérer", "demande", "identité", "registre"],
+      "liens": [
+        {"libelle": "Gérer les exposants", "url": "/portail/galerie-exposants.php"}
+      ]
+    },
+    {
+      "id": "organisateur-registre",
+      "role": "organisateur",
+      "question": "Qu'est-ce que le registre de police et comment le préparer ?",
+      "reponse": "Le registre de police liste les exposants attribués, leurs références de pièce d'identité et les mentions obligatoires. Depuis Exposants ou Registre, téléchargez-le en Excel, CSV ou PDF, faites-le signer et parapher avant la manifestation, puis déposez-le en mairie dans les 8 jours. Le registre se conserve cinq ans après la clôture.",
+      "mots_cles": ["registre", "police", "mairie", "exposant", "identité", "pdf", "excel", "signature"],
+      "liens": [
+        {"libelle": "Ouvrir le registre", "url": "/portail/galerie-registre.php"}
+      ],
+      "tutoriel": "exporter-un-plan"
+    },
+    {
+      "id": "organisateur-bourse",
+      "role": "organisateur",
+      "question": "À quoi sert la bourse d'échanges ?",
+      "reponse": "La bourse permet aux visiteurs de proposer une pièce à la vente et à vous de publier des recherches d'achat (« je recherche des céramiques »). Les réponses arrivent dans la même liste, rattachées à la recherche. C'est un espace d'annonces, distinct des demandes d'emplacement sur le plan.",
+      "mots_cles": ["bourse", "échange", "annonce", "recherche", "proposition", "visiteur", "pièce"],
+      "liens": [
+        {"libelle": "Gérer la bourse", "url": "/portail/galerie-bourse.php"}
+      ]
+    },
+    {
+      "id": "organisateur-export",
+      "role": "organisateur",
+      "question": "Comment exporter la liste des exposants ou le plan ?",
+      "reponse": "Depuis Exposants, utilisez « Exporter (CSV) » pour la liste et « Registre des vendeurs (imprimer) » pour le document. Depuis Registre, vous pouvez télécharger Excel, CSV ou PDF et utiliser « Aperçu avant impression ». Il n'existe pas encore d'export image ou PDF du plan lui-même : utilisez l'impression du navigateur depuis la page publique.",
+      "mots_cles": ["exporter", "plan", "pdf", "csv", "excel", "imprimer", "registre", "liste"],
+      "liens": [
+        {"libelle": "Exposants", "url": "/portail/galerie-exposants.php"},
+        {"libelle": "Registre", "url": "/portail/galerie-registre.php"}
+      ],
+      "tutoriel": "exporter-un-plan"
+    },
+    {
+      "id": "organisateur-file-attente",
+      "role": "organisateur",
+      "question": "Comment gérer la file d'attente et les places voisines ?",
+      "reponse": "La file d'attente est un module : il faut l'activer, que le type de galerie permette les exposants et que les réservations en ligne soient ouvertes (événement publié avec des places, ou plan activé). La page File d'attente permet alors de suivre les demandes et de proposer des places voisines quand une place se libère.",
+      "mots_cles": ["file", "attente", "place voisine", "module", "réservation", "exposant"],
+      "liens": [
+        {"libelle": "Ouvrir la file d'attente", "url": "/portail/galerie-attente.php"}
+      ]
+    },
+    {
+      "id": "visiteur-compte",
+      "role": "visiteur",
+      "question": "Comment créer un compte client ?",
+      "reponse": "Ouvrez /compte.php et choisissez « Créer mon compte ». Indiquez votre nom, votre e-mail et votre téléphone, puis acceptez les conditions. Vous recevez un e-mail pour confirmer votre adresse et choisir votre mot de passe. La création avec un réseau social est aussi proposée ; dans ce cas, seuls votre nom et votre e-mail sont transmis.",
+      "mots_cles": ["compte", "client", "inscription", "mot de passe", "connexion", "réseau social"],
+      "liens": [
+        {"libelle": "Mon compte", "url": "/compte.php"},
+        {"libelle": "Conditions d'utilisation", "url": "/accueil/conditions.php"}
+      ]
+    },
+    {
+      "id": "visiteur-commander",
+      "role": "visiteur",
+      "question": "Comment commander une pièce ?",
+      "reponse": "Ajoutez la pièce au panier, puis ouvrez le panier. Chaque pièce est unique : la quantité est fixée à un exemplaire. Renseignez votre adresse, choisissez la livraison ou le retrait sur place, vérifiez le destinataire si vous offrez la pièce, acceptez les conditions, puis passez à la caisse et payez sur la page sécurisée du prestataire.",
+      "mots_cles": ["commander", "panier", "achat", "livraison", "retrait", "adresse", "paiement", "caisse"],
+      "liens": [
+        {"libelle": "Mon panier", "url": "/cart.php"},
+        {"libelle": "Passer à la caisse", "url": "/checkout.php"}
+      ]
+    },
+    {
+      "id": "visiteur-paiement",
+      "role": "visiteur",
+      "question": "Quels moyens de paiement puis-je utiliser ?",
+      "reponse": "Cela dépend de la boutique : carte bancaire via Stripe ou Monetico, PayPal, Revolut, ou virement SEPA. Vous êtes redirigé vers la page sécurisée du prestataire choisi ; Brocs ne stocke aucune donnée bancaire. Pour un virement SEPA, la commande est réservée et le vendeur confirme la réception du virement.",
+      "mots_cles": ["paiement", "carte", "stripe", "paypal", "revolut", "sepa", "virement", "sécurisé"],
+      "liens": [
+        {"libelle": "Passer à la caisse", "url": "/checkout.php"}
+      ]
+    },
+    {
+      "id": "visiteur-suivi",
+      "role": "visiteur",
+      "question": "Comment suivre ma commande ?",
+      "reponse": "Connectez-vous sur /compte.php et ouvrez « Mes commandes ». Vous y retrouvez le statut, le montant, le mode de livraison et, quand il existe, le numéro de suivi. Les e-mails envoyés par la boutique donnent aussi l'avancement. Pour une question sur une commande précise, contactez directement la boutique.",
+      "mots_cles": ["suivi", "commande", "statut", "colis", "numéro", "livraison", "compte"],
+      "liens": [
+        {"libelle": "Mes commandes", "url": "/compte.php"}
+      ]
+    },
+    {
+      "id": "visiteur-livraison-autre",
+      "role": "visiteur",
+      "question": "Puis-je faire livrer à une autre personne ?",
+      "reponse": "Oui. Dans le panier, cochez « Livrer à une autre adresse ou à une autre personne » et renseignez le nom, le téléphone et l'adresse du destinataire. L'acheteur reste la personne qui paie et qui reçoit la confirmation ; le colis part chez le destinataire indiqué.",
+      "mots_cles": ["livraison", "destinataire", "cadeau", "autre adresse", "proche", "colis"],
+      "liens": [
+        {"libelle": "Mon panier", "url": "/cart.php"}
+      ]
+    },
+    {
+      "id": "visiteur-retour",
+      "role": "visiteur",
+      "question": "Comment annuler ou retourner un achat ?",
+      "reponse": "Contactez d'abord la boutique depuis la page de contact ou depuis la commande. Les règles dépendent du vendeur : un vendeur professionnel applique la garantie légale et, selon le cas, le droit de rétractation de 14 jours ; un particulier vend un objet d'occasion en l'état, décrit dans la fiche, sans ces garanties. Vérifiez le statut du vendeur dans la fiche ou les conditions de la boutique ; en cas de doute, demandez-lui avant d'acheter.",
+      "mots_cles": ["annuler", "retour", "remboursement", "rétractation", "garantie", "occasion", "particulier"],
+      "liens": [
+        {"libelle": "Conditions d'utilisation", "url": "/accueil/conditions.php"},
+        {"libelle": "Mentions légales", "url": "/legal.php"}
+      ]
+    },
+    {
+      "id": "visiteur-installer",
+      "role": "visiteur",
+      "question": "Comment installer la boutique sur mon téléphone ?",
+      "reponse": "Ouvrez la boutique dans le navigateur du téléphone et utilisez le bouton d'installation proposé, ou le menu du navigateur « Ajouter à l'écran d'accueil ». La boutique s'ouvre alors comme une application, sans passer par un magasin. L'installation fonctionne sur une adresse sécurisée (https).",
+      "mots_cles": ["installer", "téléphone", "application", "pwa", "écran d'accueil", "mobile"],
+      "liens": []
+    },
+    {
+      "id": "visiteur-trouver",
+      "role": "visiteur",
+      "question": "Où trouver une boutique, un stand ou un emplacement ?",
+      "reponse": "Utilisez l'annuaire /annuaire/ pour les boutiques, ou ouvrez la page d'une galerie, d'un marché ou d'un vide-grenier pour voir son plan et ses exposants. La page d'accueil propose aussi « Je découvre » et « J'expose » pour partir du besoin : acheter une pièce ou choisir un emplacement.",
+      "mots_cles": ["trouver", "annuaire", "boutique", "stand", "emplacement", "plan", "galerie", "marché"],
+      "liens": [
+        {"libelle": "Annuaire des boutiques", "url": "/annuaire/"},
+        {"libelle": "Trouver un emplacement", "url": "/accueil/#exposer"}
+      ]
+    },
+    {
+      "id": "commune-organiser",
+      "role": "commune",
+      "question": "Une commune peut-elle organiser un vide-grenier ou un marché sur Brocs ?",
+      "reponse": "Oui. Créez une galerie du type vide-grenier ou marché aux puces depuis /galerie/creer.php, dessinez le plan, ouvrez les demandes d'emplacement et publiez la page de l'événement. La commune garde la maîtrise de l'autorisation d'occupation du domaine public et des démarches qui lui incombent.",
+      "mots_cles": ["commune", "organiser", "vide-grenier", "marché", "domaine public", "mairie", "événement"],
+      "liens": [
+        {"libelle": "Organiser un vide-grenier", "url": "/vide-greniers/"},
+        {"libelle": "Gérer un marché aux puces", "url": "/marche-aux-puces/"}
+      ]
+    },
+    {
+      "id": "commune-autorisation",
+      "role": "commune",
+      "question": "La plateforme remplace-t-elle l'autorisation en mairie ?",
+      "reponse": "Non. Brocs gère le plan, les demandes d'emplacement, la page publique et le registre, mais les démarches administratives restent celles de la commune ou de l'organisateur : autorisation d'occupation du domaine public, déclaration éventuelle et assurance. Le registre de police se dépose en mairie dans les 8 jours.",
+      "mots_cles": ["autorisation", "mairie", "domaine public", "déclaration", "assurance", "commune", "registre"],
+      "liens": [
+        {"libelle": "Questions des communes", "url": "/vide-greniers/"},
+        {"libelle": "Registre de police", "url": "/portail/galerie-registre.php"}
+      ]
+    },
+    {
+      "id": "commune-subvention",
+      "role": "commune",
+      "question": "Comment préparer un dossier de subvention ?",
+      "reponse": "Ouvrez /dossier/ et renseignez l'association, le projet, les chiffres et le prestataire. Le générateur prépare la lettre, la note de cadrage, le budget, le calendrier et les pièces à joindre ; vous pouvez prévisualiser puis télécharger l'archive ZIP. Les documents s'impriment en PDF depuis le navigateur. Aucune donnée n'est enregistrée sur le serveur.",
+      "mots_cles": ["subvention", "dossier", "association", "budget", "zip", "pdf", "financement", "commune"],
+      "liens": [
+        {"libelle": "Préparer un dossier", "url": "/dossier/"}
+      ]
+    },
+    {
+      "id": "commune-registre",
+      "role": "commune",
+      "question": "Comment tenir le registre de police de la manifestation ?",
+      "reponse": "Le registre reprend les exposants attribués, leurs références de pièce d'identité et les mentions du code pénal. Téléchargez-le en Excel, CSV ou PDF depuis la page Registre, faites-le signer et parapher avant la manifestation, puis déposez-le en mairie dans les 8 jours. Conservez-le cinq ans après la clôture.",
+      "mots_cles": ["registre", "police", "mairie", "exposant", "signature", "dépôt", "cinq ans"],
+      "liens": [
+        {"libelle": "Ouvrir le registre", "url": "/portail/galerie-registre.php"}
+      ]
+    },
+    {
+      "id": "commune-financement",
+      "role": "commune",
+      "question": "Qui paie l'abonnement d'un quartier marchand ?",
+      "reponse": "L'abonnement est porté par la structure qui anime la page : commune, communauté de communes, union de commerçants ou association. Les commerces n'ont rien à payer pour figurer dans l'annuaire. La mise en place peut être intégrée à un dossier de subvention préparé avec /dossier/.",
+      "mots_cles": ["abonnement", "financement", "quartier marchand", "commune", "union", "association", "subvention"],
+      "liens": [
+        {"libelle": "Créer un quartier marchand", "url": "/quartier-marchand/"},
+        {"libelle": "Dossier de subvention", "url": "/dossier/"}
+      ]
+    },
+    {
+      "id": "commune-impact",
+      "role": "commune",
+      "question": "Comment mesurer l'impact de la démarche ?",
+      "reponse": "Le tableau de bord du quartier marchand permet de suivre le nombre de commerces, les fiches complètes, les abonnés à la lettre et les pièces en ligne. Les promotions communes et la lettre d'information donnent aussi des relais réguliers aux habitants. Les chiffres se lisent dans le temps, pas sur une seule semaine.",
+      "mots_cles": ["impact", "mesure", "tableau de bord", "statistiques", "commerces", "abonnés", "lettre"],
+      "liens": [
+        {"libelle": "Le quartier marchand", "url": "/quartier-marchand/"}
+      ]
+    },
+    {
+      "id": "commune-commerces",
+      "role": "commune",
+      "question": "Comment ajouter les commerces du quartier ?",
+      "reponse": "Les commerces peuvent être ajoutés et complétés depuis l'espace de la galerie ou de l'annuaire, puis chaque commerce gère lui-même sa fiche et ses horaires. La découverte automatique des commerces d'une rue (Google Places) n'est pas encore disponible dans l'interface : elle reste un chantier du backlog.",
+      "mots_cles": ["ajouter", "commerce", "annuaire", "fiche", "google places", "découverte", "rue"],
+      "liens": [
+        {"libelle": "Annuaire", "url": "/annuaire/"}
+      ]
+    },
+    {
+      "id": "commune-communication",
+      "role": "commune",
+      "question": "Comment communiquer auprès des habitants ?",
+      "reponse": "La page du quartier marchand sert de point d'entrée : commerces, promotions communes et lettre d'information. Les habitants peuvent s'abonner à la lettre, et les commerces relaient les opérations depuis leur propre page. Évitez d'annoncer un service que la plateforme ne rend pas encore : n'écrivez que ce qui est réellement actif.",
+      "mots_cles": ["communication", "habitants", "lettre", "promotion", "abonnement", "quartier"],
+      "liens": [
+        {"libelle": "Le quartier marchand", "url": "/quartier-marchand/"}
+      ]
+    },
+    {
+      "id": "tous-support",
+      "role": "tous",
+      "question": "Comment contacter le support ?",
+      "reponse": "Cherchez d'abord dans ce centre d'aide : la recherche et le chatbot répondent à partir des mêmes fiches. Si la réponse manque, le chatbot vous renvoie vers l'adresse de contact affichée dans le pied de page du site. Dans l'administration, le widget d'assistance peut aussi ouvrir un message directement.",
+      "mots_cles": ["support", "contact", "aide", "chatbot", "e-mail", "assistance", "problème"],
+      "liens": [
+        {"libelle": "Centre d'aide", "url": "/aide/"}
+      ]
+    },
+    {
+      "id": "tous-conditions",
+      "role": "tous",
+      "question": "Où lire les conditions d'utilisation et la confidentialité ?",
+      "reponse": "Les conditions d'utilisation sont sur /accueil/conditions.php et les mentions légales sur /legal.php. La politique de confidentialité est liée depuis la création de compte et le panier. Les conditions générales de vente de chaque boutique sont acceptées au moment du paiement.",
+      "mots_cles": ["conditions", "cgv", "confidentialité", "mentions légales", "données", "contrat"],
+      "liens": [
+        {"libelle": "Conditions d'utilisation", "url": "/accueil/conditions.php"},
+        {"libelle": "Mentions légales", "url": "/legal.php"}
+      ]
+    },
+    {
+      "id": "tous-mobile",
+      "role": "tous",
+      "question": "Brocs fonctionne-t-il sur téléphone ?",
+      "reponse": "Oui : les pages publiques, le panier, le compte et les administrations sont utilisables sur téléphone. Les boutiques et l'espace visiteur peuvent s'installer sur l'écran d'accueil, et le Studio est conçu d'abord pour le téléphone. La caméra du Studio exige une adresse sécurisée (https).",
+      "mots_cles": ["téléphone", "mobile", "responsive", "application", "pwa", "studio", "tablette"],
+      "liens": [
+        {"libelle": "Ouvrir le Studio", "url": "/studio.php"}
+      ]
+    }
+  ]
+}

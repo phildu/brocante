@@ -114,9 +114,11 @@ function db(): PDO
         // Prise de vue depuis un téléphone proche (codes QR) : tables créées si besoin.
         require_once __DIR__ . '/includes/capture.php';
         capture_ensure_schema($pdo);
-        // Consommation de l'IA (coûts estimés, solde).
+        // Consommation de l'IA (coûts estimés, solde) et notation des résultats par les testeurs.
         require_once __DIR__ . '/includes/ai-usage.php';
         ai_usage_ensure_schema($pdo);
+        require_once __DIR__ . '/includes/ai-rating.php';
+        ai_rating_ensure_schema($pdo);
         // Vidéos IA (Veo) en cours de génération.
         require_once __DIR__ . '/includes/veo.php';
         veo_ensure_schema($pdo);
@@ -140,6 +142,12 @@ function db(): PDO
         if ($contentColumns && !in_array('pickup_only_below', $contentColumns, true)) {
             $pdo->exec("ALTER TABLE content ADD COLUMN pickup_only_below TEXT NOT NULL DEFAULT '10'");
             $pdo->exec("ALTER TABLE content ADD COLUMN pickup_only_message TEXT NOT NULL DEFAULT 'Retrait à l''adresse du vendeur.'");
+        }
+        // Emballage cadeau proposé au panier (voir gift_wrap_enabled()).
+        foreach (['gift_wrap_enabled' => "TEXT NOT NULL DEFAULT '0'", 'gift_wrap_price' => "TEXT NOT NULL DEFAULT ''", 'gift_wrap_label' => "TEXT NOT NULL DEFAULT 'Emballage cadeau'"] as $giftColumn => $giftDefinition) {
+            if ($contentColumns && !in_array($giftColumn, $contentColumns, true)) {
+                $pdo->exec('ALTER TABLE content ADD COLUMN ' . $giftColumn . ' ' . $giftDefinition);
+            }
         }
         // Remises du panier : paliers par total ou par nombre d'articles (voir cart_discount_for()).
         $pdo->exec(<<<'SQL'
@@ -171,6 +179,12 @@ SQL);
                   'lot_qty' => 'INTEGER NOT NULL DEFAULT 1',
                   'channels' => 'TEXT', 'sold_channel' => 'TEXT', 'sold_at' => 'TEXT', 'restocked_at' => 'TEXT',
                   'keep_when_sold' => 'INTEGER NOT NULL DEFAULT 0'] as $extraColumn => $extraType) {
+            if ($productColumns && !in_array($extraColumn, $productColumns, true)) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN ' . $extraColumn . ' ' . $extraType);
+            }
+        }
+        // Réassort possible : délai et prix indicatifs affichés sur la fiche (voir product_restock_line_html()).
+        foreach (['restock_possible' => 'INTEGER NOT NULL DEFAULT 0', 'restock_delay' => 'TEXT', 'restock_price' => 'TEXT'] as $extraColumn => $extraType) {
             if ($productColumns && !in_array($extraColumn, $productColumns, true)) {
                 $pdo->exec('ALTER TABLE products ADD COLUMN ' . $extraColumn . ' ' . $extraType);
             }

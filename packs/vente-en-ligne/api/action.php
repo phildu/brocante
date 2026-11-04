@@ -221,20 +221,23 @@ switch ($action) {
         }
         if ($secret === '' && $publishable === '') vel_fail('Aucune clé fournie — rien n\'a été changé.');
 
-        if (!is_dir(SECRETS_DIR)) mkdir(SECRETS_DIR, 0700, true);
-        if ($secret !== '') {
-            file_put_contents(SECRETS_DIR . '/stripe_secret.key', $secret);
-            chmod(SECRETS_DIR . '/stripe_secret.key', 0600);
+        // Mode choisi dans le formulaire, sinon déduit du préfixe de la clé
+        // collée (une clé sk_test_ collée pendant le mode réel bascule la
+        // boutique en test, et inversement).
+        $mode = (string) ($in['stripe_mode'] ?? '');
+        if (!isset(STRIPE_MODES[$mode])) {
+            $mode = stripe_key_mode($secret !== '' ? $secret : $publishable);
         }
-        if ($publishable !== '') {
-            file_put_contents(SECRETS_DIR . '/stripe_publishable.key', $publishable);
-            chmod(SECRETS_DIR . '/stripe_publishable.key', 0600);
-        }
-        if ($swapped) {
-            vel_done('Vos deux clés étaient inversées (secrète/publiable) — corrigé automatiquement et enregistré.');
-        }
-        $warn = ($secret !== '' && !str_starts_with($secret, 'sk_')) || ($publishable !== '' && !str_starts_with($publishable, 'pk_'));
-        vel_done('Clés Stripe enregistrées.' . ($warn ? ' Attention : une des deux ne commence pas par le préfixe attendu (sk_/pk_), vérifiez le dashboard Stripe.' : ''));
+        if (!isset(STRIPE_MODES[$mode])) $mode = stripe_mode_current(SECRETS_DIR);
+
+        [$ok, $message] = stripe_mode_save($mode, ['secret' => $secret, 'publishable' => $publishable], SECRETS_DIR);
+        if (!$ok) vel_fail($message);
+        // Le mode du formulaire devient le mode actif : le choix est explicite.
+        [$activated, $activationMessage] = stripe_mode_activate($mode, SECRETS_DIR);
+        if (!$activated) vel_fail($activationMessage);
+        $message = $activationMessage;
+        if ($swapped) $message .= ' Vos deux clés étaient inversées (secrète/publiable) : corrigé automatiquement.';
+        vel_done($message);
     }
 
     case 'save_content': {

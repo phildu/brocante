@@ -26,8 +26,9 @@ $flHours = trim((string) ($flContent['contact_hours'] ?? ''));
         <p class="fl-nav-kicker">Sommaire</p>
         <a class="fl-nav-big" href="/index.php"<?= $activeNav === 'accueil' ? ' aria-current="page"' : '' ?>><span>I.</span> Accueil</a>
         <a class="fl-nav-big" href="/boutique.php"<?= $activeNav === 'boutique' ? ' aria-current="page"' : '' ?>><span>II.</span> La collection</a>
-        <a class="fl-nav-big" href="/index.php#histoire"><span>III.</span> La maison</a>
-        <a class="fl-nav-big" href="/index.php#contact"><span>IV.</span> Nous trouver</a>
+        <a class="fl-nav-big" href="/notre-histoire.php"<?= $activeNav === 'histoire' ? ' aria-current="page"' : '' ?>><span>III.</span> La maison</a>
+        <a class="fl-nav-big" href="/nous-trouver.php"<?= $activeNav === 'nous-trouver' ? ' aria-current="page"' : '' ?>><span>IV.</span> Nous trouver</a>
+        <a class="fl-nav-big" href="/visite.php"<?= $activeNav === 'visite' ? ' aria-current="page"' : '' ?>><span>V.</span> Visite virtuelle</a>
       </div>
       <div class="fl-nav-cats">
         <p class="fl-nav-kicker">Rayons</p>

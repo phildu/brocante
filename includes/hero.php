@@ -67,7 +67,7 @@ function shop_hero_ctas(array $content, bool $light = false): string
     $share = share_page_button((string) ($content['site_name'] ?: tenant('name')), (string) ($content['hero_subtitle'] ?? ''));
     return '<div class="hero-ctas shop-hero-ctas">'
         . '<a class="btn btn-primary" href="/boutique.php">Voir la boutique</a>'
-        . '<a class="btn btn-ghost" href="#histoire">Notre histoire</a>'
+        . '<a class="btn btn-ghost" href="/notre-histoire.php">Notre histoire</a>'
         . '<span class="shop-hero-share' . ($light ? ' is-light' : '') . '">' . $share . '</span>'
         . '</div>';
 }

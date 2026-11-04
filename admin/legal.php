@@ -43,6 +43,16 @@ $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
   .addr-suggestion strong { display: block; font-weight: 600; }
   .addr-suggestion span { display: block; font-size: .8rem; opacity: .75; }
   .addr-suggestion:hover, .addr-suggestion.is-active { background: var(--surface-2, #eee9e0); }
+  .lg-point { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .lg-point h3 { margin: 0 0 4px; font-size: 1.05rem; }
+  .lg-point-map { height: 300px; margin: 12px 0 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); overflow: hidden; z-index: 0; }
+  .lg-point-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .lg-point-tools .hint { flex-basis: 100%; margin: 2px 0 0; }
+  .lg-point-status { margin: 8px 0 0; font-size: .85rem; color: var(--ink-soft); }
+  .lg-point-status[data-kind="ok"] { color: #1c5a2c; }
+  .lg-point-status[data-kind="error"] { color: #8a1c1c; }
+  .lg-point .shop-locate-pin { width: 26px; height: 26px; border-radius: 50%; border: 3px solid #fff; background: var(--accent, #b5502e); box-shadow: 0 2px 8px rgba(0,0,0,.45); }
+  .lg-point .leaflet-container { font: inherit; background: var(--surface, #eee); }
 </style>
 </head>
 <body>
@@ -71,7 +81,7 @@ $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
       <p class="hint">Ces informations remplissent les modèles (et les mentions légales). Elles sont publiques. Elles se règlent aussi depuis l'administration du portail (Pages légales du commerce). L'hébergeur par défaut (OVH) est commun aux commerces et se règle dans le portail.</p>
       <div class="lg-grid">
         <?php foreach (LEGAL_FIELDS as $key => [$label, $help]): $value = legal_get($key) !== '' ? legal_get($key) : ($key === 'withdrawal' ? '' : ($id[$key] ?? '')); ?>
-          <label><?= h($label) ?>
+          <label<?= in_array($key, ['company', 'address', 'address_extra', 'access', 'host', 'mediator'], true) ? ' class="full"' : '' ?>><?= h($label) ?>
             <input type="<?= $key === 'withdrawal' ? 'number' : ($key === 'email' ? 'email' : 'text') ?>" name="<?= h($key) ?>" value="<?= h($value) ?>"<?= $key === 'address' ? ' data-address-autocomplete autocomplete="street-address"' : '' ?><?= $key === 'email' ? ' autocomplete="email" spellcheck="false"' : '' ?><?= $key === 'phone' ? ' inputmode="tel" autocomplete="tel"' : '' ?><?= $key === 'withdrawal' ? ' min="0" max="60" placeholder="14"' : '' ?> maxlength="300">
             <small><?= h($help) ?></small>
             <?php if ($key === 'mediator'): ?>
@@ -79,6 +89,19 @@ $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
             <?php endif; ?>
           </label>
         <?php endforeach; ?>
+      </div>
+      <?php $point = legal_point(); ?>
+      <div class="lg-point" data-locate-picker data-tiles="<?= h(SHOP_LOCATE_TILE_PLAN) ?>" data-geocode-url="<?= h(SHOP_LOCATE_GEOCODE_URL) ?>">
+        <h3>Point exact sur la carte <span class="hint" style="font-weight:400;">— facultatif</span></h3>
+        <p class="hint">Utile quand plusieurs commerces partagent la même adresse (galerie, marché couvert, brocante village). Cliquez sur votre porte ou votre local : l'épingle, l'itinéraire, les liens Google Maps et Plans et la fiche <code>.vcf</code> viseront ce point et non l'entrée du site.</p>
+        <div class="lg-point-map" data-picker-map aria-label="Carte IGN pour placer le point exact du commerce"></div>
+        <div class="lg-point-tools">
+          <input type="hidden" name="point_lat" value="<?= $point['lat'] !== null ? h(number_format($point['lat'], 6, '.', '')) : '' ?>" data-picker-lat>
+          <input type="hidden" name="point_lng" value="<?= $point['lng'] !== null ? h(number_format($point['lng'], 6, '.', '')) : '' ?>" data-picker-lng>
+          <button type="button" class="btn" data-picker-center>Centrer sur l'adresse</button>
+          <button type="button" class="btn" data-picker-clear>Effacer le point</button>
+          <p class="lg-point-status" data-picker-status role="status"<?= $point['lat'] !== null ? ' data-kind="ok"' : '' ?>><?= $point['lat'] !== null ? 'Point enregistré : ' . h(number_format($point['lat'], 6, '.', '') . ', ' . number_format($point['lng'], 6, '.', '')) . ' — Enregistrer l\'identité pour conserver les changements.' : 'Aucun point précis : la carte et l\'itinéraire utiliseront l\'adresse du site.' ?></p>
+        </div>
       </div>
       <p class="lg-actions"><button type="submit" class="btn btn-primary">Enregistrer l'identité</button></p>
     </form>
@@ -108,5 +131,6 @@ $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
 </section>
 </main>
 <script src="/assets/address-autocomplete.js?v=1" defer></script>
+<script src="/assets/locate-picker.js?v=1" defer></script>
 </body>
 </html>

@@ -1,7 +1,8 @@
 <?php
-// Pages d'atterrissage par type de galerie : /vide-greniers/, /marche-aux-puces/, /galerie-marchande/, /quartier-marchand/.
-// Un message par acheteur (organisateur, placier, galerie, commune) ; les tarifs et le nombre de membres sont lus dans le type
-// (includes/gallery-types.php) pour ne jamais afficher un prix périmé. Le gabarit est partagé, le texte vient de chaque page.
+// Pages d'atterrissage par type de galerie : /vide-greniers/, /marche-aux-puces/, /galerie-marchande/, /quartier-marchand/,
+// /marche-de-noel/, /marche-producteurs/. Un message par acheteur (organisateur, placier, galerie, commune) ; les tarifs et le
+// nombre de membres sont lus dans le type (includes/gallery-types.php) pour ne jamais afficher un prix périmé. Le gabarit est
+// partagé, le texte vient de chaque page.
 
 require_once __DIR__ . '/saas.php';
 require_once __DIR__ . '/galleries.php';
@@ -49,12 +50,11 @@ function lp_render(array $p): void
     foreach ($live as $g) $members += count($g['members'] ?? []);
     $accent = (string) ($p['accent'] ?? '#b5502e');
     $ink = saas_ink_on($accent);
-    $siblings = [
-        'vide-grenier' => ['/vide-greniers/', 'Vide-grenier', '🪑'],
-        'puces' => ['/marche-aux-puces/', 'Marché aux puces', '🧺'],
-        'marchande' => ['/galerie-marchande/', 'Galerie marchande', '🏬'],
-        'quartier' => ['/quartier-marchand/', 'Quartier marchand', '🏘️'],
-    ];
+    $siblings = [];
+    foreach (gt_types() as $siblingKey => $siblingType) {
+        $siblingMeta = gt_landing_meta((string) $siblingKey);
+        if ($siblingMeta) $siblings[$siblingKey] = [$siblingMeta['path'], $siblingType['name'], $siblingType['emoji']];
+    }
     $eur = static fn (int $cents): string => saas_money($cents);
 
     saas_page_start($p['title'], $p['description']);

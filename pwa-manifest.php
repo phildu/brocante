@@ -3,25 +3,30 @@
 require_once __DIR__ . '/includes/tenant.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/studio-theme.php';
+require_once __DIR__ . '/includes/apps.php';
 
 $theme = studio_theme_colors();
-$site = trim((string) get_content()['site_name']) ?: (string) tenant('name');
 $tag = trim((string) get_content()['site_tagline']) ?: (string) tenant('tagline');
 $base = tenant_base_path();
-// Nom court sous l'icône : 14 caractères au plus, sans couper un mot.
-$short = mb_strlen($site) > 14 ? mb_substr($site, 0, 14) : $site;
-if (mb_strlen($site) > 14 && ($sp = mb_strrpos($short, ' ')) > 3) $short = mb_substr($short, 0, $sp);
+// Nom affiché sous l'icône : personnalisé dans Administration → Réglages du site, sinon le nom de la boutique.
+$name = shop_app_name('shop');
 header('Content-Type: application/manifest+json; charset=utf-8');
-header('Cache-Control: public, max-age=3600');
+header('Cache-Control: public, max-age=300');
 echo json_encode([
-    'name' => $site,
-    'short_name' => $short,
+    'id' => app_manifest_id('shop', $base),
+    'name' => $name,
+    'short_name' => app_short_name($name, 14),
     'description' => $tag,
     'lang' => 'fr',
-    'id' => $base . '/',
+    'dir' => 'ltr',
     'start_url' => $base . '/?source=webapp',
     'scope' => $base . '/',
     'display' => 'standalone',
+    'display_override' => ['standalone', 'minimal-ui'],
+    'orientation' => 'any',
+    'categories' => ['shopping', 'lifestyle'],
+    'prefer_related_applications' => false,
+    'related_applications' => [],
     'background_color' => $theme['bg'],
     'theme_color' => $theme['bg'],
     'icons' => [

@@ -1,6 +1,9 @@
 <?php
+require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/share.php';
+require_once __DIR__ . '/includes/recommendations.php';
+require_once __DIR__ . '/includes/shop-qr.php';
 
 $ref = (string) ($_GET['ref'] ?? '');
 $product = get_product($ref);
@@ -16,8 +19,9 @@ if (!$product) {
 }
 
 $gallery = product_gallery($product);
-$related = array_filter(get_products($product['cat']), fn($p) => $p['ref'] !== $product['ref']);
-$related = array_slice(array_values($related), 0, 3);
+rec_track_product_view($product['ref']);
+$related = rec_similar_products($product, 3);
+$relatedHeading = rec_related_heading($product);
 
 $activeNav = 'boutique';
 $pageTitle = $product['name'];
@@ -28,6 +32,8 @@ $ogImage = shop_cover($product, $gallery) ?: null;
 $ogDescription = trim((shop_sales_enabled() && $product['price'] !== '' ? $product['price'] . ' — ' : '') . mb_substr(trim(preg_replace('/\s+/', ' ', (string) $product['description'])), 0, 200));
 include __DIR__ . '/includes/header.php';
 $shareBtn = share_button_html($ogUrl, $product['name'] . ' — ' . $siteName, $ogDescription, $ogImage ? share_media_url($ogImage) : '');
+// Carte « Payer avec son téléphone » : le client scanne le code depuis la boutique.
+$qrHtml = product_qr_html($product);
 
 // Prix et boutons d'achat, rendus deux fois : dans la fiche, et dans la barre collée en haut sur smartphone.
 $priceHtml = !shop_sales_enabled() ? '' : (has_promo_price($product)
@@ -144,6 +150,7 @@ if ($view = shop_view('product')) {
         <?= $buyHtml() ?>
       </div>
       <p class="share-row" style="margin:14px 0 0;"><?= $shareBtn ?></p>
+      <?= $qrHtml ?>
     </div>
   </div>
 </section>
@@ -152,8 +159,8 @@ if ($view = shop_view('product')) {
 <section class="tight">
   <div class="wrap">
     <div class="section-head">
-      <p class="eyebrow">Dans le même univers</p>
-      <h2 style="font-size:1.5rem;">Autres pièces en <?= h(mb_strtolower(category_label($product['cat']))) ?></h2>
+      <p class="eyebrow"><?= h($relatedHeading['eyebrow']) ?></p>
+      <h2 style="font-size:1.5rem;"><?= h($relatedHeading['title']) ?></h2>
     </div>
     <div class="grid-products">
       <?php foreach ($related as $i => $p) echo product_card_html($p, $i); ?>

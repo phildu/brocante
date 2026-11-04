@@ -18,6 +18,7 @@ $fields = [
     'contact_delivery',
     'shipping_fee', 'pickup_label', 'shipping_label',
     'pickup_only_below', 'pickup_only_message',
+    'gift_wrap_enabled', 'gift_wrap_price', 'gift_wrap_label',
 ];
 
 $set = [];
@@ -34,6 +35,15 @@ $params['pickup_only_below'] = (is_numeric($seuil) && (float) $seuil >= 0 && (fl
     : '10';
 if ($params['pickup_only_below'] === '') $params['pickup_only_below'] = '0';
 if ($params['pickup_only_message'] === '') $params['pickup_only_message'] = "Retrait à l'adresse du vendeur.";
+
+// Emballage cadeau : case à cocher (absente = désactivé), prix >= 0 (vide = offert), libellé par défaut.
+$params['gift_wrap_enabled'] = !empty($_POST['gift_wrap_enabled']) ? '1' : '0';
+$giftPrice = str_replace(',', '.', $params['gift_wrap_price']);
+$params['gift_wrap_price'] = (is_numeric($giftPrice) && (float) $giftPrice >= 0 && (float) $giftPrice < 100000)
+    ? rtrim(rtrim(number_format((float) $giftPrice, 2, '.', ''), '0'), '.')
+    : '0';
+if ($params['gift_wrap_price'] === '') $params['gift_wrap_price'] = '0';
+if ($params['gift_wrap_label'] === '') $params['gift_wrap_label'] = 'Emballage cadeau';
 
 // Un fichier envoyé prime sur une sélection médiathèque (le JS vide déjà
 // l'input file quand on choisit dans la médiathèque, mais on reste défensif).

@@ -2,6 +2,7 @@
 // Espace visiteur de la galerie (web app installable) : fidélité propre à la galerie, indépendante des boutiques. Voir includes/gallery-loyalty.php.
 //   GET  ?g=<galerie>[&t=<jeton>][&s=<lieu.code>]  la page ; GET ?g=<galerie>&manifest=1  le manifeste d'installation
 //   POST JSON {g, action: login | me | scan | redeem | forget, token…}  l'API de la page
+require_once __DIR__ . '/../includes/apps.php';
 require_once __DIR__ . '/../includes/gallery-offers.php';
 require_once __DIR__ . '/../includes/gallery-loyalty.php';
 require_once __DIR__ . '/../includes/gallery-locate.php';
@@ -47,13 +48,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $reply(['error' => 'Action inconnue.'], 400);
 }
 
-if (isset($_GET['manifest'])) {                // manifeste : nom et icône de la galerie, ouverture sur l'espace visiteur
+if (isset($_GET['manifest'])) {                // manifeste : nom personnalisable (galerie → nom des applications) et icône de la galerie
     header('Content-Type: application/manifest+json; charset=utf-8');
-    $name = $gallery ? $gallery['name'] : 'Galerie';
-    $logo = $gallery ? (string) ($gallery['style']['logo'] ?? '') : '';
-    echo json_encode(['name' => $name . ' — espace visiteur', 'short_name' => mb_substr($name, 0, 12), 'start_url' => '/galerie/visiteur.php?g=' . $slug, 'scope' => '/galerie/', 'display' => 'standalone',
-        'background_color' => '#ffffff', 'theme_color' => $gallery['accent'] ?? '#2f6b4f',
-        'icons' => $logo !== '' ? [['src' => '/' . ltrim($logo, '/'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any']] : []], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    header('Cache-Control: public, max-age=300');
+    if (!$gallery) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Galerie introuvable.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $name = gallery_app_name($gallery, 'gallery_visitor');
+    $accent = preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($gallery['accent'] ?? '')) ? $gallery['accent'] : '#2f6b4f';
+    $icon = '/galerie/icon.php?g=' . rawurlencode($slug);
+    echo json_encode([
+        'id' => app_manifest_id('gallery_visitor', '', $slug),
+        'name' => $name,
+        'short_name' => app_short_name($name, 14),
+        'description' => trim((string) ($gallery['tagline'] ?? '')) ?: 'Programme de fidélité et plan des lieux de la galerie.',
+        'lang' => 'fr',
+        'dir' => 'ltr',
+        'start_url' => '/galerie/visiteur.php?g=' . rawurlencode($slug) . '&source=webapp',
+        'scope' => '/galerie/',
+        'display' => 'standalone',
+        'display_override' => ['standalone', 'minimal-ui'],
+        'orientation' => 'any',
+        'categories' => ['shopping', 'lifestyle'],
+        'prefer_related_applications' => false,
+        'related_applications' => [],
+        'background_color' => '#ffffff',
+        'theme_color' => $accent,
+        'icons' => [
+            ['src' => $icon . '&s=192', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+            ['src' => $icon . '&s=512', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+            ['src' => $icon . '&s=192', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'maskable'],
+            ['src' => $icon . '&s=512', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+        ],
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
@@ -76,6 +105,7 @@ if (isset($_COOKIE[session_name()])) {          // message laissé par la connex
 }
 $accent = preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($gallery['accent'] ?? '')) ? $gallery['accent'] : '#2f6b4f';
 $ink = (0.299 * hexdec(substr($accent, 1, 2)) + 0.587 * hexdec(substr($accent, 3, 2)) + 0.114 * hexdec(substr($accent, 5, 2))) > 160 ? '#1f1f1f' : '#ffffff';
+$visitorAppName = gallery_app_name($gallery, 'gallery_visitor');
 $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug, 'program' => $s['program_name'], 'galleryUrl' => '/galerie/' . $slug . '/',
     'loyalty' => $loyalty, 'loc' => $loc, 'accent' => $accent, 'memberPlural' => (string) ($vocab['members'] ?? 'Commerces')];
 ?><!doctype html>
@@ -85,9 +115,12 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="<?= $h($accent) ?>">
 <link rel="manifest" href="/galerie/visiteur.php?g=<?= $h($slug) ?>&manifest=1">
-<?php $pwaLogo = (string) ($gallery['style']['logo'] ?? ''); ?>
-<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto data-delay="2200" data-key="gl-visiteur-<?= $h($slug) ?>" data-name="<?= $h(($loyalty ? $s['program_name'] . ' — ' : '') . $gallery['name']) ?>"<?php if ($pwaLogo !== ''): ?> data-icon="<?= $h('/' . ltrim($pwaLogo, '/')) ?>"<?php endif; ?> data-accent="<?= $h($accent) ?>" data-sw="/galerie/pwa-sw.php" data-scope="/galerie/"></script>
-<title><?= $h($loyalty ? $s['program_name'] . ' — ' . $gallery['name'] : 'Espace visiteur — ' . $gallery['name']) ?></title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="<?= $h(app_short_name($visitorAppName, 14)) ?>">
+<link rel="apple-touch-icon" href="/galerie/icon.php?g=<?= $h($slug) ?>&amp;s=180">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto data-delay="2200" data-key="gl-visiteur-<?= $h($slug) ?>" data-name="<?= $h($visitorAppName) ?>" data-icon="/galerie/icon.php?g=<?= $h($slug) ?>" data-accent="<?= $h($accent) ?>" data-sw="/galerie/pwa-sw.php" data-scope="/galerie/"></script>
+<title><?= $h(($loyalty ? $s['program_name'] . ' — ' : '') . $visitorAppName) ?></title>
 <link rel="stylesheet" href="/assets/oauth.css">
 <style>
   :root { --a: <?= $h($accent) ?>; --ai: <?= $h($ink) ?>; --line: #ddd; --soft: #666; }
@@ -116,7 +149,7 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
 </style>
 </head>
 <body>
-<header><div class="in"><p>Espace visiteur</p><h1><?= $h($loyalty ? $s['program_name'] . ' · ' . $gallery['name'] : $gallery['name']) ?></h1></div></header>
+<header><div class="in"><p>Espace visiteur</p><h1><?= $h($loyalty ? $s['program_name'] . ' · ' . $visitorAppName : $visitorAppName) ?></h1></div></header>
 <main id="app" data-cfg="<?= $h(json_encode($cfg, JSON_UNESCAPED_SLASHES)) ?>">
   <?php if ($loyalty && $s['intro'] !== ''): ?><p class="soft"><?= $h($s['intro']) ?></p><?php endif; ?>
   <p class="msg<?= $flashErr !== '' ? ' err' : '' ?>" id="msg" role="status"><?= $h($flashErr) ?></p>

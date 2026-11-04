@@ -27,6 +27,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         exit;
     }
+    if ((string) ($_POST['action'] ?? '') === 'stylize') {   // fond stylisé : capture WMS de la vue, retouche Gemini image, sauvé comme fond importé
+        header('Content-Type: application/json; charset=utf-8');
+        require_once PORTAIL_ROOT . '/includes/gallery-ai-map.php';
+        @set_time_limit(90);
+        $view = json_decode((string) ($_POST['view'] ?? ''), true);
+        try {
+            $out = gallery_ai_map_stylize(is_array($view) ? $view : [], (string) ($_POST['base'] ?? 'osm'),
+                (string) ($_POST['style'] ?? 'aquarelle'), $gaSlug);
+        } catch (Throwable $e) {
+            $out = ['ok' => false, 'error' => $e->getMessage()];
+        }
+        echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    if ((string) ($_POST['action'] ?? '') === 'export') {   // impression haute résolution : PDF (300 dpi) ou PSD (InDesign/Photoshop)
+        require_once PORTAIL_ROOT . '/includes/gallery-plan-export.php';
+        @set_time_limit(120);
+        $raw = json_decode((string) ($_POST['map'] ?? ''), true);
+        $expMap = is_array($raw) ? gallery_map_normalize($raw, $memberKeys, gt_locations($gaGallery)) : $gaGallery['map'];
+        $pages = gpx_pages();
+        $pageKey = (string) ($_POST['page'] ?? 'a4');
+        if (!is_array($expMap) || !isset($pages[$pageKey])) { http_response_code(400); exit; }
+        try {
+            $img = gpx_render($gaGallery, $expMap, $pageKey);
+            $fileSlug = preg_replace('/[^a-z0-9-]+/', '-', strtolower((string) $gaSlug));
+            if ((string) ($_POST['format'] ?? 'pdf') === 'psd') {
+                $bin = gpx_psd($img, GPX_DPI);
+                header('Content-Type: image/vnd.adobe.photoshop');
+                header('Content-Disposition: attachment; filename="' . $fileSlug . '-plan-' . $pageKey . '.psd"');
+            } else {
+                [$pxW, $pxH] = $pages[$pageKey]['px'];
+                $bin = gpx_pdf(gpx_jpeg($img), $pxW, $pxH, $pages[$pageKey]['pt']);
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: attachment; filename="' . $fileSlug . '-plan-' . $pageKey . '.pdf"');
+            }
+            header('Content-Length: ' . strlen($bin));
+            echo $bin;
+        } catch (Throwable $e) {
+            http_response_code(500);
+        }
+        exit;
+    }
     if ((string) ($_POST['action'] ?? '') === 'discover') {   // analyse du site : zones proposées d'après la BD TOPO IGN
         header('Content-Type: application/json; charset=utf-8');
         require_once PORTAIL_ROOT . '/includes/gallery-discovery.php';
@@ -91,7 +133,7 @@ foreach (gt_locations($gaGallery) as $loc) {
 }
 foreach (GALLERY_ZONE_TYPES as $zk => $zl) if (!isset($zoneTypes[$zk])) $zoneTypes[$zk] = $zl;
 $payload = ['map' => $map, 'shops' => $names, 'zoneTypes' => $zoneTypes, 'locationDefaults' => $locationDefaults, 'features' => gt_of($gaGallery)['features'],
-    'usages' => GALLERY_USAGES, 'flows' => GALLERY_FLOWS,
+    'usages' => GALLERY_USAGES, 'flows' => GALLERY_FLOWS, 'aiMap' => portail_gemini_key() !== '',
     'tiles' => ['osm' => GALLERY_MAP_TILE_PLAN, 'sat' => GALLERY_MAP_TILE_SAT]];
 $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 $priceUnits = GALLERY_PRICE_UNITS;
@@ -268,6 +310,26 @@ ga_head('Plan des commerces');
           <select id="baseSel" style="flex:none;min-width:0;"><option value="osm">Plan (IGN)</option><option value="sat">Satellite (IGN)</option></select></label>
         <label class="row" style="gap:6px;" title="N'affiche que votre dessin, sur une grille : utile pour un plan intérieur ou quand le fond gêne la lecture."><input type="checkbox" id="hideBase"> Masquer le fond de carte (plan seul)</label>
         <span class="meta" id="mode" role="status"></span>
+      </div>
+      <div class="row" id="aiRow">
+        <label class="row" style="gap:6px;">Fond stylisé par l'IA
+          <select id="aiStyle" style="flex:none;min-width:0;">
+            <option value="aquarelle">Aquarelle douce</option>
+            <option value="croquis">Croquis d'architecte</option>
+            <option value="retro">Affiche rétro</option>
+            <option value="bd">BD franco-belge</option>
+          </select></label>
+        <button class="btn mini" type="button" id="aiGo" title="Capture la vue actuelle du fond IGN, la fait redessiner par l'IA, puis la pose comme fond importé calé à l'échelle. Chaque stylisation consomme un crédit IA.">Capturer et styliser</button>
+        <span class="meta" id="aiMsg" role="status" style="flex:1 1 180px;min-width:0;"></span>
+      </div>
+      <div class="row" id="exportRow">
+        <span class="row" style="gap:6px;" title="Exporte le plan tel qu'il est à l'écran, en 300 dpi : PDF prêt à imprimer, ou PSD avec calque d'image calé pour InDesign/Photoshop.">
+          Export impression
+          <select id="expFmt" style="flex:none;min-width:0;"><option value="pdf">PDF</option><option value="psd">PSD (InDesign/Photoshop)</option></select>
+          <select id="expPage" style="flex:none;min-width:0;"><option value="a4">A4 paysage</option><option value="a3">A3 paysage</option></select>
+        </span>
+        <button class="btn mini" type="button" id="expGo">Exporter</button>
+        <span class="meta" id="expMsg" role="status" style="flex:1 1 180px;min-width:0;"></span>
       </div>
       <details id="advancedTools">
         <summary>Fond importé et rotation de la carte</summary>
@@ -606,6 +668,39 @@ ga_head('Plan des commerces');
       $('bgOpacity').addEventListener('input', function () { if (bg) { bg.opacity = parseFloat(this.value); if (bgLayer) bgLayer.setOpacity(bg.opacity); } });
       $('bgMove').addEventListener('change', renderBg);
       renderBg();
+
+      // --- Fond stylisé par l'IA : la vue courante est capturée (WMS IGN), redessinée par Gemini, puis posée comme fond importé ---
+      (function () {
+        var btn = $('aiGo'), msg = $('aiMsg'), sel = $('aiStyle');
+        if (!data.aiMap) {
+          btn.disabled = true; sel.disabled = true;
+          msg.textContent = 'Clé IA absente : voir Fournisseurs IA.';
+        }
+        btn.addEventListener('click', function () {
+          if (btn.disabled) return;
+          var b = map.getBounds();
+          var view = { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() };
+          var labels = { aquarelle: 'aquarelle douce', croquis: "croquis d'architecte", retro: 'affiche rétro', bd: 'BD franco-belge' };
+          btn.disabled = true; sel.disabled = true;
+          msg.textContent = 'Capture du fond et stylisation par l\'IA… (20 à 40 s)';
+          var fd = new FormData();
+          fd.append('csrf', CSRF); fd.append('action', 'stylize');
+          fd.append('view', JSON.stringify(view));
+          fd.append('base', hidden ? 'osm' : baseKind);
+          fd.append('style', sel.value);
+          fetch(location.pathname + location.search, { method: 'POST', body: fd, credentials: 'same-origin', headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+              btn.disabled = false; sel.disabled = false;
+              if (!j.ok) { msg.textContent = j.error || 'Stylisation impossible.'; return; }
+              bg = { path: j.path, bounds: j.bounds, opacity: 1 };
+              $('bgOpacity').value = 1;
+              renderBg();
+              msg.textContent = 'Fond ' + (labels[j.style] || 'stylisé') + ' posé : enregistrez le plan pour le conserver.';
+            })
+            .catch(function () { btn.disabled = false; sel.disabled = false; msg.textContent = 'Stylisation indisponible (réseau ou délai dépassé).'; });
+        });
+      })();
 
       // --- Rotation du fond de carte ---
       // La carte pivote autour de son centre ; pour qu'aucun coin ne reste vide, le cadre prend la taille de la diagonale.
@@ -1610,12 +1705,43 @@ ga_head('Plan des commerces');
       });
 
       // --- Enregistrement ---
-      $('saveForm').addEventListener('submit', function () {
+      function collectMap() {
         var c = map.getCenter();
-        $('mapJson').value = JSON.stringify({ center: [c.lat, c.lng], zoom: map.getZoom(), base: hidden ? 'none' : baseKind, catalog: catalog.filter(function (x) { return x.name && x.w >= 0.5 && x.d >= 0.5; }),
+        return { center: [c.lat, c.lng], zoom: map.getZoom(), base: hidden ? 'none' : baseKind, catalog: catalog.filter(function (x) { return x.name && x.w >= 0.5 && x.d >= 0.5; }),
           background: bg ? { path: bg.path, bounds: bgLayer ? bgBoundsArr(bgLayer.getBounds()) : bg.bounds, opacity: bg.opacity } : null,
-          items: group.getLayers().map(function (l) { var m = l._plan; return { id: m.id, kind: kindOf(l), pts: points(l), label: m.label, num: m.num, shop: m.shop, color: m.color, note: m.note, surface: m.surface, role: m.role, ztype: m.ztype, unit: m.unit, price_cents: toCents(m.price), price_pro_cents: toCents(m.pricePro), usage: m.usage, flow: m.flow, indoor: !!m.indoor, service: m.service }; }), costs: { fixed_cents: toCents($('simFixed').value), var_cents: toCents($('simVar').value), pct: num('simPct', 0), occ: [0, 1, 2].map(function (i) { return num('simOcc' + i, 0); }), adj: [0, 1, 2].map(function (i) { return num('simAdj' + i, 0); }) }, booking: { enabled: $('bkOn').checked, hold_days: parseInt($('bkDays').value, 10) || 7, intro: $('bkIntro').value } });
+          items: group.getLayers().map(function (l) { var m = l._plan; return { id: m.id, kind: kindOf(l), pts: points(l), label: m.label, num: m.num, shop: m.shop, color: m.color, note: m.note, surface: m.surface, role: m.role, ztype: m.ztype, unit: m.unit, price_cents: toCents(m.price), price_pro_cents: toCents(m.pricePro), usage: m.usage, flow: m.flow, indoor: !!m.indoor, service: m.service }; }), costs: { fixed_cents: toCents($('simFixed').value), var_cents: toCents($('simVar').value), pct: num('simPct', 0), occ: [0, 1, 2].map(function (i) { return num('simOcc' + i, 0); }), adj: [0, 1, 2].map(function (i) { return num('simAdj' + i, 0); }) }, booking: { enabled: $('bkOn').checked, hold_days: parseInt($('bkDays').value, 10) || 7, intro: $('bkIntro').value } };
+      }
+      $('saveForm').addEventListener('submit', function () {
+        $('mapJson').value = JSON.stringify(collectMap());
       });
+
+      // --- Export impression : PDF 300 dpi ou PSD calé, reflète l'état courant du plan (sans l'enregistrer) ---
+      (function () {
+        var btn = $('expGo'), msg = $('expMsg');
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          var fd = new FormData();
+          fd.append('csrf', CSRF); fd.append('action', 'export');
+          fd.append('map', JSON.stringify(collectMap()));
+          fd.append('format', $('expFmt').value);
+          fd.append('page', $('expPage').value);
+          btn.disabled = true; msg.textContent = 'Rendu haute résolution en cours…';
+          fetch(location.pathname + location.search, { method: 'POST', body: fd, credentials: 'same-origin' }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            var cd = r.headers.get('Content-Disposition') || '';
+            var m = cd.match(/filename="?([^";]+)"?/);
+            return r.blob().then(function (b) { return [b, m ? m[1] : 'plan-export']; });
+          }).then(function (pair) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(pair[0]); a.download = pair[1];
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+            msg.textContent = 'Fichier téléchargé.';
+          }).catch(function (e) {
+            msg.textContent = 'Export impossible : ' + (e && e.message ? e.message : e);
+          }).finally(function () { btn.disabled = false; });
+        });
+      })();
 
       // --- Hypothèses de simulation du chiffre d'affaires ---
       var cst = saved.costs || {};

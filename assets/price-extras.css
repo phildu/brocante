@@ -1,7 +1,7 @@
-/* Sous le prix d'une fiche : prix négociable, estimation du marché, prix du neuf (includes/pricing-extras.php). */
+/* Sous le prix d'une fiche : prix négociable, estimation du marché, prix du neuf, réassort possible (includes/pricing-extras.php). */
 .price-extras { margin: 10px 0 4px; display: grid; gap: 6px; font-size: .9rem; }
 .price-extras p { margin: 0; }
-.pe-nego { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.pe-nego, .pe-restock { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
 .pe-tag { display: inline-block; padding: 2px 10px; border: 1px solid var(--accent, #b5502e); color: var(--accent, #b5502e); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
 .pe-offer-btn { padding: 6px 12px; border: 1px solid var(--ink, #222); background: transparent; color: var(--ink, #222); font: inherit; font-weight: 600; cursor: pointer; }
 .pe-offer-btn:hover, .pe-offer-btn:focus-visible { background: var(--ink, #222); color: var(--bg, #fff); }

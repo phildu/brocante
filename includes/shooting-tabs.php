@@ -1,14 +1,15 @@
 <?php
-// Onglets des deux parcours de prise de vue : les pièces à vendre (assistant de
-// shooting) et le lieu (boutique, stand, atelier). Le menu ne garde qu'un écran
-// « Shooting » ; ces onglets font passer de l'un à l'autre. Un photographe n'a
-// que le parcours du lieu : les onglets disparaissent alors (un seul choix).
+// Onglets des deux parcours de prise de vue : les articles à vendre (assistant
+// de shooting, parcours par défaut) et le reportage boutique (lieu, stand,
+// atelier). Le menu ne garde qu'un écran « Shooting » ; ces onglets font
+// passer de l'un à l'autre. Un photographe n'a que le reportage boutique :
+// les onglets disparaissent alors (un seul choix).
 
 function shooting_tabs_html(string $role, string $current): string
 {
     $tabs = [
-        'assistant' => ['/admin/shooting-assistant.php', 'Pièces à vendre'],
-        'shooting-lieu' => ['/admin/shop-shooting.php', 'Boutique / stand'],
+        'assistant' => ['/admin/shooting-assistant.php', 'Articles à vendre'],
+        'shooting-lieu' => ['/admin/shop-shooting.php', 'Reportage boutique'],
     ];
     $tabs = array_filter($tabs, static fn (array $tab): bool => admin_role_can_access($role, $tab[0]));
     if (count($tabs) < 2) return '';

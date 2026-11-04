@@ -65,6 +65,7 @@ $details['Référence'] = 'N°' . h($product['ref']);
         <p class="fl-stock <?= in_stock($product) ? 'is-in' : 'is-out' ?>"><?= in_stock($product) ? 'Disponible — pièce unique' : 'Vendue' ?></p>
         <div class="fl-pdp-buy"><?= $buyHtml() ?></div>
         <div class="fl-pdp-share"><?= $shareBtn ?></div>
+        <?= $qrHtml ?>
       <?php endif; ?>
       <?php if (trim((string) ($fc['contact_delivery'] ?? '')) !== '' || trim((string) ($fc['pickup_label'] ?? '')) !== ''): ?>
         <dl class="fl-pdp-notes">

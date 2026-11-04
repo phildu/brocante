@@ -36,6 +36,11 @@ if ($appHost === '' || !preg_match('/^[A-Za-z0-9.-]+(:\d+)?$/', $appHost)) {
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
     $appUrl = ($https ? 'https' : 'http') . '://' . $appHost . tenant_base_path() . '/admin/shop-shooting.php';
 }
+// La visite virtuelle ouvre les photos déjà publiées, sur le même déploiement.
+$visitUrl = (string) preg_replace('#/admin/shop-shooting\.php$#', '/visite.php', $appUrl);
+$visitGroups = shop_shooting_visit_groups();
+$visitPhotoCount = 0;
+foreach ($visitGroups as $visitGroup) $visitPhotoCount += count($visitGroup['photos']);
 $dataJson = json_encode([
     'places' => shop_shooting_places(),
     'targets' => $targets,
@@ -72,7 +77,7 @@ $requestStatus = static function (string $status): string {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#f4eee1">
-<title>Shooting boutique / stand — <?= h($siteName) ?></title>
+<title>Reportage boutique — <?= h($siteName) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
@@ -100,7 +105,7 @@ $requestStatus = static function (string $status): string {
 
     <header class="ss-head" id="ss-head">
       <p class="eyebrow">Photos du lieu · parcours guidé</p>
-      <h1>Shooting boutique / stand</h1>
+      <h1>Reportage boutique</h1>
       <p class="ss-lede">Un programme de prise de vue pour photographier votre boutique, votre stand ou votre atelier, puis publier chaque photo au bon endroit du site : accueil, « Notre histoire », écran en magasin et bandeaux de page.</p>
       <p class="ss-note"><button type="button" class="btn-small" data-pwa-install>📲 Installer l'appli sur ce téléphone</button></p>
       <?php if (!$canPublishLive): ?>
@@ -228,6 +233,21 @@ $requestStatus = static function (string $status): string {
         <?php endif; ?>
       </div>
 
+      <div class="ss-card" id="ss-visit-card">
+        <h2>Visite virtuelle</h2>
+        <?php if ($visitPhotoCount > 0): ?>
+          <p class="ss-note">Les <?= $visitPhotoCount ?> photo<?= $visitPhotoCount > 1 ? 's' : '' ?> publiée<?= $visitPhotoCount > 1 ? 's' : '' ?> par ce parcours sont réunies sur la page publique <b>/visite.php</b>, groupées par lieu. Le lien est déjà présent dans le menu et le pied de page du site.</p>
+        <?php else: ?>
+          <p class="ss-note">Aucune photo publiée pour l'instant. La visite s'ouvrira automatiquement avec la première photo validée — rien d'autre à activer.</p>
+        <?php endif; ?>
+        <div class="ss-actions">
+          <a class="btn btn-primary" href="/visite.php" target="_blank" rel="noopener">Ouvrir la visite virtuelle</a>
+        </div>
+        <label class="ss-field">Lien à partager
+          <input type="text" readonly value="<?= h($visitUrl) ?>">
+        </label>
+      </div>
+
       <?php if ($isAdmin): ?>
       <div class="ss-card" id="ss-share-card">
         <h2>Accès du photographe</h2>
@@ -237,7 +257,7 @@ $requestStatus = static function (string $status): string {
         </label>
         <div class="ss-actions">
           <button type="button" class="btn btn-ghost" id="ss-share-copy">Copier le lien</button>
-          <?= share_button_html($appUrl, 'Shooting boutique / stand — ' . $siteName, 'Ouvrez l\'application de shooting de la boutique :', '', 'ss-share-open', true, true) ?>
+          <?= share_button_html($appUrl, 'Reportage boutique — ' . $siteName, 'Ouvrez l\'application de reportage de la boutique :', '', 'ss-share-open', true, true) ?>
         </div>
       </div>
       <?php endif; ?>

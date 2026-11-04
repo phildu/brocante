@@ -24,16 +24,34 @@
     manual: 'auto',
     program: null,
     shots: [],
+    shotsProgramKey: '',
     current: 0,
     keepAll: false,
     audio: true,
+    audioAnswered: false,
+    mode: 'single',
+    typeValidated: false,
+    draft: [],
+    batch: [],
     ref: null,
     visuals: [],
     sheet: null,
     failed: [],
-    generationDone: false
+    generationDone: false,
+    stream: null,
+    cameraError: '',
+    cameraClosed: false,
+    video: null,
+    videoFrames: [],
+    videoMode: '',
+    videoRecorder: null,
+    videoTimer: null
   };
-  try { state.audio = localStorage.getItem('sa-audio') !== '0'; } catch (e) {}
+  try {
+    state.audio = localStorage.getItem('sa-audio') !== '0';
+    state.audioAnswered = localStorage.getItem('sa-audio-answered') === '1';
+    if (localStorage.getItem('sa-mode') === 'batch') state.mode = 'batch';
+  } catch (e) {}
 
   function $(id) { return document.getElementById(id); }
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
@@ -43,7 +61,7 @@
   var panels = ['start', 'program', 'shots', 'finish', 'generate', 'done'];
   function showPanel(name) {
     panels.forEach(function (p) { var node = $('sa-panel-' + p); if (node) node.hidden = p !== name; });
-    var step = name === 'start' ? 1 : (name === 'program' ? 2 : (name === 'generate' || name === 'done' ? 4 : 3));
+    var step = name === 'start' ? 1 : (name === 'program' ? 2 : (name === 'finish' || name === 'generate' || name === 'done' ? 4 : 3));
     setStep(step);
     window.scrollTo(0, 0);
   }
@@ -54,6 +72,160 @@
       li.classList.toggle('is-done', i < n);
       if (i === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
     }
+  }
+
+  function storageGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function storageSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+
+  // ── Première visite : questions audio et mode, explications repliables ───
+  var TYPE_ICONS = {
+    auto: '✨', other: '❓', objet: '📦', vetement: '👕', chaussures: '👟', accessoires: '👜',
+    bijou: '💍', media: '📚', vaisselle: '🍽', deco: '🖼', mobilier: '🪑', luminaire: '💡',
+    textile: '🧵', collection: '🗃', electronique: '🔌', jeux: '🧸', beaute: '💄'
+  };
+  var FALLBACK_TYPES = { objet: 'Objet', vetement: 'Vêtement', chaussures: 'Chaussures', media: 'Livre / média' };
+
+  function typeLabel(type) {
+    if (type === 'auto') return 'Automatique';
+    if (type === 'other') return 'Autre';
+    return (DATA.types && DATA.types[type]) || type;
+  }
+  function typeIcon(type) { return TYPE_ICONS[type] || '🏷'; }
+  function manualKind() { return state.manual === 'auto' || state.manual === 'other' ? 'auto' : state.manual; }
+  function typeEntries(includeAuto) {
+    var entries = [];
+    if (includeAuto) entries.push(['auto', typeLabel('auto')]);
+    var types = DATA.types || FALLBACK_TYPES;
+    Object.keys(types).forEach(function (key) { entries.push([key, types[key]]); });
+    entries.push(['other', typeLabel('other')]);
+    return entries;
+  }
+
+  function renderTypeChips() {
+    ['sa-types', 'sa-program-types'].forEach(function (id) {
+      var box = $(id);
+      if (!box) return;
+      box.textContent = '';
+      typeEntries(true).forEach(function (entry) {
+        var b = el('button', '', typeIcon(entry[0]) + ' ' + entry[1]);
+        b.type = 'button';
+        b.dataset.type = entry[0];
+        b.setAttribute('aria-pressed', String(state.manual === entry[0]));
+        b.addEventListener('click', function () { setManualType(entry[0]); });
+        box.appendChild(b);
+      });
+    });
+  }
+
+  function setManualType(type) {
+    state.manual = type;
+    state.typeValidated = false;
+    state.program = programFor();
+    updateTypeButtons();
+    if (state.analysis && !$('sa-panel-start').hidden) renderAnalysis();
+    if (!$('sa-panel-program').hidden) renderProgram();
+  }
+
+  function updateTypeButtons() {
+    document.querySelectorAll('#sa-types [data-type], #sa-program-types [data-type]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.type === state.manual));
+    });
+    var note = $('sa-type-note');
+    if (note) {
+      note.textContent = state.manual === 'auto'
+        ? "Laissez « Automatique » : l'IA reconnaît la nature de la pièce et choisit le programme."
+        : (state.manual === 'other'
+          ? "« Autre » : l'IA choisit le programme d'après la photo."
+          : 'Programme adapté à votre choix manuel : ' + typeLabel(state.manual) + '.');
+    }
+  }
+
+  function renderSession() {
+    var box = $('sa-session');
+    if (!box) return;
+    box.textContent = '';
+    box.appendChild(document.createTextNode('Assistance vocale : ' + (state.audio ? 'oui' : 'non')
+      + ' · ' + (state.mode === 'batch' ? 'en lot, traitement après' : 'article par article') + '. '));
+    var change = el('button', 'btn-small', 'Changer');
+    change.type = 'button';
+    change.addEventListener('click', function () {
+      storageSet('sa-setup', '0');
+      storageSet('sa-audio-answered', '0');
+      storageSet('sa-mode-answered', '0');
+      $('sa-setup').hidden = false;
+      box.hidden = true;
+    });
+    box.appendChild(change);
+    box.hidden = false;
+  }
+
+  function completeSetupIfReady() {
+    if (storageGet('sa-audio-answered') !== '1' || storageGet('sa-mode-answered') !== '1') return;
+    storageSet('sa-setup', '1');
+    storageSet('sa-intro-seen', '1');
+    $('sa-setup').hidden = true;
+    var intro = $('sa-intro-fold');
+    if (intro) intro.open = false;
+    renderSession();
+  }
+
+  var setupDone = storageGet('sa-setup') === '1';
+  $('sa-setup').hidden = setupDone;
+  if (setupDone) renderSession();
+  $('sa-intro-fold').open = storageGet('sa-intro-seen') !== '1';
+  $('sa-first-fold').open = storageGet('sa-first-seen') !== '1';
+
+  document.querySelectorAll('[data-audio-answer]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      setAudio(this.dataset.audioAnswer === '1');
+      state.audioAnswered = true;
+      storageSet('sa-audio-answered', '1');
+      if (state.audio) speak(introSpeech(), true);
+      completeSetupIfReady();
+    });
+  });
+  document.querySelectorAll('[data-mode-answer]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.mode = this.dataset.modeAnswer === 'batch' ? 'batch' : 'single';
+      storageSet('sa-mode', state.mode);
+      storageSet('sa-mode-answered', '1');
+      completeSetupIfReady();
+    });
+  });
+
+  function markExplanationsSeen() {
+    storageSet('sa-intro-seen', '1');
+    storageSet('sa-first-seen', '1');
+    var intro = $('sa-intro-fold');
+    var first = $('sa-first-fold');
+    if (intro) intro.open = false;
+    if (first) first.open = false;
+  }
+
+  function renderDraft() {
+    var box = $('sa-draft');
+    if (!box) return;
+    box.textContent = '';
+    state.draft.forEach(function (item, i) {
+      box.appendChild(el('span', 'sa-draft-item', '✓ ' + item.label + (state.mode === 'batch' ? ' · article ' + (i + 1) : '')));
+    });
+    box.hidden = !state.draft.length;
+  }
+
+  function currentTypeLabel() {
+    if (state.manual !== 'auto' && state.manual !== 'other') return typeLabel(state.manual);
+    var subject = state.analysis && state.analysis.subject;
+    if (subject && subject.nature_label) return subject.nature_label + (subject.sub_label ? ' · ' + subject.sub_label : '');
+    return 'Type à préciser';
+  }
+
+  function validateCurrentType() {
+    state.typeValidated = true;
+    state.draft = [{ label: currentTypeLabel() }];
+    renderDraft();
+    markExplanationsSeen();
+    state.program = programFor();
+    beginShots();
   }
 
   function post(url, fd) {
@@ -92,12 +264,17 @@
   // ── Première photo ───────────────────────────────────────────────────────
   function setFirstPhoto(blob, caption) {
     state.photo = blob;
+    state.typeValidated = false;
+    state.draft = [];
+    renderDraft();
     if (state.photoUrl) URL.revokeObjectURL(state.photoUrl);
     state.photoUrl = URL.createObjectURL(blob);
     $('sa-first-img').src = state.photoUrl;
     $('sa-first-caption').textContent = caption || "Photo d'ensemble";
     $('sa-first-preview').hidden = false;
     $('sa-first-drop').hidden = true;
+    $('sa-first-live').hidden = true;
+    $('sa-first-drop').classList.remove('is-camera-open');
   }
 
   function firstPhoto(file) {
@@ -108,11 +285,130 @@
     });
   }
 
-  $('sa-take-first').addEventListener('click', function () { $('sa-cam-first').click(); });
+  // ── Caméra live (repli sur l'appareil photo natif ou la galerie) ────────
+  function cameraSupported() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+  function ensureStream() {
+    if (state.stream) return Promise.resolve(true);
+    if (!cameraSupported()) return Promise.resolve(false);
+    return new Promise(function (resolve) {
+      var settled = false;
+      // Certains navigateurs laissent la demande en attente : on rend la main pour proposer la galerie.
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        state.cameraError = 'Caméra indisponible : utilisez la galerie.';
+        resolve(false);
+      }, 10000);
+      navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      }).then(function (stream) {
+        clearTimeout(timer);
+        if (settled) {
+          stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) {} });
+          return;
+        }
+        settled = true;
+        state.stream = stream;
+        state.cameraError = '';
+        resolve(true);
+      }).catch(function (err) {
+        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        state.cameraError = err && err.name === 'NotAllowedError'
+          ? 'Caméra refusée : autorisez-la dans le navigateur, ou utilisez la galerie.'
+          : 'Caméra indisponible : utilisez la galerie.';
+        resolve(false);
+      });
+    });
+  }
+  function attachStream(video) {
+    if (!video || !state.stream) return;
+    if (video.srcObject !== state.stream) video.srcObject = state.stream;
+    var playing = video.play();
+    if (playing && playing.catch) playing.catch(function () {});
+  }
+  function stopLiveCam() {
+    if (state.stream) {
+      state.stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) {} });
+      state.stream = null;
+    }
+    ['sa-first-video', 'sa-live-video', 'sa-video-preview'].forEach(function (id) {
+      var v = $(id);
+      if (v) v.srcObject = null;
+    });
+    $('sa-first-live').hidden = true;
+    $('sa-live').hidden = true;
+    $('sa-shot-stage').classList.remove('is-live');
+    var drop = $('sa-first-drop');
+    if (drop) drop.classList.remove('is-camera-open');
+  }
+  function captureFromVideo(video) {
+    return new Promise(function (resolve) {
+      var w = video && video.videoWidth, h = video && video.videoHeight;
+      if (!w || !h) { resolve(null); return; }
+      var c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(video, 0, 0, w, h);
+      c.toBlob(function (blob) { resolve(blob); }, 'image/jpeg', 0.9);
+    });
+  }
+
+  function openFirstCam() {
+    if (!cameraSupported()) { $('sa-cam-first').click(); return; }
+    ensureStream().then(function (ok) {
+      if (!ok) {
+        var help = document.querySelector('#sa-first-drop .sa-drop-help');
+        if (help) help.textContent = state.cameraError;
+        return;
+      }
+      $('sa-first-live').hidden = false;
+      $('sa-first-preview').hidden = true;
+      $('sa-first-drop').classList.add('is-camera-open');
+      attachStream($('sa-first-video'));
+    });
+  }
+  function openShotCam() {
+    if (!cameraSupported()) { $('sa-shot-cam').click(); return; }
+    ensureStream().then(function (ok) {
+      if (!ok) {
+        $('sa-shot-quality').hidden = false;
+        $('sa-shot-quality').textContent = state.cameraError;
+        return;
+      }
+      state.cameraClosed = false;
+      $('sa-live').hidden = false;
+      $('sa-shot-empty').hidden = true;
+      $('sa-shot-stage').classList.add('is-live');
+      attachStream($('sa-live-video'));
+    });
+  }
+
+  $('sa-take-first').addEventListener('click', function () { openFirstCam(); });
   $('sa-lib-first-btn').addEventListener('click', function () { $('sa-lib-first').click(); });
-  $('sa-first-retake').addEventListener('click', function () { $('sa-cam-first').click(); });
+  $('sa-first-retake').addEventListener('click', function () { openFirstCam(); });
+  $('sa-first-lib-again').addEventListener('click', function () { $('sa-lib-first').click(); });
   $('sa-cam-first').addEventListener('change', function () { if (this.files && this.files[0]) firstPhoto(this.files[0]); this.value = ''; });
   $('sa-lib-first').addEventListener('change', function () { if (this.files && this.files[0]) firstPhoto(this.files[0]); this.value = ''; });
+  $('sa-first-capture').addEventListener('click', function () {
+    captureFromVideo($('sa-first-video')).then(function (blob) {
+      if (blob) firstPhoto(blob);
+      else if ($('sa-first-live') && !$('sa-first-live').hidden) {
+        var help = document.querySelector('#sa-first-drop .sa-drop-help');
+        if (help) help.textContent = 'La caméra démarre encore : patientez une seconde, puis reprenez.';
+      }
+    });
+  });
+  $('sa-first-close').addEventListener('click', function () {
+    stopLiveCam();
+    $('sa-first-live').hidden = true;
+    if (state.photo) $('sa-first-preview').hidden = false;
+    else $('sa-first-drop').hidden = false;
+  });
+  window.addEventListener('pagehide', stopLiveCam);
 
   function analysisLoading(text) {
     var box = $('sa-analysis');
@@ -157,7 +453,8 @@
       state.program = res.program || programFor();
       state.keepAll = false;
       renderAnalysis();
-      if (state.audio) speak('Analyse terminée. ' + res.analysis.summary);
+      markExplanationsSeen();
+      if (state.audio) speak(analysisSpeech(res.analysis));
     });
   }
 
@@ -228,6 +525,39 @@
     detected.appendChild(document.createTextNode(' · Programme : ' + prog.title + ' (' + prog.shots.length + ' vues).'));
     box.appendChild(detected);
 
+    // Validation du type : la reconnaissance automatique est proposée, jamais imposée.
+    var canProceed = !(a.count > 1 && !state.keepAll);
+    var typeBox = el('div', 'sa-type-validation');
+    var manualChosen = state.manual !== 'auto' && state.manual !== 'other';
+    var recognized = !manualChosen && !!(a.subject && a.subject.nature_label);
+    var label = currentTypeLabel();
+    var intro = manualChosen ? 'Type choisi : ' : (recognized ? 'Type reconnu : ' : 'Type non reconnu : ');
+    typeBox.appendChild(el('p', '', intro));
+    typeBox.lastChild.appendChild(el('strong', '', label));
+    typeBox.appendChild(el('p', 'sa-note', manualChosen
+      ? 'Le programme suit votre choix. Vérifiez qu\'il correspond bien à la pièce.'
+      : (recognized
+        ? 'Vérifiez que le programme correspond bien à la pièce.'
+        : 'Choisissez un type ci-dessus, ou continuez avec le programme générique.')));
+    var typeActions = el('div', 'sa-actions');
+    var yes = el('button', 'btn btn-primary', manualChosen
+      ? '✓ Continuer avec ' + label
+      : (recognized ? '✓ C\'est bien, ouvrir la caméra' : '✓ Continuer avec ce type'));
+    yes.type = 'button';
+    yes.disabled = !canProceed;
+    if (!canProceed) yes.title = 'Choisissez un objet, ou gardez toute la photo.';
+    yes.addEventListener('click', validateCurrentType);
+    var change = el('button', 'btn btn-ghost', 'Changer le type');
+    change.type = 'button';
+    change.addEventListener('click', function () {
+      var chips = $('sa-types');
+      if (chips) chips.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    typeActions.appendChild(yes);
+    typeActions.appendChild(change);
+    typeBox.appendChild(typeActions);
+    box.appendChild(typeBox);
+
     if (res.ai_error) box.appendChild(el('p', 'sa-note', res.ai_error));
 
     if (a.count > 1) {
@@ -246,6 +576,10 @@
         callout.remove();
         var nextBtn = document.getElementById('sa-next-program');
         if (nextBtn) { nextBtn.disabled = false; nextBtn.removeAttribute('title'); }
+        document.querySelectorAll('#sa-analysis .sa-type-validation .btn-primary').forEach(function (b) {
+          b.disabled = false;
+          b.removeAttribute('title');
+        });
       });
       actions.appendChild(pick);
       actions.appendChild(keep);
@@ -258,7 +592,7 @@
     var actionsRow = el('div', 'sa-actions');
     var retake = el('button', 'btn btn-ghost', '↺ Reprendre la photo');
     retake.type = 'button';
-    retake.addEventListener('click', function () { $('sa-cam-first').click(); });
+    retake.addEventListener('click', function () { openFirstCam(); });
     var auto = el('button', 'btn btn-ghost', '☀ Corriger la lumière');
     auto.type = 'button';
     auto.addEventListener('click', function () { autoCorrectFirst(); });
@@ -275,7 +609,7 @@
       ia.addEventListener('click', enhanceFirst);
       actionsRow.appendChild(ia);
     }
-    var next = el('button', 'btn btn-primary', 'Voir le programme');
+    var next = el('button', 'btn btn-ghost', 'Voir le programme');
     next.type = 'button';
     next.id = 'sa-next-program';
     next.addEventListener('click', enterProgram);
@@ -297,10 +631,8 @@
   }
 
   /** Correction locale gratuite : niveaux automatiques + légère correction gamma. */
-  function autoCorrectFirst() {
-    if (!state.photo) return;
-    analysisLoading('Correction de la lumière…');
-    loadImage(state.photo).then(function (o) {
+  function autoCorrectBlob(blob) {
+    return loadImage(blob).then(function (o) {
       var img = o.img;
       var k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
       var c = document.createElement('canvas');
@@ -340,11 +672,19 @@
         px[p] = lut[px[p]]; px[p + 1] = lut[px[p + 1]]; px[p + 2] = lut[px[p + 2]];
       }
       ctx.putImageData(data, 0, 0);
-      c.toBlob(function (blob) {
-        if (!blob) { analysisError('La correction a échoué.'); return; }
-        setFirstPhoto(blob, 'Photo corrigée (lumière)');
-        analyzePhoto();
-      }, 'image/jpeg', 0.9);
+      return new Promise(function (resolve) {
+        c.toBlob(function (result) { resolve(result); }, 'image/jpeg', 0.9);
+      });
+    });
+  }
+
+  function autoCorrectFirst() {
+    if (!state.photo) return;
+    analysisLoading('Correction de la lumière…');
+    autoCorrectBlob(state.photo).then(function (blob) {
+      if (!blob) { analysisError('La correction a échoué.'); return; }
+      setFirstPhoto(blob, 'Photo corrigée (lumière)');
+      analyzePhoto();
     }).catch(function () { analysisError('La correction a échoué.'); });
   }
 
@@ -366,33 +706,11 @@
   }
 
   // ── Choix manuel du type de pièce ────────────────────────────────────────
-  function typeLabel(type) {
-    return { auto: 'Automatique', objet: 'Objet', vetement: 'Vêtement', media: 'Livre / média', chaussures: 'Chaussures', bijou: 'Bijou', mobilier: 'Mobilier' }[type] || type;
-  }
-  function updateTypeButtons() {
-    document.querySelectorAll('#sa-types [data-type], #sa-program-types [data-type]').forEach(function (b) {
-      b.setAttribute('aria-pressed', String(b.dataset.type === state.manual));
-    });
-    $('sa-type-note').textContent = state.manual === 'auto'
-      ? "Laissez « Automatique » : l'IA reconnaît la nature de la pièce et choisit le programme."
-      : 'Programme adapté à votre choix manuel : ' + typeLabel(state.manual) + '.';
-  }
-  function bindTypeButtons() {
-    document.querySelectorAll('#sa-types [data-type], #sa-program-types [data-type]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        state.manual = b.dataset.type;
-        updateTypeButtons();
-        state.program = programFor();
-        if (state.analysis && !$('sa-panel-start').hidden) renderAnalysis();
-        if (!$('sa-panel-program').hidden) renderProgram();
-      });
-    });
-  }
-  bindTypeButtons();
+  renderTypeChips();
   updateTypeButtons();
 
   function programFor() {
-    if (state.manual !== 'auto') {
+    if (state.manual !== 'auto' && state.manual !== 'other') {
       var manualKey = DATA.manualPrograms[state.manual] || 'objet';
       return DATA.programs[manualKey] || DATA.programs.objet;
     }
@@ -406,26 +724,19 @@
     state.program = programFor();
     renderProgram();
     showPanel('program');
-    if (state.audio) speak(programSpeech(state.program));
   }
 
   function renderProgram() {
     var p = state.program || programFor();
     $('sa-program-title').textContent = p.title;
     $('sa-program-intro').textContent = p.intro;
-    $('sa-program-kicker').textContent = state.analysis && state.analysis.subject && state.analysis.subject.nature_label
-      ? 'Programme conseillé · ' + state.analysis.subject.nature_label
-      : 'Programme conseillé';
+    var manualChosen = state.manual !== 'auto' && state.manual !== 'other';
+    var heading = manualChosen
+      ? typeLabel(state.manual)
+      : (state.analysis && state.analysis.subject && state.analysis.subject.nature_label ? state.analysis.subject.nature_label : '');
+    $('sa-program-kicker').textContent = heading ? 'Programme conseillé · ' + heading : 'Programme conseillé';
 
-    var chips = $('sa-program-types');
-    chips.textContent = '';
-    ['auto', 'objet', 'vetement', 'media', 'chaussures', 'bijou', 'mobilier'].forEach(function (type) {
-      var b = el('button', '', typeLabel(type));
-      b.type = 'button'; b.dataset.type = type;
-      b.setAttribute('aria-pressed', String(state.manual === type));
-      b.addEventListener('click', function () { state.manual = type; updateTypeButtons(); state.program = programFor(); renderProgram(); });
-      chips.appendChild(b);
-    });
+    renderTypeChips();
 
     var tips = $('sa-general-tips');
     tips.textContent = '';
@@ -449,28 +760,83 @@
       plan.appendChild(li);
     });
 
-    $('sa-audio-toggle').checked = state.audio;
+    syncAudioToggles();
   }
 
   $('sa-back-start').addEventListener('click', function () { showPanel('start'); });
   $('sa-start-shots').addEventListener('click', function () { state.program = programFor(); beginShots(); });
-
-  $('sa-audio-toggle').addEventListener('change', function () {
-    state.audio = this.checked;
-    try { localStorage.setItem('sa-audio', state.audio ? '1' : '0'); } catch (e) {}
-    if (!state.audio) stopSpeaking();
+  $('sa-stop-program').addEventListener('click', stopShooting);
+  $('sa-stop-shooting').addEventListener('click', stopShooting);
+  $('sa-view-program').addEventListener('click', function () {
+    state.program = state.program || programFor();
+    renderProgram();
+    showPanel('program');
   });
+  $('sa-shot-audio-off').addEventListener('click', function () { setAudio(false); });
+
+  function stopShooting() {
+    if (!window.confirm('Arrêter la séance ? Les photos déjà prises sont conservées.')) return;
+    stopSpeaking();
+    stopVoiceRecognition();
+    stopLiveCam();
+    if (state.shots.some(function (s) { return s.blob; })) {
+      renderFinish();
+      showPanel('finish');
+      if (state.audio) speak('Séance arrêtée. Vérifiez les photos déjà prises.');
+    } else {
+      showPanel('start');
+    }
+  }
+
+  function syncAudioToggles() {
+    ['sa-audio-first', 'sa-audio-toggle'].forEach(function (id) {
+      var node = $(id);
+      if (node) node.checked = state.audio;
+    });
+  }
+  function setAudio(on) {
+    state.audio = !!on;
+    try { localStorage.setItem('sa-audio', state.audio ? '1' : '0'); } catch (e) {}
+    syncAudioToggles();
+    if (!state.audio) stopSpeaking();
+  }
+  ['sa-audio-first', 'sa-audio-toggle'].forEach(function (id) {
+    var node = $(id);
+    if (!node) return;
+    node.addEventListener('change', function () {
+      setAudio(this.checked);
+      if (state.audio && !$('sa-panel-start').hidden) speak(audioOnSpeech(), true);
+    });
+  });
+  $('sa-audio-first-play').addEventListener('click', function () { speak(introSpeech(), true); });
 
   // ── Shooting guidé ───────────────────────────────────────────────────────
   function beginShots() {
     var p = state.program || programFor();
+    var programKey = p.key || p.title;
+    if (state.shots.length && state.shotsProgramKey === programKey) {
+      showPanel('shots');
+      if (!state.stream && !state.cameraClosed) openShotCam();
+      renderShot();
+      renderThumbs();
+      announceShot();
+      return;
+    }
+    if (state.shots.some(function (s) { return s.blob; })) {
+      if (!window.confirm('Changer de programme effacera les photos déjà prises. Continuer ?')) {
+        showPanel('shots');
+        return;
+      }
+    }
     state.shots = p.shots.map(function (s) {
       return { key: s.key, label: s.label, tip: s.tip, coach: s.coach, required: !!s.required, blob: null, url: null, quality: null };
     });
+    state.shotsProgramKey = programKey;
     state.current = 0;
     renderShot();
     renderThumbs();
     showPanel('shots');
+    openShotCam();
     announceShot();
   }
 
@@ -486,27 +852,39 @@
 
     var stage = $('sa-shot-stage');
     var img = $('sa-shot-img');
+    var live = $('sa-live');
     if (s.blob) {
       if (s.url) URL.revokeObjectURL(s.url);
       s.url = URL.createObjectURL(s.blob);
       img.src = s.url;
       img.alt = s.label;
       img.hidden = false;
+      live.hidden = true;
+      stage.classList.remove('is-live');
       $('sa-shot-empty').hidden = true;
       stage.classList.add('has-photo');
       renderShotQuality(s.quality);
-      $('sa-shot-next').hidden = false;
-      $('sa-shot-next').textContent = state.current === total - 1 ? 'Terminer le shooting' : 'Valider et continuer';
-      $('sa-shot-again').hidden = false;
+      showQualityActions(s.quality);
       $('sa-shot-skip').hidden = true;
     } else {
       img.hidden = true; img.removeAttribute('src');
-      $('sa-shot-empty').hidden = false;
       stage.classList.remove('has-photo');
       $('sa-shot-quality').hidden = true;
       $('sa-shot-next').hidden = true;
       $('sa-shot-again').hidden = true;
+      $('sa-shot-correct').hidden = true;
+      $('sa-shot-enhance').hidden = true;
       $('sa-shot-skip').hidden = s.required;
+      if (state.stream && !state.cameraClosed) {
+        live.hidden = false;
+        $('sa-shot-empty').hidden = true;
+        stage.classList.add('is-live');
+        attachStream($('sa-live-video'));
+      } else {
+        live.hidden = true;
+        stage.classList.remove('is-live');
+        $('sa-shot-empty').hidden = false;
+      }
     }
 
     var taken = state.shots.filter(function (x) { return x.blob; }).length;
@@ -514,6 +892,19 @@
     $('sa-progress-fill').style.width = Math.round(ratio * 100) + '%';
     $('sa-progress-text').textContent = taken + ' photo' + (taken > 1 ? 's' : '') + ' prise' + (taken > 1 ? 's' : '') + ' · vue ' + (state.current + 1) + ' sur ' + total;
     $('sa-to-finish').hidden = !allRequiredCaptured();
+  }
+
+  function qualityBad(q) {
+    return !!(q && q.issues && q.issues.length);
+  }
+
+  function showQualityActions(q) {
+    var bad = qualityBad(q);
+    $('sa-shot-next').hidden = false;
+    $('sa-shot-next').textContent = state.current === state.shots.length - 1 ? 'Terminer le shooting' : 'Valider et continuer';
+    $('sa-shot-again').hidden = false;
+    $('sa-shot-correct').hidden = !bad;
+    $('sa-shot-enhance').hidden = !(bad && AI);
   }
 
   function renderShotQuality(q) {
@@ -529,6 +920,11 @@
     else if (q.brightness > 84) box.appendChild(el('span', 'sa-pill is-warn', 'Surexposée'));
     else box.appendChild(el('span', 'sa-pill is-good', 'Lumière correcte'));
     if (q.issues && q.issues.indexOf('contraste') >= 0) box.appendChild(el('span', 'sa-pill is-warn', 'Peu de contraste'));
+    if (q.issues && q.issues.length) {
+      box.appendChild(el('span', 'sa-quality-hint', AI
+        ? 'Corrigez avec l\'IA, reprenez, ou continuez.'
+        : 'Reprenez, ou continuez.'));
+    }
   }
 
   /** Contrôle local rapide (canvas) : luminosité, netteté approximative, contraste. */
@@ -577,6 +973,7 @@
   function captureShot(file) {
     if (!file) return;
     var s = currentShot();
+    if (!s) return;
     $('sa-shot-quality').hidden = false;
     $('sa-shot-quality').textContent = '';
     $('sa-shot-quality').appendChild(el('span', 'sa-spinner'));
@@ -592,9 +989,81 @@
     });
   }
 
-  $('sa-shot-take').addEventListener('click', function () { $('sa-shot-cam').click(); });
+  function autoCorrectShot() {
+    var s = currentShot();
+    if (!s || !s.blob) return;
+    $('sa-shot-quality').hidden = false;
+    $('sa-shot-quality').textContent = 'Correction de la lumière…';
+    autoCorrectBlob(s.blob).then(function (blob) {
+      if (!blob) throw new Error();
+      return shrink(blob, 1600, 0.9);
+    }).then(function (blob) {
+      return localQuality(blob).then(function (q) {
+        s.blob = blob;
+        s.quality = q;
+        renderShot();
+        renderThumbs();
+        if (state.audio) speak('Lumière corrigée. ' + qualitySpeech(q, s));
+      });
+    }).catch(function () {
+      $('sa-shot-quality').hidden = false;
+      $('sa-shot-quality').textContent = 'La correction a échoué.';
+    });
+  }
+
+  function enhanceShot() {
+    var s = currentShot();
+    if (!s || !s.blob || !AI) return;
+    if (!window.confirm("L'amélioration IA est payante (quelques centimes) et peut légèrement modifier la pièce. Continuer ?")) return;
+    $('sa-shot-quality').hidden = false;
+    $('sa-shot-quality').textContent = 'Amélioration IA en cours… (30 à 60 secondes)';
+    var fd = new FormData();
+    fd.append('action', 'enhance');
+    fd.append('photo', s.blob, 'photo.jpg');
+    post(ACTION, fd).then(function (res) {
+      if (!res.ok) {
+        $('sa-shot-quality').hidden = false;
+        $('sa-shot-quality').textContent = res.error || "L'amélioration IA a échoué.";
+        return;
+      }
+      fetch(res.url, { credentials: 'same-origin' })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.blob(); })
+        .then(function (blob) { return shrink(blob, 1600, 0.9); })
+        .then(function (blob) {
+          return localQuality(blob).then(function (q) {
+            s.blob = blob;
+            s.quality = q;
+            renderShot();
+            renderThumbs();
+            if (state.audio) speak('Photo corrigée par l\'IA. ' + qualitySpeech(q, s));
+          });
+        })
+        .catch(function () {
+          $('sa-shot-quality').hidden = false;
+          $('sa-shot-quality').textContent = "La photo retouchée n'a pas pu être récupérée.";
+        });
+    });
+  }
+
+  $('sa-shot-take').addEventListener('click', function () { openShotCam(); });
   $('sa-shot-lib-btn').addEventListener('click', function () { $('sa-shot-lib').click(); });
-  $('sa-shot-again').addEventListener('click', function () { $('sa-shot-cam').click(); });
+  $('sa-shot-again').addEventListener('click', function () { openShotCam(); });
+  $('sa-shot-correct').addEventListener('click', autoCorrectShot);
+  $('sa-shot-enhance').addEventListener('click', enhanceShot);
+  $('sa-live-capture').addEventListener('click', function () {
+    captureFromVideo($('sa-live-video')).then(function (blob) {
+      if (blob) captureShot(blob);
+      else {
+        $('sa-shot-quality').hidden = false;
+        $('sa-shot-quality').textContent = 'La caméra démarre encore : patientez une seconde, puis reprenez.';
+      }
+    });
+  });
+  $('sa-live-close').addEventListener('click', function () {
+    state.cameraClosed = true;
+    stopLiveCam();
+    renderShot();
+  });
   $('sa-shot-cam').addEventListener('change', function () { if (this.files && this.files[0]) captureShot(this.files[0]); this.value = ''; });
   $('sa-shot-lib').addEventListener('change', function () { if (this.files && this.files[0]) captureShot(this.files[0]); this.value = ''; });
 
@@ -666,11 +1135,304 @@
       fig.appendChild(el('figcaption', '', s.label));
       grid.appendChild(fig);
     });
+    var batch = state.mode === 'batch';
+    $('sa-finish-mode').textContent = batch
+      ? "Mode lot : cet article sera mis de côté, et l'IA préparera toutes les fiches plus tard dans le Studio."
+      : "";
+    $('sa-generate').textContent = batch ? 'Ajouter cet article au lot' : 'Générer la fiche';
     $('sa-to-finish').hidden = true;
   }
 
-  $('sa-resume-shots').addEventListener('click', function () { renderShot(); renderThumbs(); showPanel('shots'); announceShot(); });
-  $('sa-restart').addEventListener('click', function () { location.reload(); });
+  // ── Vidéo de l'objet : rotation ou tour, continu ou image par image ─────
+  function videoHelp(mode) {
+    if (!mode) return '';
+    var rotate = mode.indexOf('rotate') === 0;
+    var frame = /-frame$/.test(mode);
+    var base = rotate
+      ? "Posez l'objet sur un plateau ou une feuille, puis faites-le tourner lentement sur lui-même. Gardez le téléphone fixe."
+      : "Gardez l'objet immobile et tournez autour de lui, à la même distance, sans changer de hauteur.";
+    if (frame) base += ' Prenez une image à chaque quart de tour : la vidéo sera assemblée à la fin.';
+    else base += ' Enregistrez 10 à 20 secondes, puis arrêtez.';
+    return base;
+  }
+
+  function pickVideoMime() {
+    if (!window.MediaRecorder) return '';
+    var options = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+    for (var i = 0; i < options.length; i++) {
+      try { if (MediaRecorder.isTypeSupported(options[i])) return options[i]; } catch (e) {}
+    }
+    return '';
+  }
+
+  function resetVideoResult() {
+    var result = $('sa-video-result');
+    if (result.src) URL.revokeObjectURL(result.src);
+    result.hidden = true;
+    result.removeAttribute('src');
+  }
+
+  function chooseVideoMode(mode) {
+    if (state.videoRecorder && state.videoRecorder.state === 'recording') {
+      $('sa-video-status').textContent = 'Arrêtez l\'enregistrement avant de changer de mode.';
+      return;
+    }
+    state.videoMode = mode;
+    state.video = null;
+    state.videoFrames = [];
+    resetVideoResult();
+    document.querySelectorAll('#sa-video-modes [data-video-mode]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.videoMode === mode));
+    });
+    $('sa-video-help').textContent = videoHelp(mode);
+    $('sa-video-stage').hidden = false;
+    $('sa-video-start').hidden = !/-continuous$/.test(mode);
+    $('sa-video-frame').hidden = !/-frame$/.test(mode);
+    $('sa-video-finish').hidden = true;
+    $('sa-video-stop').hidden = true;
+    $('sa-video-status').textContent = 'Ouverture de la caméra…';
+    ensureStream().then(function (ok) {
+      if (!ok) { $('sa-video-status').textContent = state.cameraError; return; }
+      attachStream($('sa-video-preview'));
+      $('sa-video-status').textContent = /-continuous$/.test(mode) ? 'Prêt : lancez l\'enregistrement.' : 'Prenez la première image.';
+    });
+    if (state.audio) speak(videoHelp(mode));
+  }
+
+  function startVideoRecording() {
+    if (!state.stream) {
+      ensureStream().then(function (ok) {
+        if (ok) startVideoRecording();
+        else $('sa-video-status').textContent = state.cameraError;
+      });
+      return;
+    }
+    if (!window.MediaRecorder) {
+      $('sa-video-status').textContent = 'La vidéo n\'est pas disponible dans ce navigateur.';
+      return;
+    }
+    var mime = pickVideoMime();
+    var chunks = [];
+    var recorder;
+    try {
+      recorder = new MediaRecorder(state.stream, mime ? { mimeType: mime } : undefined);
+    } catch (e) {
+      $('sa-video-status').textContent = 'La vidéo n\'est pas disponible dans ce navigateur.';
+      return;
+    }
+    state.videoRecorder = recorder;
+    recorder.ondataavailable = function (event) { if (event.data && event.data.size) chunks.push(event.data); };
+    recorder.onstop = function () {
+      var blob = new Blob(chunks, { type: recorder.mimeType || mime || 'video/webm' });
+      state.video = { blob: blob, mode: state.videoMode };
+      var result = $('sa-video-result');
+      if (result.src) URL.revokeObjectURL(result.src);
+      result.src = URL.createObjectURL(blob);
+      result.hidden = false;
+      $('sa-video-status').textContent = 'Vidéo prête (' + Math.max(1, Math.round(blob.size / 1024)) + ' Ko). Vous pouvez la revoir, refaire une prise, ou continuer.';
+      $('sa-video-start').hidden = false;
+      $('sa-video-stop').hidden = true;
+      if (state.videoTimer) { clearTimeout(state.videoTimer); state.videoTimer = null; }
+      if (state.audio) speak('Vidéo prête. Rejouez-la si besoin, ou continuez avec la fiche.');
+    };
+    state.videoRecorder.start();
+    $('sa-video-start').hidden = true;
+    $('sa-video-stop').hidden = false;
+    $('sa-video-status').textContent = 'Enregistrement… 20 secondes au plus.';
+    state.videoTimer = setTimeout(function () {
+      if (state.videoRecorder && state.videoRecorder.state === 'recording') state.videoRecorder.stop();
+    }, 20000);
+  }
+
+  function stopVideoRecording() {
+    if (state.videoRecorder && state.videoRecorder.state === 'recording') state.videoRecorder.stop();
+  }
+
+  function captureVideoFrame() {
+    if (!state.stream) {
+      ensureStream().then(function (ok) { if (ok) captureVideoFrame(); else $('sa-video-status').textContent = state.cameraError; });
+      return;
+    }
+    captureFromVideo($('sa-video-preview')).then(function (blob) {
+      if (!blob) { $('sa-video-status').textContent = 'La caméra démarre encore : patientez une seconde.'; return; }
+      state.videoFrames.push(blob);
+      $('sa-video-status').textContent = state.videoFrames.length + ' image(s) prise(s). Terminez quand le tour est complet.';
+      $('sa-video-finish').hidden = state.videoFrames.length < 2;
+    });
+  }
+
+  function assembleFrames(frames) {
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return Promise.resolve(null);
+    return Promise.all(frames.map(function (blob) { return createImageBitmap(blob); })).then(function (bitmaps) {
+      var w = bitmaps[0].width, h = bitmaps[0].height;
+      var k = Math.min(1, 960 / Math.max(w, h));
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * k));
+      c.height = Math.max(1, Math.round(h * k));
+      var ctx = c.getContext('2d');
+      var stream = c.captureStream(10);
+      var mime = pickVideoMime();
+      var rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      var chunks = [];
+      rec.ondataavailable = function (event) { if (event.data && event.data.size) chunks.push(event.data); };
+      var done = new Promise(function (resolve) {
+        rec.onstop = function () { resolve(new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' })); };
+      });
+      rec.start();
+      var i = 0;
+      function draw() {
+        if (i >= bitmaps.length) { setTimeout(function () { rec.stop(); }, 350); return; }
+        ctx.drawImage(bitmaps[i], 0, 0, c.width, c.height);
+        i++;
+        setTimeout(draw, 260);
+      }
+      draw();
+      return done;
+    });
+  }
+
+  function finishVideoFrames() {
+    if (state.videoFrames.length < 2) {
+      $('sa-video-status').textContent = 'Prenez au moins deux images pour faire une vidéo.';
+      return;
+    }
+    $('sa-video-status').textContent = 'Assemblage de la vidéo…';
+    assembleFrames(state.videoFrames).then(function (blob) {
+      if (!blob) { $('sa-video-status').textContent = 'La vidéo image par image n\'est pas disponible dans ce navigateur.'; return; }
+      state.video = { blob: blob, mode: state.videoMode };
+      var result = $('sa-video-result');
+      if (result.src) URL.revokeObjectURL(result.src);
+      result.src = URL.createObjectURL(blob);
+      result.hidden = false;
+      $('sa-video-frame').hidden = true;
+      $('sa-video-finish').hidden = true;
+      $('sa-video-status').textContent = 'Vidéo prête (' + state.videoFrames.length + ' images). Vous pouvez la revoir, ou continuer.';
+      if (state.audio) speak('Vidéo assemblée. Vous pouvez la revoir, ou continuer avec la fiche.');
+    });
+  }
+
+  function closeVideo() {
+    stopVideoRecording();
+    if (state.videoTimer) { clearTimeout(state.videoTimer); state.videoTimer = null; }
+    stopLiveCam();
+    $('sa-video-stage').hidden = true;
+  }
+
+  document.querySelectorAll('#sa-video-modes [data-video-mode]').forEach(function (b) {
+    b.addEventListener('click', function () { chooseVideoMode(this.dataset.videoMode); });
+  });
+  $('sa-video-start').addEventListener('click', startVideoRecording);
+  $('sa-video-stop').addEventListener('click', stopVideoRecording);
+  $('sa-video-frame').addEventListener('click', captureVideoFrame);
+  $('sa-video-finish').addEventListener('click', finishVideoFrames);
+  $('sa-video-close').addEventListener('click', closeVideo);
+
+  // ── Mode lot : chaque article attend le traitement dans le Studio ───────
+  function renderBatch() {
+    var box = $('sa-batch');
+    var list = $('sa-batch-list');
+    if (!box || !list) return;
+    list.textContent = '';
+    state.batch.forEach(function (item, i) {
+      var li = el('li');
+      if (item.photo) {
+        var img = el('img'); img.alt = ''; img.src = '/' + String(item.photo).replace(/^\//, '');
+        li.appendChild(img);
+      }
+      var body = el('span');
+      body.appendChild(el('b', '', 'Article ' + (i + 1)));
+      body.appendChild(el('small', '', item.label + ' · Réf. N°' + item.ref));
+      li.appendChild(body);
+      list.appendChild(li);
+    });
+    box.hidden = !state.batch.length;
+  }
+
+  function finishBatchArticle(res) {
+    state.batch.push({
+      ref: res.ref,
+      photo: res.photos && res.photos[0],
+      label: state.draft[0] ? state.draft[0].label : 'Article'
+    });
+    state.draft = [];
+    renderDraft();
+    renderBatch();
+    $('sa-visuals').textContent = '';
+    $('sa-review').hidden = true;
+    $('sa-catalog-link').hidden = true;
+    $('sa-batch-studio').hidden = false;
+    $('sa-new').textContent = 'Photographier un autre article';
+    $('sa-done-title').textContent = 'Article ajouté au lot';
+    $('sa-done-text').textContent = state.batch.length + ' article' + (state.batch.length > 1 ? 's' : '')
+      + ' en attente. L\'IA préparera toutes les fiches dans le Studio, quand vous aurez terminé.';
+    showPanel('done');
+    if (state.audio) speak('Article ajouté au lot. Vous pouvez en photographier un autre, ou ouvrir le Studio pour lancer le traitement.');
+  }
+
+  function resetArticle() {
+    stopSpeaking();
+    stopLiveCam();
+    if (state.photoUrl) URL.revokeObjectURL(state.photoUrl);
+    state.shots.forEach(function (s) { if (s.url) URL.revokeObjectURL(s.url); });
+    state.photo = null;
+    state.photoUrl = null;
+    state.analysis = null;
+    state.metrics = null;
+    state.ai = false;
+    state.aiError = '';
+    state.program = null;
+    state.shots = [];
+    state.shotsProgramKey = '';
+    state.current = 0;
+    state.keepAll = false;
+    state.typeValidated = false;
+    state.draft = [];
+    state.ref = null;
+    state.visuals = [];
+    state.sheet = null;
+    state.failed = [];
+    state.generationDone = false;
+    state.cameraClosed = false;
+    state.video = null;
+    state.videoFrames = [];
+    state.videoMode = '';
+    $('sa-first-preview').hidden = true;
+    $('sa-first-drop').hidden = false;
+    $('sa-first-live').hidden = true;
+    $('sa-first-img').removeAttribute('src');
+    $('sa-analysis').textContent = '';
+    $('sa-analysis').hidden = true;
+    $('sa-notes').value = '';
+    $('sa-finish-grid').textContent = '';
+    $('sa-finish-mode').textContent = '';
+    $('sa-visuals').textContent = '';
+    $('sa-review').hidden = true;
+    $('sa-batch').hidden = true;
+    $('sa-batch-studio').hidden = true;
+    $('sa-catalog-link').hidden = false;
+    $('sa-new').textContent = state.mode === 'batch' ? 'Photographier un autre article' : 'Ajouter une autre pièce';
+    $('sa-video-stage').hidden = true;
+    $('sa-video-help').textContent = '';
+    $('sa-video-status').textContent = '';
+    resetVideoResult();
+    document.querySelectorAll('#sa-video-modes [data-video-mode]').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+    $('sa-generate').textContent = state.mode === 'batch' ? 'Ajouter cet article au lot' : 'Générer la fiche';
+    state.manual = 'auto';
+    renderTypeChips();
+    updateTypeButtons();
+    renderDraft();
+    renderThumbs();
+    showPanel('start');
+  }
+
+  $('sa-resume-shots').addEventListener('click', function () {
+    if (!state.stream && !state.cameraClosed) openShotCam();
+    renderShot();
+    renderThumbs();
+    showPanel('shots');
+    announceShot();
+  });
+  $('sa-restart').addEventListener('click', function () { resetArticle(); });
   $('sa-generate').addEventListener('click', generate);
 
   function genStep(name, st, text) {
@@ -684,10 +1446,11 @@
   function generate() {
     if (!allRequiredCaptured()) { finishShooting(); return; }
     var p = state.program || programFor();
+    var batch = state.mode === 'batch';
     var fd = new FormData();
     fd.append('action', 'create');
     fd.append('kind', p.kind || 'objet');
-    fd.append('source', 'single');
+    fd.append('source', batch ? 'batch' : 'single');
     fd.append('notes', $('sa-notes').value || '');
     var mainSet = false;
     state.shots.forEach(function (s) {
@@ -698,7 +1461,12 @@
     });
     if (!mainSet) { window.alert('Aucune photo à envoyer.'); return; }
 
-    document.querySelectorAll('#sa-gen-list li').forEach(function (li) { li.dataset.state = ''; li.hidden = false; });
+    stopLiveCam();
+    document.querySelectorAll('#sa-gen-list li').forEach(function (li) {
+      li.dataset.state = '';
+      li.hidden = batch && ['detoure', 'sheet', 'ambiance', 'angles', 'recto', 'verso'].indexOf(li.dataset.step) >= 0;
+    });
+    document.querySelector('#sa-gen-list li[data-step="video"]').hidden = !state.video;
     $('sa-generate-retry').hidden = true;
     showPanel('generate');
     genStep('create', 'run');
@@ -711,7 +1479,56 @@
       }
       state.ref = res.ref;
       genStep('create', 'ok', res.photos.length + ' photo(s) enregistrée(s) — Réf. N°' + res.ref);
-      runChain(res.ref);
+      var afterCreate = function () {
+        if (batch) finishBatchArticle(res);
+        else runChain(res.ref);
+      };
+      if (!state.video) { afterCreate(); return; }
+      genStep('video', 'run');
+      uploadVideo(res.ref, res.chunk).then(function (result) {
+        if (result.ok) genStep('video', 'ok', 'Vidéo enregistrée');
+        else genStep('video', 'err', result.error || 'Vidéo non envoyée.');
+        afterCreate();
+      });
+    });
+  }
+
+  function videoExt(blob) {
+    return blob && /mp4/.test(blob.type || '') ? 'mp4' : 'webm';
+  }
+
+  /** Envoi de la vidéo par morceaux, dans l'ordre, comme le parcours « Nouvelle pièce ». */
+  function uploadVideo(ref, serverChunk) {
+    var blob = state.video && state.video.blob;
+    if (!blob) return Promise.resolve({ ok: true });
+    var chunkBytes = Math.min(4 * 1048576, Number(serverChunk) || 4 * 1048576);
+    var total = Math.max(1, Math.ceil(blob.size / chunkBytes));
+    var uploadId = '';
+    for (var i = 0; i < 16; i++) uploadId += Math.floor(Math.random() * 16).toString(16);
+    var name = 'objet-' + ref + '.' + videoExt(blob);
+    var index = 0;
+    function step() {
+      if (index >= total) return Promise.resolve({ ok: true });
+      var start = index * chunkBytes;
+      var part = blob.slice(start, Math.min(blob.size, start + chunkBytes));
+      var fd = new FormData();
+      fd.append('action', 'video');
+      fd.append('ref', ref);
+      fd.append('upload_id', uploadId);
+      fd.append('index', String(index));
+      fd.append('total', String(total));
+      fd.append('size', String(blob.size));
+      fd.append('name', name);
+      fd.append('file', part, 'part-' + index);
+      return post(QA, fd).then(function (res) {
+        if (!res.ok) return { ok: false, error: res.error || 'Envoi de la vidéo interrompu.' };
+        index++;
+        genStep('video', 'run', Math.round(index / total * 100) + ' %');
+        return step();
+      });
+    }
+    return step().catch(function () {
+      return { ok: false, error: 'Connexion perdue pendant l\'envoi de la vidéo.' };
     });
   }
 
@@ -776,6 +1593,10 @@
     post(QA, fd).then(function (res) {
       state.generationDone = true;
       renderVisuals(res);
+      $('sa-batch').hidden = true;
+      $('sa-batch-studio').hidden = true;
+      $('sa-catalog-link').hidden = false;
+      $('sa-new').textContent = 'Ajouter une autre pièce';
       $('sa-done-title').textContent = 'Fiche prête à relire';
       $('sa-done-text').textContent = 'Réf. N°' + ref + ' — relisez le nom, le prix et la description, puis publiez si tout est correct.';
       $('sa-catalog-link').href = CATALOG + encodeURIComponent(ref);
@@ -839,7 +1660,10 @@
     });
   });
 
-  $('sa-new').addEventListener('click', function () { location.reload(); });
+  $('sa-new').addEventListener('click', function () {
+    if (state.mode === 'batch' && state.batch.length) { resetArticle(); return; }
+    location.reload();
+  });
   $('sa-generate-again').addEventListener('click', generate);
   $('sa-generate-back').addEventListener('click', function () {
     renderShot(); renderThumbs(); showPanel('shots'); announceShot();
@@ -1564,7 +2388,7 @@
       var u = new SpeechSynthesisUtterance(text);
       u.lang = 'fr-FR'; u.rate = 0.98; u.pitch = 1;
       var v = frenchVoice(); if (v) u.voice = v;
-      u.onstart = function () { audioStatus('🔊 Coaching audio en cours…'); $('sa-audio-stop').hidden = false; };
+      u.onstart = function () { audioStatus('🔊 Assistance vocale en cours…'); $('sa-audio-stop').hidden = false; };
       u.onend = function () { audioStatus(''); $('sa-audio-stop').hidden = true; finish(); };
       u.onerror = function () { audioStatus(''); $('sa-audio-stop').hidden = true; finish(); };
       synth.speak(u);
@@ -1572,13 +2396,32 @@
       setTimeout(finish, Math.max(2500, text.length * 120));
     } catch (e) { finish(); }
   }
-  $('sa-audio-play').addEventListener('click', function () { speak(programSpeech(state.program || programFor()), true); });
+  $('sa-audio-play').addEventListener('click', function () { speak(introSpeech(), true); });
   $('sa-audio-stop').addEventListener('click', stopSpeaking);
 
-  function programSpeech(p) {
-    if (!p) return '';
-    return 'Programme conseillé : ' + p.title + '. ' + p.intro + ' Vous allez prendre ' + p.shots.length + ' photos. '
-      + p.shots.map(function (s, i) { return 'Photo ' + (i + 1) + ' : ' + s.label + '.'; }).join(' ');
+  function analysisSpeech(a) {
+    if (!a) return '';
+    var text = 'Analyse terminée. ' + (a.summary || '');
+    var issues = (a.quality && a.quality.issues) || [];
+    if (issues.length) {
+      text += ' Attention : ' + issues.map(issueLabel).join(', ').toLowerCase() + '.';
+      text += AI
+        ? " Vous pouvez reprendre la photo, la corriger avec l'IA, ou continuer."
+        : ' Vous pouvez reprendre la photo, la corriger, ou continuer.';
+    } else {
+      text += ' La photo est nette et bien exposée. Vous pouvez valider le type et ouvrir la caméra.';
+    }
+    return text;
+  }
+
+  function introSpeech() {
+    return "Bienvenue dans l'assistant de shooting. Posez la pièce seule sur un fond simple, à la lumière du jour, puis prenez une photo d'ensemble. "
+      + "L'assistant contrôle la netteté, le cadrage et la lumière, reconnaît la pièce et propose un programme de photos. "
+      + "À chaque vue, une voix annonce le conseil, sans lire tout le programme. À la fin, la fiche se vérifie aussi à la voix. "
+      + 'Pour couper le son, décochez l\'assistance vocale.';
+  }
+  function audioOnSpeech() {
+    return "Assistance vocale activée. Posez la pièce seule sur un fond simple, à la lumière du jour, puis prenez la photo d'ensemble.";
   }
   function shotSpeech(s, i, total) {
     return 'Photo ' + (i + 1) + ' sur ' + total + '. ' + s.label + '. ' + s.coach;
@@ -1594,9 +2437,13 @@
     if (q.issues.indexOf('sombre') >= 0) parts.push('elle est trop sombre');
     if (q.issues.indexOf('surexpose') >= 0) parts.push('elle est surexposée');
     if (!parts.length) return 'Photo nette et bien exposée. Vous pouvez continuer.';
-    return 'Attention pour ' + s.label + ' : ' + parts.join(', ') + '. Vous pouvez reprendre la photo, ou continuer si cela vous convient.';
+    var tail = AI
+      ? 'Vous pouvez reprendre la photo, la corriger avec l\'IA, ou continuer si cela vous convient.'
+      : 'Vous pouvez reprendre la photo, ou continuer si cela vous convient.';
+    return 'Attention pour ' + s.label + ' : ' + parts.join(', ') + '. ' + tail;
   }
 
   // ── Démarrage ────────────────────────────────────────────────────────────
+  syncAudioToggles();
   showPanel('start');
 })();

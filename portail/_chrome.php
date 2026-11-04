@@ -128,6 +128,7 @@ function portail_nav_groups(): array
             ['href' => '/portail/plugins.php', 'label' => 'Plugins', 'icon' => 'puzzle'],
             ['href' => '/portail/menu.php', 'label' => 'Menu latéral', 'icon' => 'menu'],
             ['href' => '/portail/galeries.php', 'label' => 'Galeries', 'icon' => 'gallery', 'match' => ['galeries.php', 'galerie-*.php']],
+            ['href' => '/portail/stripe.php', 'label' => 'Stripe (test / réel)', 'icon' => 'key'],
             ['href' => '/portail/offres-galerie.php', 'label' => 'Types de galerie', 'icon' => 'layers'],
             ['href' => '/portail/offres.php', 'label' => 'Vitrine & annuaire', 'icon' => 'globe'],
             ['href' => '/portail/promos.php', 'label' => 'Mises en avant', 'icon' => 'megaphone'],
@@ -171,9 +172,17 @@ function portail_palette_pages(): array
     return $out;
 }
 
-/** Entrées de la recherche globale : pages utiles + boutiques. */
+/** Entrées de la recherche globale : pages utiles + boutiques (ou la galerie seule en mode restreint). */
 function portail_palette_data(): array
 {
+    if (defined('GA_LIMITED')) {
+        require_once __DIR__ . '/_search-galerie.php';
+        try {
+            return portail_palette_gallery_items(GA_LIMITED);
+        } catch (Throwable $error) {
+            return [];
+        }
+    }
     $items = portail_palette_pages();
     try {
         foreach (tenant_list() as $slug => $shop) {
@@ -288,11 +297,9 @@ function portail_page_start(array $opts = []): void
 <header class="pbar">
   <button type="button" class="pbar-burger" data-nav-open aria-label="Ouvrir le menu"><?= portail_icon('menu', 20) ?></button>
   <p class="pbar-crumb"><span><?= e($section) ?></span><i aria-hidden="true">/</i><b><?= e($title) ?></b></p>
-  <?php if (!$limited): ?>
-    <button type="button" class="psearch" data-palette-open aria-label="Rechercher (Ctrl ou Cmd + K)">
-      <?= portail_icon('search', 16) ?><span>Rechercher</span><kbd>⌘K</kbd>
-    </button>
-  <?php endif; ?>
+  <button type="button" class="psearch" data-palette-open aria-label="Rechercher (Ctrl ou Cmd + K)">
+    <?= portail_icon('search', 16) ?><span>Rechercher</span><kbd>⌘K</kbd>
+  </button>
   <div class="pbar-tools">
     <span class="penv<?= $isLocal ? ' is-local' : '' ?>"><?= $isLocal ? 'Local' : 'En ligne' ?></span>
     <button type="button" class="picon" data-theme-toggle aria-label="Changer de thème" title="Thème clair / sombre"><?= portail_icon('moon', 18) ?></button>
@@ -324,12 +331,11 @@ function portail_page_start(array $opts = []): void
   <div class="ptabs"><?= $tabs ?></div>
 <?php endif; ?>
 
-<?php if (!$limited): ?>
 <dialog class="palette" id="psearch" aria-label="Recherche globale">
   <div class="palette-inner">
     <div class="palette-search">
       <?= portail_icon('search', 18) ?>
-      <input id="psearch-input" type="search" placeholder="Rechercher une page, une boutique…" autocomplete="off" spellcheck="false" aria-label="Recherche">
+      <input id="psearch-input" type="search" placeholder="<?= $limited ? 'Rechercher une page, un exposant, un prospect…' : 'Rechercher une page, un contenu, une boutique…' ?>" autocomplete="off" spellcheck="false" aria-label="Recherche">
       <kbd>Échap</kbd>
     </div>
     <div class="palette-results" id="psearch-results"></div>
@@ -337,7 +343,6 @@ function portail_page_start(array $opts = []): void
   </div>
 </dialog>
 <script type="application/json" id="psearch-data"><?= json_encode(portail_palette_data(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
-<?php endif; ?>
-<script src="/portail/admin.js?v=1" defer></script>
+<script src="/portail/admin.js?v=2" defer></script>
 <?php
 }

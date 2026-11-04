@@ -38,14 +38,14 @@ function gm_defaults(): array
         'organisateur' => [
             'name' => 'Espace organisateur', 'emoji' => '📋', 'active' => true, 'order' => 2,
             'description' => 'Événement (date, lieu, places ou mètres), numérotation automatique des places, tableau de bord des inscriptions et registre de police.',
-            'types' => ['vide-grenier', 'puces'],
+            'types' => ['vide-grenier', 'puces', 'marche-de-noel', 'marche-producteurs'],
             'default_mode' => 'included',
             'month_cents' => 1900, 'year_cents' => 19000, 'trial_days' => 14,
         ],
         'attente' => [
             'name' => "File d'attente et places voisines", 'emoji' => '🕒', 'active' => true, 'order' => 3,
             'description' => "File d'attente des exposants, prévenus par e-mail dès qu'une place se libère (désistement, absence le jour même), et alerte aux voisins : une place vide à côté d'un stand est proposée à prix réduit pour l'agrandir.",
-            'types' => ['vide-grenier', 'puces'],
+            'types' => ['vide-grenier', 'puces', 'marche-de-noel', 'marche-producteurs'],
             'default_mode' => 'included',
             'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 0,
         ],

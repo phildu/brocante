@@ -305,10 +305,11 @@ $baseDomain = tenant_base_host($rawHost);
 $defaultSlug = trim(saas_slug($shopName !== '' ? $shopName : 'ma-boutique'), '-');
 if ($defaultSlug === '') $defaultSlug = 'ma-boutique';
 $escape = static fn (string $value): string => saas_e($value);
-// Un vide-grenier accueille des stands : les titres de l'étape suivent le lieu choisi à l'étape 1.
+// Un vide-grenier ou un marché accueille des stands : les titres de l'étape suivent le lieu choisi à l'étape 1.
 $reqGallery = $req && !empty($req['gallery']) ? gallery_load((string) $req['gallery']) : null;
 $reqPlaceType = (string) ($req['place_type'] ?? ($reqGallery['type'] ?? ''));
-$shopWord = (($reqGallery && (string) ($reqGallery['type'] ?? '') === 'vide-grenier') || $reqPlaceType === 'vide-grenier') ? 'stand' : 'boutique';
+$shopWord = in_array((string) ($reqGallery['type'] ?? ''), ['vide-grenier', 'marche-de-noel', 'marche-producteurs'], true)
+    || in_array($reqPlaceType, ['vide-grenier', 'marche-de-noel', 'marche-producteurs'], true) ? 'stand' : 'boutique';
 $shopWordCap = ucfirst($shopWord);
 
 saas_page_start(($shopWord === 'stand' ? 'Mon stand' : 'Ma boutique') . ' — ' . saas_config()['name'], 'Choisissez le nom de votre ' . $shopWord . ', son activité et vos options de nom de domaine.', 'inscription');
@@ -557,7 +558,7 @@ saas_page_start(($shopWord === 'stand' ? 'Mon stand' : 'Ma boutique') . ' — ' 
       </label>
       <label class="field full<?= isset($errors['terms']) ? ' has-error' : '' ?>" style="grid-template-columns:auto 1fr;align-items:start;gap:10px">
         <input type="checkbox" name="terms" value="1" style="width:auto;margin-top:4px"<?= !empty($_POST['terms']) ? ' checked' : '' ?>>
-        <span style="font-weight:400">J'accepte d'être contacté(e) pour la création de ma boutique et que mes informations servent à ce seul usage.
+        <span style="font-weight:400">J'accepte les <a href="/accueil/conditions.php" target="_blank" rel="noopener">conditions d'utilisation de la plateforme</a>, d'être contacté(e) pour la création de ma boutique et que mes informations servent à ce seul usage.
           <?php if (isset($errors['terms'])): ?><span class="err" role="alert"><?= $escape($errors['terms']) ?></span><?php endif; ?>
         </span>
       </label>

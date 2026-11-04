@@ -8,6 +8,7 @@ require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/share.php';
 require_once __DIR__ . '/includes/oauth.php';
+require_once __DIR__ . '/includes/apps.php';
 require_once __DIR__ . '/includes/login-ui.php';
 
 header('Cache-Control: no-store');
@@ -48,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'samesite' => 'Lax',
                 ]);
             }
-            header('Location: /studio.php');
+            header('Location: /studio.php' . (($_GET['tab'] ?? '') === 'pos' ? '?tab=pos' : ''));
             exit;
         }
         sleep(1); // freine les essais en série
@@ -63,9 +64,19 @@ $angles = studio_object_angles();
 $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/studio.php', 'list' => '/studio.php#pieces', 'list_label' => 'Voir mes pièces', 'title' => false, 'later' => true];
 $ico = static fn (string $d): string => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
 $siteName = trim((string) $content['site_name']) ?: (string) tenant('name');
+// L'onglet Caisse a sa propre application installable (« Vente »), le reste est l'application « Article ».
+$studioApp = ($_GET['tab'] ?? '') === 'pos' ? 'vente' : 'article';
+$studioLabel = $studioApp === 'vente' ? 'Vente' : 'Article';
+$studioAppName = shop_app_name($studioApp);
+$venteAppName = $studioApp === 'vente' ? $studioAppName : shop_app_name('vente');
+$studioBase = tenant_base_path();
+$studioManifest = $studioBase . ($studioApp === 'vente' ? '/vente-manifest.php' : '/studio-manifest.php');
+$studioIcon = $studioBase . ($studioApp === 'vente' ? '/vente-icon.php' : '/studio-icon.php');
+$studioSw = $studioBase . ($studioApp === 'vente' ? '/pwa-sw.php' : '/studio-sw.php');
+$studioLoginNext = '/studio.php' . ($studioApp === 'vente' ? '?tab=pos' : '');
 // Adresse de l'application et texte partagé (réseaux, WhatsApp, SMS, e-mail, code QR) : le menu et la page de connexion les proposent.
 [$studioUrl, $studioReachable] = studio_public_url();
-$shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('Studio — ' . $siteName) . '" data-share-text="' . h("Studio de $siteName : photographiez vos pièces avec votre téléphone, l'application prépare les fiches de la boutique. Ouvrez le lien, connectez-vous, puis « Ajouter à l'écran d'accueil ».") . '" data-share-dialog="1"';
+$shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($studioAppName) . '" data-share-text="' . h("$studioAppName : photographiez vos pièces avec votre téléphone, l'application prépare les fiches de la boutique. Ouvrez le lien, connectez-vous, puis « Ajouter à l'écran d'accueil ».") . '" data-share-dialog="1"';
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -75,12 +86,12 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
 <meta name="theme-color" content="#f4eee1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="<?= h($siteName) ?>">
+<meta name="apple-mobile-web-app-title" content="<?= h($studioAppName) ?>">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="manifest" href="/studio-manifest.php">
-<link rel="apple-touch-icon" href="/studio-icon.php?s=180">
-<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pwa-save.js') ?>" data-auto data-delay="2000" data-key="studio" data-name="Studio — <?= h($siteName) ?>" data-icon="/studio-icon.php?s=192" data-sw="/studio-sw.php" data-scope="<?= h(tenant_base_path() . '/') ?>"></script>
-<title>Studio — <?= h($siteName) ?></title>
+<link rel="manifest" href="<?= h($studioManifest) ?>">
+<link rel="apple-touch-icon" href="<?= h($studioIcon) ?>?s=180">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pwa-save.js') ?>" data-auto data-delay="2000" data-key="studio-<?= h($studioApp) ?>" data-name="<?= h($studioAppName) ?>" data-icon="<?= h($studioIcon) ?>?s=192" data-manifest="<?= h($studioManifest) ?>" data-sw="<?= h($studioSw) ?>" data-scope="<?= h($studioBase . '/') ?>"></script>
+<title><?= h($studioAppName) ?></title>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="/assets/studio.css">
@@ -95,7 +106,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
 <?php if (!$account): ?>
   <main class="st-login">
     <img class="st-logo" src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($siteName) ?>">
-    <p class="eyebrow">Studio</p>
+    <p class="eyebrow"><?= h($studioLabel) ?></p>
     <h1>Votre shooting, depuis la poche</h1>
     <p class="lede">Photographiez vos pièces, l'application prépare les fiches pour la boutique.</p>
     <?php if ($notice): ?><p class="st-notice" role="status"><?= h($notice) ?></p><?php endif; ?>
@@ -104,7 +115,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
     <?= login_form_html([
       'id' => 'studio-login',
       'identifier_name' => 'username',
-      'social' => oauth_buttons_html('admin', ['next' => '/studio.php']),
+      'social' => oauth_buttons_html('admin', ['next' => $studioLoginNext]),
       'forgot_url' => '/admin/mot-de-passe-oublie.php?from=studio',
       'submit' => 'Se connecter',
       'remember' => true,
@@ -117,15 +128,15 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
   </main>
 <?php elseif (!$isAdmin): ?>
   <main class="st-login">
-    <p class="eyebrow">Studio</p>
+    <p class="eyebrow"><?= h($studioLabel) ?></p>
     <h1>Accès réservé</h1>
-    <p class="lede">Le Studio crée des fiches du catalogue : il est réservé aux administrateurs de la boutique. Vous êtes connecté·e en tant que « <?= h(account_role_label($account['role'])) ?> ».</p>
+    <p class="lede">L'application <?= h($studioLabel) ?> crée des fiches du catalogue : elle est réservée aux administrateurs de la boutique. Vous êtes connecté·e en tant que « <?= h(account_role_label($account['role'])) ?> ».</p>
     <form method="post" class="st-form"><input type="hidden" name="action" value="logout"><button class="btn btn-ghost" type="submit">Changer de compte</button></form>
   </main>
 <?php else: ?>
   <header class="st-top">
     <img class="st-top-logo" src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($siteName) ?>">
-    <button type="button" class="st-share" data-share-open="share"<?= $shareAttrs ?> aria-label="Partager l'application Studio" title="Partager l'application"><?= $ico('<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.3M8.3 13.2l7.4 4.3"/>') ?></button>
+    <button type="button" class="st-share" data-share-open="share"<?= $shareAttrs ?> aria-label="Partager l'application" title="Partager l'application"><?= $ico('<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.3M8.3 13.2l7.4 4.3"/>') ?></button>
     <details class="st-menu">
       <summary aria-label="Menu"><?= $ico('<circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/>') ?></summary>
       <div class="st-menu-box">
@@ -141,7 +152,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
   </header>
   <p class="st-variants" id="st-variants" role="status" hidden></p>
   <aside class="st-hint" id="st-ios" hidden>
-    <span>Pour garder le Studio sur l'écran d'accueil : touchez Partager, puis « Sur l'écran d'accueil ».</span>
+    <span>Pour garder l'application sur l'écran d'accueil : touchez Partager, puis « Sur l'écran d'accueil ».</span>
     <button type="button" id="st-ios-close" aria-label="Fermer">Fermer</button>
   </aside>
 
@@ -233,6 +244,10 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h('
 
     <!-- Caisse : lecture de QR code, retrait d'un achat en ligne, vente directe en boutique -->
     <section class="st-tab" id="tab-pos" data-tab="pos" hidden>
+      <p class="qa-note" style="margin:0 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span>Caisse installable sur le téléphone sous le nom « <?= h($venteAppName) ?> ».</span>
+        <a class="btn btn-ghost" href="<?= h($studioBase) ?>/vente.php">Installer l'application Vente</a>
+      </p>
       <div class="pos" id="pos"></div>
     </section>
 

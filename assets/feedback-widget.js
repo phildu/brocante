@@ -180,6 +180,7 @@
     }
     data.append('action', 'submit');
     data.append('page', location.pathname + location.search);
+    data.append('url', location.href.split('#')[0]);
     data.append('page_title', document.title);
     data.append('module', config.module || '');
     data.append('viewport', window.innerWidth + '×' + window.innerHeight);

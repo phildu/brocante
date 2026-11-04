@@ -94,6 +94,7 @@ final class FeedbackTest extends TestCase
         $f = $this->add('Le bouton de publication ne répond plus.', 'bug', [
             'severity' => 'blocker',
             'page' => '/admin/produits.php?x=1',
+            'url' => 'https://brocs.test/la-fripe-a-naty/admin/produits.php?x=1#top',
             'page_title' => 'Produits',
             'viewport' => '1440 × 900',
             'ua' => 'Mozilla/5.0',
@@ -106,9 +107,18 @@ final class FeedbackTest extends TestCase
         self::assertSame(42, $f['account_id']);
         self::assertSame('Testeur Démo', $f['account']);
         self::assertSame('/admin/produits.php?x=1', $f['page']);
+        self::assertSame('https://brocs.test/la-fripe-a-naty/admin/produits.php?x=1', $f['url']);
         self::assertSame('1440 × 900', $f['context']['viewport']);
         self::assertSame('testeur@example.test', $f['email']);
         self::assertCount(1, feedback_all());
+    }
+
+    public function testAddDropsInvalidUrl(): void
+    {
+        $f = $this->add('Le bouton de publication ne répond toujours pas.', 'bug', [
+            'url' => 'javascript:alert(1)',
+        ]);
+        self::assertSame('', $f['url']);
     }
 
     public function testAddRejectsShortMessageAndUnknownShop(): void

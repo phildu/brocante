@@ -92,6 +92,15 @@ if (isset($_POST['barcode'])) {
     $set .= ', barcode = :barcode';
     $params['barcode'] = product_barcode_clean($_POST['barcode']) ?: null;
 }
+// Réassort possible : mention, délai et prix affichés sur la fiche publique (voir product_restock_line_html()).
+if (isset($_POST['restock_form'])) {
+    $set .= ', restock_possible = :restock_possible, restock_delay = :restock_delay, restock_price = :restock_price';
+    $params += [
+        'restock_possible' => !empty($_POST['restock_possible']) ? 1 : 0,
+        'restock_delay' => mb_substr(trim((string) ($_POST['restock_delay'] ?? '')), 0, 60) ?: null,
+        'restock_price' => price_from_input($_POST['restock_price'] ?? '') ?: null,
+    ];
+}
 if ($photoPath) {
     $set .= ', photo = :photo';
     $params['photo'] = $photoPath;

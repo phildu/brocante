@@ -522,6 +522,16 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
 
     $page = feedback_clean_text($in['page'] ?? '', 400);
     if ($page !== '' && !str_starts_with($page, '/')) $page = '/' . ltrim(preg_replace('#^[a-z]+://[^/]+#i', '', $page), '/');
+    $url = feedback_clean_text($in['url'] ?? '', 400);
+    if ($url !== '') {
+        $parts = parse_url($url);
+        $scheme = is_array($parts) ? strtolower((string) ($parts['scheme'] ?? '')) : '';
+        if (!in_array($scheme, ['http', 'https'], true) || (string) ($parts['host'] ?? '') === '') {
+            $url = '';
+        } else {
+            $url = (string) preg_replace('/#.*$/', '', $url);
+        }
+    }
     $viewport = (string) ($in['viewport'] ?? '');
     if (!preg_match('/^\d{2,5}\s*[×x]\s*\d{2,5}$/u', $viewport)) $viewport = '';
     $module = (string) ($in['module'] ?? '');
@@ -548,6 +558,7 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
         'severity' => $severity,
         'message' => $message,
         'page' => $page,
+        'url' => $url,
         'page_title' => feedback_clean_text($in['page_title'] ?? '', 200),
         'context' => [
             'ua' => feedback_clean_text($in['ua'] ?? '', 300),
@@ -781,7 +792,7 @@ function feedback_notify_new(array $f): bool
         . "Type : " . (FEEDBACK_TYPE_LABELS[$f['type']] ?? $f['type']) . "\n"
         . ($f['severity'] !== '' ? 'Gravité : ' . (FEEDBACK_SEVERITY_LABELS[$f['severity']] ?? $f['severity']) . "\n" : '')
         . "Compte : " . ($f['account'] !== '' ? $f['account'] : '—') . "\n"
-        . "Page : " . ($f['page'] !== '' ? $f['page'] : '—') . "\n\n"
+        . "Page : " . (trim((string) ($f['url'] ?? '')) ?: ($f['page'] !== '' ? $f['page'] : '—')) . "\n\n"
         . $f['message'] . "\n\n"
         . "Ouvrir le suivi : $link\n";
     return feedback_mail($to, $subject, $body);
@@ -1162,6 +1173,6 @@ function feedback_widget_html(): string
     </div>
   </div>
 </div>
-<script src="/assets/feedback-widget.js?v=2" defer></script>
+<script src="/assets/feedback-widget.js?v=3" defer></script>
 <?php return (string) ob_get_clean();
 }

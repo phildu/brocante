@@ -15,6 +15,7 @@
 
 const TENANT_DEFAULT = 'petit-chalet';
 require_once __DIR__ . '/business-presence.php';
+require_once __DIR__ . '/domain-custom.php';
 
 /**
  * Commerce désigné par le sous-domaine de l'hôte (« naty » pour
@@ -74,6 +75,13 @@ function tenant_from_domain(?string $host = null): string
             $cache[$host] = $slug;
             break;
         }
+    }
+    // Adresse personnalisée rattachée et mise en service par l'exploitant
+    // (data/domaines/custom/<boutique>.json) : même priorité qu'une site_url.
+    if ($cache[$host] === '') {
+        $custom = domain_custom_hosts();
+        $slug = (string) ($custom[$host] ?? '');
+        if ($slug !== '' && is_file(tenant_dir($slug) . '/tenant.php')) $cache[$host] = $slug;
     }
     return $cache[$host];
 }
@@ -139,6 +147,10 @@ function tenant_slug(): string
  */
 function tenant_site_url(): string
 {
+    // Une adresse personnalisée en service devient l'adresse publique du commerce
+    // (liens, retours de paiement, e-mails), même sous /<identifiant>/.
+    $customHost = domain_custom_active_host(tenant_slug());
+    if ($customHost !== '') return 'https://' . $customHost;
     $url = rtrim((string) tenant('site_url'), '/');
     $host = strtolower((string) parse_url($url, PHP_URL_HOST));
     $placeholder = $host === '' || $host === 'localhost' || $host === '127.0.0.1' || str_ends_with($host, '.test') || str_ends_with($host, '.example.com');
@@ -364,6 +376,7 @@ function tenant_defaults(string $slug): array
 
 require_once __DIR__ . '/appearance.php';
 require_once __DIR__ . '/templates.php';
+require_once __DIR__ . '/shop-status.php';
 
 /** Chemin absolu d'un fichier déclaré relativement à la racine du projet. */
 function tenant_path(string $key): string

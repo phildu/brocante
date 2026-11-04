@@ -17,6 +17,9 @@ const LEGAL_FIELDS = [
     'company' => ['Nom du vendeur (raison sociale ou nom)', 'Ex. La Brocante du Petit Chalet — Marie Dupont, entrepreneur individuel'],
     'siret' => ['SIRET / SIREN', 'Ex. 123 456 789 00012'],
     'address' => ['Adresse du vendeur', 'Adresse postale complète'],
+    'address_extra' => ['Complément d\'adresse (bâtiment, entrée, local, stand)', 'Ex. Bâtiment B, entrée 3, local 14 — utile si plusieurs commerces partagent la même adresse'],
+    'floor' => ['Étage / niveau', 'Ex. Rez-de-chaussée, 1er étage, mezzanine, sous-sol'],
+    'access' => ['Comment entrer dans le site', 'Ex. Sonner « Brocante » à l\'interphone, puis escalier à droite après l\'accueil'],
     'email' => ['E-mail de contact', 'Adresse à laquelle les clients peuvent écrire'],
     'phone' => ['Téléphone de contact', 'Ex. 06 12 34 56 78'],
     'vat' => ['Mention de TVA', 'Ex. TVA non applicable, art. 293 B du CGI — ou n° de TVA intracommunautaire'],
@@ -97,6 +100,41 @@ function legal_identity(): array
     return legal_identity_values($saved, $site, $c);
 }
 
+/** Adresse complète pour les textes légaux : voie, complément (bâtiment, local) puis étage. */
+function legal_address_display(array $identity): string
+{
+    $parts = [];
+    foreach (['address', 'address_extra', 'floor'] as $field) {
+        $value = trim((string) ($identity[$field] ?? ''));
+        if ($value !== '') $parts[] = $value;
+    }
+    return implode(', ', $parts);
+}
+
+/** Point exact du commerce choisi dans l'administration (facultatif) : ['lat' => ?float, 'lng' => ?float]. */
+function legal_point(): array
+{
+    $lat = shop_setting('legal_lat', '');
+    $lng = shop_setting('legal_lng', '');
+    if (!is_numeric($lat) || !is_numeric($lng)) return ['lat' => null, 'lng' => null];
+    $lat = (float) $lat;
+    $lng = (float) $lng;
+    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) return ['lat' => null, 'lng' => null];
+    return ['lat' => $lat, 'lng' => $lng];
+}
+
+/** Enregistre le point exact ; deux valeurs nulles effacent le point. */
+function legal_point_save(?float $lat, ?float $lng): void
+{
+    if ($lat === null || $lng === null || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        shop_setting_set('legal_lat', '');
+        shop_setting_set('legal_lng', '');
+        return;
+    }
+    shop_setting_set('legal_lat', number_format(round($lat, 6), 6, '.', ''));
+    shop_setting_set('legal_lng', number_format(round($lng, 6), 6, '.', ''));
+}
+
 /** Valeurs `legal_*` d'une base de commerce (portail). */
 function legal_settings_from_pdo(PDO $pdo): array
 {
@@ -142,6 +180,8 @@ function legal_default_text(string $page): string
     $id = legal_identity();
     $v = static fn (string $k): string => trim((string) ($id[$k] ?? '')) !== '' ? trim((string) $id[$k]) : '[À COMPLÉTER]';
     $site = $id['site'];
+    $address = legal_address_display($id);
+    if ($address === '') $address = '[À COMPLÉTER]';
     $days = max(0, (int) $id['withdrawal']);
     $mail = $v('email');
     $retract = $days > 0
@@ -149,7 +189,7 @@ function legal_default_text(string $page): string
         : "## 7. Droit de rétractation\nLes ventes sont conclues par un particulier : le droit de rétractation prévu par le Code de la consommation ne s'applique pas. Vous pouvez néanmoins nous contacter en cas de difficulté ({$mail}).\n";
     switch ($page) {
         case 'cgv':
-            return "## 1. Vendeur\n{$v('company')}, {$v('address')} — SIRET {$v('siret')}. {$v('vat')}. Contact : {$mail}" . ($id['phone'] !== '' ? ", {$id['phone']}" : '') . ".\n\n"
+            return "## 1. Vendeur\n{$v('company')}, {$address} — SIRET {$v('siret')}. {$v('vat')}. Contact : {$mail}" . ($id['phone'] !== '' ? ", {$id['phone']}" : '') . ".\n\n"
                 . "## 2. Objet\nLes présentes conditions régissent les ventes de pièces proposées sur le site {$site} (boutique en ligne). Toute commande implique l'acceptation sans réserve de ces conditions, que vous cochez avant de payer.\n\n"
                 . "## 3. Pièces proposées\nLes pièces sont, sauf mention contraire, d'occasion, chinées et le plus souvent uniques. Chaque fiche décrit la pièce (état, dimensions, matières, défauts éventuels) et la présente en photos ; les photos et les couleurs peuvent légèrement varier selon votre écran. Une pièce unique ne peut être vendue qu'une fois : elle est réservée pendant le paiement, puis retirée de la boutique.\n\n"
                 . "## 4. Prix\nLes prix sont indiqués en euros, toutes taxes comprises le cas échéant ({$v('vat')}), hors frais de livraison. Le prix applicable est celui affiché au moment de la commande. Les frais de livraison sont indiqués avant le paiement.\n\n"
@@ -170,14 +210,14 @@ function legal_default_text(string $page): string
                 . "## 7. Évolution des conditions\nNous pouvons modifier ces conditions ; la version applicable est celle en ligne au moment de votre utilisation du site ou de votre commande.\n\n"
                 . "## 8. Droit applicable\nLes présentes conditions sont soumises au droit français.\n";
         case 'confidentialite':
-            return "## Qui est responsable de vos données ?\n{$v('company')}, {$v('address')} (SIRET {$v('siret')}), responsable du traitement. Contact pour toute question : {$mail}.\n\n"
+            return "## Qui est responsable de vos données ?\n{$v('company')}, {$address} (SIRET {$v('siret')}), responsable du traitement. Contact pour toute question : {$mail}.\n\n"
                 . "## Quelles données recueillons-nous ?\n- Commande : nom, adresse e-mail, numéro de téléphone, adresse de livraison, contenu et montant de la commande.\n- Compte client : nom, adresse e-mail, téléphone, mot de passe (conservé chiffré, jamais en clair) ou identifiant du compte Google, Facebook, etc. utilisé.\n- Newsletter, alertes ou programme de fidélité si vous vous y inscrivez : adresse e-mail et préférences.\n- Navigation : un cookie technique de session (panier, connexion) ; pas de cookie publicitaire.\n\n"
                 . "## Pourquoi, et sur quelle base ?\n- Traiter, livrer et suivre votre commande, et répondre à vos demandes (exécution du contrat).\n- Gérer votre compte client (exécution du contrat).\n- Vous joindre à propos d'une livraison : votre numéro de téléphone n'est utilisé que pour cela (intérêt légitime).\n- Tenir notre comptabilité et répondre à nos obligations légales (obligation légale).\n- Vous envoyer notre lettre d'information ou vos alertes (votre consentement, retirable à tout moment).\n\n"
                 . "## Qui reçoit vos données ?\nNos prestataires, uniquement pour ce qui les concerne : Stripe (paiement sécurisé), les transporteurs (livraison), notre hébergeur ({$v('host')}) et les services d'envoi d'e-mails. L'aide à la saisie d'adresse utilise les services de l'État (Base Adresse Nationale) et d'OpenStreetMap. Nous ne vendons pas vos données.\n\n"
                 . "## Combien de temps ?\nCommandes et factures : 10 ans (obligations comptables). Compte client : jusqu'à sa suppression, ou 3 ans sans activité. Prospects, newsletter et fidélité : jusqu'à votre désinscription ou 3 ans sans contact.\n\n"
                 . "## Vos droits\nVous pouvez demander l'accès à vos données, leur rectification, leur effacement, leur portabilité, la limitation ou vous opposer à leur traitement, en écrivant à {$mail}. Depuis « Mon compte », vous modifiez vos informations ou supprimez votre compte. Vous pouvez aussi introduire une réclamation auprès de la CNIL (www.cnil.fr).\n";
         case 'mentions':
-            return "## Éditeur du site\n{$v('company')}\nAdresse : {$v('address')}\nSIRET : {$v('siret')}\n{$v('vat')}\nE-mail : {$mail}" . ($id['phone'] !== '' ? "\nTéléphone : {$id['phone']}" : '') . "\nDirecteur de la publication : {$v('director')}\n\n"
+            return "## Éditeur du site\n{$v('company')}\nAdresse : {$address}\nSIRET : {$v('siret')}\n{$v('vat')}\nE-mail : {$mail}" . ($id['phone'] !== '' ? "\nTéléphone : {$id['phone']}" : '') . "\nDirecteur de la publication : {$v('director')}\n\n"
                 . "## Hébergement\n{$v('host')}\n\n"
                 . "## Médiation de la consommation\nConformément à l'article L.612-1 du Code de la consommation, le consommateur peut recourir gratuitement à un médiateur : {$v('mediator')}.\n\n"
                 . "## Propriété intellectuelle\nLes contenus du site (photographies, textes, logos) sont protégés. Toute reproduction sans autorisation est interdite.\n\n"

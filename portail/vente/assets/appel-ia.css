@@ -1,0 +1,47 @@
+/* Appels — bloc de dictée et de résumé IA. Chargé seulement sur appels.php. */
+.fv-ia {
+  border: 1px solid var(--fv-line);
+  border-radius: 10px;
+  background: var(--fv-panel-2);
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.fv-ia[aria-busy="true"] { opacity: .92; }
+.fv-ia-head h3 { font-size: .92rem; margin: 0 0 4px; display: flex; align-items: center; gap: 6px; }
+.fv-ia-head p { margin: 0; font-size: .76rem; color: var(--fv-muted); line-height: 1.45; }
+.fv-ia-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.fv-ia-time { font-size: .82rem; }
+.fv-ia-time[data-hot="1"] { color: var(--fv-accent); }
+.fv-ia-status { margin: 8px 0 0; font-size: .78rem; color: var(--fv-muted); min-height: 1.2em; }
+.fv-ia-status[data-kind="error"] { color: var(--fv-warn); }
+.fv-ia-status[data-kind="ok"] { color: var(--fv-ok); }
+.fv-ia-status[data-kind="rec"] { color: var(--fv-accent); }
+.fv-ia-paste { margin-top: 10px; border-top: 1px dashed var(--fv-line); padding-top: 8px; }
+.fv-ia-paste summary { cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--fv-brand-2); }
+.fv-ia-paste textarea { margin-top: 8px; }
+.fv-ia-result { margin-top: 12px; border-top: 1px solid var(--fv-line); padding-top: 10px; }
+.fv-ia-result label { display: block; font-size: .78rem; font-weight: 600; margin-bottom: 4px; }
+.fv-ia-chips { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 5px; }
+.fv-ia-chips li {
+  font-size: .78rem; line-height: 1.4; padding: 5px 8px; border-radius: 7px;
+  background: var(--fv-panel); border: 1px solid var(--fv-line);
+}
+.fv-ia-chips li b { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--fv-muted); }
+.fv-ia-chips li[data-kind="outcome"] { border-color: color-mix(in srgb, var(--fv-ok) 45%, var(--fv-line)); }
+.fv-ia-chips li[data-kind="interet"] { border-color: var(--fv-accent); }
+.fv-ia-result pre {
+  max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  background: var(--fv-panel); border: 1px solid var(--fv-line); border-radius: 8px;
+  padding: 8px; font-family: var(--fv-mono); font-size: .74rem; margin: 6px 0;
+}
+.fv-outcomes button.is-suggested {
+  border-color: var(--fv-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fv-accent) 30%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fv-outcomes button.is-suggested { animation: fv-ia-pulse 1.4s ease-in-out 2; }
+  @keyframes fv-ia-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--fv-accent) 30%, transparent); }
+    50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--fv-accent) 12%, transparent); }
+  }
+}

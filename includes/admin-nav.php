@@ -35,6 +35,21 @@ foreach ($adminNavLayout as $groupRow) {
 $adminIcons = admin_menu_icons();
 // Une icône inconnue (déclarée par un plugin) prend la pièce de puzzle.
 $adminIcon = static fn (string $name): string => admin_menu_icon_svg($name);
+// Loupe : elle n'est pas au catalogue des icônes du menu (aucune entrée ne la porte).
+$adminSearchIcon = '<svg class="admin-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>';
+
+// Recherche (⌘K) : les entrées du menu servent de résultats immédiats, le texte
+// des pages et les fiches de la boutique arrivent d'admin/recherche.php.
+// Un rôle qui ne peut pas ouvrir cet endpoint (photographe) n'a pas la palette.
+$adminPaletteOk = admin_role_can_access(admin_role(), '/admin/recherche.php');
+$adminPaletteItems = [];
+if ($adminPaletteOk) {
+    foreach ($adminNavLayout as $groupRow) {
+        foreach ($groupRow['items'] as $item) {
+            $adminPaletteItems[] = ['group' => $groupRow['label'], 'label' => $item[1], 'hint' => '', 'href' => $item[0]];
+        }
+    }
+}
 ?>
 <script>
   // Appliqué avant l'affichage du reste de la page, pour éviter un saut de mise en page.
@@ -44,6 +59,9 @@ $adminIcon = static fn (string $name): string => admin_menu_icon_svg($name);
 <?= plugin_admin_assets_html(admin_role()) ?>
 <header class="admin-topbar">
   <button type="button" class="admin-topbar-btn" id="admin-sidebar-open" aria-controls="admin-sidebar" aria-expanded="false" aria-label="Ouvrir le menu d'administration"><?= $adminIcon('menu') ?></button>
+  <?php if ($adminPaletteOk): ?>
+    <button type="button" class="admin-topbar-btn" data-palette-open aria-label="Rechercher (Ctrl ou Cmd + K)"><?= $adminSearchIcon ?></button>
+  <?php endif; ?>
   <a class="wordmark" href="<?= h(admin_home_for_role(admin_role())) ?>"><img src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($content['site_name'] ?? '') ?>" class="site-logo"></a>
 </header>
 <div class="admin-sidebar-overlay" id="admin-sidebar-overlay"></div>
@@ -54,6 +72,11 @@ $adminIcon = static fn (string $name): string => admin_menu_icon_svg($name);
       <img class="logo-mini" src="/<?= h(logo_url('square')) ?>" alt="">
     </a>
     <span class="admin-sidebar-tag">Espace boutique</span>
+    <?php if ($adminPaletteOk): ?>
+      <button type="button" class="admin-search" data-palette-open title="Rechercher une page, une pièce, une commande (Ctrl ou Cmd + K)">
+        <?= $adminSearchIcon ?><span class="admin-label">Rechercher</span><kbd class="admin-search-kbd">⌘K</kbd>
+      </button>
+    <?php endif; ?>
   </div>
   <nav class="admin-sidebar-nav" aria-label="Navigation administration">
     <?php $firstGroup = true; foreach ($adminNavLayout as $groupRow): ?>
@@ -249,4 +272,241 @@ $adminIcon = static fn (string $name): string => admin_menu_icon_svg($name);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
 })();
 </script>
+<?php if ($adminPaletteOk): ?>
+<link rel="stylesheet" href="/assets/admin-palette.css">
+<dialog class="palette" id="psearch" aria-label="Recherche dans la boutique">
+  <div class="palette-inner">
+    <div class="palette-search">
+      <?= $adminSearchIcon ?>
+      <input id="psearch-input" type="search" placeholder="Rechercher une page, une pièce, une commande…" autocomplete="off" spellcheck="false" aria-label="Recherche">
+      <kbd>Échap</kbd>
+    </div>
+    <div class="palette-results" id="psearch-results"></div>
+    <div class="palette-foot"><span>↑ ↓ naviguer</span><span>↵ ouvrir</span><span>Échap fermer</span></div>
+  </div>
+</dialog>
+<script type="application/json" id="psearch-data"><?= json_encode($adminPaletteItems, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+<script>
+// Palette ⌘K : les entrées du menu répondent tout de suite, le texte des pages
+// et les fiches (pièces, commandes, médias…) arrivent d'admin/recherche.php
+// après 180 ms de frappe ; une réponse périmée est ignorée (remoteSeq).
+(function () {
+  var dialog = document.getElementById('psearch');
+  var source = document.getElementById('psearch-data');
+  var input = document.getElementById('psearch-input');
+  var results = document.getElementById('psearch-results');
+  if (!dialog || !source || !input || !results) return;
+
+  var baseItems = [];
+  try { baseItems = JSON.parse(source.textContent || '[]'); } catch (error) { baseItems = []; }
+
+  function normalizeText(text) {
+    return (text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+  function prepare(item) {
+    item.search = normalizeText(item.label + ' ' + item.hint + ' ' + item.group);
+    return item;
+  }
+  baseItems.forEach(prepare);
+
+  var remoteItems = [];
+  var remoteNeedle = null;
+  var remotePending = false;
+  var remoteTimer = 0;
+  var remoteSeq = 0;
+  var selected = 0;
+  var rendered = [];
+
+  function mergeItems(first, second) {
+    var seen = Object.create(null);
+    var out = [];
+    first.concat(second).forEach(function (item) {
+      var key = item.href + '|' + item.label;
+      if (seen[key]) {
+        if ((item.hint || '').length > (seen[key].hint || '').length) seen[key].hint = item.hint;
+        return;
+      }
+      seen[key] = item;
+      out.push(item);
+    });
+    return out;
+  }
+
+  function groupItems(list) {
+    var order = [];
+    var groups = Object.create(null);
+    list.forEach(function (item) {
+      if (!groups[item.group]) { groups[item.group] = []; order.push(item.group); }
+      groups[item.group].push(item);
+    });
+    return order.map(function (name) { return [name, groups[name]]; });
+  }
+
+  function render(query) {
+    var needle = normalizeText(query);
+    var staticMatches = needle === ''
+      ? baseItems
+      : baseItems.filter(function (item) { return item.search.indexOf(needle) !== -1; });
+    var contentMatches = needle !== '' && remoteNeedle === needle ? remoteItems : [];
+    var matches = mergeItems(staticMatches, contentMatches).slice(0, 40);
+    rendered = matches;
+    selected = 0;
+    results.innerHTML = '';
+    if (!matches.length) {
+      var empty = document.createElement('p');
+      empty.className = 'palette-empty';
+      empty.textContent = needle !== '' && remotePending
+        ? 'Recherche dans le contenu…'
+        : 'Aucun résultat pour « ' + query + ' ».';
+      results.appendChild(empty);
+      return;
+    }
+    var index = 0;
+    groupItems(matches).forEach(function (pair) {
+      var group = document.createElement('p');
+      group.className = 'palette-group';
+      group.textContent = pair[0];
+      results.appendChild(group);
+      pair[1].forEach(function (item) {
+        var link = document.createElement('a');
+        link.className = 'palette-item';
+        link.href = item.href;
+        link.setAttribute('role', 'option');
+        link.setAttribute('aria-selected', String(index === selected));
+        link.dataset.index = String(index);
+        var mark = document.createElement('span');
+        mark.className = 'pitem-dot';
+        var label = document.createElement('span');
+        label.className = 'pitem-label';
+        label.textContent = item.label;
+        var hint = document.createElement('small');
+        hint.textContent = item.hint || '';
+        link.appendChild(mark);
+        link.appendChild(label);
+        link.appendChild(hint);
+        results.appendChild(link);
+        index++;
+      });
+    });
+    highlight();
+  }
+
+  function fetchRemote(query) {
+    var needle = normalizeText(query);
+    if (needle.length < 2) {
+      remoteSeq++;
+      remotePending = false;
+      remoteItems = [];
+      remoteNeedle = null;
+      return;
+    }
+    var seq = ++remoteSeq;
+    remotePending = true;
+    fetch('/admin/recherche.php?q=' + encodeURIComponent(query), {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin'
+    })
+      .then(function (response) { return response.ok ? response.json() : { items: [] }; })
+      .then(function (data) {
+        if (seq !== remoteSeq) return;
+        remotePending = false;
+        remoteItems = Array.isArray(data.items) ? data.items.map(prepare) : [];
+        remoteNeedle = needle;
+        if (normalizeText(input.value) === needle) render(input.value);
+      })
+      .catch(function () {
+        if (seq !== remoteSeq) return;
+        remotePending = false;
+        remoteItems = [];
+        remoteNeedle = needle;
+        render(input.value);
+      });
+  }
+
+  function highlight() {
+    var links = results.querySelectorAll('.palette-item');
+    links.forEach(function (link, index) {
+      var on = index === selected;
+      link.setAttribute('aria-selected', String(on));
+      if (on) link.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  function resetRemote() {
+    window.clearTimeout(remoteTimer);
+    remoteSeq++;
+    remotePending = false;
+    remoteItems = [];
+    remoteNeedle = null;
+  }
+  function openPalette() {
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+    resetRemote();
+    input.value = '';
+    render('');
+    window.setTimeout(function () { input.focus(); }, 20);
+  }
+  function closePalette() {
+    resetRemote();
+    if (typeof dialog.close === 'function') dialog.close();
+    else dialog.removeAttribute('open');
+  }
+
+  document.querySelectorAll('[data-palette-open]').forEach(function (button) {
+    button.addEventListener('click', openPalette);
+  });
+  document.addEventListener('keydown', function (event) {
+    var key = event.key.toLowerCase();
+    if ((event.metaKey || event.ctrlKey) && key === 'k') {
+      event.preventDefault();
+      if (dialog.open) closePalette(); else openPalette();
+      return;
+    }
+    if (!dialog.open) return;
+    if (event.key === 'Escape') { closePalette(); return; }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (!rendered.length) return;
+      selected = Math.min(selected + 1, rendered.length - 1);
+      highlight();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!rendered.length) return;
+      selected = Math.max(selected - 1, 0);
+      highlight();
+    } else if (event.key === 'Enter') {
+      var item = rendered[selected];
+      if (item) { event.preventDefault(); window.location.href = item.href; }
+    }
+  });
+  input.addEventListener('input', function () {
+    var query = input.value;
+    if (normalizeText(query).length >= 2) {
+      remotePending = true;
+      remoteNeedle = null;
+    } else {
+      remotePending = false;
+    }
+    render(query);
+    window.clearTimeout(remoteTimer);
+    remoteTimer = window.setTimeout(function () { fetchRemote(query); }, 180);
+  });
+  results.addEventListener('click', function (event) {
+    var link = event.target.closest('.palette-item');
+    if (link) { event.preventDefault(); window.location.href = link.href; }
+  });
+  results.addEventListener('mousemove', function (event) {
+    var link = event.target.closest('.palette-item');
+    if (!link) return;
+    var index = Number(link.dataset.index);
+    if (!isNaN(index) && index !== selected) { selected = index; highlight(); }
+  });
+  dialog.addEventListener('click', function (event) {
+    if (event.target === dialog) closePalette();
+  });
+})();
+</script>
+<?php endif; ?>
 <?= feedback_widget_html() ?>
+<?= ai_rating_widget_html() ?>

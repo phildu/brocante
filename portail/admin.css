@@ -916,3 +916,15 @@ body.login-body {
 }
 .login-form .password-toggle:hover { background: var(--accent-soft); }
 .login-foot { margin: 0; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; text-align: center; }
+
+/* Messagerie interne d'une galerie */
+.gmsg-list { display: grid; gap: 10px; }
+.gmsg-msg { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; max-width: min(680px, 92%); background: var(--panel-2); }
+.gmsg-msg.admin { margin-right: auto; }
+.gmsg-msg.guest { margin-left: auto; background: var(--accent-soft); }
+.gmsg-head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 0.78rem; }
+.gmsg-head strong { color: var(--ink); }
+.gmsg-msg p { margin: 6px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.gmsg-new { display: grid; gap: 10px; margin-top: 4px; }
+.gmsg-new textarea { min-height: 110px; width: 100%; font: inherit; padding: 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel); color: var(--ink); }
+

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/vendor-avatar.php';
 require_admin(); // tout compte connecté (administrateur ou community manager) gère SON profil
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -8,6 +9,40 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 admin_csrf_check();
+
+// Avatar : disponible aussi pour le compte principal (non modifiable par
+// ailleurs), puisqu'il n'est rangé que dans les réglages de la boutique.
+$avatarAction = (string) ($_POST['avatar_action'] ?? '');
+if ($avatarAction !== '') {
+    $avatarSession = admin_session();
+    $avatarKey = vendor_avatar_key($avatarSession);
+    @set_time_limit(120);
+    try {
+        if ($avatarAction === 'generate') {
+            vendor_avatar_generate_from_upload($avatarKey, $_FILES['portrait'] ?? [], $avatarSession);
+            flash_set("Avatar généré (" . ai_format_eur(vendor_avatar_cost_eur()) . " décomptés de votre crédit IA). Vous pouvez maintenant l'utiliser comme logo de boutique.");
+        } elseif ($avatarAction === 'use_logo') {
+            $avatar = vendor_avatar_for($avatarSession) ?? throw new InvalidArgumentException("Générez d'abord un avatar.");
+            $composed = vendor_avatar_use_as_logo($avatar);
+            $count = count($composed['paths']);
+            flash_set("Votre avatar est désormais le logo de la boutique : $count déclinaison" . ($count > 1 ? 's' : '')
+                . ' (en-tête, vertical, carré) composée' . ($count > 1 ? 's' : '') . '.'
+                . ($composed['failed'] ? ' Échec pour : ' . implode(', ', $composed['failed']) . '.' : ''));
+        } elseif ($avatarAction === 'remove') {
+            vendor_avatar_remove($avatarKey);
+            flash_set('Avatar retiré. Le logo de la boutique, lui, reste inchangé.');
+        } else {
+            throw new InvalidArgumentException('Action inconnue.');
+        }
+    } catch (InvalidArgumentException | RuntimeException $ex) {
+        flash_set($ex->getMessage(), 'error');
+    } catch (Throwable $ex) {
+        error_log('profile-action avatar : ' . $ex->getMessage());
+        flash_set("L'opération sur l'avatar a échoué. Réessayez.", 'error');
+    }
+    header('Location: /admin/profile.php');
+    exit;
+}
 
 // Le compte modifié est toujours celui de la session, jamais un identifiant envoyé par le formulaire.
 $actingId = admin_session()['id'] ?? null;

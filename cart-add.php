@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/recommendations.php';
 
 if (!shop_sales_enabled()) {
     http_response_code(404);
@@ -31,6 +32,7 @@ if ($product && is_fixed_price(effective_price($product)) && in_stock($product) 
     flash_set(product_held_message($product['name']), 'error');
 } elseif ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
     cart_add($ref, 1);
+    rec_track_cart($ref);
     try {
         require_once __DIR__ . '/includes/plugins.php';
         plugin_fire('cart_add', ['ref' => $ref]);

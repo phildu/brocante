@@ -103,7 +103,8 @@ function cm_connect(): array
 function cm_connect_ready(string $key): bool
 {
     $a = cm_connect()[$key] ?? null;
-    return is_array($a) && ($a['status'] ?? '') === 'ready' && !empty($a['account']);
+    return is_array($a) && ($a['status'] ?? '') === 'ready' && !empty($a['account'])
+        && ($a['mode'] ?? 'test') === saas_stripe_config()['mode'];
 }
 
 /** Écrit pour les boutiques (includes/connect.php) les commerces dont la commission est prélevée par Stripe Connect. */
@@ -131,30 +132,60 @@ function cm_account_create(string $kind, string $slug, string $email): ?string
     if (!in_array($kind, ['shop', 'gallery'], true)) return 'Type inconnu.';
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return 'Adresse e-mail du titulaire invalide.';
     if (!saas_stripe_configured()) return "Stripe n'est pas configuré pour la plateforme (Portail → Clés / Stripe).";
+    $mode = saas_stripe_config()['mode'];
     $all = cm_connect();
     $key = $kind . ':' . $slug;
-    if (!empty($all[$key]['account'])) return 'Ce compte existe déjà.';
+    if (!empty($all[$key]['account']) && ($all[$key]['mode'] ?? 'test') === $mode) return 'Ce compte existe déjà.';
     $caps = $kind === 'shop' ? ['card_payments' => ['requested' => 'true'], 'transfers' => ['requested' => 'true']] : ['transfers' => ['requested' => 'true']];
     try {
         $a = saas_stripe_request('POST', '/accounts', ['type' => 'express', 'country' => 'FR', 'email' => $email, 'capabilities' => $caps, 'metadata' => ['kind' => $kind, 'slug' => $slug]]);
     } catch (Throwable $e) {
         return 'Stripe : ' . $e->getMessage();
     }
-    $all[$key] = ['account' => (string) $a['id'], 'status' => 'pending', 'email' => $email, 'created' => time(), 'updated' => time()];
+    $all[$key] = ['account' => (string) $a['id'], 'status' => 'pending', 'email' => $email, 'created' => time(), 'updated' => time(), 'mode' => $mode];
     return cm_json_save('connect.json', $all) ? null : "Impossible d'écrire data/saas/connect.json.";
 }
 
 /** Lien d'inscription (KYC) Stripe du titulaire. -> [url, erreur]. */
-function cm_account_link(string $key, string $returnUrl): array
+function cm_account_link(string $key, string $returnUrl, ?string $refreshUrl = null): array
 {
     $a = cm_connect()[$key] ?? null;
     if (!$a) return [null, 'Compte inconnu.'];
+    $mode = saas_stripe_config()['mode'];
+    if (($a['mode'] ?? 'test') !== $mode) return [null, 'Ce compte a été créé en mode ' . (($a['mode'] ?? 'test') === 'live' ? 'réel' : 'test') . ' : recréez-le en mode ' . ($mode === 'live' ? 'réel' : 'test') . '.'];
     try {
-        $l = saas_stripe_request('POST', '/account_links', ['account' => $a['account'], 'type' => 'account_onboarding', 'refresh_url' => $returnUrl, 'return_url' => $returnUrl]);
+        $l = saas_stripe_request('POST', '/account_links', ['account' => $a['account'], 'type' => 'account_onboarding', 'refresh_url' => $refreshUrl ?? $returnUrl, 'return_url' => $returnUrl]);
     } catch (Throwable $e) {
         return [null, 'Stripe : ' . $e->getMessage()];
     }
     return [(string) $l['url'], null];
+}
+
+/** Jeton public et durable du lien d'inscription (les liens Stripe, eux, expirent en quelques minutes). */
+function cm_account_token(string $key): string
+{
+    $all = cm_connect();
+    if (empty($all[$key]['account'])) return '';
+    if (($all[$key]['mode'] ?? 'test') !== saas_stripe_config()['mode']) return '';
+    $t = (string) ($all[$key]['token'] ?? '');
+    $at = (int) ($all[$key]['invite_at'] ?? 0);
+    if (preg_match('/^[a-f0-9]{40}$/', $t) && $at > time() - 90 * 86400) return $t;
+    $t = bin2hex(random_bytes(20));
+    $all[$key]['token'] = $t;
+    $all[$key]['invite_at'] = time();
+    return cm_json_save('connect.json', $all) ? $t : '';
+}
+
+/** Compte correspondant à un jeton d'inscription, ou null (jeton inconnu ou expiré). */
+function cm_account_by_token(string $token): ?string
+{
+    if (!preg_match('/^[a-f0-9]{40}$/', $token)) return null;
+    $mode = saas_stripe_config()['mode'];
+    foreach (cm_connect() as $key => $a) {
+        if (!empty($a['account']) && ($a['mode'] ?? 'test') === $mode && hash_equals((string) ($a['token'] ?? ''), $token)
+            && (int) ($a['invite_at'] ?? 0) > time() - 90 * 86400) return (string) $key;
+    }
+    return null;
 }
 
 /** Relit l'état du compte chez Stripe (prêt = informations validées et virements possibles). */
@@ -162,6 +193,9 @@ function cm_account_refresh(string $key): ?string
 {
     $all = cm_connect();
     if (empty($all[$key]['account'])) return 'Compte inconnu.';
+    $mode = saas_stripe_config()['mode'];
+    if (($all[$key]['mode'] ?? 'test') !== $mode) return 'Ce compte a été créé en mode ' . (($all[$key]['mode'] ?? 'test') === 'live' ? 'réel' : 'test') . ' : recréez-le en mode ' . ($mode === 'live' ? 'réel' : 'test') . '.';
+    $all[$key]['mode'] = $mode;
     try {
         $a = saas_stripe_request('GET', '/accounts/' . rawurlencode($all[$key]['account']));
     } catch (Throwable $e) {

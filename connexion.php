@@ -13,6 +13,7 @@ require_once __DIR__ . '/includes/unified-auth.php';
 $expired = isset($_GET['expire']);
 $error = null;
 $options = [];
+$remember = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!ua_csrf_ok((string) ($_POST['csrf'] ?? ''))) {
@@ -24,7 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$matches) {
             $error = 'Identifiant, nom ou e-mail incorrect — ou mot de passe incorrect.';
         } else {
+            // La préférence voyage dans le jeton : c'est sso.php, dans l'espace visé, qui la consomme.
+            $remember = !empty($_POST['remember']);
             foreach ($matches as $identity) {
+                if ($remember) $identity['remember'] = true;
                 $token = ua_ticket_create($identity);
                 if ($token !== null) $options[] = ['identity' => $identity, 'url' => ua_sso_url($identity) . '?t=' . rawurlencode($token)];
             }
@@ -86,6 +90,9 @@ $content = get_content();
       'identifier_label' => 'Identifiant, nom ou e-mail',
       'forgot_url' => '/mot-de-passe-oublie.php',
       'submit' => 'Se connecter',
+      'remember' => true,
+      'remember_name' => 'remember',
+      'remember_label' => 'Rester connecté sur cet appareil de confiance (30 jours)',
       'hidden' => ['csrf' => ua_csrf_token()],
     ]) ?>
 <?php endif; ?>

@@ -50,6 +50,69 @@ if ($action === 'fulfillment') {
         $res = order_refund($id, $amount, trim((string) ($_POST['refund_reason'] ?? '')), !empty($_POST['restock']));
         flash_set($res['message'], $res['ok'] ? 'ok' : 'error');
     }
+} elseif ($action === 'refresh_revolut') {
+    // Revérifie auprès de Revolut une commande dont le client n'est pas revenu.
+    $order = order_get($id);
+    if (!$order) {
+        flash_set('Commande introuvable.', 'error');
+        header('Location: ' . $back);
+        exit;
+    }
+    if (payment_provider_of($order) !== 'revolut') {
+        flash_set('Cette commande n’a pas été payée avec Revolut.', 'error');
+    } else {
+        $config = revolut_config();
+        if (!$config) {
+            flash_set('Revolut n’est plus configuré pour cette boutique.', 'error');
+        } else {
+            try {
+                $data = revolut_get_order($config, (string) ($order['provider_checkout_id'] ?? ''));
+                if (revolut_is_paid($data)) {
+                    if ($order['status'] === 'paid') {
+                        flash_set('Cette commande est déjà à jour (payée).');
+                    } elseif ((int) ($data['amount'] ?? -1) !== (int) $order['amount_total'] || strtoupper((string) ($data['currency'] ?? '')) !== 'EUR') {
+                        order_event($id, 'paiement_echec', 'Montant Revolut incohérent lors de la vérification manuelle', 'admin');
+                        flash_set('Revolut indique un montant différent de la commande — vérifiez avant d’expédier.', 'error');
+                    } else {
+                        order_finalize_external($order, 'revolut', revolut_payment_id($data), '', revolut_payment_detail($data));
+                        flash_set('Paiement confirmé auprès de Revolut — commande mise à jour.');
+                    }
+                } else {
+                    flash_set('Revolut indique que cette commande n’est pas encore payée (état : ' . (revolut_state($data) ?: 'inconnu') . ').', 'error');
+                }
+            } catch (Throwable $e) {
+                flash_set('Impossible de vérifier auprès de Revolut : ' . $e->getMessage(), 'error');
+            }
+        }
+    }
+} elseif ($action === 'mark_sepa_paid') {
+    // Virement SEPA constaté sur le compte bancaire : la commande passe en payée.
+    $order = order_get($id);
+    if (!$order) {
+        flash_set('Commande introuvable.', 'error');
+    } elseif (payment_provider_of($order) !== 'sepa') {
+        flash_set('Cette commande n’attend pas de virement SEPA.', 'error');
+    } elseif ($order['status'] !== 'pending') {
+        flash_set('Cette commande n’est plus en attente de virement.', 'error');
+    } else {
+        $reference = sepa_reference($order);
+        $done = order_finalize_external($order, 'sepa', 'virement:' . $reference, '', 'Virement SEPA reçu — référence ' . $reference);
+        flash_set($done ? 'Virement reçu : la commande est payée et le client prévenu.' : 'Cette commande a déjà été confirmée.', $done ? 'ok' : 'error');
+    }
+} elseif ($action === 'availability_confirm') {
+    $res = oa_confirm($id, 'admin');
+    flash_set($res['message'], $res['ok'] ? 'ok' : 'error');
+} elseif ($action === 'availability_refuse') {
+    $res = oa_refuse($id, 'admin');
+    flash_set($res['message'], $res['ok'] ? 'ok' : 'error');
+} elseif ($action === 'availability_resend_buyer') {
+    $sent = oa_send_buyer_available($id, true);
+    flash_set($sent ? 'Lien de paiement renvoyé au client.' : "Impossible d'envoyer l'e-mail (adresse absente ou e-mail indisponible ?).", $sent ? 'ok' : 'error');
+} elseif ($action === 'availability_notify_seller') {
+    $channel = oa_notify_seller($id);
+    flash_set($channel !== ''
+        ? 'Alerte envoyée par ' . oa_channel_label($channel) . '.'
+        : "Aucun canal n'a pu prévenir le vendeur — vérifiez les réglages WhatsApp/SMS et l'e-mail du commerce.", $channel !== '' ? 'ok' : 'error');
 } elseif ($action === 'cancel') {
     $res = order_cancel($id, trim((string) ($_POST['cancel_reason'] ?? '')));
     flash_set($res['message'], $res['ok'] ? 'ok' : 'error');

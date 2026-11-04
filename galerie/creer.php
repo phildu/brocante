@@ -26,6 +26,12 @@ $typeKey = strtolower((string) ($_GET['type'] ?? $_POST['type'] ?? ''));
 $chooser = !isset($types[$typeKey]) && count($types) > 1 && !isset($_GET['r']) && $_SERVER['REQUEST_METHOD'] !== 'POST';
 $type = $types[$typeKey] ?? gt_type(array_key_first($types) ?? GT_DEFAULT);
 $V = $type['vocab'];
+$namePlaceholder = [
+    'vide-grenier' => 'Vide-grenier de la Rue des Fleurs',
+    'puces' => 'Marché aux puces du Port',
+    'marche-de-noel' => 'Marché de Noël de la Place Bellecour',
+    'marche-producteurs' => 'Marché des producteurs du Bourg',
+][$type['key']] ?? 'La Rue des Arts';
 $offers = array_filter($type['offers'], static fn ($o) => $o['active']);
 $message = null;
 $error = $oauthError !== '' ? $oauthError : null;
@@ -156,7 +162,7 @@ $pre = (string) ($_GET['offre'] ?? $_POST['offre'] ?? 'test');
         <?php endforeach; ?>
       </div>
       <div class="send" style="margin-top:20px;display:grid;gap:12px;max-width:560px;">
-        <label>Nom de votre <?= e($V['gallery']) ?><input type="text" name="name" required minlength="3" maxlength="80" placeholder="<?= e($type['key'] === 'vide-grenier' ? 'Vide-grenier de la Rue des Fleurs' : ($type['key'] === 'puces' ? 'Marché aux puces du Port' : 'La Rue des Arts')) ?>" value="<?= e($_POST['name'] ?? '') ?>"></label>
+        <label>Nom de votre <?= e($V['gallery']) ?><input type="text" name="name" required minlength="3" maxlength="80" placeholder="<?= e($namePlaceholder) ?>" value="<?= e($_POST['name'] ?? '') ?>"></label>
         <label>Votre e-mail <small class="n">(vos accès y seront envoyés)</small><input type="email" name="email" required maxlength="160" value="<?= e($_POST['email'] ?? '') ?>"></label>
         <label>Facturation <small class="n">(offres payantes)</small><select name="billing"><option value="month">Mensuelle</option><option value="year"<?= ($_POST['billing'] ?? '') === 'year' ? ' selected' : '' ?>>Annuelle (plus avantageuse)</option></select></label>
         <input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;" aria-hidden="true">

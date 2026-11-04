@@ -21,8 +21,10 @@ return function (E2e $e): void {
             $res = $e->get('/e2e-boutique-a/');
             $marker = 'template-' . $t;
             $e->check(str_contains($res['body'], $marker) || str_contains($res['body'], 'data-layout="' . $t . '"'), "marqueur $marker absent du HTML public");
+            $product = $e->get('/e2e-boutique-a/produit.php?ref=E2E-QR-1');
+            $e->check(str_contains($product['body'], 'class="qr-pay"'), "carte QR absente de la fiche avec le modèle $t");
             $seen[$t] = true;
-            return 'marqueur présent';
+            return 'marqueur et QR présents';
         });
     }
 

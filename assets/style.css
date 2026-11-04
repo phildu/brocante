@@ -788,6 +788,10 @@
     gap: 24px;
   }
 
+  /* Suggestions « Pour vous » : rangée complémentaire de la liste ou de la fiche produit. */
+  .rec-for-you .rec-for-you-head { margin-bottom: 24px; }
+  .rec-for-you-note { margin: 0; color: var(--ink-soft); font-size: 0.92rem; }
+
   .card {
     background: var(--surface);
     border: 1px solid var(--line);
@@ -1884,3 +1888,63 @@ img, video, canvas, iframe, svg { max-width: 100%; }
 /* Liens légaux sous le pied de page (CGV, conditions d'utilisation, confidentialité, mentions légales) */
 .legal-bar { padding: 14px 0 22px; font-size: .82rem; color: var(--ink-soft); text-align: center; }
 .legal-bar a { display: inline-block; padding: 8px 6px; color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── Payer une pièce par QR code (fiche produit et page payer.php) ──────────────────────────────────────────── */
+.qr-pay {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
+  margin-top: 22px; padding: 16px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); box-shadow: var(--shadow);
+}
+.qr-pay-code {
+  flex: 0 0 auto; width: 136px; height: 136px; padding: 8px;
+  display: grid; place-items: center;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  color: #2a2420; font-size: .72rem; line-height: 1.3; text-align: center;
+}
+.qr-pay-code svg { display: block; width: 100%; height: 100%; }
+.qr-pay-body { flex: 1 1 190px; min-width: 0; }
+.qr-pay-kicker { margin: 0 0 4px; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); }
+.qr-pay-title { margin: 0 0 6px; font-size: 1.02rem; line-height: 1.3; }
+.qr-pay-text { margin: 0; font-size: .84rem; line-height: 1.45; color: var(--ink-soft); }
+.qr-pay-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.qr-pay-actions .btn { font-size: .82rem; padding: 8px 12px; min-height: 40px; }
+.qr-pay-admin { font-size: .78rem; color: var(--accent); }
+
+.pay-product {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2);
+}
+.pay-product img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex: 0 0 auto; }
+.pay-product > div { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pay-product .pay-ref { font-size: .78rem; color: var(--ink-soft); }
+.pay-product .price-group { flex: 0 0 auto; }
+.pay-card {
+  margin-top: 18px; padding: 20px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow);
+}
+.pay-form fieldset { margin: 0; padding: 0; border: 0; }
+.pay-form legend { padding: 0; margin-bottom: 10px; font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
+.pay-methods { display: grid; gap: 8px; margin-bottom: 18px; }
+.pay-method {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+  font-size: .94rem; cursor: pointer;
+}
+.pay-method:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pay-method input { margin: 0; accent-color: var(--accent); }
+.pay-email { display: block; margin-bottom: 16px; font-size: .9rem; }
+.pay-email > span { display: block; margin-bottom: 6px; }
+.pay-email em { font-style: normal; color: var(--ink-soft); }
+.pay-email input {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface-2); color: inherit; font: inherit;
+}
+.pay-submit { width: 100%; }
+.pay-legal { margin: 12px 0 0; font-size: .78rem; line-height: 1.5; color: var(--ink-soft); text-align: center; }
+.pay-notice { margin: 16px 0 0; padding: 10px 13px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line); font-size: .88rem; }
+.pay-notice-error { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 560px) {
+  .qr-pay { flex-direction: column; align-items: stretch; }
+  .qr-pay-code { width: 168px; height: 168px; align-self: center; }
+  .qr-pay-actions .btn { flex: 1 1 auto; justify-content: center; }
+}

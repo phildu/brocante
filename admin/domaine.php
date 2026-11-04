@@ -91,6 +91,20 @@ $available = (int) array_sum(array_map(static fn ($c): int => !empty($c['availab
 $searchStale = $search !== null && time() - (int) ($search['searched_at'] ?? 0) > 86400;
 $shopAddress = tenant_site_url() . '/';
 
+// Adresse personnalisée déjà possédée par le marchand (hors achat OVH).
+$custom = domain_custom_load($slug);
+$customState = (string) ($custom['state'] ?? '');
+$customDomain = (string) ($custom['domain'] ?? '');
+$customToken = (string) ($custom['token'] ?? '');
+$customProofAt = (int) ($custom['ownership_at'] ?? 0);
+$customRoutingAt = (int) ($custom['routing_at'] ?? 0);
+$customCheckedAt = (int) ($custom['checked_at'] ?? 0);
+$customObserved = (array) ($custom['observed'] ?? []);
+$expectedIps = domain_custom_expected_ips();
+$targetIp = (string) ($expectedIps[0] ?? '');
+$customPrefill = trim((string) ($_GET['deja'] ?? ''));
+$customActive = $customState === 'active';
+
 $identity = legal_identity();
 $owner = (array) ($purchase['owner'] ?? []);
 if (!$owner) {
@@ -171,8 +185,110 @@ if (!$owner) {
     <div class="dm-card dm-current">
       <h2>Adresse actuelle de la boutique</h2>
       <p><code><?= h($shopAddress) ?></code></p>
-      <p class="dm-note">Tant qu’aucun domaine propre n’est actif, cette adresse reste celle de la boutique. Un domaine acheté ici est réservé à votre nom : sa mise en service (DNS et certificat) se fait ensuite avec l’exploitant de la plateforme.</p>
+      <p class="dm-note"><?= $customActive
+        ? 'Votre domaine personnalisé est en service : cette adresse et l’adresse historique ci-dessus affichent la même boutique.'
+        : 'Tant qu’aucun domaine propre n’est actif, cette adresse reste celle de la boutique. Un domaine acheté ici est réservé à votre nom : sa mise en service (DNS et certificat) se fait ensuite avec l’exploitant de la plateforme.' ?></p>
     </div>
+
+    <?php if ($customState === ''): ?>
+      <div class="dm-card" id="deja">
+        <h2>J’ai déjà un nom de domaine</h2>
+        <p>Votre adresse a été achetée chez un autre prestataire (OVH, Gandi, Ionos…), ou vous préférez garder celle que vous possédez déjà : rattachez-la à cette boutique. Aucun achat et aucun paiement — le domaine reste chez votre fournisseur, qui continue de le renouveler.</p>
+        <form class="dm-search" method="post" action="/admin/domaine-action.php">
+          <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+          <input type="hidden" name="action" value="custom_attach">
+          <div class="field">
+            <label for="dm-custom">Adresse existante</label>
+            <input type="text" id="dm-custom" name="domain" maxlength="253" required value="<?= h($customPrefill) ?>" placeholder="Ex. la-fripe-a-naty.fr">
+          </div>
+          <button type="submit" class="btn btn-primary">Rattacher ce domaine</button>
+        </form>
+        <p class="dm-note" style="margin-top:8px;">Deux vérifications suivent : un enregistrement TXT prouve que le domaine est bien à vous, puis le domaine est pointé vers ce serveur. La mise en service (alias d’hébergement et certificat HTTPS) est faite par l’exploitant de la plateforme.</p>
+      </div>
+    <?php else: ?>
+      <div class="dm-card" id="deja">
+        <h2>Votre nom de domaine</h2>
+        <p><strong><?= h($customDomain) ?></strong> · <span class="dm-badge"><?= h(domain_custom_state_label($customState)) ?></span></p>
+
+        <?php if ($customState === 'active'): ?>
+          <p>Votre boutique répond désormais à l’adresse <a href="https://<?= h($customDomain) ?>/">https://<?= h($customDomain) ?>/</a>. L’adresse historique de la plateforme continue de fonctionner.</p>
+          <p class="dm-note">Le domaine reste enregistré chez votre fournisseur : c’est lui qui prélève le renouvellement annuel. Pour le détacher, prévenez aussi l’exploitant de la plateforme afin qu’il retire l’alias d’hébergement et le certificat.</p>
+          <form method="post" action="/admin/domaine-action.php" onsubmit="return confirm('Détacher <?= h($customDomain) ?> ? Votre boutique ne répondra plus à cette adresse dès maintenant. Le domaine reste chez votre fournisseur.');">
+            <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+            <input type="hidden" name="action" value="custom_remove">
+            <button type="submit" class="btn">Détacher ce domaine</button>
+          </form>
+        <?php else: ?>
+          <p>Étape 1 — prouvez que le domaine est à vous. Ajoutez cet enregistrement TXT chez votre fournisseur de domaine (la propagation prend de quelques minutes à quelques heures) :</p>
+          <table class="dm-table">
+            <thead><tr><th>Type</th><th>Nom</th><th>Valeur</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td>TXT</td>
+                <td><code><?= h('_brocs.' . $customDomain) ?></code></td>
+                <td><code><?= h('brocs-verify=' . $customToken) ?></code></td>
+                <td><?= $customProofAt > 0 ? '<span class="dm-ok">Vérifié</span>' : '<span class="dm-no">En attente</span>' ?></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="dm-note">Si votre fournisseur refuse les noms commençant par « _brocs », l’enregistrement TXT peut aussi être créé sur le domaine lui-même, <code><?= h($customDomain) ?></code>, avec la même valeur.</p>
+
+          <p style="margin-top:14px;">Étape 2 — pointez le domaine vers ce serveur :</p>
+          <table class="dm-table">
+            <thead><tr><th>Type</th><th>Nom</th><th>Valeur</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td>A</td>
+                <td><code>@</code> (le domaine)</td>
+                <td><code><?= $targetIp !== '' ? h($targetIp) : 'adresse à demander à l’exploitant' ?></code></td>
+                <td><?= $customRoutingAt > 0 ? '<span class="dm-ok">Confirmé</span>' : '<span class="dm-no">En attente</span>' ?></td>
+              </tr>
+              <tr>
+                <td>CNAME</td>
+                <td><code>www</code></td>
+                <td><code>@</code> (ou <code><?= h($customDomain) ?></code>)</td>
+                <td><?= !empty($customObserved['www']) ? '<span class="dm-ok">Vu</span>' : '<span class="dm-no">Facultatif</span>' ?></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="dm-note">Conservez la durée de vie (TTL) proposée par votre fournisseur. Si le domaine a déjà des adresses e-mail, ne touchez pas aux enregistrements MX.</p>
+
+          <?php if ($customCheckedAt > 0): ?>
+            <p class="dm-note">Dernier contrôle le <?= h(date('d/m/Y à H:i', $customCheckedAt)) ?><?= !empty($customObserved['a']) ? ' — adresse vue : ' . h(implode(', ', (array) $customObserved['a'])) : '' ?>.</p>
+          <?php endif; ?>
+
+          <div class="dm-actions" style="margin-top:12px;">
+            <form method="post" action="/admin/domaine-action.php">
+              <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+              <input type="hidden" name="action" value="custom_check">
+              <button type="submit" class="btn btn-primary">Vérifier maintenant</button>
+            </form>
+            <?php if ($customState === 'dns_ok'): ?>
+              <form method="post" action="/admin/domaine-action.php">
+                <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                <input type="hidden" name="action" value="custom_request">
+                <button type="submit" class="btn btn-primary">Demander la mise en service</button>
+              </form>
+            <?php endif; ?>
+            <form method="post" action="/admin/domaine-action.php" onsubmit="return confirm('Détacher ce domaine ? Les consignes DNS seront oubliées et un nouveau jeton sera demandé pour le rattacher à nouveau.');">
+              <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+              <input type="hidden" name="action" value="custom_remove">
+              <button type="submit" class="btn">Détacher</button>
+            </form>
+          </div>
+
+          <?php if ($customState === 'ready'): ?>
+            <p class="dm-note" style="margin-top:10px;">La demande est chez l’exploitant de la plateforme : il déclare le domaine sur l’hébergement, émet le certificat HTTPS puis active l’adresse. Vous n’avez rien d’autre à faire.</p>
+          <?php elseif ($customState === 'dns_ok'): ?>
+            <p class="dm-note" style="margin-top:10px;">Tout est en place. Demandez la mise en service : l’exploitant émet le certificat HTTPS et active l’adresse (généralement sous 24 à 48 heures).</p>
+          <?php elseif ($customState === 'verified'): ?>
+            <p class="dm-note" style="margin-top:10px;">La propriété est confirmée. Il reste à pointer le domaine vers le serveur (étape 2) pour pouvoir demander la mise en service.</p>
+          <?php else: ?>
+            <p class="dm-note" style="margin-top:10px;">L’enregistrement TXT n’est pas encore visible. Vérifiez le nom et la valeur, puis cliquez sur « Vérifier maintenant » après la propagation.</p>
+          <?php endif; ?>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
 
     <?php if ($ovhError !== ''): ?>
       <div class="dm-card">
@@ -306,6 +422,8 @@ if (!$owner) {
                   <td>
                     <?php if (!empty($candidate['available']) && !$searchStale): ?>
                       <a class="btn-small" href="/admin/domaine.php?choisir=<?= h(rawurlencode($candidateDomain)) ?>">Choisir</a>
+                    <?php elseif (($candidate['kind'] ?? '') === 'exact' && $customState === ''): ?>
+                      <a class="btn-small" href="/admin/domaine.php?deja=<?= h(rawurlencode($candidateDomain)) ?>#deja">Déjà à vous ?</a>
                     <?php endif; ?>
                   </td>
                 </tr>

@@ -12,6 +12,7 @@
 // commerce, que le portail.
 
 require_once __DIR__ . '/tenant.php';
+require_once __DIR__ . '/apps.php';
 require_once __DIR__ . '/appearance.php';
 require_once __DIR__ . '/gallery-map.php';
 require_once __DIR__ . '/gallery-modules.php';
@@ -91,14 +92,35 @@ function gallery_normalize(string $slug, array $data): array
         'paused' => !empty($data['paused']),
         'created' => (int) ($data['created'] ?? time()),
         'style' => gallery_style_normalize((array) ($data['style'] ?? [])),
+        'apps' => gallery_apps_normalize((array) ($data['apps'] ?? [])),
         'members' => $members,
         'admins' => gallery_admins_normalize((array) ($data['admins'] ?? [])),
         'plan' => gallery_plan_normalize((array) ($data['plan'] ?? [])),
+        'gesture' => gallery_gesture_normalize($data['gesture'] ?? null),
         'type' => $type,
         'domain' => gallery_domain_normalize((string) ($data['domain'] ?? '')),
         'modules' => gallery_modules_normalize((array) ($data['modules'] ?? [])),
         'event' => gallery_event_normalize((array) ($data['event'] ?? [])),
         'map' => gallery_map_normalize((array) ($data['map'] ?? []), array_map('gallery_member_key', $members), $typeLocations),
+    ];
+}
+
+/**
+ * Geste commercial attaché à une galerie : gratuité d'accès (kind=forever ou until) ou avantage de facturation
+ * (kind=credit ou discount). Seuls forever et until maintiennent la galerie ouverte malgré l'offre.
+ */
+function gallery_gesture_normalize($gesture): ?array
+{
+    if (!is_array($gesture) || !in_array($gesture['kind'] ?? '', ['forever', 'until', 'credit', 'discount'], true)) return null;
+    $kind = (string) $gesture['kind'];
+    $until = max(0, (int) ($gesture['until'] ?? 0));
+    return [
+        'kind' => $kind,
+        'until' => in_array($kind, ['until', 'credit', 'discount'], true) ? $until : 0,
+        'amount_cents' => $kind === 'credit' ? max(0, min(1000000, (int) ($gesture['amount_cents'] ?? 0))) : 0,
+        'percent' => $kind === 'discount' ? max(0, min(100, (int) ($gesture['percent'] ?? 0))) : 0,
+        'note' => mb_substr(trim((string) ($gesture['note'] ?? '')), 0, 300),
+        'created' => (int) ($gesture['created'] ?? time()),
     ];
 }
 
@@ -361,7 +383,7 @@ function gallery_export_payload(string $slug): ?array
         }
         $assets[$kind] = ['mime' => $mime, 'data' => base64_encode($content)];
     }
-    unset($gallery['admins'], $gallery['plan'], $gallery['modules'], $gallery['domain']);
+    unset($gallery['admins'], $gallery['plan'], $gallery['gesture'], $gallery['modules'], $gallery['domain']);
     $gallery['style'] = $style;
     return ['format' => 'brocante-gallery', 'version' => 1, 'gallery' => $gallery, 'assets' => $assets];
 }
@@ -423,6 +445,7 @@ function gallery_import_payload(array $payload, string $slug, ?array $existing =
     $data['style'] = $style;
     $data['admins'] = $existing['admins'] ?? [];
     $data['plan'] = $existing['plan'] ?? null;
+    $data['gesture'] = $existing['gesture'] ?? null;
     $data['domain'] = $existing['domain'] ?? '';
     $data['created'] = $existing['created'] ?? time();
     if ($existing === null) {
@@ -633,6 +656,7 @@ function gallery_local_shop_url(string $slug, array $config, string $requestOrig
 function catalogue_local(string $slug, string $requestOrigin): ?array
 {
     if (!is_file(tenant_dir($slug) . '/tenant.php')) return null;
+    if (!shop_state_is_public(shop_state_load($slug))) return null;
     $config = tenant_load($slug);
     $file = tenant_file($config, 'db_file');
     if (!is_file($file)) return null;

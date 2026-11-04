@@ -7,11 +7,13 @@ require_once __DIR__ . '/../includes/saas.php';
 http_response_code(400);
 header('Content-Type: text/plain; charset=utf-8');
 
-$secret = saas_stripe_config()['webhook_secret'];
 $payload = (string) file_get_contents('php://input');
-if ($secret === '' || !saas_stripe_signature_valid($payload, (string) ($_SERVER['HTTP_STRIPE_SIGNATURE'] ?? ''), $secret)) {
-    exit('signature invalide');
+$signature = (string) ($_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '');
+$signed = false;
+foreach (saas_stripe_webhook_secrets() as $secret) {
+    if (saas_stripe_signature_valid($payload, $signature, $secret)) { $signed = true; break; }
 }
+if (!$signed) exit('signature invalide');
 $event = json_decode($payload, true);
 if (!is_array($event) || empty($event['type'])) exit('événement illisible');
 

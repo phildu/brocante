@@ -19,7 +19,7 @@ $ticker = array_values(array_filter(array_map(static fn (int $i): string => trim
     <p class="md-kicker"><?= h($content['hero_eyebrow']) ?></p>
     <h1><?= h($content['hero_title']) ?></h1>
     <p class="md-hero-sub"><?= h($content['hero_subtitle']) ?></p>
-    <p class="md-hero-ctas"><a class="md-btn md-btn-light" href="/boutique.php">Découvrir la collection</a> <a class="md-link-light" href="#histoire">Notre histoire</a> <span class="md-hero-share"><?= share_page_button((string) ($content['site_name'] ?: tenant('name')), (string) $content['hero_subtitle']) ?></span></p>
+    <p class="md-hero-ctas"><a class="md-btn md-btn-light" href="/boutique.php">Découvrir la collection</a> <a class="md-link-light" href="/notre-histoire.php">Notre histoire</a> <span class="md-hero-share"><?= share_page_button((string) ($content['site_name'] ?: tenant('name')), (string) $content['hero_subtitle']) ?></span></p>
   </div>
 </section>
 
@@ -94,6 +94,14 @@ $ticker = array_values(array_filter(array_map(static fn (int $i): string => trim
 
 <section class="md-contact" id="contact">
   <div class="wrap md-contact-in">
+    <?php $mdLocate = shop_locate_info(); $mdLocateMeta = array_filter([$mdLocate['hours'] !== '' ? 'Horaires : ' . $mdLocate['hours'] : '', $mdLocate['delivery'] !== '' ? $mdLocate['delivery'] : '']); ?>
+    <div class="md-locate">
+      <p class="md-locate-kicker">Nous trouver</p>
+      <?php if ($mdLocate['address_full'] !== ''): ?><address><?= nl2br(h($mdLocate['address_full'])) ?></address><?php endif; ?>
+      <?php if ($mdLocate['access'] !== ''): ?><p class="md-locate-meta"><?= nl2br(h($mdLocate['access'])) ?></p><?php endif; ?>
+      <?php if ($mdLocateMeta): ?><p class="md-locate-meta"><?= h(implode(' · ', $mdLocateMeta)) ?></p><?php endif; ?>
+      <?= shop_locate_actions_html(['class' => 'md-locate-actions']) ?>
+    </div>
     <h2 class="md-h"><?= h(tenant_text('newsletter_title')) ?></h2>
     <p><?= h(tenant_text('newsletter_text')) ?></p>
     <form method="post" action="/newsletter.php" class="md-news md-news-big">

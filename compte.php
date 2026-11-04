@@ -150,6 +150,10 @@ include __DIR__ . '/includes/header.php';
               </p>
               <?php if (!empty($o['shipping_address'])): ?><p style="font-size:0.82rem;color:var(--ink-soft);">📦 <?= h($o['shipping_address']) ?></p><?php endif; ?>
               <?php if (!empty($o['tracking_number'])): ?><p style="font-size:0.82rem;color:var(--ink-soft);">N° de suivi : <?= h($o['tracking_number']) ?></p><?php endif; ?>
+              <?php $track = order_buyer_tracking($o); $trackUrl = order_track_url($o); ?>
+              <?php if ($trackUrl !== ''): ?>
+                <p style="font-size:0.82rem;color:var(--ink-soft);"><a href="<?= h($trackUrl) ?>" style="color:var(--accent);">Suivre ma commande</a><?php if ($track['pickup'] && $track['address'] !== ''): ?> — retrait : <?= h($track['address']) ?><?php endif; ?><?php if ($track['deadline'] !== ''): ?>, avant le <?= h($track['deadline']) ?><?php endif; ?></p>
+              <?php endif; ?>
             </div>
           <?php endforeach; ?>
         </div>

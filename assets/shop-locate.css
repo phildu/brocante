@@ -1,0 +1,318 @@
+/* « Nous trouver » : adresse, carte IGN Géoplateforme, itinéraire et export vCard — includes/locate.php + assets/shop-locate.js.
+   Reprend les variables de couleur et de police du modèle de la boutique (assets/style.css, assets/*-theme.css). */
+
+.shop-locate {
+  --sl-radius: 3px;
+  --sl-gap: 18px;
+  --sl-map-height: clamp(300px, 46vw, 460px);
+  color: var(--ink);
+  background: var(--bg);
+  padding: clamp(28px, 5vw, 64px) 0;
+}
+
+.shop-locate a { color: inherit; }
+.shop-locate address { font-style: normal; }
+
+/* En-tête */
+
+.shop-locate-head { max-width: 720px; margin: 0 0 26px; }
+.shop-locate-kicker {
+  margin: 0 0 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: .72rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.shop-locate-head h1 {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.7rem, 4.2vw, 2.6rem);
+  line-height: 1.08;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+.shop-locate-lead { margin: 0; font-size: 1.05rem; color: var(--ink-soft); line-height: 1.55; }
+.shop-locate-lead address { color: var(--ink); font-weight: 600; }
+
+.shop-locate-meta {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  margin: 18px 0 0;
+  padding: 0;
+  font-size: .9rem;
+  color: var(--ink-soft);
+}
+.shop-locate-meta li { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shop-locate-meta b {
+  font-family: var(--font-mono, monospace);
+  font-size: .64rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.shop-locate-meta a { text-decoration: underline; text-underline-offset: 2px; }
+.shop-locate-meta .shop-locate-access { padding-left: 12px; border-left: 3px solid var(--accent); }
+.shop-locate-meta .shop-locate-access span { color: var(--ink); }
+
+/* Grille carte + actions */
+
+.shop-locate-grid { display: grid; grid-template-columns: 1fr; gap: var(--sl-gap); align-items: start; }
+@media (min-width: 860px) {
+  .shop-locate-grid { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); }
+}
+
+.shop-locate-mapwrap { position: relative; min-width: 0; }
+.shop-locate-map {
+  width: 100%;
+  height: var(--sl-map-height);
+  background: var(--surface, #eee);
+  border: 1px solid var(--line);
+  border-radius: var(--sl-radius);
+  overflow: hidden;
+  z-index: 0;
+}
+.shop-locate-map.is-loading {
+  background-image: linear-gradient(100deg, var(--surface, #eee) 20%, var(--bg) 40%, var(--surface, #eee) 60%);
+  background-size: 200% 100%;
+  animation: sl-shimmer 1.2s linear infinite;
+}
+@keyframes sl-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+
+.shop-locate-layers {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 500;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--sl-radius);
+  background: var(--bg);
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .35);
+}
+.shop-locate-layers[hidden] { display: none; }
+.shop-locate-layers button {
+  font: inherit;
+  font-size: .76rem;
+  font-weight: 600;
+  padding: 8px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 0;
+}
+.shop-locate-layers button + button { border-left: 1px solid var(--line); }
+.shop-locate-layers button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.shop-locate-layers button:hover:not([aria-pressed="true"]) { color: var(--ink); }
+
+.shop-locate-note { margin: 8px 0 0; font-size: .74rem; line-height: 1.45; color: var(--ink-soft); }
+
+/* Panneau latéral */
+
+.shop-locate-side { min-width: 0; }
+.shop-locate-actions { display: flex; flex-direction: column; gap: 8px; }
+.shop-locate-actions-main { margin-bottom: 12px; }
+.shop-locate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  padding: 12px 16px;
+  border: 1px solid var(--ink);
+  border-radius: var(--sl-radius);
+  background: var(--ink);
+  color: var(--bg);
+  cursor: pointer;
+  transition: filter .15s ease, background .15s ease, color .15s ease;
+}
+.shop-locate-btn:hover { filter: brightness(1.1); }
+.shop-locate-btn-alt { background: transparent; color: var(--ink); border-color: var(--line); }
+.shop-locate-btn-alt:hover { border-color: var(--ink); filter: none; background: var(--surface, rgba(0,0,0,.04)); }
+.shop-locate-hint { margin: 0 0 16px; font-size: .8rem; line-height: 1.55; color: var(--ink-soft); }
+.shop-locate-hint strong { color: var(--ink); font-weight: 600; }
+
+.shop-locate-actions:not(.shop-locate-actions-main) { flex-direction: row; flex-wrap: wrap; }
+.shop-locate-actions:not(.shop-locate-actions-main) .shop-locate-btn { padding: 9px 13px; font-size: .82rem; border-color: var(--line); background: transparent; color: var(--ink); }
+
+/* Formulaire d'itinéraire */
+
+.shop-locate-route {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--sl-radius);
+  background: var(--surface, transparent);
+}
+.shop-locate-route[hidden] { display: none; }
+.shop-locate-route-title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.shop-locate-field { display: flex; flex-direction: column; gap: 6px; }
+.shop-locate-field > span:first-child {
+  font-family: var(--font-mono, monospace);
+  font-size: .66rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.shop-locate-origin-row { display: flex; gap: 8px; align-items: stretch; }
+.shop-locate-origin-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: .9rem;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--sl-radius);
+}
+.shop-locate-origin-row input:focus { outline: 2px solid var(--accent-2, var(--accent)); outline-offset: 1px; }
+.shop-locate-origin-row button {
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  padding: 0 12px;
+  white-space: nowrap;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--sl-radius);
+  cursor: pointer;
+}
+.shop-locate-origin-row button:hover { border-color: var(--ink); }
+
+.shop-locate-suggestions {
+  list-style: none;
+  margin: -4px 0 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--sl-radius);
+  background: var(--bg);
+  box-shadow: 0 14px 30px -18px rgba(0, 0, 0, .45);
+  max-height: 260px;
+  overflow: auto;
+}
+.shop-locate-suggestions[hidden] { display: none; }
+.shop-locate-suggestions li { margin: 0; }
+.shop-locate-suggestions button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: .86rem;
+  line-height: 1.35;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.shop-locate-suggestions button:hover,
+.shop-locate-suggestions button:focus-visible,
+.shop-locate-suggestions button[aria-selected="true"] { background: var(--surface, rgba(0,0,0,.06)); }
+.shop-locate-suggestions small { display: block; color: var(--ink-soft); font-size: .74rem; }
+
+.shop-locate-profiles {
+  display: flex;
+  overflow: hidden;
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: var(--sl-radius);
+}
+.shop-locate-profiles button {
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.shop-locate-profiles button + button { border-left: 1px solid var(--line); }
+.shop-locate-profiles button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+.shop-locate-submit { width: 100%; }
+.shop-locate-submit[disabled] { opacity: .65; cursor: progress; filter: none; }
+
+.shop-locate-status { margin: 0; min-height: 1.2em; font-size: .8rem; line-height: 1.45; color: var(--ink-soft); }
+.shop-locate-status[data-kind="error"] { color: var(--accent); }
+.shop-locate-status[data-kind="ok"] { color: var(--ink); }
+
+.shop-locate-result {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: .88rem;
+  color: var(--ink-soft);
+}
+.shop-locate-result[hidden] { display: none; }
+.shop-locate-result-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 6px; }
+.shop-locate-result-line strong { font-size: 1.3rem; color: var(--ink); font-family: var(--font-display, inherit); }
+.shop-locate-result p { margin: 0; }
+.shop-locate-result a { color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.shop-locate-fallback { margin: 0; font-size: .78rem; }
+.shop-locate-fallback a { color: var(--ink-soft); text-decoration: underline; text-underline-offset: 2px; }
+
+.shop-locate-noscript { margin: 16px 0 0; padding: 12px 14px; font-size: .86rem; color: var(--ink-soft); border-left: 3px solid var(--accent); background: var(--surface, transparent); }
+
+/* Repères sur la carte (Leaflet) */
+
+.shop-locate-pin {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--accent, #b5502e);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+.shop-locate-pin-start { background: var(--ink, #222); }
+.leaflet-container { font-family: var(--font-body, system-ui, sans-serif); background: var(--surface, #eee); }
+.shop-locate .leaflet-container { font-family: var(--font-body, system-ui, sans-serif); }
+.leaflet-control-attribution { font-size: 10px; }
+.shop-locate .leaflet-bar a { color: #222; }
+
+/* Modèles : coins carrés, titres en capitales */
+
+/* Boutons compacts dans les sections « contact » des accueils. */
+.shop-locate-actions.shop-locate-contact-actions { margin: 20px 0 4px; }
+
+/* Modèle « Mode » : bloc adresse au-dessus de la lettre d'information. */
+.md-locate { display: grid; justify-items: center; gap: 8px; margin: 0 auto 34px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.md-locate-kicker { margin: 0; font-size: .68rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); }
+.md-locate address { font-style: normal; font-size: 1rem; line-height: 1.5; }
+.md-locate-meta { margin: 0; font-size: .86rem; color: var(--ink-soft); }
+.md-locate-actions { justify-content: center; }
+
+html[data-layout="librairie"] .shop-locate,
+html[data-layout="mode"] .shop-locate { --sl-radius: 0; }
+html[data-layout="mode"] .shop-locate-kicker,
+html[data-layout="mode"] .shop-locate-btn,
+html[data-layout="mode"] .shop-locate-route-title,
+html[data-layout="mode"] .shop-locate-layers button,
+html[data-layout="mode"] .shop-locate-profiles button { text-transform: uppercase; letter-spacing: .08em; }
+html[data-layout="mode"] .shop-locate-kicker { letter-spacing: .16em; }
+html[data-layout="feuille"] .shop-locate-head h1 { font-style: italic; }
+
+@media (max-width: 520px) {
+  .shop-locate-origin-row { flex-wrap: wrap; }
+  .shop-locate-origin-row button { width: 100%; padding: 9px 12px; }
+  .shop-locate-layers button { padding: 7px 9px; font-size: .72rem; }
+}

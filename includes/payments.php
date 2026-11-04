@@ -5,8 +5,11 @@
 // il ajoute un registre de fournisseurs, la lecture des réglages et la
 // finalisation commune d'une commande payée hors Stripe.
 
+require_once __DIR__ . '/stripe-mode.php';
 require_once __DIR__ . '/payments/monetico.php';
 require_once __DIR__ . '/payments/paypal.php';
+require_once __DIR__ . '/payments/revolut.php';
+require_once __DIR__ . '/payments/sepa.php';
 
 /** Fournisseur d'une commande ; les commandes antérieures (sans colonne) sont Stripe. */
 function payment_provider_of(array $order): string
@@ -16,6 +19,8 @@ function payment_provider_of(array $order): string
     $session = (string) ($order['stripe_session_id'] ?? '');
     if (str_starts_with($session, 'monetico:')) return 'monetico';
     if (str_starts_with($session, 'paypal:')) return 'paypal';
+    if (str_starts_with($session, 'revolut:')) return 'revolut';
+    if (str_starts_with($session, 'sepa:')) return 'sepa';
     return 'stripe';
 }
 
@@ -25,6 +30,8 @@ function payment_provider_label(string $provider): string
         'stripe' => 'Stripe',
         'monetico' => 'Monetico',
         'paypal' => 'PayPal',
+        'revolut' => 'Revolut',
+        'sepa' => 'Virement SEPA',
     ][$provider] ?? $provider;
 }
 
@@ -44,6 +51,8 @@ function shop_payment_methods_available(): array
     if (stripe_checkout_ready()) $all['stripe'] = 'Carte bancaire (Stripe)';
     if (monetico_configured()) $all['monetico'] = 'Carte bancaire (Monetico)';
     if (paypal_configured()) $all['paypal'] = 'PayPal';
+    if (revolut_configured()) $all['revolut'] = 'Carte bancaire (Revolut)';
+    if (sepa_configured()) $all['sepa'] = 'Virement SEPA';
     return $all;
 }
 
@@ -63,6 +72,12 @@ function shop_payment_methods(): array
     return array_intersect_key($all, array_flip($keep));
 }
 
+/** Moyens de paiement utilisables pour un règlement immédiat par QR (le virement SEPA est exclu). */
+function shop_qr_payment_methods(): array
+{
+    return array_diff_key(shop_payment_methods(), ['sepa' => true]);
+}
+
 function payment_method_available(string $provider): bool
 {
     return isset(shop_payment_methods()[$provider]);
@@ -74,8 +89,8 @@ function payment_reference(?PDO $pdo = null): string
     $pdo ??= db();
     for ($try = 0; $try < 10; $try++) {
         $reference = 'B' . strtoupper(bin2hex(random_bytes(5)));
-        $st = $pdo->prepare("SELECT 1 FROM orders WHERE payment_reference = ? OR stripe_session_id IN (?, ?) LIMIT 1");
-        $st->execute([$reference, 'monetico:' . $reference, 'paypal:' . $reference]);
+        $st = $pdo->prepare("SELECT 1 FROM orders WHERE payment_reference = ? OR stripe_session_id IN (?, ?, ?, ?) LIMIT 1");
+        $st->execute([$reference, 'monetico:' . $reference, 'paypal:' . $reference, 'revolut:' . $reference, 'sepa:' . $reference]);
         if (!$st->fetchColumn()) return $reference;
     }
     throw new RuntimeException('Impossible de générer une référence de commande.');
@@ -84,7 +99,8 @@ function payment_reference(?PDO $pdo = null): string
 /**
  * Jeton du lien de retour : permet d'afficher la commande sans dépendre du
  * cookie de session (Monetico revient par un POST depuis un autre domaine,
- * où le cookie SameSite=Lax n'est pas envoyé).
+ * où le cookie SameSite=Lax n'est pas envoyé). Les fournisseurs sans secret
+ * propre (virement, Revolut) utilisent une clé de boutique dédiée.
  */
 function payment_return_secret(string $provider): string
 {
@@ -96,7 +112,36 @@ function payment_return_secret(string $provider): string
         $config = paypal_config();
         return (string) ($config['secret'] ?? '');
     }
+    if ($provider === 'revolut') {
+        $config = revolut_config();
+        return (string) ($config['api_key'] ?? '') !== '' ? payment_token_secret() : '';
+    }
+    if ($provider === 'sepa') {
+        return sepa_configured() ? payment_token_secret() : '';
+    }
     return '';
+}
+
+/** Clé aléatoire propre à la boutique, créée au premier besoin (fichier 0600). */
+function payment_token_secret(): string
+{
+    static $secret = null;
+    if ($secret !== null) return $secret;
+    $file = rtrim(SECRETS_DIR, '/') . '/payment_token.key';
+    if (is_file($file)) {
+        $stored = trim((string) file_get_contents($file));
+        if ($stored !== '') return $secret = $stored;
+    }
+    $dir = rtrim(SECRETS_DIR, '/');
+    if (!is_dir($dir)) @mkdir($dir, 0700, true);
+    $value = bin2hex(random_bytes(32));
+    if (@file_put_contents($file, $value) !== false) {
+        @chmod($file, 0600);
+        return $secret = $value;
+    }
+    // Dossier non inscriptible : clé déterministe de secours (moins forte, mais
+    // le lien reste signé et propre à ce commerce).
+    return $secret = hash('sha256', 'brocs-payment-link:' . tenant_slug() . ':' . tenant_site_url());
 }
 
 function payment_return_token(int $orderId, string $provider): string
@@ -175,8 +220,12 @@ function order_finalize_external(array $order, string $provider, string $payment
     ]);
     if ($upd->rowCount() === 0) return false;
 
-    decrement_stock_for_order(json_decode((string) $order['items'], true) ?: []);
+    // Un virement SEPA réserve le stock dès la commande : ne pas le retirer deux fois.
+    if (empty($order['stock_reserved_at'])) {
+        decrement_stock_for_order(json_decode((string) $order['items'], true) ?: []);
+    }
     order_prepare_after_payment($order, []);
+    order_mark_shop_qr_sold($order);
     order_event($orderId, 'paiement', 'Paiement confirmé (' . format_cents((int) $order['amount_total']) . ') — ' . payment_provider_label($provider), $provider, 'paid');
 
     account_upsert_contact(

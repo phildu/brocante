@@ -4,6 +4,7 @@
 require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas.php';
 require_once PORTAIL_ROOT . '/includes/domain-shop.php';
+require_once PORTAIL_ROOT . '/includes/domain-custom.php';
 
 if (defined('GA_LIMITED')) { header('Location: /portail/galerie-tableau.php'); exit; }
 
@@ -72,6 +73,30 @@ try {
     if ($action === 'archive') {
         domain_shop_archive_purchase($slug);
         domain_portal_back('Commande archivée : vous pouvez préparer un autre domaine.', 'ok');
+    }
+
+    if ($action === 'save_custom_ip') {
+        $ip = trim((string) ($_POST['domain_ip'] ?? ''));
+        if ($ip !== '' && !filter_var($ip, FILTER_VALIDATE_IP)) {
+            domain_portal_back('Indiquez une adresse IP valide (par exemple 213.186.33.3), ou laissez le champ vide.');
+        }
+        $cfg = saas_config();
+        $cfg['domain_ip'] = $ip;
+        if (!saas_config_save($cfg)) domain_portal_back('Impossible d’enregistrer l’adresse IP.');
+        domain_portal_back($ip !== '' ? 'Adresse IP du serveur enregistrée : les consignes DNS des boutiques l’utilisent.' : 'Adresse IP effacée : l’adresse du serveur qui répond sera proposée.', 'ok');
+    }
+
+    if ($action === 'custom_activate' || $action === 'custom_remove') {
+        $shop = strtolower(trim((string) ($_POST['shop'] ?? '')));
+        if (!domain_custom_slug_valid($shop) || !is_file(tenant_dir($shop) . '/tenant.php')) {
+            domain_portal_back('Boutique inconnue.');
+        }
+        if ($action === 'custom_activate') {
+            $record = domain_custom_activate($shop);
+            domain_portal_back('Adresse ' . (string) ($record['domain'] ?? '') . ' mise en service pour ' . $shop . ' : la boutique répond maintenant sur ce domaine.', 'ok');
+        }
+        domain_custom_remove($shop);
+        domain_portal_back('Adresse détachée de ' . $shop . '. Pensez à retirer l’alias d’hébergement et le certificat si le domaine ne doit plus arriver ici.', 'ok');
     }
 
     domain_portal_back('Action inconnue.');

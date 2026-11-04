@@ -28,6 +28,8 @@ const GB_AUDIT_LABELS = [
     'waitlist_claim' => 'Place voisine acceptée (file d\'attente)', 'no_show' => 'Absence constatée le jour même',
     'cni_upload' => 'Copie de pièce déposée', 'cni_verified' => 'Pièce vérifiée', 'cni_rejected' => 'Pièce refusée',
     'cni_delete' => 'Copie supprimée', 'cni_purged' => 'Copie purgée automatiquement', 'cni_view' => 'Copie consultée',
+    'event_cancel' => 'Événement annulé', 'event_reopen' => 'Événement réactivé', 'event_notice' => 'Avis d’annulation envoyé',
+    'refund_due' => 'Remboursement à effectuer', 'refund_paid' => 'Remboursement effectué', 'refund_waived' => 'Remboursement renoncé',
 ];
 
 function gb_file(string $slug): string
@@ -73,6 +75,9 @@ function gb_booking(array $gallery): array
     $map = is_array($gallery['map']['booking'] ?? null) ? $gallery['map']['booking'] : [];
     $event = gallery_event($gallery);
     $exposants = function_exists('gt_feature') ? gt_feature($gallery, 'exposants') : true;
+    if ($event && ge_cancelled($event)) {
+        return ['enabled' => false, 'source' => '', 'hold_days' => 7, 'intro' => '', 'event' => $event, 'cancelled' => true];
+    }
     $eventOn = $exposants && $event && !empty($event['published']) && !empty($event['booking']['enabled'])
         && gm_enabled($gallery, 'organisateur') && ge_place_count($event) > 0;
     $mapOn = $exposants && gm_enabled($gallery, 'carte') && !empty($map['enabled']);
@@ -231,6 +236,7 @@ function gb_pass_url(array $gallery, array $row): string
 function gb_request(array $gallery, string $slotId, array $in, string $ip, array $files = []): array
 {
     $b = gb_booking($gallery);
+    if (!empty($b['cancelled'])) return [null, "L'événement est annulé : les demandes d'emplacement sont fermées. Les exposants déjà inscrits sont prévenus du remboursement."];
     if (!$b['enabled'] || !go_is_live($gallery)) return [null, "Les demandes d'emplacement ne sont pas ouvertes."];
     $slot = gb_slot($gallery, $slotId);
     if (!$slot || $slot['shop'] !== '') return [null, "Cet emplacement n'est pas disponible."];
@@ -299,6 +305,10 @@ function gb_request(array $gallery, string $slotId, array $in, string $ip, array
 function gb_decide(array $gallery, string $slotId, string $action, string $actor = ''): ?string
 {
     if (!in_array($action, ['accept', 'refuse', 'release'], true)) return 'Action invalide.';
+    $event = gallery_event($gallery);
+    if ($event && ge_cancelled($event) && preg_match('/^ev[0-9]{1,4}$/', $slotId)) {
+        return "L'événement est annulé : les demandes ne peuvent plus être modifiées. Suivez les remboursements depuis la page de l'événement.";
+    }
     $slot = gb_slot($gallery, $slotId);
     $entry = gb_update($gallery['slug'], static function (array &$d) use ($slotId, $action) {
         $e = $d['slots'][$slotId] ?? null;
@@ -331,6 +341,8 @@ function gb_decide(array $gallery, string $slotId, string $action, string $actor
 function gb_cancel(string $slug, string $token, ?string &$removedSlotId = null): bool
 {
     if (!preg_match('/^[a-f0-9]{32}$/', $token)) return false;
+    $gallery = gallery_slug_valid($slug) ? gallery_load($slug) : null;
+    if ($gallery && ge_cancelled(gallery_event($gallery))) return false;   // l'annulation de l'événement fige le registre des remboursements
     $removed = null;
     $removedId = '';
     $ok = (bool) gb_update($slug, static function (array &$d) use ($token, &$removed, &$removedId) {

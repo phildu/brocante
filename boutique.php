@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/recommendations.php';
 
 $cat = $_GET['cat'] ?? 'tous';
 $validKeys = array_column(category_list(), 'key');
@@ -19,6 +20,8 @@ foreach (db()->query("SELECT nature, sous_categorie, COUNT(*) AS n FROM products
 if ($nature !== '') {
     $products = array_values(array_filter($products, static fn (array $p): bool => ($p['nature'] ?? '') === $nature && ($sous === '' || ($p['sous_categorie'] ?? '') === $sous)));
 }
+if ($q !== '') rec_track_search($q);
+if ($cat !== 'tous' || $nature !== '') rec_track_browse($cat, $nature);
 $banner = get_page_banner('boutique');
 
 function boutique_url(string $cat, string $q, string $nature = '', string $sous = ''): string
@@ -38,6 +41,7 @@ include __DIR__ . '/includes/header.php';
 // Modèle à mise en page propre (views/<modèle>/shop.php) : mêmes données, autre structure.
 if ($view = shop_view('shop')) {
     include $view;
+    echo rec_for_you_section_html(array_column($products, 'ref'));
     include __DIR__ . '/includes/footer.php';
     return;
 }
@@ -97,6 +101,8 @@ if ($view = shop_view('shop')) {
     <?php endif; ?>
   </div>
 </section>
+
+<?= rec_for_you_section_html(array_column($products, 'ref')) ?>
 
 <?= plugin_render('boutique_bottom') ?>
 <?php include __DIR__ . '/includes/footer.php'; ?>

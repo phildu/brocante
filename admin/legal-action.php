@@ -22,6 +22,10 @@ if ($action === 'identity') {
         if ($f === 'host' && $v === legal_default_host()) $v = '';
         shop_setting_set('legal_' . $f, $v);
     }
+    // Point exact choisi sur la carte (facultatif) : deux valeurs vides l'effacent.
+    $lat = isset($_POST['point_lat']) && is_numeric($_POST['point_lat']) ? (float) $_POST['point_lat'] : null;
+    $lng = isset($_POST['point_lng']) && is_numeric($_POST['point_lng']) ? (float) $_POST['point_lng'] : null;
+    legal_point_save($lat !== null && $lng !== null ? $lat : null, $lat !== null && $lng !== null ? $lng : null);
     flash_set("Identité enregistrée : les textes qui n'ont pas été modifiés à la main en tiennent compte.");
 } elseif ($action === 'text' && isset(LEGAL_PAGES[$page])) {
     $text = mb_substr(trim(str_replace("\r", '', (string) ($_POST['text'] ?? ''))), 0, 40000);

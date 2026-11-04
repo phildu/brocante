@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $imported = gallery_import_payload($payload, $targetSlug, $existing);
                 $saasNote = 'Galerie « ' . $imported['name'] . ' » importée (' . ($existing ? 'remplacée' : 'créée') . ')';
-                portail_flash($saasNote . ($existing ? ' ; administrateurs et offre conservés.' : ' ; brouillon créé, sans comptes administrateurs ni offre importée.'), 'ok');
+                portail_flash($saasNote . ($existing ? ' ; administrateurs et offre conservés.' : ' ; galerie en test créée, sans comptes administrateurs ni offre importée.'), 'ok');
                 $back = '/portail/galeries.php?g=' . urlencode($targetSlug);
             } catch (JsonException | InvalidArgumentException | RuntimeException $e) {
                 error_log('gallery import: ' . $e->getMessage());
@@ -148,6 +148,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'published' => !empty($_POST['published']),
                 'domain' => $domain,
                 'members' => array_merge($local, $members),
+                'apps' => gallery_apps_normalize([
+                    'admin' => (string) ($_POST['app_name_admin'] ?? ''),
+                    'visitor' => (string) ($_POST['app_name_visitor'] ?? ''),
+                ]),
             ]);
             $ok = gallery_save($gallery);
             portail_flash($ok ? 'Galerie enregistrée.' : "Impossible d'écrire la galerie (droits du dossier data/galeries).", $ok ? 'ok' : 'error');
@@ -366,6 +370,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 : 'Impossible d’enregistrer le statut de la galerie.', $ok ? 'ok' : 'error');
             break;
 
+        case 'status':
+            if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            $state = (string) ($_POST['state'] ?? '');
+            if (!in_array($state, ['published', 'test', 'paused'], true)) { portail_flash('Statut inconnu.', 'error'); break; }
+            $gallery['published'] = $state !== 'test';
+            $gallery['paused'] = $state === 'paused';
+            $ok = gallery_save($gallery);
+            portail_flash($ok
+                ? ($state === 'published' ? 'Galerie publiée : elle est visible à son adresse publique.'
+                    : ($state === 'test' ? 'Galerie en test : elle n’est plus visible que par son lien d’aperçu.'
+                        : 'Galerie en pause : elle n’est plus visible publiquement, son offre n’est pas résiliée.'))
+                : 'Impossible d’enregistrer le statut de la galerie.', $ok ? 'ok' : 'error');
+            break;
+
+        case 'gesture':
+            if (!$gallery) { portail_flash('Galerie introuvable.', 'error'); break; }
+            $kind = (string) ($_POST['gesture_kind'] ?? 'none');
+            $note = mb_substr(trim((string) ($_POST['gesture_note'] ?? '')), 0, 300);
+            $until = 0;
+            $dateRaw = trim((string) ($_POST['gesture_until'] ?? ''));
+            if ($dateRaw !== '') {
+                $until = strtotime($dateRaw . ' 23:59:59') ?: 0;
+                if (!$until || $until <= time()) { portail_flash('Indiquez une date de fin dans le futur, ou laissez la date vide.', 'error'); break; }
+            }
+            $gesture = null;
+            if ($kind === 'forever') {
+                $gesture = ['kind' => 'forever', 'until' => 0, 'note' => $note, 'created' => time()];
+            } elseif ($kind === 'until') {
+                if ($until <= 0) { portail_flash('Indiquez une date de fin de gratuité dans le futur.', 'error'); break; }
+                $gesture = ['kind' => 'until', 'until' => $until, 'note' => $note, 'created' => time()];
+            } elseif ($kind === 'credit') {
+                $cents = (int) round(((float) str_replace(',', '.', (string) ($_POST['gesture_amount'] ?? ''))) * 100);
+                if ($cents <= 0 || $cents > 1000000) { portail_flash('Indiquez un montant d’avoir entre 0,01 € et 10 000 €.', 'error'); break; }
+                $gesture = ['kind' => 'credit', 'amount_cents' => $cents, 'until' => $until, 'note' => $note, 'created' => time()];
+            } elseif ($kind === 'discount') {
+                $percent = (int) ($_POST['gesture_percent'] ?? 0);
+                if ($percent < 1 || $percent > 100) { portail_flash('Indiquez une remise entre 1 % et 100 %.', 'error'); break; }
+                $gesture = ['kind' => 'discount', 'percent' => $percent, 'until' => $until, 'note' => $note, 'created' => time()];
+            } elseif ($kind !== 'none') {
+                portail_flash('Geste commercial inconnu.', 'error');
+                break;
+            }
+            $gallery['gesture'] = $gesture;
+            $ok = gallery_save($gallery);
+            $billing = in_array($kind, ['credit', 'discount'], true);
+            portail_flash($ok
+                ? ($gesture
+                    ? ($billing
+                        ? 'Geste de facturation enregistré. Il ne modifie pas automatiquement Stripe : appliquez l’avoir ou la remise dans Stripe pour la même période.'
+                        : 'Geste commercial enregistré : la galerie reste ouverte sans facturation pendant la période.')
+                    : 'Geste commercial retiré.')
+                : 'Impossible d’enregistrer le geste commercial.', $ok ? 'ok' : 'error');
+            break;
+
         case 'delete':
             if ($gallery && trim((string) ($_POST['confirm'] ?? '')) === $slug) {
                 $deleted = gallery_delete($slug);
@@ -459,23 +517,45 @@ portail_page_start([
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
   <div class="gwrap ga-page">
+  <?php if (!$limited): $platformStripe = saas_stripe_modes_status(); ?>
+    <section class="gcard" id="stripe">
+      <h2>Paiement des galeries (Stripe plateforme)
+        <span class="pill <?= $platformStripe['modes'][$platformStripe['mode']]['configured'] ? 'done' : 'sent' ?>">Mode <?= e(STRIPE_MODES[$platformStripe['mode']]) ?></span>
+      </h2>
+      <p class="meta">Les abonnements des galeries passent par le compte Stripe de la plateforme : <strong>mode test</strong> pour les essais, <strong>mode réel</strong> pour encaisser les clients. Les clés des deux modes sont conservées, la bascule ne demande pas de les recoller.</p>
+      <p class="meta">Test : <?= $platformStripe['modes']['test']['configured'] ? 'clé ' . e($platformStripe['modes']['test']['secret_mask']) : 'sans clé' ?>
+        · Réel : <?= $platformStripe['modes']['live']['configured'] ? 'clé ' . e($platformStripe['modes']['live']['secret_mask']) : 'sans clé' ?></p>
+      <a class="btn btn-primary" href="/portail/stripe.php#plateforme">Basculer le mode / gérer les clés</a>
+    </section>
+  <?php endif; ?>
   <?php if (!$edit): ?>
     <section class="gcard">
       <h2>Mes galeries</h2>
       <?php if (!$galleries): ?><p class="meta">Aucune galerie pour le moment : créez la première ci-dessous.</p><?php endif; ?>
-      <?php foreach ($galleries as $g): $url = gallery_public_url($g, $origin); ?>
+      <?php foreach ($galleries as $g): $url = gallery_public_url($g, $origin); $live = go_is_live($g); $paused = !empty($g['paused']); $inTest = !$paused && empty($g['published']); ?>
         <div class="gl">
           <div>
             <strong><?= e($g['name']) ?></strong>
-            <span class="pill <?= !empty($g['paused']) ? 'sent' : ($g['published'] ? 'done' : 'sent') ?>"><?= !empty($g['paused']) ? 'En pause' : ($g['published'] ? 'Publiée' : 'Brouillon') ?></span>             <span class="pill"><?= e(gt_of($g)['emoji'] . ' ' . gt_of($g)['name']) ?></span>
+            <span class="pill <?= $paused || $inTest ? 'sent' : 'done' ?>"><?= $paused ? 'En pause' : ($inTest ? 'En test' : 'Publiée') ?></span>
+            <?php if (!empty($g['gesture'])): ?><span class="pill <?= go_gesture_current($g) ? 'done' : 'sent' ?>" title="<?= e((string) ($g['gesture']['note'] ?? '')) ?>"><?= e(go_gesture_label($g)) ?></span><?php endif; ?>
+            <span class="pill"><?= e(gt_of($g)['emoji'] . ' ' . gt_of($g)['name']) ?></span>
             <span class="pill"><?= e(business_presence_label($g['presence_mode'])) ?></span><br>
             <small class="meta"><?= count($g['members']) ?> <?= e(count($g['members']) > 1 ? gt_word($g, 'members') : gt_word($g, 'member')) ?> · <code class="url"><?= e($url) ?></code></small>
           </div>
           <div class="row"><a class="btn small btn-primary" href="/portail/galeries.php?g=<?= e($g['slug']) ?>">Gérer</a>
             <?php if (gt_feature($g, 'plan')): ?><a class="btn small" href="/portail/galerie-plan.php?g=<?= e($g['slug']) ?>">Plan</a><?php endif; ?>
             <?php if (!$limited): ?><a class="btn small" href="/portail/galeries.php?g=<?= e($g['slug']) ?>#admins">Comptes admin</a><?php endif; ?>
+            <?php if (!$limited): ?>
+              <form method="post" class="row" style="gap:6px;"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>"><input type="hidden" name="action" value="status">
+                <?php if (!$live): ?><button class="btn small" type="submit" name="state" value="published">Publier</button><?php endif; ?>
+                <?php if ($live): ?><button class="btn small" type="submit" name="state" value="test">Mettre en test</button>
+                  <button class="btn small" type="submit" name="state" value="paused">Mettre en pause</button><?php elseif ($paused): ?><button class="btn small" type="submit" name="state" value="test">Mettre en test</button><?php endif; ?>
+              </form>
+              <a class="btn small" href="/portail/galeries.php?g=<?= e($g['slug']) ?>#geste">Geste commercial</a>
+            <?php endif; ?>
             <form method="post" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>"><button class="btn small" type="submit" name="action" value="export">Exporter JSON</button></form>
-            <a class="btn small" href="<?= e($url . ($g['published'] && empty($g['paused']) ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener"><?= $g['published'] && empty($g['paused']) ? 'Voir' : 'Aperçu' ?></a></div>
+            <a class="btn small" href="<?= e($url . ($live ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener"><?= $live ? 'Voir' : 'Aperçu' ?></a>
+            <?php if (!$limited): ?><a class="btn small danger" href="/portail/galeries.php?g=<?= e($g['slug']) ?>&amp;supprimer=1#supprimer">Supprimer</a><?php endif; ?></div>
         </div>
       <?php endforeach; ?>
     </section>
@@ -483,7 +563,7 @@ portail_page_start([
     <?php if (!$limited): ?>
     <form class="gcard" method="post" enctype="multipart/form-data">
       <h2>Importer une galerie</h2>
-      <p class="meta">Importez un export JSON Brocante (40 Mo maximum). Les images sont incluses ; les boutiques membres restent inchangées. Les comptes administrateurs et l’offre Stripe ne sont jamais importés. Une nouvelle galerie est créée en brouillon.</p>
+      <p class="meta">Importez un export JSON Brocante (40 Mo maximum). Les images sont incluses ; les boutiques membres restent inchangées. Les comptes administrateurs et l’offre Stripe ne sont jamais importés. Une nouvelle galerie est créée en test.</p>
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="import">
       <div class="row">
         <label class="f">Fichier JSON<input type="file" name="gallery_file" accept="application/json,.json" required></label>
@@ -492,7 +572,7 @@ portail_page_start([
         </label>
         <label class="f">Identifiant cible (facultatif pour une nouvelle galerie)<input type="text" name="target_slug" maxlength="40" pattern="[a-z0-9][a-z0-9\-]{1,39}" placeholder="par défaut : identifiant de l’export"></label>
       </div>
-      <p><button class="btn btn-primary" type="submit" onclick="return confirm(document.getElementById('import-mode').value === 'replace' ? 'Remplacer la configuration de la galerie sélectionnée ? Ses administrateurs et son offre seront conservés.' : 'Créer cette galerie en brouillon ?')">Importer la galerie</button></p>
+      <p><button class="btn btn-primary" type="submit" onclick="return confirm(document.getElementById('import-mode').value === 'replace' ? 'Remplacer la configuration de la galerie sélectionnée ? Ses administrateurs et son offre seront conservés.' : 'Créer cette galerie en test ?')">Importer la galerie</button></p>
     </form>
     <?php endif; ?>
 
@@ -517,19 +597,33 @@ portail_page_start([
       <p class="flash" data-kind="<?= in_array($st, ['expired', 'canceled'], true) ? 'error' : 'ok' ?>" role="status">Offre « <?= e(go_offer($g['plan']['offer'], gt_of($g)['key'])['name'] ?? $g['plan']['offer']) ?> » — <?= e(GO_PLAN_STATUS[$st] ?? $st) ?><?= $st === 'trial' ? ' jusqu\'au ' . e(date('d/m/Y', $g['plan']['trial_until'])) : '' ?> · <?= count($g['members']) ?>/<?= (int) $lim ?> commerces.
         <?php if (in_array($st, ['expired', 'canceled'], true)): ?>Votre galerie n'est plus visible du public. <?php endif; ?><a href="/portail/galerie-offre.php">Voir mon offre</a></p>
     <?php endif; ?>
-    <section class="gcard">
-      <h2><?= e($g['name']) ?> <span class="pill <?= !empty($g['paused']) ? 'sent' : ($g['published'] ? 'done' : 'sent') ?>"><?= !empty($g['paused']) ? 'En pause' : ($g['published'] ? 'Publiée' : 'Brouillon') ?></span> <span class="pill"><?= e(business_presence_label($g['presence_mode'])) ?></span></h2>
-      <p class="meta">Adresse publique : <a href="<?= e($url) ?><?= $g['published'] && empty($g['paused']) ? '' : '?apercu=' . e(gallery_preview_token($g)) ?>" target="_blank" rel="noopener"><code class="url"><?= e($url) ?></code></a>
-        <?= !empty($g['paused']) ? ' — galerie en pause : seul ce lien d\'aperçu l\'ouvre.' : ($g['published'] ? '' : ' — non publiée : seul ce lien d\'aperçu l\'ouvre.') ?></p>
+    <section class="gcard" id="statut">
+      <h2><?= e($g['name']) ?> <span class="pill <?= !empty($g['paused']) || !$g['published'] ? 'sent' : 'done' ?>"><?= !empty($g['paused']) ? 'En pause' : ($g['published'] ? 'Publiée' : 'En test') ?></span>
+        <?php if (!empty($g['gesture'])): ?><span class="pill <?= go_gesture_current($g) ? 'done' : 'sent' ?>"><?= e(go_gesture_label($g)) ?></span><?php endif; ?>
+        <span class="pill"><?= e(business_presence_label($g['presence_mode'])) ?></span></h2>
+      <p class="meta">Adresse publique : <a href="<?= e($url) ?><?= go_is_live($g) ? '' : '?apercu=' . e(gallery_preview_token($g)) ?>" target="_blank" rel="noopener"><code class="url"><?= e($url) ?></code></a>
+        <?= !empty($g['paused']) ? ' — galerie en pause : seul ce lien d\'aperçu l\'ouvre.' : ($g['published'] ? '' : ' — en test : seul ce lien d\'aperçu l\'ouvre.') ?></p>
+      <?php if (!$limited): ?>
+      <form method="post" class="row" style="align-items:center;gap:6px;">
+        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>"><input type="hidden" name="action" value="status">
+        <span class="meta" style="margin:0;">Statut de la galerie :</span>
+        <button class="btn small<?= go_is_live($g) ? ' btn-primary' : '' ?>" type="submit" name="state" value="published"<?= go_is_live($g) ? ' disabled' : '' ?>>Publiée — visible de tous</button>
+        <button class="btn small<?= !$g['published'] ? ' btn-primary' : '' ?>" type="submit" name="state" value="test"<?= !$g['published'] ? ' disabled' : '' ?>>En test — lien d'aperçu seulement</button>
+        <button class="btn small<?= !empty($g['paused']) ? ' btn-primary' : '' ?>" type="submit" name="state" value="paused"<?= !empty($g['paused']) ? ' disabled' : '' ?>>En pause — fermée au public</button>
+      </form>
+      <?php else: ?>
+      <form method="post" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
+        <button class="btn small" type="submit" name="action" value="pause"><?= !empty($g['paused']) ? 'Réactiver la galerie' : 'Mettre en pause' ?></button>
+      </form>
+      <?php endif; ?>
       <p><a class="btn small" href="/portail/addons.php?scope=gallery&amp;gallery=<?= e(rawurlencode($g['slug'])) ?>">Gérer les plugins et tarifs des boutiques membres</a></p>
       <form method="post" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
         <button class="btn small" type="submit" name="action" value="refresh">Actualiser le catalogue maintenant</button>
-        <button class="btn small" type="submit" name="action" value="pause"><?= !empty($g['paused']) ? 'Réactiver la galerie' : 'Mettre en pause' ?></button>
         <button class="btn small" type="submit" name="action" value="export">Exporter JSON</button>
-        <?php if (!$limited): ?><a class="btn small danger" href="/portail/galeries.php?g=<?= e($g['slug']) ?>&amp;supprimer=1">Supprimer la galerie</a><?php endif; ?>
+        <?php if (!$limited): ?><a class="btn small danger" href="/portail/galeries.php?g=<?= e($g['slug']) ?>&amp;supprimer=1#supprimer">Supprimer la galerie</a><?php endif; ?>
         <span class="meta">Le catalogue est relu toutes les 10 minutes.</span></form>
       <?php if ($confirmDelete): ?>
-        <form class="confirm danger-zone" method="post" autocomplete="off">
+        <form class="confirm danger-zone" method="post" autocomplete="off" id="supprimer">
           <span>Supprimer la galerie <strong><?= e($g['name']) ?></strong> ? Les commerces et leurs pièces ne sont pas touchés.</span>
           <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
           <label class="field">Pour confirmer, tapez l'identifiant <code><?= e($g['slug']) ?></code><input name="confirm" required autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="<?= e($g['slug']) ?>"></label>
@@ -537,6 +631,38 @@ portail_page_start([
         </form>
       <?php endif; ?>
     </section>
+
+    <?php if (!$limited): $ges = $g['gesture'] ?? null; ?>
+    <section class="gcard" id="geste">
+      <h2>Geste commercial</h2>
+      <p class="meta">Offrir un avantage à votre guise : <strong>gratuité</strong> (totale ou jusqu'à une date), <strong>avoir</strong> en euros ou <strong>remise</strong> en pourcentage. La gratuité garde la galerie ouverte et visible pendant le geste, même si l'essai est terminé ou l'abonnement résilié ; l'avoir et la remise sont seulement des gestes de facturation, mémorisés ici pour le suivi. <a href="/accueil/conditions.php#geste" target="_blank" rel="noopener">Voir la clause de geste commercial</a>.</p>
+      <?php if ($ges): ?>
+        <p class="flash" data-kind="<?= go_gesture_current($g) ? 'ok' : 'error' ?>" role="status"><strong><?= e(go_gesture_label($g)) ?></strong><?php if (($ges['note'] ?? '') !== ''): ?> — <?= e($ges['note']) ?><?php endif; ?>
+          <?php if (!empty($ges['until']) && (int) $ges['until'] <= time()): ?> (terminé le <?= e(date('d/m/Y', (int) $ges['until'])) ?>)<?php endif; ?></p>
+      <?php endif; ?>
+      <form method="post" autocomplete="off">
+        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>"><input type="hidden" name="action" value="gesture">
+        <div class="row">
+          <label class="f" style="flex:none;min-width:0;"><span><input type="radio" name="gesture_kind" value="none"<?= !$ges ? ' checked' : '' ?>> Aucun geste</span></label>
+          <label class="f" style="flex:none;min-width:0;"><span><input type="radio" name="gesture_kind" value="forever"<?= ($ges['kind'] ?? '') === 'forever' ? ' checked' : '' ?>> Gratuité totale</span></label>
+          <label class="f" style="flex:none;min-width:0;"><span><input type="radio" name="gesture_kind" value="until"<?= ($ges['kind'] ?? '') === 'until' ? ' checked' : '' ?>> Gratuit jusqu'à une date</span></label>
+          <label class="f" style="flex:none;min-width:0;"><span><input type="radio" name="gesture_kind" value="credit"<?= ($ges['kind'] ?? '') === 'credit' ? ' checked' : '' ?>> Avoir en euros</span></label>
+          <label class="f" style="flex:none;min-width:0;"><span><input type="radio" name="gesture_kind" value="discount"<?= ($ges['kind'] ?? '') === 'discount' ? ' checked' : '' ?>> Remise en %</span></label>
+        </div>
+        <div class="row">
+          <label class="f">Montant de l'avoir (€)<input type="text" name="gesture_amount" inputmode="decimal" value="<?= ($ges['kind'] ?? '') === 'credit' && !empty($ges['amount_cents']) ? e(number_format((int) $ges['amount_cents'] / 100, 2, ',', '')) : '' ?>" placeholder="ex. 29,00"></label>
+          <label class="f">Pourcentage de remise (%)<input type="number" name="gesture_percent" min="1" max="100" step="1" value="<?= ($ges['kind'] ?? '') === 'discount' && !empty($ges['percent']) ? (int) $ges['percent'] : '' ?>" placeholder="ex. 20"></label>
+          <label class="f">Fin de validité (facultative, incluse)<input type="date" name="gesture_until" value="<?= !empty($ges['until']) ? e(date('Y-m-d', (int) $ges['until'])) : '' ?>"></label>
+        </div>
+        <label class="f">Note interne (facultative)<input type="text" name="gesture_note" maxlength="300" value="<?= e((string) ($ges['note'] ?? '')) ?>" placeholder="ex. dédommagement incident du 2 novembre, offert au comité des fêtes pour l'inauguration"></label>
+        <p><button class="btn btn-primary" type="submit">Enregistrer le geste commercial</button></p>
+        <p class="meta">L'avoir et la remise ne modifient pas automatiquement Stripe : appliquez le coupon ou l'avoir dans Stripe pour la même période. La gratuité non plus ne suspend pas un abonnement : pensez à le mettre en pause dans Stripe.</p>
+        <?php if (!empty($g['plan']['stripe_subscription_id'])): ?>
+          <p class="meta">Abonnement Stripe de cette galerie : <code class="url"><?= e((string) $g['plan']['stripe_subscription_id']) ?></code>.</p>
+        <?php endif; ?>
+      </form>
+    </section>
+    <?php endif; ?>
 
     <?php if (!$limited): $newPw = $_SESSION['ga_new_password'] ?? null; unset($_SESSION['ga_new_password']); ?>
     <section class="gcard" id="admins">
@@ -575,6 +701,17 @@ portail_page_start([
       <label class="f">Slogan<input type="text" name="tagline" maxlength="160" value="<?= e($g['tagline']) ?>"></label>
       <label class="f">Présentation (facultative)<textarea name="description" maxlength="1200"><?= e($g['description']) ?></textarea></label>
 
+      <h2 style="margin-top:8px;">Noms des applications</h2>
+      <p class="meta">Le nom affiché sous l'icône quand la galerie est installée sur un téléphone. Un champ vide garde le nom par défaut ; renommer ne casse pas l'installation.</p>
+      <div class="row">
+        <label class="f">Administration — organisateur et exposants
+          <input type="text" name="app_name_admin" maxlength="40" value="<?= e($g['apps']['admin'] ?? '') ?>" placeholder="<?= e('Admin ' . $g['name']) ?>">
+        </label>
+        <label class="f">Espace client — visiteurs
+          <input type="text" name="app_name_visitor" maxlength="40" value="<?= e($g['apps']['visitor'] ?? '') ?>" placeholder="<?= e($g['name']) ?>">
+        </label>
+      </div>
+
       <h2 style="margin-top:8px;"><?= e(ucfirst(gt_word($g, 'members'))) ?> de ce serveur</h2>
       <p class="meta">Cochez ceux qui font partie de la galerie ; ★ les met en avant dans l'annuaire. Seules les pièces visibles et en stock sont présentées.</p>
       <?php $inGallery = []; foreach ($g['members'] as $m) if ($m['type'] === 'local') $inGallery[$m['slug']] = $m; ?>
@@ -596,7 +733,7 @@ portail_page_start([
       <?php endif; ?>
 
       <h2 style="margin-top:8px;">Publication</h2>
-      <label class="member"><input type="checkbox" name="published" value="1"<?= $g['published'] ? ' checked' : '' ?>> <span class="name"><strong>Publier la galerie</strong> <small>— visible de tous à l'adresse publique et dans la liste des galeries</small></span></label>
+      <label class="member"><input type="checkbox" name="published" value="1"<?= $g['published'] ? ' checked' : '' ?>> <span class="name"><strong>Publier la galerie</strong> <small>— visible de tous à l'adresse publique et dans la liste des galeries ; décochée, elle reste en test (lien d'aperçu seulement)</small></span></label>
       <label class="f" style="margin-top:8px;">Nom de domaine propre (facultatif)
         <input type="text" name="domain" maxlength="253" value="<?= e($g['domain'] ?? '') ?>" placeholder="galerie-exemple.fr">
         <span class="meta" style="font-weight:400;">Le domaine doit pointer vers ce serveur (enregistrement DNS) et disposer d'un certificat HTTPS. Laissez vide pour garder l'adresse <code class="url"><?= e($origin) ?>/galerie/<?= e($g['slug']) ?>/</code>.</span>
@@ -712,7 +849,7 @@ portail_page_start([
     <form class="gcard" method="post" enctype="multipart/form-data" autocomplete="off" id="style-form">
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="style"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
       <h2>Apparence de la page publique</h2>
-      <p class="meta">Palette, bannière, logo, polices, cartes et textes de <a href="<?= e($url . ($g['published'] && empty($g['paused']) ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener">la page de la galerie</a>. L'aperçu ci-contre se met à jour pendant la saisie ; rien ne change en ligne avant « Enregistrer l'apparence ».</p>
+      <p class="meta">Palette, bannière, logo, polices, cartes et textes de <a href="<?= e($url . (go_is_live($g) ? '' : '?apercu=' . gallery_preview_token($g))) ?>" target="_blank" rel="noopener">la page de la galerie</a>. L'aperçu ci-contre se met à jour pendant la saisie ; rien ne change en ligne avant « Enregistrer l'apparence ».</p>
       <div class="style-layout">
         <div class="style-fields">
           <fieldset><legend>Palette</legend>

@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS content (
   shipping_fee TEXT NOT NULL DEFAULT '6,90 €',
   pickup_label TEXT NOT NULL DEFAULT 'Retrait à l''atelier',
   shipping_label TEXT NOT NULL DEFAULT 'Envoi postal',
+  gift_wrap_enabled TEXT NOT NULL DEFAULT '0', -- '1' : proposer l'emballage cadeau au panier
+  gift_wrap_price TEXT NOT NULL DEFAULT '',    -- prix de l'emballage, 0 ou vide = offert
+  gift_wrap_label TEXT NOT NULL DEFAULT 'Emballage cadeau',
   slideshow_orientation TEXT NOT NULL DEFAULT 'horizontal',
   pickup_only_below TEXT NOT NULL DEFAULT '10', -- € : en dessous (dons à 0 € inclus), retrait seul ; 0 = seuls les dons
   pickup_only_message TEXT NOT NULL DEFAULT 'Retrait à l''adresse du vendeur.'
@@ -83,6 +86,9 @@ CREATE TABLE IF NOT EXISTS products (
   sold_channel TEXT, -- canal par lequel la pièce a été vendue
   sold_at TEXT, -- date de la dernière vente (stock passé à 0)
   restocked_at TEXT, -- date du dernier réassort
+  restock_possible INTEGER NOT NULL DEFAULT 0, -- réassort possible (délai et prix affichés sur la fiche)
+  restock_delay TEXT, -- délai de réassort (« 10 jours », « 2 semaines »…)
+  restock_price TEXT, -- prix d'un réassort (facultatif)
   keep_when_sold INTEGER NOT NULL DEFAULT 0, -- 1 : la pièce reste au catalogue (badge « Vendue ») une fois vendue
   lot_qty INTEGER NOT NULL DEFAULT 1, -- vente en lot : nombre de pièces vendues ensemble au prix affiché (1 = pièce seule)
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -179,8 +185,26 @@ CREATE TABLE IF NOT EXISTS orders (
   fulfillment_status TEXT NOT NULL DEFAULT 'a_preparer',
   tracking_number TEXT,
   items TEXT,
+  gift_wrap INTEGER NOT NULL DEFAULT 0,        -- 1 : emballage cadeau demandé
+  gift_wrap_cents INTEGER NOT NULL DEFAULT 0,  -- montant facturé pour l'emballage
+  gift_message TEXT,                           -- petit mot du client pour le destinataire
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Habitudes anonymes des visiteurs pour les suggestions de produits (voir
+-- includes/recommendations.php) : vues, recherches, filtres, panier, commandes.
+-- visitor est l'empreinte d'un jeton de cookie, jamais une adresse IP.
+CREATE TABLE IF NOT EXISTS recommendation_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  visitor TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  ref TEXT,
+  meta TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rec_visitor ON recommendation_events(visitor, created_at);
+CREATE INDEX IF NOT EXISTS idx_rec_ref ON recommendation_events(ref, created_at);
+CREATE INDEX IF NOT EXISTS idx_rec_kind ON recommendation_events(kind, created_at);
 
 -- Réglages divers du commerce (ex. « appearance » : palette et typographie
 -- choisies dans Administration → Apparence), au format JSON.

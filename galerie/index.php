@@ -427,10 +427,11 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       // Événement (module organisateur) : les places numérotées ev1…evN sont calculées, jamais stockées une à une.
       $orgOn = function_exists('gm_enabled') && gm_enabled($gallery, 'organisateur');
       $galleryEvent = gallery_event($gallery);
+      $evCancelled = function_exists('ge_cancelled') && ge_cancelled($galleryEvent);
       $galleryBooking = gb_booking($gallery);
       $evPlaces = [];
       $evStates = [];
-      if ($orgOn && $galleryEvent && !empty($galleryEvent['published'])) $evPlaces = ge_places($galleryEvent);
+      if ($orgOn && $galleryEvent && !empty($galleryEvent['published']) && !$evCancelled) $evPlaces = ge_places($galleryEvent);
       if ($evPlaces && $galleryBooking['source'] === 'event') $evStates = gb_states($gallery);
       $hasEventSection = $orgOn && $galleryEvent && !empty($galleryEvent['published']);
       $waitlistLink = function_exists('gm_enabled') && gm_enabled($gallery, 'attente') && gt_feature($gallery, 'exposants') && !empty($galleryBooking['enabled'])
@@ -444,12 +445,18 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
         <?php if ($p = ge_place_text($galleryEvent)): ?><?= $d ? ' · ' : '' ?><?= e($p) ?><?php endif; ?>
         <?php if ($h = ge_hours_text($galleryEvent)): ?><?= ($d || $p) ? ' · ' : '' ?><?= e($h) ?><?php endif; ?>
       </p>
+      <?php if ($evCancelled): $cn = (array) $galleryEvent['cancelled']; ?>
+        <div role="status" style="margin:12px 0;padding:12px 14px;border:1px solid #d9a3a0;border-radius:10px;background:#fdf0ef;color:#6d1f1b;">
+          <strong>Événement annulé.</strong> <?= e(ge_cancel_reason($galleryEvent)) ?>.
+          <?php if ((int) $cn['refund_pct'] > 0): ?>Les exposants inscrits sont remboursés à <?= (int) $cn['refund_pct'] ?> % du tarif sous <?= (int) $cn['refund_delay_days'] ?> jours, par <?= e($cn['refund_method']) ?>, et prévenus par e-mail.<?php else: ?>Les exposants inscrits sont prévenus par e-mail ; aucun remboursement n'est prévu selon les conditions de vente.<?php endif; ?>
+        </div>
+      <?php endif; ?>
       <?php if ($galleryEvent['notes'] !== ''): ?><p class="lede"><?= nl2br(e($galleryEvent['notes'])) ?></p><?php endif; ?>
       <?php
         $evPrice = ge_place_price($galleryEvent);
         $evPricePro = ge_place_price($galleryEvent, true);
       ?>
-      <?php if ($evPrice !== null): ?>
+      <?php if ($evPrice !== null && !$evCancelled): ?>
         <p class="lede">Tarif : <strong><?= e(gb_eur($evPrice)) ?></strong> la place<?= $evPricePro !== null && $evPricePro !== $evPrice ? ' · <strong>' . e(gb_eur($evPricePro)) . '</strong> pour les entreprises' : '' ?>.</p>
       <?php endif; ?>
       <?php if ($evPlaces): ?>

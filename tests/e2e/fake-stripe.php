@@ -40,6 +40,24 @@ if ($method === 'POST' && $path === '/v1/checkout/sessions') {
     $s = store();
     $id = 'cs_test_' . bin2hex(random_bytes(8));
     $mode = (string) ($_POST['mode'] ?? 'payment');
+    $amount = 0;
+    foreach ((array) ($_POST['line_items'] ?? []) as $line) {
+        $amount += (int) ($line['price_data']['unit_amount'] ?? 0) * (int) ($line['quantity'] ?? 1);
+    }
+    foreach ((array) ($_POST['shipping_options'] ?? []) as $option) {
+        $amount += (int) ($option['shipping_rate_data']['fixed_amount']['amount'] ?? 0);
+    }
+    $couponId = (string) ($_POST['discounts'][0]['coupon'] ?? '');
+    if ($couponId !== '' && isset($s['coupons'][$couponId]['amount_off'])) $amount -= (int) $s['coupons'][$couponId]['amount_off'];
+    $customerId = (string) ($_POST['customer'] ?? '');
+    $customerEmail = (string) ($_POST['customer_email'] ?? '');
+    $customerName = '';
+    $customerPhone = '';
+    if ($customerId !== '' && isset($s['customers'][$customerId])) {
+        $customerEmail = $customerEmail !== '' ? $customerEmail : (string) ($s['customers'][$customerId]['email'] ?? '');
+        $customerName = (string) ($s['customers'][$customerId]['name'] ?? '');
+        $customerPhone = (string) ($s['customers'][$customerId]['phone'] ?? '');
+    }
     $session = [
         'id' => $id,
         'object' => 'checkout.session',
@@ -48,10 +66,11 @@ if ($method === 'POST' && $path === '/v1/checkout/sessions') {
         'payment_status' => 'unpaid',
         'mode' => $mode,
         'currency' => 'eur',
-        'amount_total' => (int) ($_POST['line_items'][0]['price_data']['unit_amount'] ?? 0) * (int) ($_POST['line_items'][0]['quantity'] ?? 1),
+        'amount_total' => max(0, $amount),
         'client_reference_id' => (string) ($_POST['client_reference_id'] ?? ''),
-        'customer' => '',
-        'customer_email' => (string) ($_POST['customer_email'] ?? ''),
+        'customer' => $customerId,
+        'customer_email' => $customerEmail,
+        'customer_details' => ['email' => $customerEmail, 'name' => $customerName, 'phone' => $customerPhone],
         'metadata' => (array) ($_POST['metadata'] ?? []),
         'subscription' => $mode === 'subscription' ? 'sub_test_' . bin2hex(random_bytes(6)) : null,
         'success_url' => (string) ($_POST['success_url'] ?? ''),

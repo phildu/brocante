@@ -51,6 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $_SESSION['admin_account_id'] = $login['id'];
         }
+        if (!empty($_POST['remember'])) {
+            session_remember();
+        }
         header('Location: ' . $after_login($login['role']));
         exit;
     }
@@ -97,6 +100,9 @@ if (!admin_password_configured()) {
       'social' => oauth_buttons_html('admin'),
       'forgot_url' => '/admin/mot-de-passe-oublie.php',
       'submit' => 'Se connecter',
+      'remember' => true,
+      'remember_name' => 'remember',
+      'remember_label' => 'Rester connecté sur cet appareil de confiance (30 jours)',
     ]) ?>
     <p class="login-other"><a href="/connexion.php">Connexion unique — boutique, galerie, portail, compte client</a></p>
   </div>

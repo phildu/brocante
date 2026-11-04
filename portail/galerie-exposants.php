@@ -9,6 +9,7 @@ require_once PORTAIL_ROOT . '/includes/client-types.php';
 $actor = (string) (($_SESSION['gallery_admin']['email'] ?? '') ?: 'exploitant');
 $self = '/portail/galerie-exposants.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
 $detailBase = '/portail/galerie-exposant.php' . ($limited ? '?' : '?g=' . urlencode($gaSlug) . '&');
+$msgBase = '/portail/galerie-messages.php' . ($limited ? '?' : '?g=' . urlencode($gaSlug) . '&');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -147,6 +148,7 @@ ga_head('Exposants');
           <td><?= e(date('d/m/Y H:i', (int) $r['requested'])) ?></td>
           <td><div class="row" style="gap:4px;">
             <a class="btn small" href="<?= e($detailBase . 'slot=' . urlencode($r['slot_id'])) ?>">Fiche</a>
+            <a class="btn small" href="<?= e($msgBase . 'new=slot:' . urlencode($r['slot_id'])) ?>">Message</a>
             <form method="post" class="row" style="gap:4px;"><?= $hid ?><input type="hidden" name="slot" value="<?= e($r['slot_id']) ?>">
             <?php if ($r['status'] === 'pending'): ?>
               <button class="btn small btn-primary" name="action" value="accept" type="submit">Accepter</button>

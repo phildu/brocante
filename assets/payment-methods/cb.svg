@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 44" role="img" aria-label="Carte Bancaire">
+  <defs>
+    <linearGradient id="cbGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a4ea3"/>
+      <stop offset="1" stop-color="#00a651"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="71" height="43" rx="6" fill="#fff" stroke="#d8d8d8"/>
+  <text x="36" y="28" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="0.8" fill="url(#cbGrad)">CB</text>
+  <text x="36" y="36" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="5.4" letter-spacing="0.5" fill="#5b6b84">CARTE BANCAIRE</text>
+</svg>

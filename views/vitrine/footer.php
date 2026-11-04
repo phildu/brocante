@@ -16,8 +16,9 @@ $fc = get_content();
       <div>
         <h4>Maison</h4>
         <ul>
-          <li><a href="/index.php#histoire">Notre histoire</a></li>
-          <li><a href="/index.php#contact">Nous trouver</a></li>
+          <li><a href="/notre-histoire.php">Notre histoire</a></li>
+          <li><a href="/visite.php">Visite virtuelle</a></li>
+          <li><a href="/nous-trouver.php">Carte et itinéraire</a></li>
           <?php if (shop_sales_enabled()): ?><li><a href="/cart.php">Mon panier</a></li><?php endif; ?>
           <li><a href="/admin/" class="footer-admin-link">Administration</a></li>
         </ul>

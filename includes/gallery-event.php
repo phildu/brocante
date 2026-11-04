@@ -11,6 +11,12 @@
 const GE_MODES = ['places' => 'Nombre de places', 'meters' => 'Mètres linéaires'];
 const GE_MAX_PLACES = 2000;
 const GE_DEFAULT_METERS_PER_PLACE = 3.0;
+const GE_CANCEL_CAUSES = [
+    'organisateur' => 'Décision de l’organisateur',
+    'meteo' => 'Météo',
+    'force_majeure' => 'Cas de force majeure',
+    'autre' => 'Autre raison',
+];
 
 function gallery_event_normalize(array $e): ?array
 {
@@ -31,6 +37,20 @@ function gallery_event_normalize(array $e): ?array
     $dateStart = $date($e['date'] ?? '');
     $dateEnd = $date($e['end_date'] ?? '');
     $bk = (array) ($e['booking'] ?? []);
+    $c = (array) ($e['cancelled'] ?? []);
+    $cancelled = null;
+    if (!empty($c['at'])) {
+        $cancelled = [
+            'at' => max(0, (int) $c['at']),
+            'reason' => mb_substr(trim((string) ($c['reason'] ?? '')), 0, 400),
+            'cause' => in_array($c['cause'] ?? '', array_keys(GE_CANCEL_CAUSES), true) ? (string) $c['cause'] : 'organisateur',
+            'refund_pct' => max(0, min(100, (int) ($c['refund_pct'] ?? 0))),
+            'refund_delay_days' => max(0, min(180, (int) ($c['refund_delay_days'] ?? 30))),
+            'refund_method' => mb_substr(trim((string) ($c['refund_method'] ?? '')), 0, 120),
+            'by' => mb_substr(trim((string) ($c['by'] ?? '')), 0, 120),
+            'notified' => max(0, (int) ($c['notified'] ?? 0)),
+        ];
+    }
     $event = [
         'title' => $text('title', 80) ?: 'Vide-grenier',
         'date' => $dateStart,
@@ -55,6 +75,7 @@ function gallery_event_normalize(array $e): ?array
             'hold_days' => max(1, min(60, (int) ($bk['hold_days'] ?? 7))),
             'intro' => mb_substr(trim((string) ($bk['intro'] ?? '')), 0, 300),
         ],
+        'cancelled' => $cancelled,
         'updated' => (int) ($e['updated'] ?? 0),
     ];
     $empty = $event['place'] === '' && $event['address'] === '' && $event['city'] === '' && $event['date'] === ''
@@ -65,6 +86,21 @@ function gallery_event_normalize(array $e): ?array
 function gallery_event(array $gallery): ?array
 {
     return is_array($gallery['event'] ?? null) ? $gallery['event'] : null;
+}
+
+/** L'événement a-t-il été annulé ? (la date d'annulation sert de drapeau, les remboursements restent suivis à part). */
+function ge_cancelled(?array $event): bool
+{
+    return is_array($event) && !empty($event['cancelled']['at']);
+}
+
+/** Cause et motif d'annulation en une phrase lisible. */
+function ge_cancel_reason(array $event): string
+{
+    $c = (array) ($event['cancelled'] ?? []);
+    $label = GE_CANCEL_CAUSES[(string) ($c['cause'] ?? '')] ?? 'Annulation';
+    $reason = trim((string) ($c['reason'] ?? ''));
+    return $reason !== '' ? $label . ' — ' . $reason : $label;
 }
 
 function ge_place_count(array $event): int

@@ -566,7 +566,7 @@ function rc_upcoming_events(int $limit = 20, bool $publishedOnly = false): array
     foreach (gallery_list() as $slug => $gallery) {
         $event = is_array($gallery['event'] ?? null) ? $gallery['event'] : null;
         $type = (string) ($gallery['type'] ?? '');
-        if (!$event || !in_array($type, ['vide-grenier', 'puces'], true)) continue;
+        if (!$event || !in_array($type, ['vide-grenier', 'puces', 'marche-de-noel', 'marche-producteurs'], true)) continue;
         $date = (string) ($event['date'] ?? '');
         if ($date !== '' && $date < $today) continue;
         if ($publishedOnly && empty($event['published'])) continue;

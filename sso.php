@@ -31,6 +31,8 @@ if (($identity['space'] ?? '') === 'shop') {
     require_once __DIR__ . '/includes/session.php';
 } elseif (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
+        // même durée que session_remember() (includes/session.php) : machine de confiance
+        'lifetime' => !empty($identity['remember']) ? 30 * 86400 : 0,
         'httponly' => true,
         'samesite' => 'Lax',
         'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
@@ -40,5 +42,8 @@ if (($identity['space'] ?? '') === 'shop') {
 
 ua_ticket_redeem($token);
 ua_open_session($identity);
+if (!empty($identity['remember']) && ($identity['space'] ?? '') === 'shop') {
+    session_remember();
+}
 header('Location: ' . ua_destination($identity));
 exit;

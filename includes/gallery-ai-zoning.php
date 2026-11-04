@@ -6,6 +6,8 @@
 // mis en cache 30 jours ; aucune donnée du plan n'est écrite ici. Appelé par portail/galerie-plan.php (action
 // « discover » avec ai=1), après gallery_discover_site().
 
+require_once __DIR__ . '/omniroute.php';
+
 const GAIZ_VERSION = 1;
 const GAIZ_MODEL = 'gemini-2.5-flash';
 const GAIZ_CACHE_TTL = 2592000;        // 30 jours : l'orthophoto et la BD TOPO évoluent lentement
@@ -98,11 +100,43 @@ function gaiz_prompt(array $zones, array $idx): string
         . '{"site":{"indoor":true,"summary":"1 phrase sur le site"},"zones":[{"i":0,"label":"...","usage":"vente","service":"","indoor":true,"confidence":"haute","why":"..."}],"extras":[{"label":"...","usage":"vente","box":[0.1,0.2,0.05,0.08],"indoor":false,"confidence":"moyenne","why":"..."}]}';
 }
 
+/** Objet JSON de la réponse du modèle, avec ou sans clôture ``` ; null si inexploitable. */
+function gaiz_json(string $text): ?array
+{
+    $text = trim(preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)));
+    $data = json_decode($text, true);
+    if (!is_array($data)) {
+        // Certains modèles ajoutent une phrase avant le JSON : on isole le premier objet complet.
+        $start = strpos($text, '{');
+        $end = strrpos($text, '}');
+        if ($start !== false && $end !== false && $end > $start) $data = json_decode(substr($text, $start, $end - $start + 1), true);
+    }
+    return is_array($data) ? $data : null;
+}
+
+/** Relais par la passerelle locale : même consigne, même orthophoto. Null si elle est muette. */
+function gaiz_relay(string $prompt, string $jpeg): ?array
+{
+    $tmp = tempnam(sys_get_temp_dir(), 'gaiz-');
+    if ($tmp === false) return null;
+    try {
+        file_put_contents($tmp, $jpeg);
+        $text = omniroute_text($prompt, [$tmp], 45);
+        return $text !== null ? gaiz_json($text) : null;
+    } finally {
+        @unlink($tmp);
+    }
+}
+
 /** Appel Gemini vision -> tableau JSON décodé. Lève RuntimeException avec un message affichable. */
 function gaiz_gemini(string $prompt, string $jpeg): array
 {
     $key = gaiz_key();
-    if ($key === '') throw new RuntimeException("La clé IA du portail n'est pas configurée (Génération IA).");
+    if ($key === '') {
+        $relayed = gaiz_relay($prompt, $jpeg);
+        if ($relayed !== null) return $relayed;
+        throw new RuntimeException("La clé IA du portail n'est pas configurée (Génération IA).");
+    }
     $payload = [
         'contents' => [['parts' => [
             ['text' => $prompt],
@@ -118,6 +152,8 @@ function gaiz_gemini(string $prompt, string $jpeg): array
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     if ($body === false || $status >= 400) {
         error_log('gaiz_gemini: HTTP ' . $status . ' ' . substr((string) $body, 0, 300));
+        $relayed = gaiz_relay($prompt, $jpeg);
+        if ($relayed !== null) return $relayed;
         throw new RuntimeException(match (true) {
             $status === 402 || ($body !== false && str_contains((string) $body, 'prepayment')) => 'Crédits IA épuisés : rechargez la clé Gemini du portail.',
             $status === 429 => "Le service d'IA est saturé, réessayez dans un instant.",
@@ -126,16 +162,12 @@ function gaiz_gemini(string $prompt, string $jpeg): array
             default => "Le service d'IA n'a pas répondu, réessayez.",
         });
     }
-    $text = (string) (json_decode($body, true)['candidates'][0]['content']['parts'][0]['text'] ?? '');
-    $text = trim(preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)));
-    $data = json_decode($text, true);
-    if (!is_array($data)) {
-        // Certains modèles ajoutent une phrase avant le JSON : on isole le premier objet complet.
-        $start = strpos($text, '{');
-        $end = strrpos($text, '}');
-        if ($start !== false && $end !== false && $end > $start) $data = json_decode(substr($text, $start, $end - $start + 1), true);
+    $data = gaiz_json((string) (json_decode($body, true)['candidates'][0]['content']['parts'][0]['text'] ?? ''));
+    if ($data === null) {
+        $relayed = gaiz_relay($prompt, $jpeg);
+        if ($relayed !== null) return $relayed;
+        throw new RuntimeException("La réponse de l'IA est inexploitable, réessayez.");
     }
-    if (!is_array($data)) throw new RuntimeException("La réponse de l'IA est inexploitable, réessayez.");
     return $data;
 }
 

@@ -7,7 +7,7 @@ $fc = get_content();
     <div>
       <p class="lb-foot-mark"><?= h($siteName ?? tenant('name')) ?></p>
       <p><?= h($siteTagline ?? '') ?></p>
-      <p><a href="/index.php#histoire">Le mot du libraire</a></p>
+      <p><a href="/notre-histoire.php">Le mot du libraire</a></p>
     </div>
     <div>
       <h4>Les rayons</h4>
@@ -23,6 +23,8 @@ $fc = get_content();
         <?php if (trim((string) ($fc['contact_hours'] ?? '')) !== ''): ?><li><?= h($fc['contact_hours']) ?></li><?php endif; ?>
         <?php if (trim((string) ($fc['contact_delivery'] ?? '')) !== ''): ?><li><?= h($fc['contact_delivery']) ?></li><?php endif; ?>
         <?php if (shop_sales_enabled()): ?><li><a href="/cart.php">Mon panier</a></li><?php endif; ?>
+        <li><a href="/visite.php">Visite virtuelle</a></li>
+        <li><a href="/nous-trouver.php">Carte et itinéraire</a></li>
       </ul>
     </div>
     <div>

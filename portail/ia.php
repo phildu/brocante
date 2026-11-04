@@ -3,6 +3,8 @@
 // et vidéos), packs de crédit à racheter, et état de chaque boutique (quota, consommation du mois, crédit). Voir includes/ai-plans.php.
 require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas.php';
+require_once PORTAIL_ROOT . '/includes/ai-usage.php';
+require_once PORTAIL_ROOT . '/includes/ai-rating.php';
 
 $galleries = gallery_list();
 $pricing = saas_pricing();
@@ -39,6 +41,86 @@ function ia_shop_usage(string $slug, ?array $policy): array
             $out['all'] += $v;
             if ($r['m'] === gmdate('Y-m')) $out['month'] = $v;
             $out['overflow'] += max(0.0, $v - (float) ($policy['quota_eur'] ?? 0));
+        }
+    } catch (Throwable $e) {
+    }
+    return $out;
+}
+
+/**
+ * Usage et efficacité d'une boutique, lus dans sa base (lecture seule) :
+ * requêtes et coûts (total et mois), répartition par fournisseur, notes des testeurs.
+ */
+function ia_shop_ai_stats(string $slug): array
+{
+    $out = ['requests' => 0, 'month_requests' => 0, 'cost' => 0.0, 'month_cost' => 0.0,
+        'providers' => [], 'notes' => 0, 'effective' => 0, 'avg' => null, 'rated' => 0,
+        'provider_notes' => [], 'recent' => []];
+    $file = tenant_file(tenant_load($slug), 'db_file');
+    if (!is_file($file)) return $out;
+    try {
+        $pdo = new PDO('sqlite:' . $file);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('PRAGMA query_only = 1');
+        $rate = saas_ai_pricing()['usd_eur'];
+        $month = gmdate('Y-m-01 00:00:00');
+
+        if ($pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_usage'")->fetchColumn()) {
+            $columns = $pdo->query('PRAGMA table_info(ai_usage)')->fetchAll(PDO::FETCH_COLUMN, 1);
+            $providerColumn = in_array('provider', $columns, true) ? "COALESCE(NULLIF(provider, ''), '')" : "''";
+            $stmt = $pdo->prepare("SELECT $providerColumn AS provider, kind, model, COUNT(*) AS n, SUM(cost_usd) AS usd,
+                    SUM(CASE WHEN at >= ? THEN 1 ELSE 0 END) AS n_month,
+                    SUM(CASE WHEN at >= ? THEN cost_usd ELSE 0 END) AS usd_month
+                FROM ai_usage GROUP BY provider, kind, model");
+            $stmt->execute([$month, $month]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $label = trim((string) $row['provider']) !== '' ? (string) $row['provider'] : ai_usage_provider((string) $row['model'], (string) $row['kind']);
+                if (!isset($out['providers'][$label])) $out['providers'][$label] = ['n' => 0, 'usd' => 0.0, 'n_month' => 0, 'usd_month' => 0.0];
+                $out['providers'][$label]['n'] += (int) $row['n'];
+                $out['providers'][$label]['usd'] += (float) $row['usd'];
+                $out['providers'][$label]['n_month'] += (int) $row['n_month'];
+                $out['providers'][$label]['usd_month'] += (float) $row['usd_month'];
+                $out['requests'] += (int) $row['n'];
+                $out['month_requests'] += (int) $row['n_month'];
+                $out['cost'] += (float) $row['usd'];
+                $out['month_cost'] += (float) $row['usd_month'];
+            }
+            $out['cost'] *= $rate;
+            $out['month_cost'] *= $rate;
+            foreach ($out['providers'] as &$provider) {
+                $provider['usd'] *= $rate;
+                $provider['usd_month'] *= $rate;
+            }
+            unset($provider);
+        }
+
+        if ($pdo->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_ratings'")->fetchColumn()) {
+            $stmt = $pdo->prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN stars >= ? THEN 1 ELSE 0 END) AS effective,
+                    COUNT(DISTINCT usage_id) AS rated FROM ai_ratings");
+            $stmt->execute([AI_RATING_EFFECTIVE_MIN]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $out['notes'] = (int) ($row['n'] ?? 0);
+            $out['effective'] = (int) ($row['effective'] ?? 0);
+            $out['rated'] = (int) ($row['rated'] ?? 0);
+
+            $columns = $pdo->query('PRAGMA table_info(ai_ratings)')->fetchAll(PDO::FETCH_COLUMN, 1);
+            $providerColumn = in_array('provider', $columns, true) ? "COALESCE(NULLIF(provider, ''), '')" : "''";
+            $stmt = $pdo->query("SELECT $providerColumn AS provider, kind, model, COUNT(*) AS n, AVG(stars) AS avg,
+                    SUM(CASE WHEN stars >= " . AI_RATING_EFFECTIVE_MIN . " THEN 1 ELSE 0 END) AS effective
+                FROM ai_ratings GROUP BY provider, kind, model");
+            $avgSum = 0.0;
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $label = trim((string) $row['provider']) !== '' ? (string) $row['provider'] : ai_usage_provider((string) $row['model'], (string) $row['kind']);
+                if (!isset($out['provider_notes'][$label])) $out['provider_notes'][$label] = ['n' => 0, 'effective' => 0, 'avg_sum' => 0.0];
+                $out['provider_notes'][$label]['n'] += (int) $row['n'];
+                $out['provider_notes'][$label]['effective'] += (int) $row['effective'];
+                $out['provider_notes'][$label]['avg_sum'] += (float) $row['avg'] * (int) $row['n'];
+                $avgSum += (float) $row['avg'] * (int) $row['n'];
+            }
+            $out['avg'] = $out['notes'] > 0 ? $avgSum / $out['notes'] : null;
+
+            $out['recent'] = $pdo->query('SELECT at, usage_id, stars, comment, tester_name, kind, provider, model, ref
+                FROM ai_ratings ORDER BY id DESC LIMIT 5')->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (Throwable $e) {
     }
@@ -123,6 +205,36 @@ $packs = saas_ai_packs();
 while (count($packs) < 5) $packs[] = ['key' => '', 'name' => '', 'credit_eur' => null, 'price_cents' => null];
 $shops = ia_shops();
 $eur = static fn (float $v, int $d = 2): string => number_format($v, $d, ',', ' ') . ' €';
+
+// Usage réel et notes des testeurs, boutique par boutique (bases de ce serveur, lecture seule).
+$aiByShop = [];
+$aiTotals = ['requests' => 0, 'month_requests' => 0, 'cost' => 0.0, 'month_cost' => 0.0,
+    'notes' => 0, 'effective' => 0, 'rated' => 0, 'avg_sum' => 0.0, 'providers' => [], 'recent' => []];
+foreach ($shops as $slug => $name) {
+    $s = ia_shop_ai_stats($slug);
+    $aiByShop[$slug] = ['name' => $name] + $s;
+    foreach (['requests', 'month_requests', 'cost', 'month_cost', 'notes', 'effective', 'rated'] as $k) $aiTotals[$k] += $s[$k];
+    $aiTotals['avg_sum'] += ($s['avg'] ?? 0.0) * $s['notes'];
+    foreach ($s['providers'] as $label => $p) {
+        $aiTotals['providers'][$label] ??= ['n' => 0, 'n_month' => 0, 'cost' => 0.0, 'month_cost' => 0.0, 'notes' => 0, 'effective' => 0];
+        $aiTotals['providers'][$label]['n'] += $p['n'];
+        $aiTotals['providers'][$label]['n_month'] += $p['n_month'];
+        $aiTotals['providers'][$label]['cost'] += $p['usd'];
+        $aiTotals['providers'][$label]['month_cost'] += $p['usd_month'];
+    }
+    foreach ($s['provider_notes'] as $label => $pn) {
+        $aiTotals['providers'][$label] ??= ['n' => 0, 'n_month' => 0, 'cost' => 0.0, 'month_cost' => 0.0, 'notes' => 0, 'effective' => 0];
+        $aiTotals['providers'][$label]['notes'] += $pn['n'];
+        $aiTotals['providers'][$label]['effective'] += $pn['effective'];
+    }
+    foreach ($s['recent'] as $r) $aiTotals['recent'][] = $r + ['shop' => $name];
+}
+uasort($aiTotals['providers'], static fn (array $a, array $b): int => [$b['n'], $b['notes']] <=> [$a['n'], $a['notes']]);
+usort($aiTotals['recent'], static fn (array $a, array $b): int => strcmp((string) $b['at'], (string) $a['at']));
+$aiTotals['recent'] = array_slice($aiTotals['recent'], 0, 15);
+$aiTotals['avg'] = $aiTotals['notes'] > 0 ? $aiTotals['avg_sum'] / $aiTotals['notes'] : null;
+$aiRate = static fn (int $effective, int $n): ?float => $n > 0 ? $effective / $n : null;
+$stars = static fn (int $n): string => str_repeat('★', max(0, min(5, $n))) . str_repeat('☆', max(0, 5 - $n));
 
 // Toutes les offres avec leur quota, leur prix mensuel et la marge brute qu'il laisse (prix − quota entièrement consommé).
 $offerRows = [];
@@ -285,6 +397,74 @@ $labels = ['pricing' => 'Barème', 'calc' => 'Calculateur', 'packs' => 'Packs', 
         <?php endforeach; ?>
       </tbody></table></div>
       <p class="hint">Consommation lue dans la base de chaque boutique de ce serveur, au barème ci-dessus. Les boutiques hébergées ailleurs ne sont pas listées : leur quota se règle dans leur tenant.php (<code>ai_quota_eur</code>).</p>
+    </section>
+
+    <section class="ocard" id="usage">
+      <h2>5. Usage et efficacité de l'IA <small>requêtes, coûts et fournisseurs réellement appelés ; notes des testeurs</small></h2>
+      <p class="hint">Ce que les boutiques ont réellement consommé, tous appels confondus (générations, textes, recherches web, détourages, vidéos). Le fournisseur vient du journal de chaque boutique ; pour les appels d'avant cette version, il est déduit du modèle. Les notes sont saisies par les testeurs depuis l'administration d'une boutique (widget « Résultat IA » ou bouton « Noter » de la page Consommation IA).</p>
+      <?php if ($aiTotals['requests'] === 0 && $aiTotals['notes'] === 0): ?>
+        <p class="hint" style="padding:12px;border:1px dashed var(--line);border-radius:8px">Aucun appel ni aucune note pour l'instant sur ce serveur. Les chiffres apparaîtront dès la première génération IA d'une boutique, et le taux d'efficacité dès la première note d'un testeur.</p>
+      <?php else: ?>
+        <div class="refs" aria-label="Totaux d'usage de l'IA">
+          <div class="ref"><b><?= e(number_format($aiTotals['requests'], 0, ',', ' ')) ?></b><span>requêtes IA au total<br><?= e(number_format($aiTotals['month_requests'], 0, ',', ' ')) ?> ce mois</span></div>
+          <div class="ref"><b><?= e($eur($aiTotals['cost'])) ?></b><span>coût estimé cumulé<br><?= e($eur($aiTotals['month_cost'])) ?> ce mois</span></div>
+          <div class="ref"><b><?= e(number_format($aiTotals['notes'], 0, ',', ' ')) ?></b><span>notes reçues<br><?= e(number_format($aiTotals['rated'], 0, ',', ' ')) ?> résultats notés</span></div>
+          <div class="ref"><b><?= e(ai_rating_rate_label($aiRate($aiTotals['effective'], $aiTotals['notes']))) ?></b><span>taux d'efficacité<br><?= $aiTotals['avg'] !== null ? 'moyenne ' . e(number_format($aiTotals['avg'], 1, ',', ' ')) . ' / 5' : 'aucune note' ?></span></div>
+        </div>
+
+        <?php if ($aiTotals['providers']): ?>
+          <div class="scroll"><table class="t">
+            <caption class="hint" style="text-align:left;margin-bottom:6px">Par fournisseur (part du coût estimé, et notes reçues sur ses résultats)</caption>
+            <thead><tr><th>Fournisseur</th><th class="r">Requêtes</th><th class="r">Ce mois</th><th class="r">Coût ce mois</th><th class="r">Coût total</th><th class="r">Part</th><th class="r">Notes</th><th class="r">Efficacité</th></tr></thead><tbody>
+            <?php foreach ($aiTotals['providers'] as $label => $p): $share = $aiTotals['cost'] > 0 ? $p['cost'] / $aiTotals['cost'] : 0; ?>
+              <tr><td><?= e($label) ?></td>
+                <td class="r"><?= e(number_format($p['n'], 0, ',', ' ')) ?></td>
+                <td class="r"><?= e(number_format($p['n_month'], 0, ',', ' ')) ?></td>
+                <td class="r"><?= e($eur($p['month_cost'], 3)) ?></td>
+                <td class="r"><?= e($eur($p['cost'], 3)) ?></td>
+                <td class="r"><?= e(number_format($share * 100, 1, ',', ' ')) ?> %</td>
+                <td class="r"><?= e(number_format($p['notes'], 0, ',', ' ')) ?></td>
+                <td class="r"><?= e(ai_rating_rate_label($aiRate($p['effective'], $p['notes']))) ?></td></tr>
+            <?php endforeach; ?>
+            </tbody></table></div>
+        <?php endif; ?>
+
+        <div class="scroll"><table class="t">
+          <caption class="hint" style="text-align:left;margin-bottom:6px">Par boutique (usage lu dans sa base ; les boutiques hébergées ailleurs ne sont pas comptées)</caption>
+          <thead><tr><th>Boutique</th><th class="r">Requêtes</th><th class="r">Ce mois</th><th class="r">Coût total</th><th class="r">Notes</th><th class="r">Résultats notés</th><th class="r">Efficacité</th><th>Fournisseur principal</th></tr></thead><tbody>
+          <?php foreach ($aiByShop as $slug => $s):
+            $top = $s['providers'];
+            uasort($top, static fn (array $a, array $b): int => $b['n'] <=> $a['n']);
+            $topLabel = $top ? (string) array_key_first($top) : '—'; ?>
+            <tr><td><strong><?= e($s['name']) ?></strong><br><span class="muted mono"><?= e($slug) ?></span></td>
+              <td class="r"><?= e(number_format($s['requests'], 0, ',', ' ')) ?></td>
+              <td class="r"><?= e(number_format($s['month_requests'], 0, ',', ' ')) ?></td>
+              <td class="r"><?= e($eur($s['cost'], 3)) ?></td>
+              <td class="r"><?= e(number_format($s['notes'], 0, ',', ' ')) ?></td>
+              <td class="r"><?= e(number_format($s['rated'], 0, ',', ' ')) ?></td>
+              <td class="r"><?= e(ai_rating_rate_label($aiRate($s['effective'], $s['notes']))) ?></td>
+              <td><?= $s['requests'] ? e($topLabel) : '<span class="muted">aucun appel</span>' ?></td></tr>
+          <?php endforeach; ?>
+          </tbody></table></div>
+
+        <?php if ($aiTotals['recent']): ?>
+          <div class="scroll"><table class="t">
+            <caption class="hint" style="text-align:left;margin-bottom:6px">Dernières notes des testeurs (15 au plus, toutes boutiques)</caption>
+            <thead><tr><th>Date</th><th>Boutique</th><th>Résultat</th><th>Fournisseur</th><th class="r">Note</th><th>Commentaire</th><th>Testeur</th></tr></thead><tbody>
+            <?php foreach ($aiTotals['recent'] as $r): ?>
+              <tr><td class="mono" style="white-space:nowrap"><?= e(gmdate('d/m/Y H:i', (int) strtotime((string) $r['at'] . ' UTC'))) ?></td>
+                <td><?= e($r['shop']) ?></td>
+                <td><?= e(AI_KINDS[$r['kind']] ?? $r['kind']) ?><?= $r['ref'] ? ' · Réf. ' . e($r['ref']) : '' ?></td>
+                <td><?= e(trim((string) $r['provider']) !== '' ? $r['provider'] : ai_usage_provider((string) $r['model'], (string) $r['kind'])) ?></td>
+                <td class="r" title="<?= e(ai_rating_label((int) $r['stars'])) ?>" style="white-space:nowrap"><?= e($stars((int) $r['stars'])) ?></td>
+                <td><?= $r['comment'] !== '' ? e($r['comment']) : '<span class="muted">—</span>' ?></td>
+                <td><?= e($r['tester_name'] !== '' ? $r['tester_name'] : 'testeur') ?></td></tr>
+            <?php endforeach; ?>
+            </tbody></table></div>
+        <?php endif; ?>
+
+        <p class="hint"><strong>Taux d'efficacité</strong> = notes « Bon » ou « Excellent » (4 ou 5 sur 5) ÷ résultats notés. Exemple : 9 notes de 4–5 sur 12 notes = 75 % ; un résultat jugé « Passable » ou moins ne compte pas comme efficace. Un même testeur qui renvoie sa note sur le même résultat remplace la précédente, il ne crée pas de doublon.</p>
+      <?php endif; ?>
     </section>
   </div>
 </div>

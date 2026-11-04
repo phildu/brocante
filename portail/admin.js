@@ -98,62 +98,133 @@
   var results = document.getElementById('psearch-results');
   if (!dialog || !source || !input || !results) return;
 
-  var items = [];
-  try { items = JSON.parse(source.textContent || '[]'); } catch (error) { items = []; }
+  var baseItems = [];
+  try { baseItems = JSON.parse(source.textContent || '[]'); } catch (error) { baseItems = []; }
 
   function normalizeText(text) {
     return (text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
-  items.forEach(function (item) {
+  function prepare(item) {
     item.search = normalizeText(item.label + ' ' + item.hint + ' ' + item.group);
-  });
+    return item;
+  }
+  baseItems.forEach(prepare);
+
+  var remoteItems = [];
+  var remoteNeedle = null;
+  var remotePending = false;
+  var remoteTimer = 0;
+  var remoteSeq = 0;
 
   var selected = 0;
   var rendered = [];
 
+  function mergeItems(first, second) {
+    var seen = Object.create(null);
+    var out = [];
+    first.concat(second).forEach(function (item) {
+      var key = item.href + '|' + item.label;
+      if (seen[key]) {
+        if ((item.hint || '').length > (seen[key].hint || '').length) seen[key].hint = item.hint;
+        return;
+      }
+      seen[key] = item;
+      out.push(item);
+    });
+    return out;
+  }
+
+  function groupItems(list) {
+    var order = [];
+    var groups = Object.create(null);
+    list.forEach(function (item) {
+      if (!groups[item.group]) { groups[item.group] = []; order.push(item.group); }
+      groups[item.group].push(item);
+    });
+    return order.map(function (name) { return [name, groups[name]]; });
+  }
+
   function render(query) {
     var needle = normalizeText(query);
-    var matches = needle === '' ? items : items.filter(function (item) { return item.search.indexOf(needle) !== -1; });
-    matches = matches.slice(0, 40);
+    var staticMatches = needle === ''
+      ? baseItems
+      : baseItems.filter(function (item) { return item.search.indexOf(needle) !== -1; });
+    var contentMatches = needle !== '' && remoteNeedle === needle ? remoteItems : [];
+    var matches = mergeItems(staticMatches, contentMatches).slice(0, 40);
     rendered = matches;
     selected = 0;
     results.innerHTML = '';
     if (!matches.length) {
       var empty = document.createElement('p');
       empty.className = 'palette-empty';
-      empty.textContent = 'Aucun résultat pour « ' + query + ' ».';
+      empty.textContent = needle !== '' && remotePending
+        ? 'Recherche dans le contenu…'
+        : 'Aucun résultat pour « ' + query + ' ».';
       results.appendChild(empty);
       return;
     }
-    var lastGroup = null;
-    matches.forEach(function (item, index) {
-      if (item.group !== lastGroup) {
-        var group = document.createElement('p');
-        group.className = 'palette-group';
-        group.textContent = item.group;
-        results.appendChild(group);
-        lastGroup = item.group;
-      }
-      var link = document.createElement('a');
-      link.className = 'palette-item';
-      link.href = item.href;
-      link.setAttribute('role', 'option');
-      link.setAttribute('aria-selected', String(index === selected));
-      link.dataset.index = String(index);
-      var mark = document.createElement('span');
-      mark.className = 'pitem-dot';
-      var label = document.createElement('span');
-      label.className = 'pitem-label';
-      label.textContent = item.label;
-      var hint = document.createElement('small');
-      hint.textContent = item.hint || '';
-      link.appendChild(mark);
-      link.appendChild(label);
-      link.appendChild(hint);
-      results.appendChild(link);
+    var index = 0;
+    groupItems(matches).forEach(function (pair) {
+      var group = document.createElement('p');
+      group.className = 'palette-group';
+      group.textContent = pair[0];
+      results.appendChild(group);
+      pair[1].forEach(function (item) {
+        var link = document.createElement('a');
+        link.className = 'palette-item';
+        link.href = item.href;
+        link.setAttribute('role', 'option');
+        link.setAttribute('aria-selected', String(index === selected));
+        link.dataset.index = String(index);
+        var mark = document.createElement('span');
+        mark.className = 'pitem-dot';
+        var label = document.createElement('span');
+        label.className = 'pitem-label';
+        label.textContent = item.label;
+        var hint = document.createElement('small');
+        hint.textContent = item.hint || '';
+        link.appendChild(mark);
+        link.appendChild(label);
+        link.appendChild(hint);
+        results.appendChild(link);
+        index++;
+      });
     });
     highlight();
   }
+
+  function fetchRemote(query) {
+    var needle = normalizeText(query);
+    if (needle.length < 2) {
+      remoteSeq++;
+      remotePending = false;
+      remoteItems = [];
+      remoteNeedle = null;
+      return;
+    }
+    var seq = ++remoteSeq;
+    remotePending = true;
+    fetch('/portail/recherche.php?q=' + encodeURIComponent(query), {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin'
+    })
+      .then(function (response) { return response.ok ? response.json() : { items: [] }; })
+      .then(function (data) {
+        if (seq !== remoteSeq) return;
+        remotePending = false;
+        remoteItems = Array.isArray(data.items) ? data.items.map(prepare) : [];
+        remoteNeedle = needle;
+        if (normalizeText(input.value) === needle) render(input.value);
+      })
+      .catch(function () {
+        if (seq !== remoteSeq) return;
+        remotePending = false;
+        remoteItems = [];
+        remoteNeedle = needle;
+        render(input.value);
+      });
+  }
+
 
   function highlight() {
     var links = results.querySelectorAll('.palette-item');
@@ -169,11 +240,19 @@
   function openPalette() {
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
+    window.clearTimeout(remoteTimer);
+    remoteSeq++;
+    remotePending = false;
+    remoteItems = [];
+    remoteNeedle = null;
     input.value = '';
     render('');
     window.setTimeout(function () { input.focus(); }, 20);
   }
   function closePalette() {
+    window.clearTimeout(remoteTimer);
+    remoteSeq++;
+    remotePending = false;
     if (typeof dialog.close === 'function') dialog.close();
     else dialog.removeAttribute('open');
   }
@@ -191,10 +270,12 @@
     if (event.key === 'Escape') { closePalette(); return; }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
+      if (!rendered.length) return;
       selected = Math.min(selected + 1, rendered.length - 1);
       highlight();
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
+      if (!rendered.length) return;
       selected = Math.max(selected - 1, 0);
       highlight();
     } else if (event.key === 'Enter') {
@@ -202,7 +283,18 @@
       if (item) { event.preventDefault(); window.location.href = item.href; }
     }
   });
-  input.addEventListener('input', function () { render(input.value); });
+  input.addEventListener('input', function () {
+    var query = input.value;
+    if (normalizeText(query).length >= 2) {
+      remotePending = true;
+      remoteNeedle = null;
+    } else {
+      remotePending = false;
+    }
+    render(query);
+    window.clearTimeout(remoteTimer);
+    remoteTimer = window.setTimeout(function () { fetchRemote(query); }, 180);
+  });
   results.addEventListener('click', function (event) {
     var link = event.target.closest('.palette-item');
     if (link) { event.preventDefault(); window.location.href = link.href; }

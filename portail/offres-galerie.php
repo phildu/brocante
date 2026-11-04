@@ -88,7 +88,7 @@ $origin = saas_origin();
 <?php portail_page_start([
     'title' => 'Types de galerie',
     'eyebrow' => 'Boutiques',
-    'desc' => 'Marché aux puces, vide-grenier, galerie marchande, quartier marchand… : chaque type a ses prix, son vocabulaire et ses fonctionnalités.',
+    'desc' => 'Marché aux puces, vide-grenier, galerie marchande, quartier marchand, marché de Noël, marché des producteurs… : chaque type a ses prix, son vocabulaire et ses fonctionnalités.',
     'actions' => '<a class="btn" href="/portail/galeries.php">Galeries</a>',
 ]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>

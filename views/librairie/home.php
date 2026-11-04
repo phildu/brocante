@@ -95,7 +95,8 @@ if (!$shelves && $products) $shelves[] = ['Le catalogue', 'À découvrir', array
         <li><strong>Adresse</strong> <?= h($content['contact_address']) ?></li>
         <li><strong>Horaires</strong> <?= h($content['contact_hours']) ?></li>
         <li><strong>Livraison</strong> <?= h($content['contact_delivery']) ?></li>
-      </ul></div>
+      </ul>
+      <?= shop_locate_actions_html(['class' => 'shop-locate-contact-actions']) ?></div>
     <div><h2><?= h(tenant_text('newsletter_title')) ?></h2><p><?= h(tenant_text('newsletter_text')) ?></p>
       <form method="post" action="/newsletter.php" class="lb-news">
         <input type="email" name="email" required placeholder="votre@email.fr" aria-label="Adresse e-mail">

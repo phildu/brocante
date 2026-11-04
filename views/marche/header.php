@@ -29,8 +29,9 @@ $stripText = trim((string) ($siteContent['contact_delivery'] ?? '')) ?: (string)
     <?php foreach (category_list() as $c): ?>
       <a href="/boutique.php?cat=<?= h($c['key']) ?>"<?= $activeNav === 'boutique' && ($_GET['cat'] ?? '') === $c['key'] ? ' aria-current="page"' : '' ?>><?= h($c['label']) ?></a>
     <?php endforeach; ?>
-    <a class="mk-chip-rest" href="/index.php#histoire">Le marché</a>
-    <a class="mk-chip-rest" href="/index.php#contact">Contact</a>
+    <a class="mk-chip-rest" href="/notre-histoire.php"<?= $activeNav === 'histoire' ? ' aria-current="page"' : '' ?>>Le marché</a>
+    <a class="mk-chip-rest" href="/visite.php"<?= $activeNav === 'visite' ? ' aria-current="page"' : '' ?>>Visite virtuelle</a>
+    <a class="mk-chip-rest" href="/nous-trouver.php"<?= $activeNav === 'nous-trouver' ? ' aria-current="page"' : '' ?>>Contact</a>
     <span class="mk-mobile-tools">
       <?php if (shop_sales_enabled()): ?><a href="/cart.php">Panier<?= $cartCount ? ' (' . (int) $cartCount . ')' : '' ?></a><?php endif; ?>
       <?php if ($accountLink): ?><a href="/compte.php">Mon compte</a><?php endif; ?>

@@ -1,0 +1,301 @@
+{
+  "version": 1,
+  "langue": "fr",
+  "mis_a_jour": "2026-11-03",
+  "note": "Aucune capture n'est fournie dans ce pack. Chaque fiche décrit la capture à produire sur le serveur local, avec un compte de test. Flouter les noms, e-mails, téléphones et IBAN avant publication.",
+  "regles": [
+    "Capturer sur le serveur local, jamais sur la production avec de vraies données.",
+    "Utiliser un compte de test et une galerie de démonstration.",
+    "Format PNG, largeur 1280 px pour le bureau, 390 px pour le téléphone.",
+    "Flouter ou masquer les données personnelles et les secrets.",
+    "Nommer le fichier exactement comme indiqué, dans aide/assets/captures/."
+  ],
+  "captures": [
+    {
+      "fichier": "plan-01-portail.png",
+      "tutoriel": "creer-son-plan",
+      "url": "/portail/galerie-plan.php",
+      "compte": "Organisateur de test, galerie de type vide-grenier avec le module carte actif.",
+      "action": "Ouvrir le portail, choisir la galerie, cliquer sur « Plan ».",
+      "cadrage": "Bureau 1280 px, menu de la galerie visible, carte centrée sur une adresse de démonstration.",
+      "alt": "Page Plan d'implantation avec la carte, la recherche d'adresse et le bouton Enregistrer le plan.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "plan-02-adresse.png",
+      "tutoriel": "creer-son-plan",
+      "url": "/portail/galerie-plan.php",
+      "compte": "Même compte de test.",
+      "action": "Taper une adresse, choisir une suggestion, centrer la carte.",
+      "cadrage": "Zoom sur la barre d'adresse et la carte, suggestion visible.",
+      "alt": "Recherche d'adresse avec une suggestion et la carte centrée sur le lieu.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "plan-03-poser.png",
+      "tutoriel": "creer-son-plan",
+      "url": "/portail/galerie-plan.php",
+      "compte": "Même compte de test.",
+      "action": "Créer une surface « Stand 3 × 2 m » dans le catalogue, cliquer sur « Poser », placer un emplacement.",
+      "cadrage": "Carte avec un emplacement sélectionné et sa fiche « Élément sélectionné ».",
+      "alt": "Emplacement posé sur le plan et sa fiche de réglage.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "plan-04-numeroter.png",
+      "tutoriel": "creer-son-plan",
+      "url": "/portail/galerie-plan.php",
+      "compte": "Même compte de test.",
+      "action": "Utiliser « Numéroter tout » ou saisir un numéro dans la fiche.",
+      "cadrage": "Zoom sur plusieurs emplacements numérotés et le compteur « prochain numéro ».",
+      "alt": "Emplacements numérotés sur le plan.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "plan-05-tarifs.png",
+      "tutoriel": "creer-son-plan",
+      "url": "/portail/galerie-plan.php",
+      "compte": "Même compte de test.",
+      "action": "Sélectionner une zone et ouvrir « Tarifs de cette zone ».",
+      "cadrage": "Fiche de zone avec unité, prix particulier et prix entreprise.",
+      "alt": "Réglage des tarifs d'une zone du plan.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "plan-06-enregistrer.png",
+      "tutoriel": "creer-son-plan",
+      "url": "/portail/galerie-plan.php",
+      "compte": "Même compte de test.",
+      "action": "Cliquer sur « Enregistrer le plan », puis sur « Voir sur la page publique ».",
+      "cadrage": "Barre d'actions avec le bouton Enregistrer et le lien vers la page publique.",
+      "alt": "Bouton Enregistrer le plan et lien Voir sur la page publique.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "demandes-01-evenement.png",
+      "tutoriel": "ouvrir-les-demandes",
+      "url": "/portail/galerie-evenement.php",
+      "compte": "Organisateur de test avec un événement de démonstration.",
+      "action": "Ouvrir Événement et remplir le nom, la date, le lieu et les horaires.",
+      "cadrage": "Bureau 1280 px, formulaire « L'événement » visible.",
+      "alt": "Formulaire de l'événement avec nom, date et lieu.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "demandes-02-tarifs.png",
+      "tutoriel": "ouvrir-les-demandes",
+      "url": "/portail/galerie-evenement.php",
+      "compte": "Même compte de test.",
+      "action": "Renseigner le nombre de places, la longueur, le prix au mètre et le prix d'une place.",
+      "cadrage": "Section « et tarif » et aperçu des places.",
+      "alt": "Réglage des places et des tarifs de l'événement.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "demandes-03-reserver.png",
+      "tutoriel": "ouvrir-les-demandes",
+      "url": "/portail/galerie-evenement.php",
+      "compte": "Même compte de test.",
+      "action": "Cocher « Accepter les demandes d'emplacement en ligne » et fixer le délai.",
+      "cadrage": "Section « Réserver en ligne » avec la case, le délai et la phrase d'accueil.",
+      "alt": "Case Accepter les demandes d'emplacement en ligne et délai de réservation.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "demandes-04-exposants.png",
+      "tutoriel": "ouvrir-les-demandes",
+      "url": "/portail/galerie-exposants.php",
+      "compte": "Même compte de test, avec une demande en attente.",
+      "action": "Ouvrir Exposants → Demandes d'emplacement et accepter une demande.",
+      "cadrage": "Liste des demandes avec les boutons Accepter, Refuser et Libérer.",
+      "alt": "Demande d'emplacement avec les boutons d'acceptation et de refus.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "demandes-05-pass.png",
+      "tutoriel": "ouvrir-les-demandes",
+      "url": "/galerie/exposant.php",
+      "compte": "Exposant de test avec une place confirmée.",
+      "action": "Ouvrir le lien reçu par e-mail et afficher le pass avec QR code.",
+      "cadrage": "Téléphone 390 px, pass et QR code visibles, données personnelles floutées.",
+      "alt": "Espace exposant avec le pass de confirmation et son QR code.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "studio-01-accueil.png",
+      "tutoriel": "publier-une-piece-studio",
+      "url": "/studio.php",
+      "compte": "Vendeur de test avec une boutique de démonstration.",
+      "action": "Ouvrir le Studio sur un téléphone ou en vue mobile.",
+      "cadrage": "Téléphone 390 px, écran d'accueil avec les modes de prise de vue.",
+      "alt": "Écran d'accueil du Studio avec la prise de vue simple et le shooting en lot.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "studio-02-photo.png",
+      "tutoriel": "publier-une-piece-studio",
+      "url": "/studio.php",
+      "compte": "Même compte de test.",
+      "action": "Ouvrir l'appareil photo et prendre une photo de face d'un objet neutre.",
+      "cadrage": "Téléphone 390 px, photo et boutons Pièce suivante / Terminer le shooting.",
+      "alt": "Prise de vue d'une pièce dans le Studio.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "studio-03-fiche-ia.png",
+      "tutoriel": "publier-une-piece-studio",
+      "url": "/studio.php",
+      "compte": "Même compte de test, crédit IA disponible.",
+      "action": "Lancer le traitement et afficher la fiche proposée par l'IA.",
+      "cadrage": "Téléphone 390 px, champs de la fiche et bouton de validation.",
+      "alt": "Fiche de pièce proposée par l'IA, à relire et corriger.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "studio-04-catalogue.png",
+      "tutoriel": "publier-une-piece-studio",
+      "url": "/admin/catalog.php",
+      "compte": "Même compte de test.",
+      "action": "Retrouver la pièce publiée dans le catalogue.",
+      "cadrage": "Bureau 1280 px, ligne de la pièce avec photo, prix et état.",
+      "alt": "Pièce publiée dans le catalogue de la boutique.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "studio-05-lot.png",
+      "tutoriel": "publier-une-piece-studio",
+      "url": "/studio.php",
+      "compte": "Même compte de test.",
+      "action": "Ouvrir « Shooting en lot » et photographier deux ou trois pièces.",
+      "cadrage": "Téléphone 390 px, liste « Votre lot » et bouton Générer les fiches.",
+      "alt": "Shooting en lot avec plusieurs pièces en attente de traitement.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "encaisser-01-reglages.png",
+      "tutoriel": "encaisser",
+      "url": "/admin/index.php?s=paiement",
+      "compte": "Vendeur de test avec une boutique de démonstration.",
+      "action": "Ouvrir Réglages → Paiement & livraison.",
+      "cadrage": "Bureau 1280 px, onglet Paiement & livraison et section Réglages Stripe.",
+      "alt": "Réglages de paiement de la boutique avec Stripe et les autres prestataires.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "encaisser-02-stripe.png",
+      "tutoriel": "encaisser",
+      "url": "/admin/index.php?s=paiement",
+      "compte": "Même compte de test, mode test.",
+      "action": "Remplir les champs de clés Stripe avec des valeurs de test factices, jamais de vraies clés.",
+      "cadrage": "Section Stripe avec mode actif, champs et bouton de test.",
+      "alt": "Champs de clés Stripe en mode test.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "encaisser-03-webhook.png",
+      "tutoriel": "encaisser",
+      "url": "/admin/index.php?s=paiement",
+      "compte": "Même compte de test.",
+      "action": "Afficher l'adresse du webhook et le champ du secret de signature.",
+      "cadrage": "Zoom sur l'aide webhook et le champ whsec_…",
+      "alt": "Adresse du webhook Stripe et champ du secret de signature.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "encaisser-04-commandes.png",
+      "tutoriel": "encaisser",
+      "url": "/admin/orders.php",
+      "compte": "Même compte de test, avec une commande de test payée.",
+      "action": "Ouvrir la liste des commandes et une commande payée.",
+      "cadrage": "Bureau 1280 px, statut Payée et moyen de paiement visibles.",
+      "alt": "Commande de test payée dans l'administration.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "encaisser-05-sepa.png",
+      "tutoriel": "encaisser",
+      "url": "/admin/orders.php",
+      "compte": "Même compte de test, avec une commande SEPA en attente.",
+      "action": "Afficher une commande SEPA et le bouton « Marquer le virement reçu ».",
+      "cadrage": "Détail de la commande SEPA, IBAN masqué.",
+      "alt": "Commande par virement SEPA avec le bouton Marquer le virement reçu.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "export-01-exposants.png",
+      "tutoriel": "exporter-un-plan",
+      "url": "/portail/galerie-exposants.php",
+      "compte": "Organisateur de test avec des exposants attribués.",
+      "action": "Ouvrir Exposants et repérer les boutons d'export.",
+      "cadrage": "Bureau 1280 px, boutons Exporter (CSV) et Registre des vendeurs (imprimer).",
+      "alt": "Liste des exposants avec les boutons d'export CSV et registre.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "export-02-csv.png",
+      "tutoriel": "exporter-un-plan",
+      "url": "/portail/galerie-exposants.php",
+      "compte": "Même compte de test.",
+      "action": "Cliquer sur « Exporter (CSV) » et ouvrir le fichier dans un tableur.",
+      "cadrage": "Tableur avec les colonnes exposant, place et coordonnées, données floutées.",
+      "alt": "Fichier CSV des exposants ouvert dans un tableur.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "export-03-registre.png",
+      "tutoriel": "exporter-un-plan",
+      "url": "/portail/galerie-registre.php",
+      "compte": "Même compte de test, événement renseigné.",
+      "action": "Ouvrir le registre et afficher l'aperçu.",
+      "cadrage": "Bureau 1280 px, en-tête de manifestation et lignes des exposants.",
+      "alt": "Aperçu du registre de police avec l'en-tête et les exposants.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "export-04-impression.png",
+      "tutoriel": "exporter-un-plan",
+      "url": "/portail/galerie-registre.php",
+      "compte": "Même compte de test.",
+      "action": "Cliquer sur « Imprimer / PDF » et ouvrir la boîte d'impression du navigateur.",
+      "cadrage": "Boîte d'impression avec l'option Enregistrer au format PDF et le format A4 paysage.",
+      "alt": "Boîte d'impression du navigateur avec l'option Enregistrer au format PDF.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    },
+    {
+      "fichier": "export-05-plan-public.png",
+      "tutoriel": "exporter-un-plan",
+      "url": "/galerie/<slug>/",
+      "compte": "Visiteur, page publique de la galerie de test.",
+      "action": "Ouvrir la page publique et afficher le plan.",
+      "cadrage": "Bureau 1280 px, plan public sans bouton d'export dédié.",
+      "alt": "Plan visible sur la page publique de la galerie.",
+      "remplacement": "Capture à faire",
+      "statut": "a-faire"
+    }
+  ]
+}

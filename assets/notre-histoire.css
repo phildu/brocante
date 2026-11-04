@@ -1,0 +1,57 @@
+/* « Notre histoire » : la page autonome du récit de la maison. */
+.nh-hero { position: relative; padding: clamp(36px, 7vw, 78px) 0 clamp(28px, 4vw, 48px); }
+.nh-hero-in { display: grid; gap: 14px; max-width: 860px; }
+.nh-hero h1 { font-size: clamp(2.15rem, 5.6vw, 3.9rem); line-height: 1.03; margin: 0; }
+.nh-hero .lede { font-size: 1.05rem; margin: 0; }
+.nh-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.nh-hero .share-row { margin: 6px 0 0; }
+
+/* Bandeau de page configuré dans Administration → Bandeaux de page. */
+.nh-hero.has-page-banner { display: flex; align-items: center; min-height: clamp(280px, 44vh, 460px); padding: clamp(56px, 10vw, 116px) 0; margin: 0; overflow: hidden; }
+.nh-hero.has-page-banner > .wrap { position: relative; z-index: 1; }
+.nh-hero.has-page-banner h1 { color: #fff; }
+.nh-hero.has-page-banner .eyebrow { color: var(--bg); }
+.nh-hero.has-page-banner .lede { color: rgba(255, 255, 255, 0.88); }
+.nh-hero.has-page-banner .btn-ghost { border-color: rgba(255, 255, 255, 0.6); color: #fff; }
+.nh-hero.has-page-banner .btn-ghost:hover { border-color: #fff; }
+.nh-hero.has-page-banner .share-row { color: rgba(255, 255, 255, 0.85); }
+
+.nh-story { padding: clamp(36px, 6vw, 64px) 0; border-top: 1px solid var(--line); }
+.nh-story-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: clamp(28px, 5vw, 64px); align-items: start; }
+.nh-story-grid.is-plain { grid-template-columns: minmax(0, 780px); justify-content: center; }
+.nh-story-copy { max-width: 68ch; }
+.nh-story-copy p { margin: 0 0 1.05em; font-size: 1.06rem; line-height: 1.75; color: var(--ink-soft); }
+.nh-story-copy p:first-child { color: var(--ink); font-size: clamp(1.16rem, 2.2vw, 1.34rem); line-height: 1.6; }
+.nh-story-copy p:first-child::first-letter {
+  float: left;
+  padding: 8px 10px 0 0;
+  font-family: var(--font-display);
+  font-size: 3.2em;
+  line-height: 0.8;
+  color: var(--accent);
+}
+.nh-sign { margin: 26px 0 0; font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.nh-sign::before { content: "— "; }
+
+.nh-figure { position: sticky; top: 104px; margin: 0; }
+.nh-figure img { display: block; width: 100%; padding: 10px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 22px 48px -34px rgba(0, 0, 0, 0.5); }
+.nh-figure figcaption { margin-top: 10px; font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.5; color: var(--ink-soft); }
+
+.nh-values { padding: clamp(36px, 6vw, 64px) 0; border-top: 1px solid var(--line); }
+.nh-values-head { display: grid; gap: 8px; margin-bottom: 26px; max-width: 60ch; }
+.nh-values-head h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
+.nh-values-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }
+.nh-value { padding: clamp(20px, 3vw, 30px); background: var(--surface); }
+.nh-value .num { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); }
+.nh-value h3 { margin: 10px 0 6px; font-size: 1.08rem; }
+.nh-value p { margin: 0; font-size: 0.95rem; color: var(--ink-soft); }
+
+.nh-cta { padding: 0 0 clamp(44px, 7vw, 72px); }
+.nh-cta-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; padding-top: clamp(22px, 4vw, 34px); border-top: 1px solid var(--line); }
+.nh-cta h2 { max-width: 34ch; font-size: clamp(1.3rem, 2.6vw, 1.7rem); }
+.nh-cta-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+@media (max-width: 840px) {
+  .nh-story-grid { grid-template-columns: 1fr; }
+  .nh-figure { position: static; order: -1; }
+}

@@ -622,10 +622,15 @@
     return 'La caméra n’a pas pu démarrer. Vérifiez l’adresse sécurisée (https) et les autorisations.';
   }
 
+  function updateFlipLabel() {
+    if (!el.flipBtn) return;
+    el.flipBtn.textContent = state.facing === 'user' ? 'Passer à la caméra arrière' : 'Passer à la caméra avant';
+  }
+
   async function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       notify('Ce navigateur ne donne pas accès à la caméra. Utilisez Chrome, Safari ou Firefox récent, sur une adresse https.', 'error');
-      return;
+      return false;
     }
     stopCamera();
     const portrait = el.format.value === 'portrait';
@@ -646,14 +651,20 @@
       el.camBtn.textContent = 'Couper la caméra';
       el.camnote.textContent = 'La caméra est active. La vidéo reste dans ce navigateur.';
       startMeters(stream);
+      let inputs = 0;
       try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        el.flipBtn.hidden = devices.filter((d) => d.kind === 'videoinput').length < 2;
-      } catch (e) { el.flipBtn.hidden = true; }
+        inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput').length;
+      } catch (e) { inputs = 0; }
+      // Sur téléphone, enumerateDevices() ne liste parfois qu'une entrée : on garde le bouton visible.
+      const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints || 0) > 1;
+      el.flipBtn.hidden = !(inputs >= 2 || mobile);
+      updateFlipLabel();
       drawGuides();
+      return true;
     } catch (error) {
       notify(cameraError(error), 'error');
       el.stage.classList.add('is-off');
+      return false;
     }
   }
 
@@ -666,6 +677,7 @@
     el.record.disabled = true;
     el.camBtn.textContent = 'Activer la caméra';
     el.flipBtn.hidden = true;
+    el.flipBtn.disabled = false;
     el.camnote.textContent = 'La caméra ne fonctionne que sur une adresse sécurisée (https) et avec votre accord.';
     stopMeters();
   }
@@ -848,6 +860,7 @@
     }
     state.recording = true;
     state.recordStart = performance.now();
+    el.flipBtn.disabled = true;
     el.record.hidden = true;
     el.record.disabled = false;
     el.stop.hidden = false;
@@ -860,6 +873,7 @@
   function stopRecording() {
     if (!state.recording) return;
     state.recording = false;
+    el.flipBtn.disabled = false;
     clearInterval(state.timer);
     state.timer = 0;
     el.stop.hidden = true;
@@ -1192,9 +1206,21 @@
         const segment = segments[i];
         const video = videos[i];
         await seek(video, segment.in);
-        // L'enregistrement démarre au premier plan, une fois la prise positionnée :
-        // sinon la durée du fichier dépasse le montage (image figée au début).
-        if (recorder && !recording) { recorder.start(500); recording = true; }
+        if (recorder && !recording) {
+          // La première image du plan est affichée avant le démarrage : sur Safari,
+          // l'initialisation de l'encodeur prenait parfois près d'une seconde et les
+          // images dessinées entre-temps étaient perdues, le fichier commençant après
+          // le début du plan.
+          drawMovieFrame(ctx, video, width, height, segment.title, elapsed, total, fade);
+          await new Promise((resolve) => {
+            let done = false;
+            const go = () => { if (!done) { done = true; resolve(); } };
+            recorder.onstart = go;
+            setTimeout(go, 600);
+            recorder.start(500);
+          });
+          recording = true;
+        }
         try { await video.play(); } catch (e) { /* lecture bloquée : le minuteur de secours prend le relais */ }
         await new Promise((resolve) => {
           const tick = () => {
@@ -1517,8 +1543,16 @@
 
     el.camBtn.addEventListener('click', () => { if (state.stream) stopCamera(); else startCamera(); });
     el.flipBtn.addEventListener('click', async () => {
-      state.facing = state.facing === 'user' ? 'environment' : 'user';
-      if (state.stream) { stopCamera(); await startCamera(); }
+      if (state.recording) return;
+      const previous = state.facing;
+      state.facing = previous === 'user' ? 'environment' : 'user';
+      el.flipBtn.disabled = true;
+      const ok = await startCamera();
+      if (!ok) {
+        state.facing = previous;
+        if (await startCamera()) notify('Une seule caméra est disponible sur cet appareil.', 'error');
+      }
+      el.flipBtn.disabled = false;
     });
     el.guides.addEventListener('change', drawGuides);
     el.mirror.addEventListener('change', () => el.stage.classList.toggle('is-mirror', el.mirror.checked));

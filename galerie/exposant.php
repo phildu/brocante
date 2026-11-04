@@ -9,6 +9,8 @@ require_once __DIR__ . '/../includes/gallery-offers.php';
 require_once __DIR__ . '/../includes/gallery-booking.php';
 require_once __DIR__ . '/../includes/gallery-waitlist.php';
 require_once __DIR__ . '/../includes/gallery-locate.php';
+require_once __DIR__ . '/../includes/gallery-cancellation.php';
+require_once __DIR__ . '/../includes/gallery-messages.php';
 
 function gx_page(string $title, string $html, string $accent = '#2f6b4f'): never
 {
@@ -63,7 +65,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($in['action'] ?? '') === 'cancel')
         . ($gallery ? '<p><a class="btn" href="' . htmlspecialchars($galleryUrl, ENT_QUOTES, 'UTF-8') . '">Voir les emplacements libres</a></p>' : ''), $accent);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {                                                 // nouvelle demande depuis le plan public
+$msgError = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($in['action'] ?? '') === 'message' && $gallery && gt_feature($gallery, 'messages')) { // message de l'exposant à l'organisateur
+    $ct = (string) ($in['t'] ?? '');
+    $msgRow = $gallery ? gb_by_token($slug, $ct) : null;
+    if (!$gallery || !$msgRow) {
+        gx_page('Lien invalide', "<p>Ce lien n'est plus valide : ouvrez celui reçu par e-mail après votre demande d'emplacement.</p>", $accent);
+    }
+    if (!gmsg_guest_quota_ok($slug)) {
+        $msgError = 'Trop de messages envoyés : réessayez dans une heure.';
+    } else {
+        $threadId = gmsg_open_exposant($gallery, $msgRow);
+        $msgError = $threadId === null ? "La conversation n'a pas pu être ouverte."
+            : (string) (gmsg_post($slug, $threadId, 'guest', (string) ($in['body'] ?? ''), ['guest_quota' => true, 'by' => (string) ($msgRow['name'] ?? '')]) ?? '');
+        if ($msgError === '' && ($thread = gmsg_thread_for_booking($slug, $ct))) gmsg_notify_admins($gallery, $thread, (string) ($in['body'] ?? ''));
+    }
+    if ($msgError === '') {
+        header('Location: /galerie/exposant.php?' . http_build_query(['g' => $slug, 't' => $ct, 'msg' => 1]) . '#messages');
+        exit;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($in['action'] ?? '') !== 'message') {          // nouvelle demande depuis le plan public
     header('Content-Type: application/json; charset=utf-8');
     if (!empty($in['website'])) { echo json_encode(['ok' => true, 'message' => 'Votre demande est enregistrée.']); exit; }   // champ piège
     if (!$gallery) { http_response_code(404); echo json_encode(['error' => 'Galerie introuvable.']); exit; }
@@ -97,7 +120,9 @@ if (isset($_GET['manifest'])) {                                                 
 // Contrôle d'un pass par un organisateur ou la sécurité : jamais d'e-mail ni de téléphone, seulement l'identité et l'emplacement.
 if ($pass !== '' || isset($_GET['p'])) {
     $row = $gallery ? gb_by_pass($slug, $pass) : null;
-    $valid = $row && ($row['status'] ?? '') === 'taken';
+    $galleryEventForPass = $gallery ? gallery_event($gallery) : null;
+    $passCancelled = ge_cancelled($galleryEventForPass);
+    $valid = $row && ($row['status'] ?? '') === 'taken' && !$passCancelled;
     $slot = $valid ? gb_slot($gallery, (string) $row['slot_id']) : null;
     $loc = $slot ? gallery_locate_slot($gallery, $slot) : null;
     $event = $loc['event'] ?? ($gallery ? gallery_locate_event($gallery) : null);
@@ -119,6 +144,7 @@ if ($pass !== '' || isset($_GET['p'])) {
         if ($endRaw !== '' && $endRaw < date('Y-m-d')) $html .= '<div class="verdict warn">L\'événement indiqué est terminé : vérifiez auprès de l\'organisateur.</div>';
         $html .= '<p class="soft">Pass nominatif : ne pas transférer. Ce contrôle n\'affiche aucune coordonnée personnelle.</p></div>';
     } else {
+        if ($passCancelled) $html .= '<div class="verdict warn">L\'événement a été annulé : ce pass n\'est plus valable.</div>';
         $html .= '<div class="card"><p>Ce code ne correspond à aucune confirmation d\'emplacement en cours.</p>'
             . '<p class="soft">Demandez à l\'exposant d\'ouvrir son espace exposant et de présenter le QR code de confirmation. Une demande encore en attente n\'a pas de pass.</p></div>';
     }
@@ -145,6 +171,10 @@ $slot = gb_slot($gallery, (string) $row['slot_id']);
 $stand = $slot ? gb_slot_name($gallery, $slot) : ($taken ? 'Emplacement attribué' : 'Emplacement retiré du plan');
 $slotLoc = $slot ? gallery_locate_slot($gallery, $slot) : null;
 $event = $slotLoc['event'] ?? gallery_locate_event($gallery);
+$galleryEvent = gallery_event($gallery);
+$eventCancelled = ge_cancelled($galleryEvent);
+$cancelInfo = $eventCancelled ? (array) $galleryEvent['cancelled'] : [];
+$refund = gcn_row_refund($row);
 $plan = gallery_locate_data($gallery, [], gallery_locate_origin());
 $zone = (string) ($slotLoc['zone'] ?? '');
 $address = (string) ($slotLoc['address'] ?? ($event['address'] ?? ''));
@@ -155,11 +185,21 @@ $canMap = (bool) ($point || $address !== '' || $plan);
 $passUrl = $taken ? gb_pass_url($gallery, $row) : '';
 $passCode = $taken ? gb_pass_code($slug, (string) $row['token']) : '';
 $passOn = $taken && $passUrl !== '' && $passCode !== '';
-$statusLabel = $taken ? 'Confirmé' : ($expired ? 'Délai dépassé' : 'En attente');
-$statusClass = $taken ? 'ok' : ($expired ? 'bad' : 'wait');
-$canCancel = !$taken;
+$statusLabel = $eventCancelled ? 'Événement annulé' : ($taken ? 'Confirmé' : ($expired ? 'Délai dépassé' : 'En attente'));
+$statusClass = $eventCancelled ? 'bad' : ($taken ? 'ok' : ($expired ? 'bad' : 'wait'));
+$canCancel = !$taken && !$eventCancelled;
+$msgThread = gt_feature($gallery, 'messages') ? gmsg_thread_for_booking($slug, $token) : null;
+if ($msgThread) {
+    gmsg_mark_read($slug, $msgThread['id'], 'guest');
+    $msgThread = gmsg_thread($slug, $msgThread['id']) ?? $msgThread;
+}
+$msgDraft = $msgError !== '' ? (string) ($in['body'] ?? '') : '';
 
 if (isset($_GET['annuler'])) {                                                              // confirmation d'annulation (un lien ouvert par un antivirus n'annule rien)
+    if ($eventCancelled) {
+        gx_page('Événement annulé', '<p>Cet événement a été annulé par l’organisateur : votre demande est gelée et aucun remboursement n’est à demander ici.</p>'
+            . '<p><a class="btn" href="/galerie/exposant.php?g=' . rawurlencode($slug) . '&amp;t=' . rawurlencode($token) . '">Ouvrir mon espace exposant</a></p>', $accent);
+    }
     if ($taken) {
         gx_page('Demande confirmée', '<p>Votre emplacement est confirmé : il ne peut plus être annulé depuis cette page. Contactez l\'organisateur de la galerie pour toute modification.</p>'
             . '<p><a class="btn" href="/galerie/exposant.php?g=' . rawurlencode($slug) . '&amp;t=' . rawurlencode($token) . '">Ouvrir mon espace exposant</a></p>', $accent);
@@ -176,7 +216,7 @@ $cfg = [
     'point' => $point, 'address' => $address, 'directions' => $directions, 'accent' => $accent,
     'plan' => $plan ? ['center' => $plan['center'], 'zoom' => $plan['zoom'], 'base' => $plan['base'],
         'tiles' => $plan['tiles'], 'background' => $plan['background'], 'items' => $plan['items']] : null,
-    'pass' => $passUrl, 'code' => $passCode,
+    'pass' => $eventCancelled ? '' : $passUrl, 'code' => $eventCancelled ? '' : $passCode,
 ];
 ?><!doctype html>
 <html lang="fr">
@@ -228,6 +268,17 @@ $cfg = [
   .fullpass .close { justify-self: end; }
   .fullpass h2 { margin: 0; font-size: 1.2rem; }
   .fullpass .qr { max-width: 420px; }
+  .msgs { display: grid; gap: 10px; }
+  .msg { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; max-width: 92%; }
+  .msg.admin { margin-right: auto; background: #f4f7f4; }
+  .msg.guest { margin-left: auto; background: #eef3f8; }
+  .msg-head { display: flex; justify-content: space-between; gap: 8px; font-size: .78rem; color: var(--soft); }
+  .msg-head strong { color: #1f1f1f; }
+  .msg p { margin: 6px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+  .msg-form { display: grid; gap: 10px; }
+  .msg-form label { display: grid; gap: 6px; font-weight: 600; font-size: .9rem; }
+  .msg-form textarea { font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 10px; min-height: 110px; width: 100%; }
+  .notice { background: #e6f4ea; color: #1c6b3c; border: 1px solid #b7dcc2; border-radius: 10px; padding: 10px 12px; margin: 0; }
   @media print {
     .noprint { display: none !important; }
     body { background: #fff; }
@@ -244,7 +295,10 @@ $cfg = [
   <section class="card" id="status">
     <span class="pill <?= $h($statusClass) ?>"><?= $h($statusLabel) ?></span>
     <h2><?= $h($stand) ?></h2>
-    <?php if ($taken): ?>
+    <?php if ($eventCancelled): ?>
+      <p class="soft"><strong>L’organisateur a annulé cet événement.</strong> <?= $h(ge_cancel_reason($galleryEvent)) ?>.</p>
+      <p class="soft">Votre emplacement n’est plus à tenir<?= $taken ? ' ; le remboursement est détaillé ci-dessous' : ' : votre demande était en attente, aucun paiement n’a été enregistré' ?>.</p>
+    <?php elseif ($taken): ?>
       <p class="soft">Votre emplacement est attribué. Le pass ci-dessous confirme la réservation aux organisateurs et à la sécurité du site.</p>
     <?php elseif ($expired): ?>
       <p class="soft">Le délai de réservation est dépassé : l'emplacement a été remis à disposition. Vous pouvez annuler cette demande ou en choisir un autre sur le plan.</p>
@@ -267,7 +321,7 @@ $cfg = [
     <?php endif; ?>
   </section>
 
-  <?php if ($passOn): ?>
+  <?php if ($passOn && !$eventCancelled): ?>
   <section class="card" id="pass-card">
     <h2>Pass de confirmation</h2>
     <p class="soft">Présentez ce QR code aux organisateurs ou à la sécurité du site, sur téléphone ou imprimé.</p>
@@ -279,10 +333,55 @@ $cfg = [
     </div>
     <p class="soft">Pass nominatif : <?= $h($row['name'] ?? '') ?> · <?= $h($stand) ?>. Ne le transférez pas ; un code différent est nécessaire pour annuler la demande.</p>
   </section>
-  <?php elseif (!$taken): ?>
+  <?php elseif (!$taken && !$eventCancelled): ?>
   <section class="card">
     <h2>Pass de confirmation</h2>
     <p class="soft">Le QR code de confirmation apparaîtra ici dès que l'organisateur aura accepté votre demande.</p>
+  </section>
+  <?php endif; ?>
+
+  <?php if (gt_feature($gallery, 'messages')): ?>
+  <section class="card" id="messages">
+    <h2>Messages avec l'organisateur</h2>
+    <?php if (isset($_GET['msg'])): ?><p class="notice">Votre message a bien été envoyé.</p><?php endif; ?>
+    <?php if ($msgError !== ''): ?><p class="verdict bad"><?= $h($msgError) ?></p><?php endif; ?>
+    <?php if ($msgThread && $msgThread['messages']): ?>
+      <div class="msgs">
+        <?php foreach ($msgThread['messages'] as $m): ?>
+          <div class="msg <?= $m['from'] === 'admin' ? 'admin' : 'guest' ?>">
+            <div class="msg-head"><strong><?= $h($m['from'] === 'admin' ? ($m['by'] !== '' ? $m['by'] : 'Organisateur') : ($row['name'] ?? 'Vous')) ?></strong><span><?= $h(date('d/m/Y H:i', $m['at'])) ?></span></div>
+            <p><?= nl2br($h($m['body'])) ?></p>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    <?php else: ?>
+      <p class="soft">Une question sur votre emplacement, votre paiement ou l'installation ? Écrivez à l'organisateur : il reçoit un e-mail et vous répond ici.</p>
+    <?php endif; ?>
+    <form method="post" class="msg-form">
+      <input type="hidden" name="g" value="<?= $h($slug) ?>">
+      <input type="hidden" name="t" value="<?= $h($token) ?>">
+      <input type="hidden" name="action" value="message">
+      <label>Votre message<textarea name="body" maxlength="<?= GMSG_MAX_BODY ?>" rows="4" required placeholder="Bonjour, …"><?= $h($msgDraft) ?></textarea></label>
+      <div><button type="submit" class="primary">Envoyer le message</button></div>
+    </form>
+    <p class="soft">La conversation est privée : elle n'est visible que par vous et l'organisateur.</p>
+  </section>
+  <?php endif; ?>
+
+  <?php if ($eventCancelled): ?>
+  <section class="card" id="refund">
+    <h2>Remboursement</h2>
+    <?php if (!$taken): ?>
+      <p class="soft">Votre demande était encore en attente : aucun paiement n’a été enregistré. Vous n’avez rien à payer et aucun remboursement n’est nécessaire.</p>
+    <?php elseif ($refund['status'] === 'paid'): ?>
+      <p class="soft">Un remboursement de <strong><?= $h(gb_eur($refund['amount_cents'])) ?></strong> a été effectué<?= $refund['paid_at'] > 0 ? ' le ' . $h(date('d/m/Y', $refund['paid_at'])) : '' ?>.</p>
+    <?php elseif ($refund['status'] === 'due'): ?>
+      <p class="soft">Remboursement prévu : <strong><?= $h(gb_eur($refund['amount_cents'])) ?></strong><?php if ($refund['price_cents'] > 0): ?> (<?= (int) $refund['pct'] ?> % du tarif de <?= $h(gb_eur($refund['price_cents'])) ?>)<?php endif; ?>, sous <?= (int) ($cancelInfo['refund_delay_days'] ?? 0) ?> jours par <?= $h((string) ($cancelInfo['refund_method'] ?? '')) ?>.</p>
+    <?php else: ?>
+      <p class="soft">Aucun remboursement n’est prévu à ce titre selon les conditions de vente de l’événement.</p>
+    <?php endif; ?>
+    <?php if ($refund['note'] !== ''): ?><p class="soft"><?= $h($refund['note']) ?></p><?php endif; ?>
+    <p class="soft">Si vous avez réglé sur place et que ce montant ne correspond pas, contactez l’organisateur.</p>
   </section>
   <?php endif; ?>
 
@@ -329,7 +428,7 @@ $cfg = [
   <p class="soft noprint"><a href="<?= $h($galleryUrl) ?>">← Retour à la galerie</a></p>
 </main>
 
-<?php if ($passOn): ?>
+<?php if ($passOn && !$eventCancelled): ?>
 <div class="fullpass" id="fullpass" hidden role="dialog" aria-modal="true" aria-labelledby="fullpass-title">
   <div class="fullpass-in">
     <button type="button" class="close noprint" id="fullpass-close">Fermer</button>

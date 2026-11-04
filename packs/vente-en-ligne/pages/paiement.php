@@ -11,6 +11,8 @@ $rateCount = (int) db()->query('SELECT COUNT(*) FROM shipping_rates')->fetchColu
 $mask = static function (string $key): string {
     return $key === '' ? '' : substr($key, 0, 7) . '…' . substr($key, -4);
 };
+$stripeStatus = stripe_modes_status(SECRETS_DIR);
+$stripeMode = $stripeStatus['mode'];
 ?>
 <link rel="stylesheet" href="<?= h($pluginAsset('vel.css')) ?>">
 <div id="vel-page" data-api="<?= h($pluginApi('action')) ?>" data-csrf="<?= h($pluginCsrf) ?>">
@@ -28,6 +30,7 @@ $mask = static function (string $key): string {
 
   <div class="vel-kpis">
     <div class="vel-kpi"><span>Paiement en ligne</span><strong style="font-size:1rem;"><?= $ready ? 'Actif' : 'Désactivé' ?></strong></div>
+    <div class="vel-kpi"><span>Mode Stripe</span><strong style="font-size:1rem;"><?= $stripeMode === 'live' ? 'Réel' : 'Test' ?></strong></div>
     <div class="vel-kpi"><span>Clé secrète</span><strong style="font-size:.95rem;"><?= STRIPE_SECRET_KEY !== '' ? h($mask(STRIPE_SECRET_KEY)) : 'absente' ?></strong></div>
     <div class="vel-kpi"><span>Clé publiable</span><strong style="font-size:.95rem;"><?= STRIPE_PUBLISHABLE_KEY !== '' ? h($mask(STRIPE_PUBLISHABLE_KEY)) : 'absente' ?></strong></div>
     <div class="vel-kpi"><span>Transporteurs</span><strong><?= $carrierCount ?></strong></div>
@@ -46,8 +49,15 @@ $mask = static function (string $key): string {
 
   <section class="vel-card">
     <h2>Clés Stripe</h2>
-    <p class="hint" style="margin:0 0 10px;">Clés de <a href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">dashboard.stripe.com/test/apikeys</a> (mode test : <code>sk_test_…</code> / <code>pk_test_…</code> ; en production, les clés <code>sk_live_…</code> / <code>pk_live_…</code>). Un champ laissé vide conserve la clé déjà enregistrée — elle n'est jamais réaffichée.</p>
+    <p class="hint" style="margin:0 0 10px;">Clés de <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">dashboard.stripe.com/apikeys</a> (test : <code>sk_test_…</code> / <code>pk_test_…</code> ; réel : <code>sk_live_…</code> / <code>pk_live_…</code>). Les clés des deux modes sont conservées : choisissez le mode à activer, ou collez les clés du mode voulu : il bascule automatiquement. Un champ laissé vide conserve la clé déjà enregistrée — elle n'est jamais réaffichée.</p>
     <form class="vel-form" data-vel-form="save_stripe_keys">
+      <label style="flex:none;min-width:130px;">Mode
+        <select name="stripe_mode">
+          <?php foreach (STRIPE_MODES as $modeOption => $modeLabel): ?>
+            <option value="<?= h($modeOption) ?>"<?= $stripeMode === $modeOption ? ' selected' : '' ?>><?= h($modeLabel) ?><?= $stripeStatus['modes'][$modeOption]['secret'] ? '' : ' (sans clé)' ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
       <label style="flex:1;min-width:260px;">Clé secrète (sk_…)
         <input type="password" name="stripe_secret" autocomplete="off" placeholder="<?= STRIPE_SECRET_KEY !== '' ? 'Déjà enregistrée — ' . h($mask(STRIPE_SECRET_KEY)) : 'sk_test_…' ?>">
       </label>

@@ -65,6 +65,41 @@ try {
         domain_back('Devis ou paiement en attente annulé. Vous pouvez choisir un autre domaine.', 'ok');
     }
 
+    if ($action === 'custom_attach') {
+        $record = domain_custom_attach($slug, (string) ($_POST['domain'] ?? ''), tenant_base_host());
+        domain_back('Domaine ' . $record['domain'] . ' enregistré. Ajoutez l’enregistrement TXT indiqué chez votre fournisseur, puis cliquez sur « Vérifier maintenant ».', 'ok');
+    }
+
+    if ($action === 'custom_check') {
+        $record = domain_custom_check($slug);
+        $state = (string) ($record['state'] ?? '');
+        if ($state === 'dns_ok') {
+            domain_back('Domaine vérifié : la propriété et le pointage vers le serveur sont confirmés. Vous pouvez demander la mise en service.', 'ok');
+        }
+        if ($state === 'verified') {
+            $ips = domain_custom_expected_ips();
+            domain_back('Propriété du domaine confirmée. Il reste à pointer l’enregistrement A vers '
+                . ($ips ? implode(' ou ', $ips) : 'l’adresse indiquée par l’exploitant') . ', puis à revérifier.', 'ok');
+        }
+        if ($state === 'ready') {
+            domain_back('Contrôle enregistré. La demande de mise en service est chez l’exploitant de la plateforme.', 'ok');
+        }
+        $observed = (array) ($record['observed']['txt'] ?? []);
+        domain_back('La preuve DNS n’est pas encore visible'
+            . ($observed ? ' (vu : ' . implode(' ; ', array_slice($observed, 0, 3)) . ')' : '')
+            . '. Vérifiez le nom et la valeur de l’enregistrement TXT, puis réessayez après la propagation.', 'error');
+    }
+
+    if ($action === 'custom_request') {
+        $record = domain_custom_request_activation($slug);
+        domain_back('Mise en service demandée pour ' . (string) ($record['domain'] ?? 'le domaine') . '. L’exploitant de la plateforme installe le certificat HTTPS puis active l’adresse.', 'ok');
+    }
+
+    if ($action === 'custom_remove') {
+        domain_custom_remove($slug);
+        domain_back('Domaine détaché. Vous pouvez en rattacher un autre à tout moment.', 'ok');
+    }
+
     domain_back('Action inconnue.');
 } catch (InvalidArgumentException | RuntimeException $ex) {
     domain_back($ex->getMessage());

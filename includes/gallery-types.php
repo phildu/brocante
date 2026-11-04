@@ -1,11 +1,13 @@
 <?php
 
 // Types de galerie : chaque type est un produit à part, avec son vocabulaire (commerces, exposants, marchands…), ses fonctionnalités et ses
-// offres (prix, durée d'essai, nombre de membres). Quatre types d'origine, tous modifiables dans le portail (Types de galerie) :
-//   marchande   Galerie marchande : des commerces regroupés sur une page commune (comportement historique) ;
-//   puces       Marché aux puces : des marchands installés sur des emplacements numérotés, avec tarifs par zone ;
-//   vide-grenier Vide-grenier : des exposants qui choisissent un emplacement sur le plan et le demandent en ligne ;
-//   quartier    Quartier marchand : les commerçants d'une rue, d'un quartier ou d'un village réunis (nom proposé, modifiable).
+// offres (prix, durée d'essai, nombre de membres). Six types d'origine, tous modifiables dans le portail (Types de galerie) :
+//   marchande         Galerie marchande : des commerces regroupés sur une page commune (comportement historique) ;
+//   puces             Marché aux puces : des marchands installés sur des emplacements numérotés, avec tarifs par zone ;
+//   vide-grenier      Vide-grenier : des exposants qui choisissent un emplacement sur le plan et le demandent en ligne ;
+//   quartier          Quartier marchand : les commerçants d'une rue, d'un quartier ou d'un village réunis (nom proposé, modifiable) ;
+//   marche-de-noel    Marché de Noël : des chalets numérotés, des allées, une page publique éphémère et une identité saisonnière ;
+//   marche-producteurs Marché des producteurs et créateurs : des producteurs locaux, artisans et créateurs sur des stands.
 // Réglages : data/saas/galeries-types.json (uniquement ce qui diffère des valeurs d'origine). Le type d'une galerie est la clé « type » de
 // data/galeries/<id>.json ; une galerie sans type est une galerie marchande.
 
@@ -20,6 +22,8 @@ const GT_LANDING_META = [
     'puces' => ['/marche-aux-puces/', '#2f6b4f', 'Vos emplacements numérotés, vos tarifs par zone, vos marchands présentés.'],
     'vide-grenier' => ['/vide-greniers/', '#b5502e', 'Le vide-grenier se prépare en ligne, pas au téléphone.'],
     'quartier' => ['/quartier-marchand/', '#3b5fa8', 'La rue, le quartier ou le village : une adresse qui rassemble ses commerces.'],
+    'marche-de-noel' => ['/marche-de-noel/', '#a3333d', 'Un marché de Noël qui se réserve en ligne, pas au téléphone.'],
+    'marche-producteurs' => ['/marche-producteurs/', '#7a6a2f', 'Les producteurs et créateurs du territoire, réunis sur une même place.'],
 ];
 const GT_FEATURES = [
     'plan' => 'Plan d\'implantation (carte, zones, emplacements)',
@@ -30,6 +34,7 @@ const GT_FEATURES = [
     'abonnes' => 'Abonnés aux nouveautés',
     'fidelite' => 'Espace visiteur et fidélité de la galerie (web app, QR codes)',
     'bourse' => 'Bourse d\'échanges (propositions de vente et recherches d\'achat)',
+    'messages' => 'Messagerie interne (exposants et contacts)',
 ];
 const GT_VOCAB_KEYS = [
     'gallery' => 'La galerie (singulier)', 'galleries' => 'Les galeries (pluriel)', 'member' => 'Un membre (singulier)', 'members' => 'Les membres (pluriel)',
@@ -89,6 +94,20 @@ function gt_default_locations(): array
             ['key' => 'rue', 'label' => 'Rue', 'unit' => 'ml', 'price_cents' => 0],
             ['key' => 'autre', 'label' => 'Autre lieu', 'unit' => 'slot', 'price_cents' => 0],
         ],
+        'marche-de-noel' => [
+            ['key' => 'chalet', 'label' => 'Chalet', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'stand', 'label' => 'Stand', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'allee', 'label' => 'Allée', 'unit' => 'ml', 'price_cents' => 0],
+            ['key' => 'esplanade', 'label' => 'Esplanade', 'unit' => 'm2', 'price_cents' => 0],
+            ['key' => 'autre', 'label' => 'Autre lieu', 'unit' => 'slot', 'price_cents' => 0],
+        ],
+        'marche-producteurs' => [
+            ['key' => 'stand', 'label' => 'Stand', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'etal', 'label' => 'Étal', 'unit' => 'ml', 'price_cents' => 0],
+            ['key' => 'emplacement', 'label' => 'Emplacement', 'unit' => 'slot', 'price_cents' => 0],
+            ['key' => 'halle', 'label' => 'Halle', 'unit' => 'm2', 'price_cents' => 0],
+            ['key' => 'autre', 'label' => 'Autre lieu', 'unit' => 'slot', 'price_cents' => 0],
+        ],
     ];
 }
 
@@ -103,7 +122,7 @@ function gt_defaults(): array
             'vocab' => ['gallery' => 'galerie commerciale', 'galleries' => 'galeries commerciales', 'member' => 'commerce', 'members' => 'commerces', 'place' => 'lieu de vente', 'places' => 'lieux de vente', 'members_title' => 'Les commerces',
                 'members_lede' => 'Chaque commerce a sa boutique, son panier et son paiement : une pièce se règle chez son commerçant.', 'plan_of' => 'des commerces', 'join_cta' => 'Votre boutique ici',
                 'create_cta' => 'Créer ma galerie', 'create_title' => 'Créez votre galerie commerciale', 'create_intro' => 'Réunissez plusieurs commerces sur une page commune, avec un annuaire, des filtres, vos couleurs et un tableau de bord.', 'empty' => "Cette galerie n'a pas encore de commerce."],
-            'features' => $all(['plan', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse']),
+            'features' => $all(['plan', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse', 'messages']),
             'locations' => $loc['marchande'],
             'offers' => gt_offers_for([]),
         ],
@@ -113,7 +132,7 @@ function gt_defaults(): array
             'vocab' => ['gallery' => 'marché aux puces', 'galleries' => 'marchés aux puces', 'member' => 'marchand', 'members' => 'marchands', 'place' => 'emplacement', 'places' => 'emplacements', 'members_title' => 'Les marchands',
                 'members_lede' => 'Retrouvez chaque marchand et ses trouvailles : une pièce se règle chez son marchand.', 'plan_of' => 'du marché', 'join_cta' => 'Devenir marchand',
                 'create_cta' => 'Créer mon marché aux puces', 'create_title' => 'Créez votre marché aux puces', 'create_intro' => 'Dessinez le plan de votre marché, numérotez les emplacements, fixez les tarifs par zone et présentez vos marchands.', 'empty' => "Ce marché n'a pas encore de marchand."],
-            'features' => $all(['plan', 'tarifs', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse']),
+            'features' => $all(['plan', 'tarifs', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse', 'messages']),
             'locations' => $loc['puces'],
             'offers' => gt_offers_for([
                 'test' => ['tagline' => 'Pour essayer votre marché sans engagement', 'max_members' => 5],
@@ -127,7 +146,7 @@ function gt_defaults(): array
             'vocab' => ['gallery' => 'vide-grenier', 'galleries' => 'vides-greniers', 'member' => 'exposant', 'members' => 'exposants', 'place' => 'emplacement', 'places' => 'emplacements', 'members_title' => 'Les exposants',
                 'members_lede' => 'Retrouvez les exposants du vide-grenier et leurs boutiques en ligne.', 'plan_of' => 'du vide-grenier', 'join_cta' => 'Exposer ici',
                 'create_cta' => 'Organiser mon vide-grenier', 'create_title' => 'Organisez votre vide-grenier', 'create_intro' => 'Un plan en ligne, des tarifs par zone (rue, hall…), et des exposants qui demandent leur emplacement : vous validez en un clic.', 'empty' => "Ce vide-grenier n'a pas encore d'exposant."],
-            'features' => $all(['plan', 'tarifs', 'exposants', 'tableau', 'abonnes', 'fidelite', 'bourse']),
+            'features' => $all(['plan', 'tarifs', 'exposants', 'tableau', 'abonnes', 'fidelite', 'bourse', 'messages']),
             'locations' => $loc['vide-grenier'],
             'offers' => gt_offers_for([
                 'test' => ['tagline' => 'Pour préparer votre prochain vide-grenier', 'max_members' => 10],
@@ -141,12 +160,40 @@ function gt_defaults(): array
             'vocab' => ['gallery' => 'quartier marchand', 'galleries' => 'quartiers marchands', 'member' => 'commerçant', 'members' => 'commerçants', 'place' => 'boutique', 'places' => 'boutiques', 'members_title' => 'Les commerçants du quartier',
                 'members_lede' => 'Les boutiques de la rue, du quartier ou du village : chacune garde son panier et son paiement.', 'plan_of' => 'du quartier', 'join_cta' => 'Rejoindre le quartier',
                 'create_cta' => 'Créer mon quartier marchand', 'create_title' => 'Créez votre quartier marchand', 'create_intro' => 'Réunissez les commerçants d\'une rue, d\'un quartier ou d\'un village : annuaire, plan des boutiques, promotions communes et lettre d\'information.', 'empty' => "Ce quartier n'a pas encore de commerçant."],
-            'features' => $all(['plan', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse']),
+            'features' => $all(['plan', 'prospects', 'tableau', 'abonnes', 'fidelite', 'bourse', 'messages']),
             'locations' => $loc['quartier'],
             'offers' => gt_offers_for([
                 'test' => ['tagline' => 'Pour réunir vos premiers commerçants', 'max_members' => 5],
                 'essentiel' => ['tagline' => 'Pour une rue ou un petit village', 'month_cents' => 2500, 'year_cents' => 25000, 'max_members' => 15],
                 'pro' => ['tagline' => 'Pour un quartier ou une grande commune', 'month_cents' => 6900, 'year_cents' => 69000, 'max_members' => 50],
+            ]),
+        ],
+        'marche-de-noel' => [
+            'name' => 'Marché de Noël', 'emoji' => '🎄', 'active' => true, 'order' => 5,
+            'tagline' => 'Des chalets numérotés et des exposants qui réservent leur place en ligne.',
+            'vocab' => ['gallery' => 'marché de Noël', 'galleries' => 'marchés de Noël', 'member' => 'exposant', 'members' => 'exposants', 'place' => 'chalet', 'places' => 'chalets', 'members_title' => 'Les exposants',
+                'members_lede' => 'Retrouvez les exposants du marché de Noël et leurs boutiques en ligne.', 'plan_of' => 'du marché de Noël', 'join_cta' => 'Réserver un chalet',
+                'create_cta' => 'Créer mon marché de Noël', 'create_title' => 'Créez votre marché de Noël', 'create_intro' => 'Dessinez les allées, numérotez les chalets, fixez les tarifs par zone et ouvrez les réservations en ligne pour votre marché de Noël.', 'empty' => "Ce marché de Noël n'a pas encore d'exposant."],
+            'features' => $all(['plan', 'tarifs', 'exposants', 'tableau', 'abonnes', 'fidelite', 'bourse', 'messages']),
+            'locations' => $loc['marche-de-noel'],
+            'offers' => gt_offers_for([
+                'test' => ['tagline' => 'Pour préparer votre marché de Noël', 'max_members' => 5],
+                'essentiel' => ['tagline' => 'Pour un marché de Noël de village ou de quartier', 'month_cents' => 2900, 'year_cents' => 29000, 'max_members' => 35],
+                'pro' => ['tagline' => 'Pour un grand marché de Noël ou une place centrale', 'month_cents' => 7900, 'year_cents' => 79000, 'max_members' => 120],
+            ]),
+        ],
+        'marche-producteurs' => [
+            'name' => 'Marché des producteurs et créateurs', 'emoji' => '🌾', 'active' => true, 'order' => 6,
+            'tagline' => 'Producteurs locaux, artisans et créateurs réunis sur un marché de proximité.',
+            'vocab' => ['gallery' => 'marché des producteurs et créateurs', 'galleries' => 'marchés des producteurs et créateurs', 'member' => 'producteur ou créateur', 'members' => 'producteurs et créateurs', 'place' => 'stand', 'places' => 'stands', 'members_title' => 'Les producteurs et créateurs',
+                'members_lede' => 'Chaque stand présente ses produits ou ses créations ; une pièce se règle chez son exposant.', 'plan_of' => 'du marché', 'join_cta' => 'Réserver un stand',
+                'create_cta' => 'Créer mon marché', 'create_title' => 'Créez votre marché des producteurs et créateurs', 'create_intro' => 'Réunissez les producteurs locaux, artisans et créateurs : plan des stands, tarifs par zone et réservations en ligne.', 'empty' => "Ce marché n'a pas encore de producteur ou de créateur."],
+            'features' => $all(['plan', 'tarifs', 'exposants', 'tableau', 'abonnes', 'fidelite', 'bourse', 'messages']),
+            'locations' => $loc['marche-producteurs'],
+            'offers' => gt_offers_for([
+                'test' => ['tagline' => 'Pour réunir vos premiers producteurs', 'max_members' => 5],
+                'essentiel' => ['tagline' => 'Pour un marché de village ou de quartier', 'month_cents' => 2500, 'year_cents' => 25000, 'max_members' => 30],
+                'pro' => ['tagline' => 'Pour un marché hebdomadaire ou une halle', 'month_cents' => 6900, 'year_cents' => 69000, 'max_members' => 90],
             ]),
         ],
     ];

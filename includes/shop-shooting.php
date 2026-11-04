@@ -200,7 +200,7 @@ function shop_shooting_targets(): array
         ],
         'story' => [
             'label' => 'Photo « Notre histoire »',
-            'where' => 'Accueil — section Notre histoire (une seule photo, la nouvelle remplace la précédente)',
+            'where' => 'Accueil et page Notre histoire (une seule photo, la nouvelle remplace la précédente)',
             'admin' => '/admin/index.php?s=pages',
             'ratio' => 'paysage',
             'single' => true,
@@ -425,7 +425,7 @@ function shop_shooting_publish_to(string $target, string $path, string $caption,
             } else {
                 db()->prepare('UPDATE content SET story_photo = ? WHERE id = 1')->execute([$path]);
             }
-            return 'Publiée dans la section « Notre histoire ».';
+            return 'Publiée sur la page et la section « Notre histoire ».';
         }
 
         case 'slideshow':
@@ -458,6 +458,103 @@ function shop_shooting_published(int $limit = 30): array
     $stmt = db()->prepare('SELECT path, label, tags, created_at FROM media_library WHERE source = ? ORDER BY id DESC LIMIT ' . $limit);
     $stmt->execute([shop_shooting_media_source()]);
     return $stmt->fetchAll();
+}
+
+/** Tags d'une ressource de médiathèque, en minuscules (ils sont séparés par des virgules). */
+function shop_shooting_tag_list(string $tags): array
+{
+    return array_values(array_filter(array_map(
+        static fn ($tag): string => mb_strtolower(trim((string) $tag)),
+        explode(',', $tags)
+    ), static fn (string $tag): bool => $tag !== ''));
+}
+
+/**
+ * Photos du lieu validées, groupées par lieu, pour la visite virtuelle publique.
+ * Chaque photo publiée par le reportage est inscrite dans la médiathèque : cette
+ * liste ne montre donc que ce qui est déjà en ligne, jamais un envoi en attente.
+ *
+ * @return array<int, array{key:string,title:string,icon:string,intro:string,order:int,photos:array}>
+ */
+function shop_shooting_visit_groups(int $limit = 160): array
+{
+    $limit = max(1, min(200, $limit));
+    try {
+        $stmt = db()->prepare('SELECT path, label, tags, created_at FROM media_library WHERE source = ? AND type = ? ORDER BY id DESC LIMIT ' . $limit);
+        $stmt->execute([shop_shooting_media_source(), 'photo']);
+        $rows = $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+    if (!$rows) return [];
+
+    $places = shop_shooting_places();
+    $placeOrder = array_flip(array_keys($places));
+    // Présentation publique du lieu : courte, elle ne reprend pas les consignes
+    // de prise de vue du programme (durée, lumière, préparation du local).
+    $visitIntros = [
+        'boutique' => 'La vitrine, la pièce, les rayons et les détails qui font la boutique.',
+        'stand' => 'L’enseigne, l’étal et l’ambiance autour du stand.',
+        'atelier' => 'L’entrée, l’établi et les outils de l’atelier.',
+    ];
+    $groups = [];
+    $seen = [];
+
+    foreach ($rows as $row) {
+        $path = (string) ($row['path'] ?? '');
+        if ($path === '' || isset($seen[$path]) || !preg_match('/\.(?:jpe?g|png|webp|gif)$/i', $path)) continue;
+        // Une photo retirée du disque ne doit pas laisser une vignette cassée.
+        if (!is_file(dirname(__DIR__) . '/' . $path)) continue;
+        $seen[$path] = true;
+
+        $tags = shop_shooting_tag_list((string) ($row['tags'] ?? ''));
+        $placeKey = '';
+        foreach ($tags as $tag) {
+            if (isset($places[$tag])) { $placeKey = $tag; break; }
+        }
+        if ($placeKey === '') $placeKey = 'autres';
+
+        $shot = null;
+        $shotIndex = 99;
+        if ($placeKey !== 'autres') {
+            foreach ($places[$placeKey]['shots'] as $i => $candidate) {
+                if (in_array($candidate['key'], $tags, true)) { $shot = $candidate; $shotIndex = $i; break; }
+            }
+        }
+        $shotLabel = $shot !== null ? (string) $shot['label'] : 'Vue du lieu';
+
+        $placeTitle = $placeKey !== 'autres' ? (string) $places[$placeKey]['title'] : 'Autres vues';
+        $label = trim((string) ($row['label'] ?? ''));
+        // Une légende vide a été enregistrée sous la forme « Lieu — Vue » : on
+        // ne la répète pas sous la photo.
+        $caption = ($label !== '' && $label !== $shotLabel && $label !== $placeTitle . ' — ' . $shotLabel) ? $label : '';
+
+        $groups[$placeKey] ??= [
+            'key' => $placeKey,
+            'title' => $placeKey !== 'autres' ? $places[$placeKey]['title'] : 'Autres vues du lieu',
+            'icon' => $placeKey !== 'autres' ? (string) $places[$placeKey]['icon'] : '📷',
+            'intro' => $placeKey !== 'autres' ? (string) ($visitIntros[$placeKey] ?? '') : '',
+            'order' => $placeKey !== 'autres' ? (int) $placeOrder[$placeKey] : 99,
+            'photos' => [],
+        ];
+        $groups[$placeKey]['photos'][] = [
+            'path' => $path,
+            'url' => '/' . ltrim($path, '/'),
+            'shot' => $shotLabel,
+            'shot_order' => $shotIndex,
+            'caption' => mb_substr($caption, 0, 160),
+            'created_at' => (string) ($row['created_at'] ?? ''),
+        ];
+    }
+
+    foreach ($groups as &$group) {
+        usort($group['photos'], static fn (array $a, array $b): int => $a['shot_order'] <=> $b['shot_order'] ?: strcmp($b['created_at'], $a['created_at']));
+    }
+    unset($group);
+
+    $groups = array_values($groups);
+    usort($groups, static fn (array $a, array $b): int => $a['order'] <=> $b['order'] ?: strcmp($a['title'], $b['title']));
+    return $groups;
 }
 
 /** Ce qui est déjà en place sur le site, cible par cible. */

@@ -13,13 +13,14 @@
 
 require_once __DIR__ . '/tenant.php';
 require_once __DIR__ . '/galleries.php';
+require_once __DIR__ . '/stripe-mode.php';
 require_once __DIR__ . '/templates.php';
 require_once __DIR__ . '/tenant-factory.php';
 require_once __DIR__ . '/autofeed.php';
 require_once __DIR__ . '/oauth.php';
 
 const SAAS_RESERVED_SLUGS = ['galerie', 'annuaire', 'inscription', 'accueil', 'portail', 'admin', 'assets', 'uploads', 'includes', 'data', 'tenants',
-    'var', 'scripts', 'api', 'modal', 'static', 'www', 'mail', 'test', 'demo', 'dossier'];
+    'var', 'scripts', 'api', 'modal', 'static', 'www', 'mail', 'test', 'demo', 'dossier', 'aide'];
 const SAAS_CACHE_TTL = 600;
 
 function saas_data_dir(): string
@@ -123,6 +124,9 @@ function saas_config(): array
         'tagline' => mb_substr(trim((string) ($saved['tagline'] ?? '')) ?: 'Votre boutique en ligne, seule ou réunie avec d\'autres commerçants.', 0, 160),
         'contact' => filter_var((string) ($saved['contact'] ?? ''), FILTER_VALIDATE_EMAIL) ?: '',
         'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', $accent) ? strtolower($accent) : '#b5502e',
+        // Adresse IP du serveur indiquée aux boutiques qui rattachent un domaine
+        // déjà acheté (enregistrement A). Vide : celle du serveur est proposée.
+        'domain_ip' => filter_var((string) ($saved['domain_ip'] ?? ''), FILTER_VALIDATE_IP) ?: '',
         // Depuis que le portail enregistre des tarifs (includes/saas-pricing.php), les formules par défaut viennent de la grille par défaut.
         'plans' => saas_pricing()['saved'] ? saas_pricing_legacy_plans() : ($plans ?: saas_default_plans()),
         // Garde-fou : nombre maximal de boutiques GRATUITES créées par 24 h (0 = pas de plafond), puisqu'aucune validation humaine n'est exigée.
@@ -732,23 +736,74 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
 
 function saas_stripe_file(): string
 {
-    return dirname(__DIR__) . '/.secrets/stripe_plateforme.json';
+    return defined('SAAS_STRIPE_FILE') ? (string) SAAS_STRIPE_FILE : dirname(__DIR__) . '/.secrets/stripe_plateforme.json';
 }
 
-/** ['secret_key' => sk_…, 'webhook_secret' => whsec_… | '', 'api_base' => …]. */
+/** Contenu brut du fichier de clés de la plateforme (ancienne ou nouvelle disposition). */
+function saas_stripe_data(): array
+{
+    $file = saas_stripe_file();
+    return is_file($file) ? (json_decode((string) file_get_contents($file), true) ?: []) : [];
+}
+
+function saas_stripe_data_save(array $data): bool
+{
+    $file = saas_stripe_file();
+    $dir = dirname($file);
+    if (!is_dir($dir) && !@mkdir($dir, 0700, true)) return false;
+    if (@file_put_contents($file, json_encode($data)) === false) return false;
+    @chmod($file, 0600);
+    return true;
+}
+
+/**
+ * Mode actif de la plateforme : mode enregistré, sinon préfixe de l'ancienne
+ * clé unique, sinon test. Les clés des deux modes vivent dans le même fichier
+ * (« test » et « live ») ; la paire active est aussi recopiée dans les champs
+ * historiques secret_key / webhook_secret pour les outils qui les lisent.
+ */
+function saas_stripe_mode(?array $data = null): string
+{
+    $data ??= saas_stripe_data();
+    $mode = (string) ($data['mode'] ?? '');
+    if (isset(STRIPE_MODES[$mode])) return $mode;
+    $mode = stripe_key_mode((string) ($data['secret_key'] ?? ''));
+    return $mode !== '' ? $mode : 'test';
+}
+
+/** Clés enregistrées pour un mode de la plateforme. */
+function saas_stripe_mode_keys(string $mode, ?array $data = null): array
+{
+    $data ??= saas_stripe_data();
+    $entry = is_array($data[$mode] ?? null) ? $data[$mode] : [];
+    $keys = [
+        'secret_key' => (string) ($entry['secret_key'] ?? ''),
+        'webhook_secret' => (string) ($entry['webhook_secret'] ?? ''),
+    ];
+    // Ancienne disposition : une seule paire, rattachée au mode de son préfixe.
+    if (empty($data['test']) && empty($data['live']) && saas_stripe_mode($data) === $mode) {
+        if ($keys['secret_key'] === '') $keys['secret_key'] = (string) ($data['secret_key'] ?? '');
+        if ($keys['webhook_secret'] === '') $keys['webhook_secret'] = (string) ($data['webhook_secret'] ?? '');
+    }
+    return $keys;
+}
+
+/** ['secret_key' => sk_…, 'webhook_secret' => whsec_… | '', 'api_base' => …, 'mode' => test|live]. */
 function saas_stripe_config(): array
 {
     static $cfg = null;
     if ($cfg !== null) return $cfg;
-    $file = saas_stripe_file();
-    $d = is_file($file) ? (json_decode((string) file_get_contents($file), true) ?: []) : [];
+    $d = saas_stripe_data();
+    $mode = saas_stripe_mode($d);
+    $keys = saas_stripe_mode_keys($mode, $d);
     $base = 'https://api.stripe.com/v1';
     // Adresse de l'API de substitution (faux Stripe de test) : acceptée seulement sur la machine de développement.
     if (is_file(dirname(__DIR__) . '/config.local.php') && preg_match('#^https?://(localhost|127\.0\.0\.1)(:\d+)?/v1$#', (string) ($d['api_base'] ?? ''))) $base = (string) $d['api_base'];
     return $cfg = [
-        'secret_key' => preg_match('/^sk_(test|live)_[A-Za-z0-9]+$/', (string) ($d['secret_key'] ?? '')) ? (string) $d['secret_key'] : '',
-        'webhook_secret' => preg_match('/^whsec_[A-Za-z0-9]+$/', (string) ($d['webhook_secret'] ?? '')) ? (string) $d['webhook_secret'] : '',
+        'secret_key' => preg_match('/^(?:sk|rk)_(test|live)_[A-Za-z0-9]+$/', (string) $keys['secret_key']) ? (string) $keys['secret_key'] : '',
+        'webhook_secret' => preg_match('/^whsec_[A-Za-z0-9]+$/', (string) $keys['webhook_secret']) ? (string) $keys['webhook_secret'] : '',
         'api_base' => $base,
+        'mode' => $mode,
     ];
 }
 
@@ -759,19 +814,92 @@ function saas_stripe_configured(): bool
 
 function saas_stripe_live(): bool
 {
-    return str_starts_with(saas_stripe_config()['secret_key'], 'sk_live_');
+    return saas_stripe_config()['mode'] === 'live';
 }
 
+/** Enregistre les clés d'un mode ; $activate bascule la plateforme sur ce mode. */
+function saas_stripe_save_mode(string $mode, string $secret, string $webhook, bool $activate = false): bool
+{
+    if (!isset(STRIPE_MODES[$mode])) return false;
+    $data = saas_stripe_data();
+    // Ancienne disposition (une seule paire en haut du fichier) : la ranger
+    // dans son mode avant d'ajouter quoi que ce soit, sinon l'enregistrement
+    // d'un autre mode ferait disparaître la paire active.
+    if (empty($data['test']) && empty($data['live'])) {
+        $legacy = stripe_key_mode((string) ($data['secret_key'] ?? ''));
+        if ($legacy === '') $legacy = 'test';
+        $data[$legacy] = [
+            'secret_key' => (string) ($data['secret_key'] ?? ''),
+            'webhook_secret' => (string) ($data['webhook_secret'] ?? ''),
+        ];
+        if (!isset(STRIPE_MODES[(string) ($data['mode'] ?? '')])) $data['mode'] = $legacy;
+    }
+    $entry = is_array($data[$mode] ?? null) ? $data[$mode] : [];
+    if ($secret !== '') $entry['secret_key'] = $secret;
+    if ($webhook !== '') $entry['webhook_secret'] = $webhook;
+    $data[$mode] = $entry;
+
+    $current = $activate ? $mode : saas_stripe_mode($data);
+    // Aucune clé dans le mode actif : la paire qu'on vient d'enregistrer devient active.
+    if (saas_stripe_mode_keys($current, $data)['secret_key'] === '') $current = $mode;
+    $data['mode'] = $current;
+    $active = saas_stripe_mode_keys($current, $data);
+    $data['secret_key'] = (string) $active['secret_key'];
+    $data['webhook_secret'] = (string) $active['webhook_secret'];
+    return saas_stripe_data_save($data);
+}
+
+/** Enregistre dans le mode actif puis l'active (comportement historique du formulaire). */
 function saas_stripe_save(string $secret, string $webhook): bool
 {
-    $dir = dirname(saas_stripe_file());
-    if (!is_dir($dir) && !@mkdir($dir, 0700, true)) return false;
-    $old = is_file(saas_stripe_file()) ? (json_decode((string) file_get_contents(saas_stripe_file()), true) ?: []) : [];
-    $data = ['secret_key' => $secret !== '' ? $secret : ($old['secret_key'] ?? ''), 'webhook_secret' => $webhook !== '' ? $webhook : ($old['webhook_secret'] ?? '')];
-    if (!empty($old['api_base'])) $data['api_base'] = $old['api_base'];
-    if (@file_put_contents(saas_stripe_file(), json_encode($data)) === false) return false;
-    @chmod(saas_stripe_file(), 0600);
-    return true;
+    return saas_stripe_save_mode(saas_stripe_mode(), $secret, $webhook, true);
+}
+
+/** Bascule la plateforme sur un mode. Retourne [bool, message]. */
+function saas_stripe_mode_set(string $mode): array
+{
+    if (!isset(STRIPE_MODES[$mode])) return [false, 'Mode Stripe inconnu.'];
+    $data = saas_stripe_data();
+    $keys = saas_stripe_mode_keys($mode, $data);
+    if ($keys['secret_key'] === '' || !preg_match('/^(?:sk|rk)_' . $mode . '_[A-Za-z0-9]+$/', $keys['secret_key'])) {
+        return [false, 'Aucune clé secrète valide pour le mode ' . STRIPE_MODES[$mode] . ' : enregistrez-la d\'abord.'];
+    }
+    $data['mode'] = $mode;
+    $data['secret_key'] = $keys['secret_key'];
+    $data['webhook_secret'] = $keys['webhook_secret'];
+    return saas_stripe_data_save($data)
+        ? [true, 'Stripe de la plateforme : mode ' . STRIPE_MODES[$mode] . '.']
+        : [false, 'Impossible d\'écrire le fichier des clés (droits du dossier .secrets).'];
+}
+
+/** État des deux modes de la plateforme pour l'affichage. */
+function saas_stripe_modes_status(): array
+{
+    $data = saas_stripe_data();
+    $modes = [];
+    foreach (array_keys(STRIPE_MODES) as $mode) {
+        $keys = saas_stripe_mode_keys($mode, $data);
+        $valid = preg_match('/^(?:sk|rk)_' . $mode . '_[A-Za-z0-9]+$/', $keys['secret_key']) === 1;
+        $modes[$mode] = [
+            'configured' => $valid,
+            'webhook' => preg_match('/^whsec_[A-Za-z0-9]+$/', $keys['webhook_secret']) === 1,
+            'secret_mask' => $valid ? stripe_key_mask($keys['secret_key']) : '',
+        ];
+    }
+    return ['mode' => saas_stripe_mode($data), 'modes' => $modes];
+}
+
+/** Secrets de webhook utilisables : mode actif puis l'autre mode (un paiement en attente peut arriver après la bascule). */
+function saas_stripe_webhook_secrets(): array
+{
+    $data = saas_stripe_data();
+    $mode = saas_stripe_mode($data);
+    $out = [];
+    foreach ([$mode, $mode === 'live' ? 'test' : 'live'] as $m) {
+        $secret = (string) saas_stripe_mode_keys($m, $data)['webhook_secret'];
+        if (preg_match('/^whsec_[A-Za-z0-9]+$/', $secret) && !in_array($secret, $out, true)) $out[] = $secret;
+    }
+    return $out;
 }
 
 /** Appel à l'API Stripe de la plateforme ; lève une exception avec le message de Stripe en cas d'erreur. */
@@ -1072,7 +1200,7 @@ function saas_page_end(): void
 </main>
 <footer class="site-foot"><div class="wrap foot">
   <div><strong><?= saas_e($cfg['name']) ?></strong><br><span><?= saas_e($cfg['tagline']) ?></span></div>
-  <nav aria-label="Pied de page"><a href="/">Accueil</a><a href="/vide-greniers/">Organiser un vide-grenier</a><a href="/marche-aux-puces/">Gérer un marché aux puces</a><a href="/galerie-marchande/">Créer une galerie marchande</a><a href="/quartier-marchand/">Créer un quartier marchand</a><a href="/galerie/">Galeries</a><a href="/annuaire/">Annuaire</a><a href="/inscription/">Je veux vendre en ligne</a><a href="/dossier/">Dossier de subvention</a><?php if ($cfg['contact'] !== ''): ?><a href="mailto:<?= saas_e($cfg['contact']) ?>">Contact</a><?php endif; ?></nav>
+  <nav aria-label="Pied de page"><a href="/">Accueil</a><a href="/vide-greniers/">Organiser un vide-grenier</a><a href="/marche-aux-puces/">Gérer un marché aux puces</a><a href="/galerie-marchande/">Créer une galerie marchande</a><a href="/quartier-marchand/">Créer un quartier marchand</a><a href="/marche-de-noel/">Organiser un marché de Noël</a><a href="/marche-producteurs/">Créer un marché de producteurs</a><a href="/galerie/">Galeries</a><a href="/annuaire/">Annuaire</a><a href="/inscription/">Je veux vendre en ligne</a><a href="/dossier/">Dossier de subvention</a><a href="/aide/">Aide</a><a href="/accueil/conditions.php">Conditions d'utilisation</a><?php if ($cfg['contact'] !== ''): ?><a href="mailto:<?= saas_e($cfg['contact']) ?>">Contact</a><?php endif; ?></nav>
 </div></footer>
 <script src="/assets/pwd-toggle.js" defer></script>
 </body>

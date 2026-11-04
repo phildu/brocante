@@ -20,6 +20,10 @@ if ($navG && $navMod('organisateur') && $navOn('exposants')) {
 }
 if ($navG && $navMod('attente') && $navOn('exposants')) $navBtn('galerie-attente.php', "File d'attente");
 if ($navOn('bourse')) $navBtn('galerie-bourse.php', 'Bourse d’échanges');
+if ($navOn('messages')) {
+    $navUnread = $navG ? gmsg_unread_admin((string) ($navG['slug'] ?? $navSlug)) : 0;
+    $navBtn('galerie-messages.php', 'Messages' . ($navUnread > 0 ? ' (' . (int) $navUnread . ')' : ''));
+}
 if ($navOn('tableau')) $navBtn('galerie-tableau.php', 'Tableau de bord');
 if ($navOn('prospects')) $navBtn('galerie-prospects.php', 'Prospects');
 if ($navOn('fidelite')) $navBtn('galerie-fidelite.php', 'Fidélité visiteurs');
@@ -27,6 +31,7 @@ $navBtn('galerie-assistant.php', 'Assistant');
 $navBtn('galerie-offre.php', 'Mon offre');
 if ($navG && function_exists('gm_modules')) $navBtn('galerie-modules.php', 'Options');
 if ($limited) {
+    echo '<button type="button" class="btn" data-pwa-install>Installer l’application</button>';
     $navBtn('galerie-compte.php', 'Mon compte');
     if (empty($_SESSION['ga_csrf'])) $_SESSION['ga_csrf'] = bin2hex(random_bytes(16));
     $me = ga_current();

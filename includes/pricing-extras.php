@@ -4,7 +4,8 @@
 //   - prix de vente MINIMUM (price_floor) : interne, jamais montré, sert à la marge et à juger les offres ;
 //   - fourchette de prix estimée (est_min / est_max), affichable ou non sur la fiche (est_show) ;
 //   - prix négociable (negotiable) : la fiche l'indique et propose « Faire une offre » (table price_offers, offre.php, admin/offers.php) ;
-//   - prix du neuf et lien (new_price / new_url), trouvés par la recherche « Marché », affichables ou non (new_show).
+//   - prix du neuf et lien (new_price / new_url), trouvés par la recherche « Marché », affichables ou non (new_show) ;
+//   - réassort possible (restock_possible / restock_delay / restock_price) : ligne « Réassort possible » sur la fiche, même vendue.
 
 function price_offers_ensure_schema(PDO $pdo): void
 {
@@ -52,32 +53,47 @@ function product_price_extras_visible(array $p): bool
     return !empty($p['negotiable']) || (!empty($p['est_show']) && ($p['est_min'] ?? null) !== null) || (!empty($p['new_show']) && pricing_safe_url($p['new_url'] ?? '') !== '');
 }
 
+/** Ligne « Réassort possible — délai et prix » de la fiche publique ('' si le vendeur n'a pas coché l'option). */
+function product_restock_line_html(array $p): string
+{
+    if (empty($p['restock_possible'])) return '';
+    $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+    $delay = trim((string) ($p['restock_delay'] ?? ''));
+    $price = trim((string) ($p['restock_price'] ?? ''));
+    $details = [];
+    if ($delay !== '') $details[] = 'Délai : ' . $h($delay);
+    if ($price !== '') $details[] = 'Prix : ' . $h($price);
+    return '<p class="pe-line pe-restock"><span class="pe-tag">Réassort possible</span>' . ($details ? ' <span>' . implode(' · ', $details) . '</span>' : '') . '</p>';
+}
+
 /**
  * Sous le prix de la fiche publique : « Prix négociable » + bouton « Faire une offre » (fenêtre de saisie), fourchette estimée et lien vers le prix du neuf,
- * chacun seulement si le vendeur l'a coché. Chaîne vide s'il n'y a rien à montrer.
+ * chacun seulement si le vendeur l'a coché, et la ligne « Réassort possible » (affichée même quand la pièce est vendue). Chaîne vide s'il n'y a rien à montrer.
  */
 function product_price_extras_html(array $p): string
 {
-    if (!product_price_extras_visible($p) || !in_stock($p)) return '';
+    $restock = product_restock_line_html($p);
+    $visible = product_price_extras_visible($p) && in_stock($p);
+    if (!$visible && $restock === '') return '';
     $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
     $out = '<div class="price-extras">';
-    if (!empty($p['negotiable'])) {
+    if ($visible && !empty($p['negotiable'])) {
         $out .= '<p class="pe-nego"><span class="pe-tag">Prix négociable</span> <button type="button" class="pe-offer-btn" data-offer-open>Faire une offre</button></p>';
     }
-    if (!empty($p['est_show']) && ($p['est_min'] ?? null) !== null) {
+    if ($visible && !empty($p['est_show']) && ($p['est_min'] ?? null) !== null) {
         $min = (float) $p['est_min'];
         $max = ($p['est_max'] ?? null) !== null ? (float) $p['est_max'] : $min;
         $out .= '<p class="pe-line"><span>Estimation du marché (occasion)</span> <strong>' . $h($max > $min ? pricing_fmt($min) . ' à ' . pricing_fmt($max) : pricing_fmt($min)) . '</strong></p>';
     }
-    $url = !empty($p['new_show']) ? pricing_safe_url($p['new_url'] ?? '') : '';
+    $url = $visible && !empty($p['new_show']) ? pricing_safe_url($p['new_url'] ?? '') : '';
     if ($url !== '') {
         $np = trim((string) ($p['new_price'] ?? ''));
         $out .= '<p class="pe-line"><span>Prix du neuf' . ($np !== '' ? ' constaté' : '') . '</span> '
             . ($np !== '' ? '<strong>' . $h($np) . '</strong> ' : '')
             . '<a href="' . $h($url) . '" target="_blank" rel="noopener noreferrer nofollow">Voir le prix du neuf (' . $h(pricing_url_host($url)) . ') ↗</a></p>';
     }
-    $out .= '</div>';
-    if (!empty($p['negotiable'])) {
+    $out .= $restock . '</div>';
+    if ($visible && !empty($p['negotiable'])) {
         $out .= '<dialog class="pe-dialog" data-offer-dialog aria-label="Faire une offre"><form method="post" action="' . $h(app_prefix('/offre.php')) . '" data-offer-form>'
             . '<div class="pe-head"><b>Faire une offre</b><button type="button" class="pe-x" data-offer-close aria-label="Fermer">×</button></div>'
             . '<p class="pe-note">Pour « ' . $h($p['name']) . ' », affiché ' . $h($p['price']) . '. Le vendeur vous répond par e-mail ; rien n\'est débité.</p>'

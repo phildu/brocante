@@ -11,15 +11,27 @@ require_once __DIR__ . '/includes/functions.php';
 http_response_code(400);
 header('Content-Type: text/plain; charset=utf-8');
 
-$secretFile = SECRETS_DIR . '/stripe_webhook.key';
-$secret = is_file($secretFile) ? trim((string) file_get_contents($secretFile)) : '';
-if ($secret === '' || !str_starts_with($secret, 'whsec_')) {
+// Les secrets des deux modes sont acceptés : un paiement commencé en test
+// avant une bascule vers le réel (ou l'inverse) doit encore pouvoir être
+// confirmé, même si son webhook appartient à l'autre mode.
+$secrets = [];
+foreach (array_keys(STRIPE_MODES) as $mode) {
+    $candidate = stripe_mode_keys($mode, SECRETS_DIR)['webhook'];
+    if ($candidate !== '' && str_starts_with($candidate, 'whsec_')) $secrets[$candidate] = true;
+}
+$active = stripe_read_secret(SECRETS_DIR . '/stripe_webhook.key');
+if ($active !== '' && str_starts_with($active, 'whsec_')) $secrets[$active] = true;
+if (!$secrets) {
     exit('webhook non configuré');
 }
 
 $payload = (string) file_get_contents('php://input');
 $header = (string) ($_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '');
-if (!order_stripe_signature_valid($payload, $header, $secret)) {
+$signed = false;
+foreach (array_keys($secrets) as $secret) {
+    if (order_stripe_signature_valid($payload, $header, $secret)) { $signed = true; break; }
+}
+if (!$signed) {
     exit('signature invalide');
 }
 

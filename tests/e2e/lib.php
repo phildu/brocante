@@ -5,8 +5,8 @@
 
 final class E2e
 {
-    public string $appUrl = 'http://127.0.0.1:8099';
-    public string $stripeUrl = 'http://127.0.0.1:8091';
+    public string $appUrl = 'http://127.0.0.1:8199';
+    public string $stripeUrl = 'http://127.0.0.1:8191';
     public string $workspace;
 
     /** @var array<string, string> jar de cookies par client */

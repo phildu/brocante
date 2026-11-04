@@ -63,6 +63,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             ]);
         }
         $_SESSION['shipping_ui'] = (string) ($_POST['shipping_choice'] ?? 'pickup');
+        // Emballage cadeau : conservé quand la zone de livraison est recalculée.
+        if (gift_wrap_enabled()) {
+            if (!empty($_POST['gift_wrap'])) {
+                $_SESSION['gift_wrap'] = 1;
+                $giftMessage = trim(str_replace(["\r\n", "\r"], "\n", (string) ($_POST['gift_message'] ?? '')));
+                if ($giftMessage !== '') $_SESSION['gift_message'] = mb_substr($giftMessage, 0, 200); else unset($_SESSION['gift_message']);
+            } else {
+                unset($_SESSION['gift_wrap'], $_SESSION['gift_message']);
+            }
+        }
     }
     header('Location: /cart.php');
     exit;
@@ -84,6 +94,16 @@ $pickupOnly = $lines ? cart_pickup_only($lines, $content) : false;
 $discount = $lines ? cart_discount_for($total, cart_total_qty($lines)) : ['cents' => 0, 'tier' => null];
 $discountHint = $lines ? cart_discount_hint($total, cart_total_qty($lines), null, $discount['cents']) : null;
 $totalAfterDiscount = $total - $discount['cents'];
+// Emballage cadeau : proposé par le vendeur, mémorisé dans la session pour survivre au recalcul de zone.
+$giftWrapEnabled = $lines && gift_wrap_enabled($content);
+$giftWrapCents = $giftWrapEnabled ? gift_wrap_price_cents($content) : 0;
+$giftWrap = $giftWrapEnabled && !empty($_SESSION['gift_wrap']);
+$giftMessage = $giftWrap ? (string) ($_SESSION['gift_message'] ?? '') : '';
+if (!$giftWrapEnabled) {
+    unset($_SESSION['gift_wrap'], $_SESSION['gift_message']);
+    $giftWrap = false;
+    $giftMessage = '';
+}
 
 $destCountry = (string) ($_SESSION['shipping_country'] ?? 'FR');
 $destPostalCode = (string) ($_SESSION['shipping_postal_code'] ?? '');
@@ -125,6 +145,9 @@ $deliverySelected = $uiChoice !== 'pickup';
 $paymentMethods = $lines ? shop_payment_methods() : [];
 $selectedPayment = (string) ($_SESSION['checkout_payment_method'] ?? '');
 if (!isset($paymentMethods[$selectedPayment])) $selectedPayment = (string) array_key_first($paymentMethods);
+// Panier repris après validation de la disponibilité : la commande attend le paiement.
+$resumeOrder = $lines ? oa_resume_order() : null;
+$availabilityLock = oa_enabled() && !$resumeOrder;
 
 $activeNav = '';
 $pageTitle = 'Panier';
@@ -136,6 +159,21 @@ include __DIR__ . '/includes/header.php';
   <div class="wrap">
     <p class="eyebrow">Votre sélection</p>
     <h1 style="font-size:2rem;margin:12px 0 30px;">Panier</h1>
+
+    <?php if ($resumeOrder): ?>
+      <p class="publish-status" data-kind="ok" style="margin-bottom:24px;">
+        Disponibilité confirmée pour votre demande n° <?= (int) $resumeOrder['id'] ?> : la pièce est mise de côté jusqu'au
+        <?= h(date('d/m/Y à H:i', (int) strtotime((string) $resumeOrder['availability_deadline']))) ?>.
+        Vérifiez votre panier puis réglez votre commande.
+      </p>
+    <?php endif; ?>
+
+    <?php if ($availabilityLock): ?>
+      <p class="publish-status" style="margin-bottom:24px;">
+        Avant tout paiement, le vendeur vérifie que la pièce est toujours disponible en boutique : vous serez prévenu·e par e-mail dès sa réponse.
+        Aucun montant n'est prélevé avant votre paiement.
+      </p>
+    <?php endif; ?>
 
     <?php if (!shop_checkout_ready()): ?>
       <p class="publish-status" data-kind="error" style="margin-bottom:24px;">
@@ -392,6 +430,22 @@ include __DIR__ . '/includes/header.php';
             <input type="hidden" name="payment_method" value="<?= h((string) array_key_first($paymentMethods)) ?>">
           <?php endif; ?>
 
+          <?php if ($giftWrapEnabled): ?>
+          <div class="checkout-contact" id="checkout-gift" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
+            <span class="eyebrow" style="font-size:0.9rem;display:block;margin-bottom:12px;">Emballage cadeau</span>
+            <label class="cc-check">
+              <input type="checkbox" name="gift_wrap" value="1" id="gift-wrap" data-price-cents="<?= (int) $giftWrapCents ?>"<?= $giftWrap ? ' checked' : '' ?>>
+              <span><?= h(gift_wrap_label($content)) ?> — <?= $giftWrapCents > 0 ? h(format_cents($giftWrapCents)) : 'offert' ?></span>
+            </label>
+            <div id="gift-message-wrap"<?= $giftWrap ? '' : ' hidden' ?>>
+              <label style="display:block;margin-top:14px;">Petit mot pour le destinataire (facultatif)
+                <textarea name="gift_message" id="gift-message" maxlength="200" rows="3" placeholder="Joyeux anniversaire !"><?= h($giftMessage) ?></textarea>
+              </label>
+              <p class="cc-note" style="font-size:0.78rem;color:var(--ink-soft);margin-top:6px;">Il sera recopié sur le paquet. 200 caractères maximum.</p>
+            </div>
+          </div>
+          <?php endif; ?>
+
           <div class="checkout-contact" id="checkout-terms" style="margin-bottom:20px;padding-top:20px;border-top:1px solid var(--line);">
             <label class="cc-check"><input type="checkbox" name="accept_terms" value="1" required<?= isset($ccErr['terms']) ? ' aria-invalid="true"' : '' ?>>
               <span>J'ai lu et j'accepte les <a href="<?= h(legal_url('cgv')) ?>" target="_blank" rel="noopener">conditions générales de vente</a>, les <a href="<?= h(legal_url('cgu')) ?>" target="_blank" rel="noopener">conditions d'utilisation</a> et la <a href="<?= h(legal_url('confidentialite')) ?>" target="_blank" rel="noopener">politique de confidentialité</a>. <span class="cc-req" aria-hidden="true">*</span></span></label>
@@ -399,11 +453,18 @@ include __DIR__ . '/includes/header.php';
           </div>
 
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <span class="eyebrow" style="font-size:0.95rem;">Total avec livraison</span>
-            <span class="price" id="cart-grand-total" style="font-size:1.5rem;" data-subtotal-cents="<?= (int) $totalAfterDiscount ?>"><?= format_cents($totalAfterDiscount) ?></span>
+            <span class="eyebrow" style="font-size:0.95rem;">Total avec livraison<?= $giftWrapEnabled ? ' et emballage' : '' ?></span>
+            <span class="price" id="cart-grand-total" style="font-size:1.5rem;" data-subtotal-cents="<?= (int) $totalAfterDiscount ?>"><?= format_cents($totalAfterDiscount + ($giftWrap ? $giftWrapCents : 0)) ?></span>
           </div>
 
-          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;" <?= shop_checkout_ready() ? '' : 'disabled' ?>>Passer à la caisse</button>
+          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;" <?= shop_checkout_ready() ? '' : 'disabled' ?>><?= $availabilityLock ? 'Envoyer ma demande de disponibilité' : 'Passer à la caisse' ?></button>
+          <?php require_once __DIR__ . '/includes/payment-badges.php'; ?>
+          <?php if (($__paymentBadges = payment_badges_html('', 28)) !== ''): ?>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:14px;">
+              <span style="font-size:0.68rem;letter-spacing:0.14em;text-transform:uppercase;opacity:0.6;">Paiement sécurisé</span>
+              <?= $__paymentBadges ?>
+            </div>
+          <?php endif; ?>
         </form>
       </div>
     <?php endif; ?>
@@ -467,16 +528,29 @@ include __DIR__ . '/includes/header.php';
 
   var radios = document.querySelectorAll('input[name="shipping_choice"]');
   var subtotalEl = document.getElementById('cart-grand-total');
+  var giftCheckbox = document.getElementById('gift-wrap');
+  var giftMessageWrap = document.getElementById('gift-message-wrap');
+  var giftMessageInput = document.getElementById('gift-message');
   if (subtotalEl) {
     var subtotalCents = parseInt(subtotalEl.dataset.subtotalCents, 10) || 0;
+    var giftCents = giftCheckbox ? (parseInt(giftCheckbox.dataset.priceCents, 10) || 0) : 0;
     var formatCents = function (cents) {
       return (cents / 100).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' €';
     };
     var updateTotal = function () {
       var checked = document.querySelector('input[name="shipping_choice"]:checked');
-      subtotalEl.textContent = formatCents(subtotalCents + (checked ? (parseInt(checked.dataset.priceCents, 10) || 0) : 0));
+      var gift = giftCheckbox && giftCheckbox.checked ? giftCents : 0;
+      subtotalEl.textContent = formatCents(subtotalCents + (checked ? (parseInt(checked.dataset.priceCents, 10) || 0) : 0) + gift);
+    };
+    var syncGift = function () {
+      var on = !!(giftCheckbox && giftCheckbox.checked);
+      if (giftMessageWrap) giftMessageWrap.hidden = !on;
+      if (giftMessageInput) giftMessageInput.disabled = !on;
+      updateTotal();
     };
     radios.forEach(function (r) { r.addEventListener('change', function () { syncDelivery(); updateTotal(); }); });
+    if (giftCheckbox) giftCheckbox.addEventListener('change', syncGift);
+    syncGift();
     updateTotal();
   }
   if (shipOther) shipOther.addEventListener('change', syncShipOther);
@@ -494,14 +568,15 @@ include __DIR__ . '/includes/header.php';
   .checkout-contact .cc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
   .checkout-contact label { display: block; font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-soft); }
   .checkout-contact .cc-wide { grid-column: 1 / -1; }
-  .checkout-contact input[type=text], .checkout-contact input[type=tel], .checkout-contact input[type=email] { display: block; width: 100%; margin-top: 6px; min-height: 44px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 8px 10px; font: inherit; font-family: var(--font-body); font-size: 1rem; }
+  .checkout-contact input[type=text], .checkout-contact input[type=tel], .checkout-contact input[type=email], .checkout-contact textarea { display: block; width: 100%; margin-top: 6px; min-height: 44px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 8px 10px; font: inherit; font-family: var(--font-body); font-size: 1rem; }
+  .checkout-contact textarea { min-height: 90px; resize: vertical; }
   .checkout-contact input[aria-invalid=true] { border-color: #b3261e; }
   .checkout-contact small { display: block; margin-top: 4px; font-family: var(--font-body); font-size: 0.78rem; }
   .checkout-contact .cc-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-family: var(--font-body); font-size: 0.88rem; color: var(--ink); line-height: 1.45; }
   .checkout-contact .cc-check input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
   .checkout-contact .cc-err { display: block; color: #b3261e; font-family: var(--font-body); font-size: 0.82rem; font-style: normal; margin-top: 4px; }
   .checkout-contact .cc-note { font-size: 0.88rem; margin: 0 0 12px; } .checkout-contact .cc-req { color: #b3261e; }
-  .delivery-address[hidden], .checkout-contact .cc-grid[hidden] { display: none !important; }
+  .delivery-address[hidden], .checkout-contact .cc-grid[hidden], #gift-message-wrap[hidden] { display: none !important; }
   #checkout-account .oauth-box { max-width: 340px; }
 </style>
 <script>

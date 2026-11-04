@@ -16,7 +16,11 @@ final class PaymentProvidersTest extends TestCase
         self::assertSame('monetico', payment_provider_of(['stripe_session_id' => 'monetico:B123']));
         self::assertSame('paypal', payment_provider_of(['stripe_session_id' => 'paypal:B123']));
         self::assertSame('paypal', payment_provider_of(['payment_provider' => 'paypal', 'stripe_session_id' => 'paypal:B123']));
+        self::assertSame('revolut', payment_provider_of(['stripe_session_id' => 'revolut:B123']));
+        self::assertSame('sepa', payment_provider_of(['stripe_session_id' => 'sepa:B123']));
         self::assertSame('PayPal', payment_provider_label('paypal'));
+        self::assertSame('Revolut', payment_provider_label('revolut'));
+        self::assertSame('Virement SEPA', payment_provider_label('sepa'));
         self::assertSame('inconnu', payment_provider_label('inconnu'));
     }
 
@@ -144,5 +148,91 @@ final class PaymentProvidersTest extends TestCase
             ['rel' => 'payer-action', 'href' => 'https://paypal.test/payer'],
         ]]));
         self::assertSame('', paypal_approve_url(['links' => []]));
+    }
+
+    public function testSepaIbanNormalisationAndMod97(): void
+    {
+        self::assertTrue(sepa_iban_valid('FR76 3000 6000 0112 3456 7890 189'));
+        self::assertTrue(sepa_iban_valid('de89 3704 0044 0532 0130 00'));
+        self::assertTrue(sepa_iban_valid('GB82 WEST 1234 5698 7654 32'));
+
+        self::assertSame('FR7630006000011234567890189', sepa_iban_normalize('fr76 3000-6000 0112 3456 7890 189'));
+        self::assertSame('FR76 3000 6000 0112 3456 7890 189', sepa_iban_display('FR7630006000011234567890189'));
+
+        self::assertFalse(sepa_iban_valid('FR7630006000011234567890180')); // clé fausse
+        self::assertFalse(sepa_iban_valid('FR76'));
+        self::assertFalse(sepa_iban_valid(''));
+        self::assertFalse(sepa_iban_valid('1234567890123456'));
+    }
+
+    public function testSepaBicValidation(): void
+    {
+        self::assertTrue(sepa_bic_valid('CMCIFR2A'));
+        self::assertTrue(sepa_bic_valid('CMCIFR2AXXX'));
+        self::assertTrue(sepa_bic_valid(''));
+        self::assertFalse(sepa_bic_valid('CMCI'));
+        self::assertFalse(sepa_bic_valid('CMCIFR2A12'));
+    }
+
+    public function testSepaReferenceUsesStoredReferenceThenOrderId(): void
+    {
+        self::assertSame('BABC123', sepa_reference(['id' => 7, 'payment_reference' => 'BABC123']));
+        self::assertSame('B7', sepa_reference(['id' => 7, 'payment_reference' => '']));
+    }
+
+    public function testRevolutCheckoutUrlAndStates(): void
+    {
+        self::assertSame('https://checkout.revolut.com/payment-link/TOK', revolut_checkout_url([
+            'checkout_url' => 'https://checkout.revolut.com/payment-link/TOK',
+            'token' => 'ignored',
+        ]));
+        self::assertSame('https://checkout.revolut.com/payment-link/TOK', revolut_checkout_url(['token' => 'TOK']));
+        self::assertSame('', revolut_checkout_url([]));
+
+        self::assertSame('completed', revolut_state(['state' => 'COMPLETED']));
+        self::assertTrue(revolut_is_paid(['state' => 'completed']));
+        self::assertFalse(revolut_is_paid(['state' => 'authorised']));
+        self::assertFalse(revolut_is_paid(['state' => 'pending']));
+    }
+
+    public function testRevolutPaymentIdAndDetailUseLastPayment(): void
+    {
+        $order = [
+            'id' => 'ord-1',
+            'payments' => [
+                ['id' => 'pay-1', 'payment_method' => ['type' => 'card']],
+                ['id' => 'pay-2', 'payment_method' => ['type' => 'apple_pay']],
+            ],
+        ];
+        self::assertSame('pay-2', revolut_payment_id($order));
+        self::assertSame('Revolut — Apple pay', revolut_payment_detail($order));
+        self::assertSame('ord-1', revolut_payment_id(['id' => 'ord-1']));
+        self::assertSame('Revolut', revolut_payment_detail(['id' => 'ord-1']));
+    }
+
+    public function testRevolutWebhookSignature(): void
+    {
+        $secret = 'wsk_test_secret';
+        $body = '{"event":"ORDER_COMPLETED","order":{"id":"ord-1"}}';
+        $timestamp = (string) (int) (microtime(true) * 1000);
+        $signature = hash_hmac('sha256', 'v1.' . $timestamp . '.' . $body, $secret);
+
+        self::assertTrue(revolut_webhook_valid($body, 'v1=' . $signature, $timestamp, $secret));
+        self::assertTrue(revolut_webhook_valid($body, 'v1=deadbeef, v1=' . $signature, $timestamp, $secret));
+        self::assertFalse(revolut_webhook_valid($body, 'v1=' . $signature, $timestamp, 'autre-secret'));
+        self::assertFalse(revolut_webhook_valid($body . ' ', 'v1=' . $signature, $timestamp, $secret));
+        self::assertFalse(revolut_webhook_valid($body, '', $timestamp, $secret));
+        self::assertFalse(revolut_webhook_valid($body, 'v1=' . $signature, (string) ((int) $timestamp - 600000), $secret));
+    }
+
+    public function testRevolutWebhookPartsAcceptBothEnvelopes(): void
+    {
+        [$event, $order] = revolut_webhook_parts(['event' => 'ORDER_COMPLETED', 'order' => ['id' => 'ord-1']]);
+        self::assertSame('ORDER_COMPLETED', $event);
+        self::assertSame('ord-1', $order['id']);
+
+        [$event, $order] = revolut_webhook_parts(['event' => 'order_failed', 'id' => 'ord-2']);
+        self::assertSame('ORDER_FAILED', $event);
+        self::assertSame('ord-2', $order['id']);
     }
 }

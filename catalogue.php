@@ -5,6 +5,15 @@
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/galleries.php';
 
+// Une boutique en test ou en pause ne diffuse pas son catalogue aux galeries et annuaires.
+if (!shop_state_is_public(shop_state_load(tenant_slug()))) {
+    http_response_code(404);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode(['error' => 'shop_unavailable'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $requestOrigin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 $config = tenant();

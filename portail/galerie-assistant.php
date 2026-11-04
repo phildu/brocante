@@ -12,6 +12,7 @@ $tabs = [
     'date' => 'Date et concurrence',
     'securite' => 'Sécurité',
     'documents' => 'Documents',
+    'regles' => 'Règlements',
     'contacts' => 'Contacts et sondage',
     'aides' => 'Financement',
     'plus' => 'Communication et bilan',
@@ -180,6 +181,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
             $msg = 'Plan de financement enregistré.';
             break;
+
+        case 'rules_save':
+            $data['rules'] = [
+                'organizer_pct' => (int) ($_POST['organizer_pct'] ?? 100),
+                'force_majeure_pct' => (int) ($_POST['force_majeure_pct'] ?? 100),
+                'full_days' => (int) ($_POST['full_days'] ?? 30),
+                'partial_days' => (int) ($_POST['partial_days'] ?? 7),
+                'partial_pct' => (int) ($_POST['partial_pct'] ?? 50),
+                'late_pct' => (int) ($_POST['late_pct'] ?? 0),
+                'refund_delay_days' => (int) ($_POST['refund_delay_days'] ?? 30),
+                'refund_method' => (string) ($_POST['refund_method'] ?? ''),
+                'custom' => (string) ($_POST['custom'] ?? ''),
+                'saved' => time(),
+            ];
+            $msg = 'Conditions de remboursement enregistrées : elles apparaissent dans le règlement et servent au calcul des remboursements en cas d’annulation.';
+            break;
     }
 
     if ($err !== null) {
@@ -279,6 +296,17 @@ $eventDate = (string) ($event['date'] ?? '');
 $surveyOn = !empty($data['survey']['enabled']);
 $surveyOpen = $surveyOn && !empty($data['survey']['open']);
 $surveyUrlValue = gass_survey_url($gaSlug);
+$rules = $data['rules'];
+$rulesLines = gcn_rules_lines($rules);
+$demoPrice = $event ? ge_place_price($event) : null;
+$demoPrice = $demoPrice !== null && $demoPrice > 0 ? $demoPrice : 2000;
+$rulesDemo = [
+    ['Annulation par l’organisateur', gcn_refund_amount($demoPrice, (int) $rules['organizer_pct'])],
+    ['Météo ou force majeure', gcn_refund_amount($demoPrice, (int) $rules['force_majeure_pct'])],
+    ['Désistement à J-' . (int) $rules['full_days'], gcn_refund_amount($demoPrice, gcn_withdrawal_pct($rules, (int) $rules['full_days']))],
+    ['Désistement à J-' . (int) $rules['partial_days'], gcn_refund_amount($demoPrice, gcn_withdrawal_pct($rules, (int) $rules['partial_days']))],
+    ['Désistement à J-2', gcn_refund_amount($demoPrice, gcn_withdrawal_pct($rules, 2))],
+];
 $hid = '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">'
     . ($limited ? '' : '<input type="hidden" name="g" value="' . e($gaSlug) . '">')
     . '<input type="hidden" name="vue" value="' . e($vue) . '">';
@@ -604,6 +632,79 @@ ga_head('Assistant');
         </div>
       </div>
     <?php endforeach; ?>
+  </section>
+
+<?php elseif ($vue === 'regles'): ?>
+  <section class="gcard">
+    <div class="row" style="justify-content:space-between;">
+      <h2>Conditions de vente et de remboursement</h2>
+      <span class="pill<?= !empty($rules['saved']) ? ' done' : '' ?>"><?= !empty($rules['saved']) ? 'Enregistrées le ' . e(date('d/m/Y', (int) $rules['saved'])) : 'À définir' ?></span>
+    </div>
+    <p class="meta" style="margin:0;">Ces conditions disent ce que récupère un exposant si l’événement est annulé, ou s’il se désiste lui-même. Elles figurent à l’article 15 du <a href="<?= e($url(['doc' => 'reglement'])) ?>" target="_blank" rel="noopener">règlement intérieur</a> et servent de base au calcul des remboursements lors d’une annulation.</p>
+    <p class="meta" style="margin:0;">Le paiement des emplacements n’est pas encaissé par la plateforme : les montants calculés sont un registre à suivre, ligne par ligne, depuis la page de l’événement.</p>
+  </section>
+
+  <section class="gcard">
+    <h2>Récapitulatif</h2>
+    <table class="t">
+      <thead><tr><th>Cas</th><th>Ce que récupère l’exposant</th></tr></thead>
+      <tbody>
+      <?php foreach ($rulesLines as $label => $value): ?>
+        <tr><td><strong><?= e($label) ?></strong></td><td><?= e($value) ?></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="gcard">
+    <h2>Exemple chiffré</h2>
+    <p class="meta" style="margin:0;">Avec un emplacement à <strong><?= e(gb_eur($demoPrice)) ?></strong><?= $event && ge_place_price($event) !== null ? ' (tarif de l’événement)' : ' (tarif d’exemple : renseignez le prix de vos places pour un calcul réel)' ?>.</p>
+    <table class="t">
+      <thead><tr><th>Situation</th><th class="num">Remboursement</th><th class="num">Reste à charge</th></tr></thead>
+      <tbody>
+      <?php foreach ($rulesDemo as [$label, $amount]): ?>
+        <tr><td><?= e($label) ?></td><td class="num"><?= e(gb_eur($amount)) ?></td><td class="num"><?= e(gb_eur(max(0, $demoPrice - $amount))) ?></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </section>
+
+  <form method="post" class="gcard">
+    <?= $hid ?><input type="hidden" name="action" value="rules_save">
+    <h2>Modifier les conditions</h2>
+    <h3>Annulation décidée par l’organisateur</h3>
+    <div class="row">
+      <label class="f">Remboursement si l’organisateur annule (%)
+        <input type="number" name="organizer_pct" min="0" max="100" step="5" value="<?= (int) $rules['organizer_pct'] ?>"></label>
+      <label class="f">Remboursement pour météo ou force majeure (%)
+        <input type="number" name="force_majeure_pct" min="0" max="100" step="5" value="<?= (int) $rules['force_majeure_pct'] ?>"></label>
+    </div>
+    <h3>Désistement de l’exposant</h3>
+    <div class="row">
+      <label class="f">Remboursement intégral au-delà de (jours avant l’événement)
+        <input type="number" name="full_days" min="0" max="180" step="1" value="<?= (int) $rules['full_days'] ?>"></label>
+      <label class="f">Remboursement partiel à partir de (jours)
+        <input type="number" name="partial_days" min="0" max="180" step="1" value="<?= (int) $rules['partial_days'] ?>"></label>
+      <label class="f">Part remboursée dans cette période (%)
+        <input type="number" name="partial_pct" min="0" max="100" step="5" value="<?= (int) $rules['partial_pct'] ?>"></label>
+      <label class="f">Part remboursée en dessous (%)
+        <input type="number" name="late_pct" min="0" max="100" step="5" value="<?= (int) $rules['late_pct'] ?>"></label>
+    </div>
+    <h3>Versement</h3>
+    <div class="row">
+      <label class="f">Délai de remboursement (jours après l’annonce)
+        <input type="number" name="refund_delay_days" min="0" max="180" step="1" value="<?= (int) $rules['refund_delay_days'] ?>"></label>
+      <label class="f">Moyen de remboursement
+        <input type="text" name="refund_method" maxlength="120" value="<?= e($rules['refund_method']) ?>" placeholder="Virement bancaire, chèque…"></label>
+    </div>
+    <label class="f">Condition particulière (facultatif)<textarea name="custom" rows="3" maxlength="800" placeholder="Frais de dossier retenus, avoir sur l’édition suivante, remboursement en espèces sur place…"><?= e($rules['custom']) ?></textarea></label>
+    <p><button class="btn btn-primary" type="submit">Enregistrer les conditions</button></p>
+  </form>
+
+  <section class="gcard">
+    <h2>Annuler un événement</h2>
+    <p class="meta" style="margin:0;">L’annulation se déclenche depuis la page de l’événement : elle ferme les demandes, prévient les exposants par e-mail et prépare le registre des remboursements selon ces conditions.</p>
+    <p><a class="btn" href="<?= e(gass_portal_link('galerie-evenement.php', $gaSlug)) ?>">Ouvrir l’événement</a> <a class="btn" href="<?= e($url(['doc' => 'reglement'])) ?>" target="_blank" rel="noopener">Voir le règlement avec ces conditions</a></p>
   </section>
 
 <?php elseif ($vue === 'contacts'): ?>

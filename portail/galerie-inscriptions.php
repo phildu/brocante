@@ -5,6 +5,7 @@ require __DIR__ . '/_galerie-layout.php';
 require_once PORTAIL_ROOT . '/includes/gallery-booking.php';
 require_once PORTAIL_ROOT . '/includes/gallery-waitlist.php';
 require_once PORTAIL_ROOT . '/includes/gallery-event.php';
+require_once PORTAIL_ROOT . '/includes/gallery-cancellation.php';
 
 $self = '/portail/galerie-inscriptions.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
 $with = static function (string $extra) use ($self): string {
@@ -26,6 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $event = gallery_event($gaGallery);
+$cancelled = ge_cancelled($event);
+$refundBySlot = [];
+if ($cancelled) foreach (gcn_rows($gaGallery) as $refRow) $refundBySlot[(string) $refRow['slot_id']] = $refRow['refund'];
 $rows = gb_rows($gaGallery);
 $mapSlots = count(array_filter($gaGallery['map']['items'] ?? [], static fn ($i) => ($i['role'] ?? '') === 'slot'));
 $eventSlots = $event && gm_enabled($gaGallery, 'organisateur') ? ge_place_count($event) : 0;
@@ -50,6 +54,7 @@ if (($_GET['json'] ?? '') === '1') {
     header('Cache-Control: no-store, max-age=0');
     echo json_encode([
         'generated' => time(),
+        'cancelled' => $cancelled,
         'kpis' => ['total' => $slotTotal, 'taken' => $taken, 'pending' => $pending, 'expired' => $expired, 'free' => $free, 'revenue' => $revenue],
         'rows' => array_map(static fn ($r) => ['slot_id' => (string) $r['slot_id'], 'slot' => (string) $r['slot'], 'name' => (string) $r['name'],
             'status' => (string) $r['status'], 'expired' => !empty($r['expired']), 'requested' => (int) $r['requested'], 'price_cents' => $r['price_cents']], $rows),
@@ -64,6 +69,14 @@ $hid = '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">' . ($l
     . '<input type="hidden" name="etat" value="' . e($filter) . '">';
 ga_head('Inscriptions');
 ?>
+    <?php if ($cancelled): ?>
+    <section class="gcard" style="border-color:#e0b4b4;background:#fff7f6;">
+      <h2 style="margin:0;">Événement annulé</h2>
+      <p class="meta" style="margin:4px 0 0;"><?= e(ge_cancel_reason($event)) ?> · Les demandes sont gelées : plus d’acceptation ni de refus. Le remboursement de chaque exposant se suit dans le registre.</p>
+      <p class="row" style="margin:8px 0 0;"><a class="btn btn-primary" href="<?= e($evenement) ?>">Registre des remboursements</a></p>
+    </section>
+    <?php endif; ?>
+
     <?php if (!$event && !$mapSlots): ?>
       <section class="gcard"><h2>Aucun emplacement à réserver</h2>
         <p>Créez l'événement et son nombre de places : la numérotation est automatique. Vous pouvez aussi dessiner un plan si l'option Carte interactive est active.</p>
@@ -99,17 +112,23 @@ ga_head('Inscriptions');
       <h2>Demandes d'emplacement</h2>
       <?php if (!$visible): ?><p class="meta">Aucune demande dans cette liste.</p><?php else: ?>
       <div style="overflow-x:auto;"><table class="t"><thead><tr><th>Emplacement</th><th>Exposant</th><th>Profil</th><th>Registre</th><th class="num">Tarif</th><th>État</th><th>Demandé le</th><th></th></tr></thead><tbody>
-      <?php foreach ($visible as $r): $c = $r['client']; $org = $c && $r['kind'] !== 'particulier' ? trim((string) $c['org_name']) : ''; ?>
+      <?php foreach ($visible as $r): $c = $r['client']; $org = $c && $r['kind'] !== 'particulier' ? trim((string) $c['org_name']) : ''; $ref = $refundBySlot[(string) $r['slot_id']] ?? null; ?>
         <tr data-slot="<?= e($r['slot_id']) ?>">
           <td><?= e($r['slot']) ?></td>
           <td><?= e($r['name']) ?><br><small class="meta"><?= e($r['email']) ?><?= $r['phone'] !== '' ? ' · ' . e($r['phone']) : '' ?></small><?php if ($org !== ''): ?><br><small class="meta"><?= e($org) ?></small><?php endif; ?></td>
           <td><?= e(ct_label($r['kind'])) ?></td>
           <td><?php if (gb_register_ok($r)): ?><span class="pill done">Complet</span><?php else: ?><span class="pill" title="<?= e(implode(', ', $r['register_missing'])) ?>">À compléter</span><?php endif; ?></td>
           <td class="num"><?= e(gb_eur($r['price_cents'])) ?></td>
-          <td class="js-state"><?= $r['status'] === 'taken' ? '<span class="pill done">Attribué</span>' : (!empty($r['expired']) ? '<span class="pill">Expirée</span>' : '<span class="pill sent">En attente</span>') ?></td>
+          <td class="js-state"><?php if ($cancelled): ?>
+            <span class="pill">Annulé</span>
+            <?php if ($ref && ($r['status'] ?? '') === 'taken'): ?><br><small class="meta"><?= e(gcn_refund_label($ref)) ?><?= $ref['amount_cents'] > 0 ? ' · ' . e(gb_eur($ref['amount_cents'])) : '' ?></small><?php endif; ?>
+          <?php else: ?><?= $r['status'] === 'taken' ? '<span class="pill done">Attribué</span>' : (!empty($r['expired']) ? '<span class="pill">Expirée</span>' : '<span class="pill sent">En attente</span>') ?><?php endif; ?></td>
           <td><?= e(date('d/m/Y H:i', (int) $r['requested'])) ?></td>
           <td><div class="row" style="gap:4px;">
             <a class="btn small" href="/portail/galerie-exposant.php<?= $limited ? '?' : '?g=' . e(urlencode($gaSlug)) . '&amp;' ?>slot=<?= e(urlencode($r['slot_id'])) ?>">Fiche</a>
+            <?php if ($cancelled): ?>
+              <a class="btn small" href="<?= e($evenement) ?>">Remboursement</a>
+            <?php else: ?>
             <form method="post" class="row" style="gap:4px;"><?= $hid ?><input type="hidden" name="slot" value="<?= e($r['slot_id']) ?>">
             <?php if ($r['status'] === 'pending' && empty($r['expired'])): ?>
               <button class="btn small btn-primary" name="action" value="accept" type="submit">Accepter</button>
@@ -120,6 +139,7 @@ ga_head('Inscriptions');
               <button class="btn small" name="action" value="refuse" type="submit">Retirer</button>
             <?php endif; ?>
             </form>
+            <?php endif; ?>
           </div></td>
         </tr>
       <?php endforeach; ?>
@@ -142,7 +162,12 @@ ga_head('Inscriptions');
               if (!el) return;
               el.textContent = k === 'revenue' ? (d.kpis[k] / 100).toFixed(2).replace('.', ',') + ' €' : d.kpis[k];
             });
-            if (d.rows.length !== initial) {
+            if (d.cancelled && <?= $cancelled ? 'false' : 'true' ?>) {
+              var n = document.getElementById('live-new');
+              n.hidden = false;
+              n.textContent = 'Événement annulé : les demandes sont fermées. Actualisez pour ouvrir le registre des remboursements.';
+              n.innerHTML += ' <a href="">Actualiser</a>';
+            } else if (d.rows.length !== initial) {
               var n = document.getElementById('live-new');
               n.hidden = false;
               n.textContent = (d.rows.length > initial ? 'Nouvelle demande reçue' : 'Une demande a changé d\'état') + ' : actualisez pour la traiter.';

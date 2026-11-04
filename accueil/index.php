@@ -24,7 +24,7 @@ $nameToken = static fn (string $s): string => str_replace(['{nom}', '{name}'], $
 $homeEyebrow = $home['eyebrow'] !== '' ? $nameToken($home['eyebrow']) : 'Boutiques · galeries · marchés aux puces · vides-greniers';
 $homeTitle = $home['title'] !== '' ? $nameToken($home['title']) : 'Vendez, réunissez, organisez avec ' . $cfg['name'];
 $homeLede = $home['lede'] !== '' ? $nameToken($home['lede'])
-    : $cfg['tagline'] . " Une boutique en ligne pour vendre, ou un lieu à gérer : galerie marchande, marché aux puces, vide-grenier, quartier. Photos et fiches préparées par l'IA, paiement par carte, plan interactif.";
+    : $cfg['tagline'] . " Une boutique en ligne pour vendre, ou un lieu à gérer : galerie marchande, marché aux puces, vide-grenier, marché de Noël, marché des producteurs, quartier. Photos et fiches préparées par l'IA, paiement par carte, plan interactif.";
 $shops = saas_directory();
 $pieces = array_sum(array_column($shops, 'count'));
 $live = array_values(array_filter(gallery_list(), static fn (array $g): bool => go_is_live($g)));
@@ -52,7 +52,7 @@ $ebCampaign = function_exists('eb_campaign_for_signup') ? eb_campaign_for_signup
 $ebTier = $ebCampaign && $ebCampaign['progress']['open'] ? eb_tier_at($ebCampaign, $ebCampaign['progress']['next_rank']) : null;
 $homeGrid = $ebTier ? eb_discounted_grid(saas_grid(''), $ebTier) : saas_grid('');
 
-saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, galerie commerciale, marché aux puces, vide-grenier ou quartier marchand : créez, organisez, exposez ou découvrez. Photos et fiches par l\'IA, paiement par carte, plan interactif.');
+saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, galerie commerciale, marché aux puces, vide-grenier, marché de Noël ou marché des producteurs : créez, organisez, exposez ou découvrez. Photos et fiches par l\'IA, paiement par carte, plan interactif.');
 ?>
 <style>
   .band-nav { position: sticky; top: 61px; z-index: 9; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
@@ -129,7 +129,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
     <p class="lede">Quatre façons d'utiliser la plateforme : choisissez la vôtre, chacune a ses outils et ses tarifs.</p></div>
   <div class="paths">
     <a class="path p1" href="#boutique"><span class="big" aria-hidden="true">🏪</span><h3>Je vends</h3><p>Ma propre boutique en ligne : vitrine, photos par l'IA, panier, paiement direct, livraison ou retrait.</p><span class="go">Ma boutique →</span></a>
-    <a class="path p2" href="#organiser"><span class="big" aria-hidden="true">🏘️</span><h3>J'organise</h3><p>Un lieu qui réunit des vendeurs : galerie marchande, marché aux puces, vide-grenier, quartier marchand.</p><span class="go">Choisir mon type →</span></a>
+    <a class="path p2" href="#organiser"><span class="big" aria-hidden="true">🏘️</span><h3>J'organise</h3><p>Un lieu qui réunit des vendeurs : galerie marchande, marché aux puces, vide-grenier, marché de Noël, marché des producteurs, quartier marchand.</p><span class="go">Choisir mon type →</span></a>
     <a class="path p3" href="<?= $recruiting ? '#exposer' : '/galerie/' ?>"><span class="big" aria-hidden="true">📍</span><h3>J'expose</h3><p>Je cherche un emplacement : je choisis ma place sur le plan d'un vide-grenier ou d'un marché et je fais ma demande.</p><span class="go">Trouver un emplacement →</span></a>
     <a class="path p4" href="#decouvrir"><span class="big" aria-hidden="true">🧭</span><h3>Je découvre</h3><p>Je cherche une pièce : annuaire des boutiques, galeries commerciales, plans des marchés, points de fidélité.</p><span class="go">Explorer →</span></a>
   </div>
@@ -156,7 +156,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
 </div></section>
 
 <section class="block" id="organiser" style="--c:#2f6b4f"><div class="wrap">
-  <div class="sec-head"><span class="sec-tag">J'organise</span><h2>Galerie, marché, vide-grenier ou quartier : le bon outil pour chaque lieu</h2>
+  <div class="sec-head"><span class="sec-tag">J'organise</span><h2>Galerie, marché, vide-grenier, marché de Noël ou quartier : le bon outil pour chaque lieu</h2>
     <p class="lede">Chaque type a son vocabulaire, ses fonctionnalités et ses tarifs. Test gratuit sans carte bancaire, puis un abonnement selon le nombre de participants.</p></div>
   <div class="types">
     <?php foreach ($types as $tk => $t): $from = $fromPrice($t); $test = $t['offers']['test'] ?? null; ?>
@@ -255,7 +255,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
   <div class="sec-head"><p class="eyebrow">Questions fréquentes</p><h2>Vous vous demandez…</h2></div>
   <div class="faq">
     <details><summary>Quelle différence entre une boutique et une galerie ?</summary><p>Une boutique est votre commerce, avec son panier et son paiement. Une galerie (ou un marché, un vide-grenier, un quartier marchand) réunit plusieurs boutiques ou exposants sur une page commune : chacun garde son panier, la galerie présente et renvoie vers lui.</p></details>
-    <details><summary>Quel type de galerie choisir ?</summary><p>Galerie marchande pour des commerces établis ; marché aux puces pour des marchands sur des emplacements numérotés avec tarifs par zone ; vide-grenier pour des exposants qui demandent leur place sur le plan ; quartier marchand pour les commerçants d'une rue, d'un quartier ou d'un village. Le tableau ci-dessus les compare.</p></details>
+    <details><summary>Quel type de galerie choisir ?</summary><p>Galerie marchande pour des commerces établis ; marché aux puces pour des marchands sur des emplacements numérotés avec tarifs par zone ; vide-grenier pour des exposants qui demandent leur place sur le plan ; marché de Noël pour des chalets numérotés le temps des fêtes ; marché des producteurs et créateurs pour les producteurs locaux, artisans et créateurs ; quartier marchand pour les commerçants d'une rue, d'un quartier ou d'un village. Le tableau ci-dessus les compare.</p></details>
     <details><summary>Faut-il des compétences techniques ?</summary><p>Non. Vous photographiez vos pièces avec votre téléphone, l'IA propose le titre, la description et le prix, et vous validez. Pour un plan, vous dessinez sur une carte et la plateforme calcule surfaces et tarifs.</p></details>
     <details><summary>Comment les exposants réservent-ils un emplacement ?</summary><p>L'exposant demande son emplacement sur le plan ; vous acceptez ou refusez en un clic, il est prévenu par e-mail. Le règlement de l'emplacement se fait selon vos modalités.</p></details>
     <details><summary>Comment mes clients me paient-ils ?</summary><p>Par carte bancaire, directement sur votre compte Stripe. Chaque commerce garde son panier et ses commandes ; la galerie ne fait que présenter.</p></details>

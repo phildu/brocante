@@ -141,6 +141,7 @@ const ACCOUNT_COMMUNITY_MANAGER_PAGES = [
     'capture-session.php', // code QR pour envoyer des photos/vidéos depuis un téléphone
     'prompts-action.php', // prompts enregistrés de la génération IA (galerie)
     'plugin.php', 'plugin-api.php', // plugins : chaque page et route vérifie ensuite les rôles de son manifeste (includes/plugins.php)
+    'recherche.php', // palette ⌘K : elle ne renvoie que ce que le rôle peut ouvrir
 ];
 
 /**

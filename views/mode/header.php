@@ -17,9 +17,11 @@ $over = $activeNav === 'accueil';
       <?php foreach (array_slice(category_list(), 0, 2) as $c): ?>
         <a href="/boutique.php?cat=<?= h($c['key']) ?>"<?= $activeNav === 'boutique' && ($_GET['cat'] ?? '') === $c['key'] ? ' aria-current="page"' : '' ?>><?= h($c['label']) ?></a>
       <?php endforeach; ?>
+      <a href="/visite.php"<?= $activeNav === 'visite' ? ' aria-current="page"' : '' ?>>Visite</a>
       <span class="md-mobile-only">
-        <a href="/index.php#histoire">Histoire</a>
-        <a href="/index.php#contact">Contact</a>
+        <a href="/notre-histoire.php"<?= $activeNav === 'histoire' ? ' aria-current="page"' : '' ?>>Histoire</a>
+        <a href="/visite.php"<?= $activeNav === 'visite' ? ' aria-current="page"' : '' ?>>Visite virtuelle</a>
+        <a href="/nous-trouver.php"<?= $activeNav === 'nous-trouver' ? ' aria-current="page"' : '' ?>>Contact</a>
         <?php if ($accountLink): ?><a href="/compte.php">Mon compte</a><?php endif; ?>
         <?php if (shop_sales_enabled()): ?><a href="/cart.php">Panier<?= $cartCount ? ' (' . (int) $cartCount . ')' : '' ?></a><?php endif; ?>
         <a href="<?= is_admin_logged_in() ? '/admin/dashboard.php' : '/admin/login.php' ?>"><?= is_admin_logged_in() ? 'Administration' : 'Connexion' ?></a>

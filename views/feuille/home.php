@@ -24,7 +24,7 @@ $priceOf = static function (array $p): string {
       <p class="fl-eyebrow"><?= h($content['hero_eyebrow']) ?></p>
       <h1><?= h($content['hero_title']) ?></h1>
       <p class="fl-lede"><?= h($content['hero_subtitle']) ?></p>
-      <p class="fl-actions"><a class="fl-btn" href="/boutique.php">Ouvrir la collection</a><a class="fl-textlink" href="#histoire">Lire la maison</a></p>
+      <p class="fl-actions"><a class="fl-btn" href="/boutique.php">Ouvrir la collection</a><a class="fl-textlink" href="/notre-histoire.php">Lire la maison</a></p>
       <p class="fl-share"><?= share_page_button((string) ($content['site_name'] ?: tenant('name')), (string) $content['hero_subtitle']) ?></p>
     </div>
     <aside class="fl-toc" aria-label="Sommaire des rayons">
@@ -128,6 +128,7 @@ $priceOf = static function (array $p): string {
         <?php if (trim((string) $content['contact_delivery']) !== ''): ?><div><dt>Livraison</dt><dd><?= h($content['contact_delivery']) ?></dd></div><?php endif; ?>
         <?php if (trim((string) ($content['pickup_label'] ?? '')) !== ''): ?><div><dt>Sur place</dt><dd><?= h($content['pickup_label']) ?></dd></div><?php endif; ?>
       </dl>
+      <?= shop_locate_actions_html(['class' => 'shop-locate-contact-actions']) ?>
       <p><a class="fl-textlink" href="/boutique.php">Parcourir la collection →</a></p>
     </div>
     <div class="fl-letter">

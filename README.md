@@ -112,7 +112,11 @@ La section **Logos** de la même page accepte trois déclinaisons (PNG, JPG,
 WebP ou SVG sans script) : **horizontal** (en-tête, administration),
 **vertical** (écran d'accueil mobile ; à défaut, le carré) et **carré**
 (macaron de l'accueil, menu replié, icône d'onglet). Sans logo envoyé, ceux
-du `tenant.php` (`logo`, `logo_macaron`) s'appliquent.
+du `tenant.php` (`logo`, `logo_macaron`) s'appliquent. Chaque déclinaison peut
+aussi être reprise d'un visuel de la **médiathèque** (avatar du vendeur, ancien
+logo, photo) : le fichier est copié dans `uploads/logo-…`. Un clic sur un logo
+l'affiche en grand, et « Agrandir ×2 » double sa résolution (jusqu'à 4 096 px,
+sans IA ni crédit) pour l'impression.
 L'apparence est enregistrée dans la base du commerce (table `settings`) et
 prime sur les couleurs et polices de son `tenant.php` ; « Revenir à
 l'apparence d'origine » l'efface.
@@ -374,6 +378,26 @@ on corrige, puis on enregistre. Le prix proposé est un seul montant indicatif.
 Le champ **Matières** (colonne `materials`, ajoutée automatiquement aux bases existantes) est affiché sur la
 fiche produit, rempli par la génération de fiche (Studio, ajout rapide, import par lot) et modifiable à la
 relecture.
+
+## Studio photo guidé (administration, Articles à vendre)
+
+Parcours guidé de l'administration (`admin/shooting-assistant.php`, `assets/shooting-assistant.js`), distinct de l'application smartphone `studio.php`.
+Les deux onglets de prise de vue s'appellent désormais **Articles à vendre** (par défaut) et **Reportage boutique** (`includes/shooting-tabs.php`) ;
+le second remplace l'ancien « Boutique / stand ».
+
+- **Première utilisation** : deux questions — voix ou non, article par article ou en lot. Les réponses sont mémorisées sur l'appareil ; le texte
+  d'explication de l'assistant se replie après la mise en route, et celui de la photo d'ensemble après la première analyse (`<details>` + `localStorage`).
+- **Type de pièce** : liste complète (objet, vêtement, chaussures, accessoire, bijou, média, vaisselle, décoration, mobilier, luminaire, textile,
+  collection, électronique, jeu, beauté) plus **Autre** et **Automatique**. L'IA reconnaît la nature sur la première photo, puis le vendeur **valide ou change**
+  le type ; le programme de vues et la catégorie du produit suivent ce choix.
+- **Appareil photo** : la caméra s'ouvre automatiquement après validation du type (aperçu live, déclencheur, fermeture). Si elle est refusée ou indisponible,
+  l'écran propose l'appareil natif ou la galerie. Le contrôle local (netteté, lumière, contraste) **parle** en cas de défaut et propose **Corriger avec l'IA**,
+  la correction locale de lumière, ou la poursuite du shooting.
+- **Arrêt en cours de route** : « ⏹ Arrêter la séance » (programme) et « ⏹ Arrêter le shooting » (vues) conservent les photos déjà prises et passent au récapitulatif.
+- **Mode lot** : `source=batch` enregistre chaque article sans lancer la chaîne IA ; le lot s'affiche dans le récapitulatif et se traite ensuite depuis
+  `/admin/studio.php` (`studio_jobs`, statut `queued`).
+- **Vidéo de l'objet** : dans le récapitulatif, quatre modes — rotation sur lui-même ou tour de l'objet, en continu (MediaRecorder, 20 s) ou image par image
+  (images assemblées sur canvas). La vidéo est envoyée par morceaux avec les photos (`action=video`) et rattachée à la pièce.
 
 ## Studio : type de pièce, scan, vidéo, ensemble d'objets, shooting d'abord
 
@@ -839,6 +863,31 @@ présente, et chaque pièce renvoie vers sa fiche chez le commerçant (pas de pa
 - **Pas encore** : panier commun à plusieurs commerces, abonnements (vente / location d'une boutique seule ou en galerie), inscription
   libre des commerçants, logo et visuel propres à la galerie.
 
+## Messagerie interne d'une galerie
+
+Chaque galerie dispose d'une messagerie entre l'organisateur et ses interlocuteurs, sans compte à créer pour eux. Elle est activée
+par défaut pour les six types de galerie ; la décocher dans **Types de galerie** retire le bouton et la carte de l'espace exposant,
+ferme le lien invité et affiche une explication dans le portail.
+
+- **Portail → Messages** (`portail/galerie-messages.php`) : la boîte de réception liste les conversations, leur dernier message et les
+  messages non lus (le nombre s'affiche aussi dans le bouton « Messages » de la navigation, et la palette ⌘K y mène). On y répond, on
+  ouvre une conversation avec un nom et une adresse e-mail (exposant, commerçant, prospect…), ou on supprime un fil. Depuis la liste des
+  demandes ou la fiche d'un exposant, le bouton « Message » prépare la conversation avec ses coordonnées.
+- **Côté exposant** : une carte « Messages avec l'organisateur » est ajoutée à l'espace personnel (`/galerie/exposant.php?g=…&t=…`), sous
+  le pass. L'exposant écrit et suit les réponses sans mot de passe : son lien habituel sert de clé.
+- **Côté invité** : une conversation ouverte par l'organisateur envoie un e-mail avec un lien personnel
+  `/galerie/messages.php?g=…&i=…&t=…` (signé, sans mot de passe). La page affiche le fil et permet de répondre.
+- **Notifications** : chaque message d'un visiteur prévient tous les administrateurs de la galerie ; chaque réponse de l'organisateur
+  prévient la personne (e-mail via `ga_mail`, consultable en local dans `/portail/journal-local.php`).
+- **Données et sécurité** : `data/galeries/<identifiant>.messages.json` (jamais envoyé par le déploiement), écrit sous verrou. Les fils
+  d'exposant sont rangés par un identifiant dérivé du jeton de la demande ; les fils de contact ont un identifiant aléatoire et un jeton
+  HMAC (`ga_token`), avec un jeton CSRF distinct pour le formulaire d'invité. Limites : 4 000 caractères par message, 300 messages par fil,
+  1 000 fils par galerie, 20 messages par heure et par adresse IP. Pages en `noindex`, `no-store`, `no-referrer`.
+- **Code** : `includes/gallery-messages.php` (données, jetons, notifications), `portail/galerie-messages.php` (boîte de réception),
+  `galerie/messages.php` (fil d'un invité), carte et traitement POST dans `galerie/exposant.php`, entrée de menu dans
+  `portail/_galerie-nav.php`, fonctionnalité `messages` dans `includes/gallery-types.php`, page autorisée en mode restreint
+  (`GA_PAGES` dans `portail/_bootstrap.php`).
+
 ## Clés API partagées (période de test)
 
 Pendant les essais, une même clé (Gemini, fal.ai, SiliconFlow, Modal) peut servir à **tous les commerces d'un même déploiement** qui
@@ -1179,6 +1228,17 @@ base ancienne, voir `includes/accounts.php`), une fiche par adresse e-mail.
   toujours celui de la session (jamais un identifiant du formulaire) ; le rôle, l'état et les
   notes restent réservés aux administrateurs. Le compte principal du `tenant.php` n'est pas
   modifiable ici (portail : « Changer l'accès admin »).
+- **Avatar et logo** (`admin/profile.php`, compte principal compris) : une photo importée
+  (JPG, PNG ou WebP, 8 Mo max) ou un **selfie pris avec la caméra** (`assets/avatar-selfie.js`,
+  caméra avant par défaut, bascule arrière si plusieurs caméras, aperçu avant validation) est
+  transformé par l'IA en illustration fidèle détourée ; le coût est annoncé avant et la génération
+  est décomptée du crédit IA. L'avatar généré entre dans la **médiathèque**
+  (source « Avatar du vendeur ») et y reste utilisable comme logo ; « Utiliser comme logo de boutique »
+  compose les trois déclinaisons (en-tête, vertical, carré) avec le nom du commerce, sans nouveau
+  crédit, et remplace les logos actuels. Chaque compte de l'équipe a son propre avatar (réglages de
+  la boutique, clé `avatars`).
+  La prise de vue exige une connexion sécurisée (https) ; sinon le bouton reste masqué et
+  l'import de photo reste disponible.
 - Création automatique : une commande payée crée un client, une inscription à la
   newsletter un prospect (un prospect qui commande devient client).
   « Importer les clients depuis les commandes » rattrape les commandes déjà passées ;
@@ -1458,6 +1518,17 @@ La carte « Où trouver un stand ou une boutique » apparaît dans l'appli visit
 - **Carte** : chargée seulement à l'ouverture du bloc (Leaflet 1.9.4 depuis cdnjs). Les zones, emplacements et boutiques du plan sont dessinés ; les zones passent en arrière-plan. Fonds **IGN Géoplateforme** sans clé, avec repli automatique sur Esri puis CARTO (les tuiles OpenStreetMap ne sont pas utilisées). L'adresse est complétée par le géocodage IGN (`data.geopf.fr`).
 - **Me localiser** : demande la position de l'appareil et affiche la distance jusqu'à chaque lieu ; un refus ou un échec est expliqué sans bloquer la liste. La position n'est ni transmise au serveur ni enregistrée.
 - **Appli exposant** : `galerie/exposant.php?g=<galerie>&t=<jeton>` reprend le même plan pour situer l'emplacement attribué, avec « Afficher le plan », « Itinéraire » et « Me localiser ». La page n'existe que par le lien personnel reçu par e-mail (`noindex`, `no-store`, `Referrer-Policy: no-referrer`), avec installateur (manifeste propre à la galerie) et lien d'annulation.
+
+## Page « Nous trouver » de la boutique : carte IGN, itinéraire et carnet d'adresses
+
+Chaque boutique a une page publique **`/nous-trouver.php`** (« Nous trouver » dans l'en-tête et le pied de page de tous les modèles). Un bloc d'actions compact figure aussi sur l'accueil, à côté des coordonnées : « Carte et itinéraire », « Enregistrer dans Google Maps » et « Ajouter au carnet d'adresses ». L'adresse est reprise de l'identité légale, puis de l'adresse publique de la boutique, puis du bloc contact ; une adresse d'exemple (« À compléter », etc.) est ignorée. Sans adresse, la page affiche seulement les contacts et la fiche `.vcf`, sans carte ni formulaire.
+
+- **Carte** : Leaflet 1.9.4 (cdnjs), chargé seulement quand le bloc approche de l'écran. Fonds **IGN Géoplateforme** sans clé — Plan IGN v2 et photographies aériennes (`data.geopf.fr/wmts`) — et **aucune tuile OpenStreetMap**. L'adresse est géocodée par le service IGN (`/geocodage/search`) avec un cache local de 90 jours, puis repérée par une épingle.
+- **Itinéraire** : champ de départ avec suggestions (adresse, ville ou code postal), bouton « Ma position » (géolocalisation du navigateur, jamais envoyée au serveur) et choix voiture / à pied. Le calcul passe par le service IGN Valhalla (`data.geopf.fr/navigation/itineraire`, resource `bdtopo-valhalla`) : tracé sur la carte, distance en mètres ou kilomètres et durée en minutes ou heures, puis lien « Ouvrir dans Google Maps » avec le point de départ.
+- **Enregistrer l'adresse** : Google Maps n'expose pas d'adresse web qui ajoute un lieu aux favoris. Le bouton ouvre donc la fiche du lieu et la page indique d'appuyer sur « Enregistrer » ; sur iPhone, iPad et Mac, un bouton « Ouvrir dans Plans » apparaît (même limite, Apple ne fournit pas non plus de lien « ajouter aux favoris »).
+- **Carnet d'adresses** : `carte-visite.php` renvoie une fiche **vCard 3.0** (`nom`, `adresse`, `téléphone`, `e-mail`, site, horaires, coordonnées si la carte les a trouvées) téléchargée en `.vcf`, importable dans les Contacts du téléphone, Outlook, Gmail ou l'application Contacts du Mac. La fiche répond 404 quand la boutique n'a ni adresse, ni téléphone, ni e-mail.
+- **Fichiers** : `includes/locate.php` (données, boutons, section, vCard), `nous-trouver.php`, `carte-visite.php`, `assets/shop-locate.css`, `assets/shop-locate.js`, chargement dans `includes/functions.php`, liens dans les en-têtes/pieds de page et les accueils des modèles `vitrine`, `marche`, `feuille`, `librairie` et `mode`.
+- **Tests locaux du 2026-11-03** : carte et tuiles IGN, bascule plan/orthophoto, suggestions de départ, itinéraire voiture (2,9 km / 10 min) et à pied (2,3 km / 34 min) sur l'adresse de test, lien Google Maps avec départ, `.vcf` avec `ADR` à 7 composants et coordonnées, préfixe multi-boutique (`/la-fripe-a-naty/carte-visite.php?lat=…&lng=…`), boutique sans adresse (message + 404 `.vcf`), aucun avertissement PHP. **Pas encore déployé en production.**
 
 ## Pass QR de confirmation (appli exposant)
 

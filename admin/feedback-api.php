@@ -9,6 +9,8 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/oauth.php';
 require_once __DIR__ . '/../includes/feedback.php';
+require_once __DIR__ . '/../includes/feedback-todo.php';
+require_once __DIR__ . '/../includes/notion-todo.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -110,6 +112,7 @@ if ($method === 'POST' && $action === 'submit') {
             'severity' => (string) ($_POST['severity'] ?? ''),
             'message' => (string) ($_POST['message'] ?? ''),
             'page' => (string) ($_POST['page'] ?? ''),
+            'url' => (string) ($_POST['url'] ?? ''),
             'page_title' => (string) ($_POST['page_title'] ?? ''),
             'module' => (string) ($_POST['module'] ?? ''),
             'viewport' => (string) ($_POST['viewport'] ?? ''),
@@ -118,7 +121,7 @@ if ($method === 'POST' && $action === 'submit') {
             'attachment_file' => $_FILES['shot'] ?? null,
         ], $audience === 'customer' ? null : (isset($session['id']) ? (int) $session['id'] : null),
             $audience === 'customer' ? (string) ($customer['name'] ?? '') : (string) ($session['name'] ?? ''));
-        feedback_json([
+        echo json_encode([
             'ok' => true,
             'message' => 'Merci ! Votre retour est enregistré.',
             'feedback' => [
@@ -126,7 +129,15 @@ if ($method === 'POST' && $action === 'submit') {
                 'type_label' => FEEDBACK_TYPE_LABELS[$record['type']] ?? $record['type'],
                 'status_label' => feedback_status_tester_label($record['status']),
             ],
-        ]);
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        // Réponse envoyée avant les imports quand le serveur le permet : un
+        // incident Notion ne retarde jamais l'envoi du retour.
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+        feedback_todo_import($record);
+        notion_todo_import($record);
+        exit;
     } catch (InvalidArgumentException $e) {
         feedback_json(['ok' => false, 'error' => $e->getMessage()], 422);
     } catch (Throwable $e) {

@@ -377,6 +377,22 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                   </div>
                   <p class="hint" style="margin:4px 0 0;">Où la pièce est proposée (enregistré avec « Enregistrer »).<?php if ((int) $p['stock'] <= 0 && !empty($p['sold_at'])): ?> <strong>Vendue le <?= h(date('d/m/Y', strtotime($p['sold_at']))) ?><?= !empty($p['sold_channel']) ? ' via ' . h(product_channels()[$p['sold_channel']] ?? $p['sold_channel']) : '' ?>.</strong><?php endif; ?><?php if (!empty($p['restocked_at'])): ?> Dernier réassort : <?= h(date('d/m/Y', strtotime($p['restocked_at']))) ?>.<?php endif; ?></p>
                 </div>
+                <div class="field-row-3">
+                  <div class="field">
+                    <label>Réassort possible (fiche)</label>
+                    <input type="hidden" name="restock_form" value="1">
+                    <label class="featured-check"><input type="checkbox" name="restock_possible" value="1"<?= !empty($p['restock_possible']) ? ' checked' : '' ?>> Réassort possible</label>
+                    <p class="hint" style="margin:4px 0 0;">La fiche indique que la pièce peut être retrouvée, avec le délai et le prix ci-contre.</p>
+                  </div>
+                  <div class="field">
+                    <label>Délai de réassort</label>
+                    <input type="text" name="restock_delay" maxlength="60" value="<?= h($p['restock_delay'] ?? '') ?>" placeholder="ex : 10 jours">
+                  </div>
+                  <div class="field">
+                    <label>Prix du réassort (€)</label>
+                    <input type="number" name="restock_price" min="0" step="0.01" inputmode="decimal" value="<?= h(price_input_value($p['restock_price'] ?? '')) ?>" placeholder="ex : 25">
+                  </div>
+                </div>
                 <div class="field-row-3 sale-actions">
                   <div class="field">
                     <label>Vente</label>

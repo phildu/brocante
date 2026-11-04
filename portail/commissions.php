@@ -78,6 +78,7 @@ $lines = array_slice(array_reverse(cm_lines()), 0, 40);
 $paidIds = cm_paid_ids();
 $eur = static fn (int $cents): string => number_format($cents / 100, 2, ',', ' ') . ' €';
 $stripeOk = saas_stripe_configured();
+$stripeMode = saas_stripe_config()['mode'];
 $stLabel = ['ready' => 'Prêt', 'pending' => 'À finaliser'];
 $ownerEmail = static function (string $kind, string $slug) use ($galleries): string {
     if ($kind === 'gallery') foreach ($galleries as $g) if ($g['slug'] === $slug && $g['admins']) return $g['admins'][0]['email'];
@@ -148,14 +149,15 @@ $ownerEmail = static function (string $kind, string $slug) use ($galleries): str
     <section class="gcard"><h2>2. Comptes Stripe</h2>
       <p class="meta">Une <strong>galerie</strong> a besoin d'un compte pour recevoir ses versements par Stripe ; un <strong>commerce</strong> en a besoin pour que sa commission soit prélevée à l'encaissement (seulement les commerces hébergés sur ce serveur). Le titulaire reçoit de Stripe un formulaire d'inscription (identité, IBAN).</p>
       <table class="t"><thead><tr><th>Bénéficiaire</th><th>État</th><th>E-mail du titulaire</th><th></th></tr></thead><tbody>
-      <?php foreach ([['gallery', $galleries], ['shop', array_map(static fn ($s, $k) => ['slug' => $k, 'name' => $s['name']], $shops, array_keys($shops))]] as [$kind, $list]): foreach ($list as $it): $key = $kind . ':' . $it['slug']; $a = $connect[$key] ?? null; ?>
+      <?php foreach ([['gallery', $galleries], ['shop', array_map(static fn ($s, $k) => ['slug' => $k, 'name' => $s['name']], $shops, array_keys($shops))]] as [$kind, $list]): foreach ($list as $it): $key = $kind . ':' . $it['slug']; $existing = $connect[$key] ?? null; $otherMode = $existing && ($existing['mode'] ?? 'test') !== $stripeMode; $a = $otherMode ? null : $existing; ?>
         <tr><td><?= $kind === 'gallery' ? 'Galerie' : 'Commerce' ?> — <strong><?= e($it['name']) ?></strong></td>
-          <td><?= $a ? e($stLabel[$a['status']] ?? $a['status']) . ' <small class="meta">' . e($a['account']) . '</small>' : '<span class="meta">pas de compte</span>' ?></td>
+          <td><?= $a ? e($stLabel[$a['status']] ?? $a['status']) . ' <small class="meta">' . e($a['account']) . '</small>' : ($otherMode ? '<span class="meta">compte ' . (($existing['mode'] ?? 'test') === 'live' ? 'réel' : 'test') . ' à recréer en mode ' . e($stripeMode === 'live' ? 'réel' : 'test') . '</span> <small class="meta">' . e($existing['account']) . '</small>' : '<span class="meta">pas de compte</span>') ?></td>
           <td><?php if ($a): ?><?= e($a['email']) ?><?php else: ?>
             <form method="post" class="row" id="f-<?= e(md5($key)) ?>"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="account_create"><input type="hidden" name="kind" value="<?= e($kind) ?>"><input type="hidden" name="slug" value="<?= e($it['slug']) ?>">
             <input type="email" name="email" required placeholder="titulaire@exemple.fr" value="<?= e($ownerEmail($kind, $it['slug'])) ?>"><button class="btn small" type="submit" <?= $stripeOk ? '' : 'disabled' ?>>Créer le compte</button></form><?php endif; ?></td>
           <td><?php if ($a): ?><form method="post" class="row" style="gap:4px;"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="key" value="<?= e($key) ?>">
-            <button class="btn small" type="submit" name="action" value="account_link" formtarget="_blank">Lien d'inscription</button><button class="btn small" type="submit" name="action" value="account_refresh">Actualiser</button></form><?php endif; ?></td></tr>
+            <button class="btn small" type="submit" name="action" value="account_link" formtarget="_blank" title="Ouvre un lien Stripe valable quelques minutes, pour vérifier le parcours">Aperçu Stripe</button><button class="btn small" type="submit" name="action" value="account_refresh">Actualiser</button></form>
+            <?php $invite = cm_account_token($key); if ($invite !== ''): ?><details style="margin-top:4px;"><summary class="meta">Lien à envoyer par e-mail</summary><input type="text" readonly value="<?= e($origin . '/portail/stripe-inscription.php?t=' . $invite) ?>" onclick="this.select()" style="width:300px;font-size:.72rem" aria-label="Lien d'inscription stable à envoyer au titulaire"></details><?php endif; ?><?php endif; ?></td></tr>
       <?php endforeach; endforeach; ?></tbody></table>
     </section>
 

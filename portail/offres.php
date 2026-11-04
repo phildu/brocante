@@ -101,13 +101,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         saas_config_save($cfg);
         portail_flash('Commerce retiré de l\'annuaire.');
     } elseif ($action === 'stripe_save') {
+        $mode = (string) ($_POST['stripe_mode'] ?? saas_stripe_mode());
         $sk = trim((string) ($_POST['stripe_secret'] ?? ''));
         $wh = trim((string) ($_POST['stripe_webhook'] ?? ''));
-        if ($sk === '' && $wh === '') portail_flash('Rien à enregistrer.');
-        elseif ($sk !== '' && !preg_match('/^sk_(test|live)_[A-Za-z0-9]+$/', $sk)) portail_flash('Clé secrète non valide : elle commence par sk_test_ (essais) ou sk_live_ (réel).', 'error');
+        if (!isset(STRIPE_MODES[$mode])) portail_flash('Mode Stripe inconnu.', 'error');
+        elseif ($sk === '' && $wh === '') portail_flash('Rien à enregistrer.');
+        elseif ($sk !== '' && !preg_match('/^(?:sk|rk)_' . $mode . '_[A-Za-z0-9]+$/', $sk)) portail_flash('Clé secrète non valide : pour le mode ' . STRIPE_MODES[$mode] . ', elle commence par sk_' . $mode . '_ ou rk_' . $mode . '_.', 'error');
         elseif ($wh !== '' && !preg_match('/^whsec_[A-Za-z0-9]+$/', $wh)) portail_flash('Secret de signature non valide : il commence par whsec_.', 'error');
-        elseif (!saas_stripe_save($sk, $wh)) portail_flash("Impossible d'écrire la clé (droits du dossier .secrets).", 'error');
-        else portail_flash('Stripe enregistré. Cliquez sur « Tester la connexion » pour vérifier la clé.');
+        elseif (!saas_stripe_save_mode($mode, $sk, $wh)) portail_flash("Impossible d'écrire la clé (droits du dossier .secrets).", 'error');
+        else portail_flash('Clés du mode ' . STRIPE_MODES[$mode] . ' enregistrées. Cliquez sur « Tester la connexion » pour vérifier la clé active.');
+    } elseif ($action === 'stripe_mode') {
+        [$ok, $message] = saas_stripe_mode_set((string) ($_POST['mode'] ?? ''));
+        portail_flash($message, $ok ? 'ok' : 'error');
     } elseif ($action === 'stripe_test') {
         try {
             saas_stripe_request('GET', '/balance');
@@ -237,21 +242,33 @@ $origin = saas_origin();
     </form>
 
     <section class="ocard" id="stripe">
-      <h2>Paiement des formules (Stripe)</h2>
-      <?php $sc = saas_stripe_config(); ?>
-      <p class="meta">Le client d'une formule payante règle par carte sur Stripe (abonnement mensuel) ; sa boutique est générée dès que le paiement est confirmé. Ce sont <strong>les clés Stripe de la plateforme</strong> (votre compte), sans rapport avec celles de chaque commerce. Sans clé, les formules payantes passent par votre validation manuelle.</p>
-      <p><span class="pill <?= $sc['secret_key'] !== '' ? 'done' : 'sent' ?>"><?= $sc['secret_key'] === '' ? 'Non configuré' : (saas_stripe_live() ? 'Configuré — mode RÉEL' : 'Configuré — mode test') ?></span>
-        <?php if ($sc['secret_key'] !== ''): ?><span class="meta">clé <?= e(substr($sc['secret_key'], 0, 8)) ?>…<?= e(substr($sc['secret_key'], -4)) ?> · secret de signature : <?= $sc['webhook_secret'] !== '' ? 'enregistré' : 'manquant' ?></span><?php endif; ?></p>
-      <form method="post" autocomplete="off" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="stripe_save">
-        <label class="f"><span>Clé secrète (<code>sk_test_…</code> ou <code>sk_live_…</code>)</span><input type="password" name="stripe_secret" placeholder="<?= $sc['secret_key'] !== '' ? 'déjà enregistrée — laisser vide pour la garder' : 'sk_test_…' ?>"></label>
-        <label class="f"><span>Secret de signature du webhook (<code>whsec_…</code>)</span><input type="password" name="stripe_webhook" placeholder="<?= $sc['webhook_secret'] !== '' ? 'déjà enregistré' : 'whsec_…' ?>"></label>
-        <button class="btn btn-primary" type="submit">Enregistrer</button>
-      </form>
-      <p class="meta">Dans le tableau de bord Stripe → Développeurs → Webhooks, ajoutez le point de terminaison <code><?= e($origin) ?>/inscription/webhook.php</code> avec les événements <code>checkout.session.completed</code> et <code>customer.subscription.deleted</code>, puis collez ici son secret de signature. (Le webhook est un filet : la boutique se génère déjà au retour du paiement.)</p>
-      <?php if ($sc['secret_key'] !== ''): ?>
+      <?php $ss = saas_stripe_modes_status(); $activeMode = $ss['mode']; ?>
+      <h2>Paiement des formules (Stripe) <span class="pill <?= $ss['modes'][$activeMode]['configured'] ? 'done' : 'sent' ?>">Mode <?= e(STRIPE_MODES[$activeMode]) ?></span></h2>
+      <p class="meta">Le client d'une formule payante règle par carte sur Stripe (abonnement mensuel) ; sa boutique est générée dès que le paiement est confirmé. Ce sont <strong>les clés Stripe de la plateforme</strong> (votre compte), sans rapport avec celles de chaque commerce. Chaque mode garde ses propres clés : <strong>basculer ne demande pas de recoller quoi que ce soit</strong>. Sans clé, les formules payantes passent par votre validation manuelle.</p>
+      <p class="meta">Le mode actif s'applique aux formules, aux abonnements des galeries, aux crédits IA et aux noms de domaine. <strong>Mode test</strong> : cartes de test, aucun vrai paiement. <strong>Mode réel</strong> : les clients paient vraiment.</p>
+      <div class="row" style="align-items:center;">
+        <?php foreach (STRIPE_MODES as $mode => $label): $st = $ss['modes'][$mode]; ?>
+          <span class="pill <?= $activeMode === $mode ? 'done' : '' ?>"><?= e($label) ?> : <?= $st['configured'] ? 'clé ' . e($st['secret_mask']) : 'sans clé' ?><?= $st['webhook'] ? ' · webhook ok' : '' ?></span>
+          <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="stripe_mode"><input type="hidden" name="mode" value="<?= e($mode) ?>">
+            <button class="btn small<?= $activeMode === $mode ? ' btn-primary' : '' ?>" type="submit"<?= $activeMode === $mode || !$st['configured'] ? ' disabled' : '' ?>>Passer en mode <?= e(strtolower($label)) ?></button>
+          </form>
+        <?php endforeach; ?>
+      </div>
+      <?php foreach (STRIPE_MODES as $mode => $label): $st = $ss['modes'][$mode]; ?>
+        <details<?= $activeMode === $mode ? ' open' : '' ?> style="margin-top:12px;">
+          <summary><strong>Clés du mode <?= e(strtolower($label)) ?></strong> — <?= $st['configured'] ? 'enregistrées' : 'à renseigner' ?></summary>
+          <form method="post" autocomplete="off" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="stripe_save"><input type="hidden" name="stripe_mode" value="<?= e($mode) ?>">
+            <label class="f"><span>Clé secrète (<code>sk_…</code> ou <code>rk_…</code>)</span><input type="password" name="stripe_secret" placeholder="<?= $st['configured'] ? 'déjà enregistrée — laisser vide pour la garder' : 'sk_' . e($mode) . '_… / rk_' . e($mode) . '_…' ?>"></label>
+            <label class="f"><span>Secret de signature du webhook (<code>whsec_…</code>)</span><input type="password" name="stripe_webhook" placeholder="<?= $st['webhook'] ? 'déjà enregistré' : 'whsec_…' ?>"></label>
+            <button class="btn btn-primary" type="submit">Enregistrer les clés <?= e(strtolower($label)) ?></button>
+          </form>
+        </details>
+      <?php endforeach; ?>
+      <p class="meta">Dans le tableau de bord Stripe → Développeurs → Webhooks, ajoutez le point de terminaison <code><?= e($origin) ?>/inscription/webhook.php</code> (un par mode) avec les événements <code>checkout.session.completed</code> et <code>customer.subscription.deleted</code>, puis collez son secret de signature. (Le webhook est un filet : la boutique se génère déjà au retour du paiement.)</p>
+      <?php if ($ss['modes'][$activeMode]['configured']): ?>
         <form method="post" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
-          <button class="btn small" type="submit" name="action" value="stripe_test">Tester la connexion</button>
-          <button class="btn small danger" type="submit" name="action" value="stripe_clear" onclick="return confirm('Retirer les clés Stripe de la plateforme ?');">Retirer les clés</button></form>
+          <button class="btn small" type="submit" name="action" value="stripe_test">Tester la connexion (mode <?= e(strtolower(STRIPE_MODES[$activeMode])) ?>)</button>
+          <button class="btn small danger" type="submit" name="action" value="stripe_clear" onclick="return confirm('Retirer toutes les clés Stripe de la plateforme (test et réel) ?');">Retirer les clés</button></form>
       <?php endif; ?>
     </section>
 

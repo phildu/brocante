@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/apps.php';
 require_once __DIR__ . '/../includes/key-check.php';
 require_once __DIR__ . '/../includes/sms.php';
 require_admin();
@@ -156,7 +157,7 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
 
         <div data-subpanel="sections"<?= $pagesSub !== 'sections' ? ' hidden' : '' ?>>
         <h2>Notre histoire</h2>
-        <p class="hint">Le récit affiché sur la page d'accueil, et les trois points qui le suivent.</p>
+        <p class="hint">Le récit de la maison : la section de l'accueil et la page <a href="/notre-histoire.php" target="_blank" rel="noopener">Notre histoire</a>, avec les trois points qui le suivent.</p>
         <div class="field"><label>Eyebrow</label><input type="text" name="story_eyebrow" value="<?= h($content['story_eyebrow']) ?>"></div>
         <div class="field"><label>Titre</label><input type="text" name="story_title" value="<?= h($content['story_title']) ?>"></div>
         <div class="field"><label>Texte</label><textarea name="story_text" style="min-height:120px;"><?= h($content['story_text']) ?></textarea></div>
@@ -230,6 +231,14 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
           <div class="field"><label>Message affiché à la place de la livraison</label><input type="text" name="pickup_only_message" value="<?= h((string) ($content['pickup_only_message'] ?? "Retrait à l'adresse du vendeur.")) ?>"></div>
         </div>
         <p class="hint">Les articles à 0 € (dons) et ceux dont le prix est inférieur à ce seuil ne sont proposés qu'en retrait. Si le panier contient au moins un article livrable, la livraison reste proposée. Mettez 0 pour ne l'appliquer qu'aux dons.</p>
+
+        <h2 style="margin-top:32px;">Emballage cadeau</h2>
+        <p class="hint">Le client peut demander un emballage cadeau au moment du panier, avec un petit mot facultatif pour le destinataire. L'emballage est ajouté au total et rappelé dans la commande et les e-mails.</p>
+        <label class="featured-check"><input type="checkbox" name="gift_wrap_enabled" value="1"<?= gift_wrap_enabled($content) ? ' checked' : '' ?>> Proposer l'emballage cadeau</label>
+        <div class="field-row-2" style="margin-top:16px;">
+          <div class="field"><label>Libellé affiché au client</label><input type="text" name="gift_wrap_label" maxlength="80" value="<?= h((string) ($content['gift_wrap_label'] ?? '')) ?>" placeholder="Emballage cadeau"></div>
+          <div class="field"><label>Prix de l'emballage (€)</label><input type="number" min="0" step="0.01" name="gift_wrap_price" value="<?= h((string) ($content['gift_wrap_price'] ?? '')) ?>" placeholder="0 = offert"><p class="hint" style="margin-top:4px;">Laissez vide ou 0 pour proposer l'emballage gratuitement.</p></div>
+        </div>
 
         <button type="submit" class="btn btn-primary" style="margin-top:18px;">Enregistrer les contenus</button>
         </div>
@@ -355,54 +364,86 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
         </script>
       </div>
 
-      <form class="admin-block" method="post" action="/admin/save-stripe-keys.php" id="stripe-settings" data-panel="paiement">
+      <?php
+      $stripeStatus = stripe_modes_status(SECRETS_DIR);
+      $stripeMode = $stripeStatus['mode'];
+      $webhookUrl = rtrim(tenant_site_url(), '/') . '/stripe-webhook.php';
+      ?>
+      <div class="admin-block" id="stripe-settings" data-panel="paiement">
         <h2>Réglages Stripe</h2>
-        <p class="hint">Clés de <a href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">dashboard.stripe.com/test/apikeys</a> (mode test : <code>sk_test_...</code> / <code>pk_test_...</code>). Un champ laissé vide conserve la clé déjà enregistrée.</p>
-        <div class="field-row-2">
-          <div class="field">
-            <label>Clé secrète (sk_...)</label>
-            <input type="password" name="stripe_secret" autocomplete="off" placeholder="<?= STRIPE_SECRET_KEY ? 'Déjà enregistrée — ' . h(substr(STRIPE_SECRET_KEY, 0, 7)) . '…' . h(substr(STRIPE_SECRET_KEY, -4)) : 'sk_test_...' ?>">
-          </div>
-          <div class="field">
-            <label>Clé publiable (pk_...)</label>
-            <input type="text" name="stripe_publishable" autocomplete="off" placeholder="<?= STRIPE_PUBLISHABLE_KEY ? 'Déjà enregistrée — ' . h(substr(STRIPE_PUBLISHABLE_KEY, 0, 7)) . '…' . h(substr(STRIPE_PUBLISHABLE_KEY, -4)) : 'pk_test_...' ?>">
-          </div>
+        <p class="hint">Le compte Stripe du commerce encaisse ses clients. Les clés des deux modes sont conservées : passer de test à réel (ou l’inverse) ne demande pas de recoller les clés. Un champ laissé vide conserve la clé déjà enregistrée. Clés disponibles sur <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">dashboard.stripe.com/apikeys</a> (basculez le mode test/réel dans Stripe pour voir les bonnes clés).</p>
+        <p class="publish-status" data-kind="<?= stripe_checkout_ready() ? '' : 'error' ?>" style="margin-top:10px;">
+          Mode actif : <strong><?= STRIPE_MODES[$stripeMode] ?></strong> — <?= stripe_checkout_ready() ? ($stripeMode === 'live' ? 'les clients paient réellement.' : 'cartes de test uniquement, aucun vrai paiement.') : 'aucune clé secrète valide, Stripe est désactivé (les autres moyens de paiement restent disponibles s’ils sont réglés).' ?>
+        </p>
+        <div class="row" style="align-items:center;gap:6px;margin:10px 0;">
+          <?php foreach (STRIPE_MODES as $mode => $label): $ready = $stripeStatus['modes'][$mode]['secret']; ?>
+            <form method="post" action="/admin/save-stripe-keys.php">
+              <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+              <input type="hidden" name="action" value="activate">
+              <input type="hidden" name="mode" value="<?= h($mode) ?>">
+              <button type="submit" class="btn<?= $stripeMode === $mode ? ' btn-primary' : '' ?><?= $mode === 'live' && $stripeMode !== 'live' ? ' danger' : '' ?>"<?= $stripeMode === $mode || !$ready ? ' disabled' : '' ?>>
+                Passer en mode <?= h(strtolower($label)) ?><?= $ready ? '' : ' (clé manquante)' ?>
+              </button>
+            </form>
+          <?php endforeach; ?>
         </div>
-        <?php
-        $webhookFile = SECRETS_DIR . '/stripe_webhook.key';
-        $webhookSet = is_file($webhookFile) && str_starts_with(trim((string) file_get_contents($webhookFile)), 'whsec_');
-        $webhookUrl = rtrim(tenant_site_url(), '/') . '/stripe-webhook.php';
-        ?>
-        <div class="field" style="margin-top:12px;">
-          <label>Secret de signature du webhook (whsec_...)</label>
-          <input type="password" name="stripe_webhook" autocomplete="off" placeholder="<?= $webhookSet ? 'Déjà enregistré' : 'whsec_...' ?>">
-        </div>
-        <p class="hint" style="margin-top:6px;">
-          Dans Stripe → Développeurs → Webhooks, ajoutez l'adresse <code><?= h($webhookUrl) ?></code> et copiez son secret de signature ici.
+
+        <?php foreach (STRIPE_MODES as $mode => $label): $keys = stripe_mode_keys($mode, SECRETS_DIR); ?>
+          <details style="margin-top:14px;"<?= $stripeMode === $mode ? ' open' : '' ?>>
+            <summary><strong>Clés du mode <?= h(strtolower($label)) ?></strong>
+              <?= $keys['secret'] !== '' ? '— enregistrées (' . h(stripe_key_mask($keys['secret'])) . ')' : '— à renseigner' ?>
+              <?= $stripeMode === $mode ? '· actuellement utilisées' : '' ?></summary>
+            <form method="post" action="/admin/save-stripe-keys.php" autocomplete="off" style="margin-top:10px;">
+              <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+              <input type="hidden" name="action" value="save">
+              <input type="hidden" name="mode" value="<?= h($mode) ?>">
+              <div class="field-row-2">
+                <div class="field">
+                  <label>Clé secrète (<?= h('sk_' . $mode . '_...') ?>)</label>
+                  <input type="password" name="stripe_secret" autocomplete="off" placeholder="<?= $keys['secret'] !== '' ? 'Déjà enregistrée — ' . h(stripe_key_mask($keys['secret'])) : h('sk_' . $mode . '_...') ?>">
+                </div>
+                <div class="field">
+                  <label>Clé publiable (<?= h('pk_' . $mode . '_...') ?>)</label>
+                  <input type="text" name="stripe_publishable" autocomplete="off" placeholder="<?= $keys['publishable'] !== '' ? 'Déjà enregistrée — ' . h(stripe_key_mask($keys['publishable'])) : h('pk_' . $mode . '_...') ?>">
+                </div>
+              </div>
+              <div class="field" style="margin-top:12px;">
+                <label>Secret de signature du webhook (whsec_...)</label>
+                <input type="password" name="stripe_webhook" autocomplete="off" placeholder="<?= $keys['webhook'] !== '' ? 'Déjà enregistré' : 'whsec_...' ?>">
+              </div>
+              <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer les clés <?= h(strtolower($label)) ?></button>
+            </form>
+          </details>
+        <?php endforeach; ?>
+
+        <p class="hint" style="margin-top:12px;">
+          Dans Stripe → Développeurs → Webhooks, ajoutez l'adresse <code><?= h($webhookUrl) ?></code> — une par mode (test et réel) — et copiez son secret de signature dans la bonne section.
           Événements à écouter : <code>checkout.session.completed</code>, <code>checkout.session.async_payment_succeeded</code>,
           <code>checkout.session.async_payment_failed</code>, <code>checkout.session.expired</code>, <code>charge.refunded</code>,
           <code>charge.dispute.created</code> (et <code>updated</code> / <code>closed</code>).
-          <?= $webhookSet ? 'Webhook actif : les commandes payées sont confirmées même si le client ferme l’onglet.' : 'Sans ce secret, une commande peut rester « en attente » si le client ne revient pas sur le site.' ?>
+          Le webhook accepte les secrets des deux modes : une commande commencée avant la bascule reste confirmable.
         </p>
-        <p class="publish-status" data-kind="<?= stripe_checkout_ready() ? '' : 'error' ?>" style="margin-top:10px;">
-          <?= stripe_checkout_ready() ? 'Paiement Stripe configuré et actif.' : 'Aucune clé secrète Stripe valide — Stripe est désactivé (les autres moyens de paiement restent disponibles s’ils sont réglés).' ?>
-        </p>
-        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer les clés</button>
-      <?php if (STRIPE_SECRET_KEY !== ''): ?>
-        <?= keycheck_status_html('stripe') ?>
-        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
-        <button type="submit" class="btn" style="margin-top:6px;" formaction="/admin/key-check.php" name="service" value="stripe" formnovalidate>Tester la clé Stripe</button>
+        <?php if (STRIPE_SECRET_KEY !== ''): ?>
+          <form method="post" action="/admin/key-check.php">
+            <?= keycheck_status_html('stripe') ?>
+            <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+            <button type="submit" class="btn" style="margin-top:6px;" name="service" value="stripe" formnovalidate>Tester la clé Stripe active</button>
+          </form>
         <?php endif; ?>
-      </form>
+      </div>
 
       <?php
       $moneticoConfig = monetico_config() ?? payment_config('monetico') ?? [];
       $paypalConfig = paypal_config() ?? payment_config('paypal') ?? [];
+      $revolutConfig = revolut_config() ?? payment_config('revolut') ?? [];
+      $sepaConfig = sepa_config();
       $availableMethods = shop_payment_methods_available();
       $enabledSetting = trim(shop_setting('payment_methods', ''));
       $enabledMethods = $enabledSetting === '' ? array_keys($availableMethods) : array_filter(array_map('trim', explode(',', $enabledSetting)));
       $moneticoKeySet = trim((string) ($moneticoConfig['key'] ?? '')) !== '';
       $paypalSecretSet = trim((string) ($paypalConfig['secret'] ?? '')) !== '';
+      $revolutKeySet = trim((string) ($revolutConfig['api_key'] ?? '')) !== '';
+      $revolutWebhookSet = trim((string) ($revolutConfig['webhook_secret'] ?? '')) !== '';
       ?>
       <form class="admin-block" method="post" action="/admin/save-payment-keys.php" id="payment-settings" data-panel="paiement">
         <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
@@ -460,6 +501,67 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
           </select>
         </div>
 
+        <h3 style="margin-top:24px;">Revolut Merchant</h3>
+        <p class="hint">Compte Revolut Business avec l’option « Merchant » activée. La clé API se crée dans le tableau de bord Revolut (Merchant → API). Revolut encaisse sur le compte du commerçant : comme pour Monetico et PayPal, la commission Brocs reste facturée séparément, sans éclatement automatique.</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Clé API secrète</label>
+            <input type="password" name="revolut_api_key" autocomplete="off" placeholder="<?= $revolutKeySet ? 'Déjà enregistrée' : 'sk_…' ?>">
+          </div>
+          <div class="field">
+            <label>Secret du webhook (facultatif)</label>
+            <input type="password" name="revolut_webhook_secret" autocomplete="off" placeholder="<?= $revolutWebhookSet ? 'Déjà enregistré' : 'wsk_…' ?>">
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px;max-width:240px;">
+          <label>Mode</label>
+          <select name="revolut_mode">
+            <option value="sandbox"<?= ($revolutConfig['mode'] ?? 'sandbox') === 'sandbox' ? ' selected' : '' ?>>Bac à sable (sandbox)</option>
+            <option value="production"<?= ($revolutConfig['mode'] ?? '') === 'production' ? ' selected' : '' ?>>Production</option>
+          </select>
+        </div>
+        <p class="hint" style="margin-top:8px;">
+          URL du webhook à déclarer dans Revolut :
+          <code><?= h(rtrim(tenant_site_url(), '/') . '/revolut-webhook.php') ?></code>.
+          Sans webhook, le retour du client confirme le paiement ; le bouton « Vérifier auprès de Revolut » rattrape une commande restée en attente.
+        </p>
+
+        <h3 style="margin-top:24px;">Virement SEPA</h3>
+        <p class="hint">Sans prestataire ni clé : le client vire le montant sur votre compte avec une référence unique, et vous confirmez la réception depuis la fiche commande. Les pièces sont réservées pendant le délai indiqué ; sans virement, la commande est annulée et les pièces remises en vente. L’IBAN est affiché uniquement au client qui possède le lien signé de sa commande.</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Titulaire du compte</label>
+            <input type="text" name="sepa_holder" value="<?= h($sepaConfig['holder']) ?>" maxlength="80" autocomplete="off" placeholder="Nom ou raison sociale">
+          </div>
+          <div class="field">
+            <label>Banque (facultatif)</label>
+            <input type="text" name="sepa_bank" value="<?= h($sepaConfig['bank']) ?>" maxlength="80" autocomplete="off" placeholder="ex. Crédit Mutuel">
+          </div>
+        </div>
+        <div class="field-row-2" style="margin-top:12px;">
+          <div class="field">
+            <label>IBAN</label>
+            <input type="text" name="sepa_iban" value="<?= h(sepa_iban_display($sepaConfig['iban'])) ?>" maxlength="42" autocomplete="off" placeholder="FR76 3000 …">
+          </div>
+          <div class="field">
+            <label>BIC (facultatif)</label>
+            <input type="text" name="sepa_bic" value="<?= h($sepaConfig['bic']) ?>" maxlength="11" autocomplete="off" placeholder="CMCIFR2A">
+          </div>
+        </div>
+        <div class="field-row-2" style="margin-top:12px;">
+          <div class="field">
+            <label>Délai de virement (jours)</label>
+            <input type="number" name="sepa_delay_days" min="1" max="30" step="1" value="<?= (int) $sepaConfig['delay_days'] ?>">
+          </div>
+          <div class="field">
+            <label>Consigne affichée au client (facultatif)</label>
+            <input type="text" name="sepa_note" value="<?= h($sepaConfig['note']) ?>" maxlength="300" autocomplete="off" placeholder="ex. virement instantané accepté">
+          </div>
+        </div>
+        <p class="publish-status" style="margin-top:10px;">
+          <?= sepa_configured() ? 'Virement SEPA prêt — IBAN ' . h(sepa_iban_display($sepaConfig['iban'])) . '.' : 'Virement SEPA inactif tant que le titulaire et un IBAN valide ne sont pas enregistrés.' ?>
+        </p>
+
         <h3 style="margin-top:24px;">Moyens proposés au client</h3>
         <?php if (!$availableMethods): ?>
           <p class="hint">Aucun moyen de paiement n’est encore configuré. Renseignez les identifiants ci-dessus (ou les clés Stripe) pour activer le paiement.</p>
@@ -481,6 +583,44 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer les moyens de paiement</button>
       </form>
 
+      <form class="admin-block" method="post" action="/admin/save-availability.php" id="availability-settings" data-panel="paiement">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>Valider la disponibilité avant paiement</h2>
+        <p class="hint">Beaucoup de pièces sont uniques et peuvent être vendues en boutique pendant qu'un client les commande en ligne. Une fois cette option activée, le passage à la caisse <strong>n'encaisse rien</strong> : le vendeur reçoit une alerte, valide la disponibilité, puis le client reçoit son lien de paiement. Si la pièce a été vendue, le client est prévenu et rien n'est prélevé.</p>
+        <label class="featured-check"><input type="checkbox" name="oa_enabled" value="1"<?= oa_enabled() ? ' checked' : '' ?>> Demander au vendeur de valider chaque commande avant le paiement</label>
+        <div class="field-row-2" style="margin-top:16px;">
+          <div class="field">
+            <label>Canal d'alerte</label>
+            <select name="oa_channel">
+              <?php foreach (oa_channel_labels() as $channelKey => $channelLabel): ?>
+                <option value="<?= h($channelKey) ?>"<?= oa_channel() === $channelKey ? ' selected' : '' ?>><?= h($channelLabel) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <p class="hint" style="margin-top:4px;">Automatique : WhatsApp si configuré, sinon SMS, sinon e-mail. L'e-mail au commerce reste le repli.</p>
+          </div>
+          <div class="field">
+            <label>Numéro du vendeur (SMS / WhatsApp)</label>
+            <input type="tel" name="oa_phone" value="<?= h(oa_phone()) ?>" maxlength="40" autocomplete="off" placeholder="06 12 34 56 78">
+            <p class="hint" style="margin-top:4px;"><?= oa_seller_phone() !== '' ? 'Numéro utilisé : ' . h(oa_seller_phone()) . '.' : 'Vide : le numéro WhatsApp du pack messagerie, puis le téléphone du commerce.' ?></p>
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px;max-width:280px;">
+          <label>Délai de paiement après validation (heures)</label>
+          <input type="number" name="oa_validity_hours" min="6" max="168" step="1" value="<?= (int) oa_validity_hours() ?>">
+          <p class="hint" style="margin-top:4px;">La pièce reste mise de côté pendant ce délai ; passé ce temps, la demande est annulée et la pièce remise en vente.</p>
+        </div>
+        <p class="publish-status" style="margin-top:10px;">
+          <?php if (!oa_enabled()): ?>
+            Validation avant paiement désactivée — le paiement s'ouvre immédiatement.
+          <?php elseif (!oa_whatsapp_ready() && !oa_sms_ready()): ?>
+            Activée, mais ni WhatsApp ni SMS n'est configuré : les alertes partent par e-mail aux adresses d'administration.
+          <?php else: ?>
+            Prête : WhatsApp <?= oa_whatsapp_ready() ? 'configuré' : 'non configuré' ?>, SMS <?= oa_sms_ready() ? 'configuré' : 'non configuré' ?>.
+          <?php endif; ?>
+        </p>
+        <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la validation</button>
+      </form>
+
       <form class="admin-block" method="post" action="/admin/save-photo-visibility.php" id="photo-visibility-settings" data-panel="general">
         <h2>Photos des pièces créées avec le Studio</h2>
         <p class="hint">Quand une pièce vient d'être traitée (détourage, mise en situation, recto/verso), sa fiche montre les <strong>images générées</strong> ; les photos du shooting restent dans la galerie, masquées (sauf les gros plans : étiquette, texture, détail). Décochez pour garder toutes les photos visibles. Chaque pièce se règle ensuite dans sa galerie.</p>
@@ -492,6 +632,22 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
         <h2>Boutique installable (web app)</h2>
         <p class="hint">Les visiteurs sur téléphone se voient proposer, au bon moment (à partir de leur 2<sup>e</sup> page, jamais pendant le paiement), d'<strong>ajouter la boutique à leur écran d'accueil</strong> : un geste, plein écran, avec l'icône et le nom de votre boutique (le logo carré de « Apparence »). Un lien « Installer l'appli » reste en pied de page. Sans boutique d'applications ni téléchargement.</p>
         <label class="featured-check"><input type="checkbox" name="pwa_prompt" value="1"<?= shop_setting('pwa_prompt', '1') !== '0' ? ' checked' : '' ?>> Proposer d'installer la boutique comme web app</label>
+        <h3 style="margin-top:18px;">Noms des applications</h3>
+        <p class="hint">Le nom affiché sous l'icône de chaque application installée. Laissez vide pour garder le nom par défaut : renommer ne casse jamais une installation, le lien et l'icône restent les mêmes.</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Boutique — pour les clients</label>
+            <input type="text" name="app_name_shop" maxlength="40" value="<?= h(shop_setting('app_name_shop', '')) ?>" placeholder="<?= h(app_default_name('shop', (string) $content['site_name'])) ?>">
+          </div>
+          <div class="field">
+            <label>Article — fiches produit</label>
+            <input type="text" name="app_name_article" maxlength="40" value="<?= h(shop_setting('app_name_article', '')) ?>" placeholder="<?= h(app_default_name('article', (string) $content['site_name'])) ?>">
+          </div>
+        </div>
+        <div class="field">
+          <label>Vente — encaissement et validation des commandes</label>
+          <input type="text" name="app_name_vente" maxlength="40" value="<?= h(shop_setting('app_name_vente', '')) ?>" placeholder="<?= h(app_default_name('vente', (string) $content['site_name'])) ?>">
+        </div>
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer</button>
       </form>
 
@@ -557,6 +713,17 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
           <input type="password" name="twilio_token" autocomplete="new-password" placeholder="<?= $smsTw['token'] !== '' ? 'Déjà enregistré' : '' ?>">
         </div>
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer les réglages SMS</button>
+      </form>
+
+      <form class="admin-block" method="post" action="/admin/sms-test.php" id="sms-test" data-panel="general">
+        <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
+        <h2>SMS de test</h2>
+        <p class="hint">Après enregistrement des identifiants, envoyez un message à votre propre numéro pour vérifier la réception.</p>
+        <div class="field">
+          <label>Votre numéro</label>
+          <input type="tel" name="sms_test_to" placeholder="+33 6 12 34 56 78" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:10px;">Envoyer un SMS de test</button>
       </form>
 
     </div>

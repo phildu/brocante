@@ -30,6 +30,13 @@ if ($viewing !== '' && !is_file(tenant_file($shops[$viewing], 'db_file'))) {
 $shopUrl = static fn (string $slug): string => portail_shop_url($slug, $shops[$slug]);
 $shopLabel = static fn (string $slug): string => portail_shop_label($slug, $shops[$slug]);
 $current = $shops[$viewing] ?? null;
+$currentState = $viewing !== '' ? shop_state_load($viewing) : shop_state_defaults();
+$currentLive = shop_state_is_public($currentState);
+$currentPreview = $currentLive ? '' : '?apercu=' . rawurlencode(shop_preview_token($viewing));
+
+require_once __DIR__ . '/todo/_bootstrap.php';
+$tdCounts = td_count();
+$tdTasks = td_tasks('todo', '', 6);
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -40,6 +47,7 @@ $current = $shops[$viewing] ?? null;
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
+<link rel="stylesheet" href="/portail/todo/todo.css">
 </head>
 <body>
 <div class="app">
@@ -47,7 +55,9 @@ $current = $shops[$viewing] ?? null;
     'title' => "Vue d'ensemble",
     'eyebrow' => 'Pilotage',
     'desc' => 'Toutes les boutiques du serveur, leur adresse et leur accès. Choisissez une boutique pour l’apercevoir ou ouvrir son administration.',
-    'actions' => '<a class="btn btn-primary" href="/portail/nouveau.php">' . portail_icon('plus', 16) . ' Nouveau commerce</a>',
+    'actions' => '<a class="btn" href="/portail/vente/">Forces de vente</a>'
+        . ' <a class="btn btn-primary" href="/portail/nouveau.php">' . portail_icon('plus', 16) . ' Nouveau commerce</a>'
+        . ' <a class="btn" href="/portail/todo/">' . portail_icon('receipt', 16) . ' Tâches' . ($tdCounts['open'] ? ' · ' . (int) $tdCounts['open'] : '') . '</a>',
 ]); ?>
 
   <?php if ($flash): ?>
@@ -82,6 +92,45 @@ $current = $shops[$viewing] ?? null;
     </div>
   </div>
 
+  <section class="td-dash" aria-labelledby="td-dash-title">
+    <header class="td-dash-head">
+      <div>
+        <h2 id="td-dash-title">Paramétrages à faire</h2>
+        <p class="hint"><?= (int) $tdCounts['open'] ?> à faire · <?= (int) $tdCounts['urgent'] ?> prioritaires · <?= (int) $tdCounts['done'] ?> faites</p>
+      </div>
+      <a class="btn btn-primary" href="/portail/todo/">Gérer la liste</a>
+    </header>
+    <?php if (!$tdTasks): ?>
+      <p class="td-dash-empty">Rien en attente. <a href="/portail/todo/">Ajouter une tâche</a> quand un réglage reste à brancher.</p>
+    <?php else: ?>
+      <ul class="td-dash-list">
+        <?php foreach ($tdTasks as $task): ?>
+          <li class="td-dash-item">
+            <form class="td-toggle" method="post" action="/portail/todo/action.php">
+              <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+              <input type="hidden" name="action" value="toggle">
+              <input type="hidden" name="id" value="<?= (int) $task['id'] ?>">
+              <input type="hidden" name="retour" value="dashboard">
+              <button class="td-check" type="submit" aria-pressed="false" aria-label="Marquer comme fait : <?= e($task['title']) ?>"><span aria-hidden="true"></span></button>
+            </form>
+            <div>
+              <span class="td-dash-title"><?= e($task['title']) ?></span>
+              <?php if ($task['detail'] !== ''): ?><p class="td-dash-detail"><?= e($task['detail']) ?></p><?php endif; ?>
+              <span class="td-dash-meta">
+                <span class="td-pill"><span class="td-dot" style="background:<?= e(TD_CATEGORY_COLORS[$task['category']] ?? TD_CATEGORY_COLORS['autre']) ?>"></span><?= e(TD_CATEGORIES[$task['category']] ?? TD_CATEGORIES['autre']) ?></span>
+                <?php if ((int) $task['priority'] === 1): ?><span class="td-prio" data-p="1">Prioritaire</span><?php endif; ?>
+                <?php if ($task['shop'] !== ''): ?><span><?= e((string) ($shops[$task['shop']]['name'] ?? $task['shop'])) ?></span><?php endif; ?>
+              </span>
+            </div>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+      <?php if ($tdCounts['open'] > count($tdTasks)): ?>
+        <p class="hint" style="margin:0;"><a href="/portail/todo/">Voir les <?= (int) $tdCounts['open'] ?> tâches à faire</a></p>
+      <?php endif; ?>
+    <?php endif; ?>
+  </section>
+
   <div class="dash">
     <div class="dash-main">
       <section class="panel dash-panel" aria-labelledby="shops-title">
@@ -105,6 +154,10 @@ $current = $shops[$viewing] ?? null;
               $mode = portail_presence_mode($shop);
               $presence = business_presence_label($mode);
               $blocker = tenant_delete_blocker($slug);
+              $shopState = shop_state_load($slug);
+              $shopStripe = stripe_modes_status(tenant_file($shop, 'secrets_dir'));
+              $shopLive = shop_state_is_public($shopState);
+              $shopPreview = $shopLive ? '' : '?apercu=' . rawurlencode(shop_preview_token($slug));
               $searchText = $shop['name'] . ' ' . $slug . ' ' . $shopLabel($slug) . ' ' . $presence . ' ' . $shop['admin_user']; ?>
             <article class="shopcard<?= $isActive ? ' is-active' : '' ?>" data-shop-card data-search="<?= e($searchText) ?>">
               <div class="shopcard-head">
@@ -113,13 +166,18 @@ $current = $shops[$viewing] ?? null;
                   <h3>
                     <?= e($shop['name']) ?>
                     <?php if ($isActive): ?><span class="pill done">À l’écran</span><?php endif; ?>
+                    <?php if (!$shopLive): ?><span class="pill sent"><?= ($shopState['status'] ?? '') === 'paused' ? 'En pause' : 'En test' ?></span><?php endif; ?>
+                    <?php if (!empty($shopState['gesture'])): ?><span class="pill <?= shop_gesture_current($shopState) ? 'done' : 'sent' ?>" title="<?= e((string) ($shopState['gesture']['note'] ?? '')) ?>"><?= e(shop_gesture_label($shopState)) ?></span><?php endif; ?>
                     <span class="pill<?= $mode === 'physical' ? '' : ' sent' ?>"><?= e($presence) ?></span>
                   </h3>
-                  <p class="shopcard-url"><a href="<?= e($shopUrl($slug)) ?>/" target="_blank" rel="noopener"><?= e($shopLabel($slug)) ?> ↗</a></p>
+                  <p class="shopcard-url"><a href="<?= e($shopUrl($slug)) ?>/<?= e($shopPreview) ?>" target="_blank" rel="noopener"><?= e($shopLabel($slug)) ?> ↗</a></p>
                 </div>
               </div>
               <div class="shopcard-meta">
                 <span>Administration : <b><?= e($shop['admin_user']) ?></b></span>
+                <span>Stripe :
+                  <a href="/portail/stripe.php?boutique=<?= e(urlencode($slug)) ?>"><b>mode <?= e(STRIPE_MODES[$shopStripe['mode']]) ?></b></a><?= $shopStripe['modes'][$shopStripe['mode']]['secret'] ? '' : ' — sans clé' ?>
+                </span>
                 <span class="look" title="Apparence<?= $look['custom'] ? ' réglée dans l’administration du commerce' : ' de départ' ?>">
                   <span class="look-colors" aria-hidden="true">
                     <?php foreach (['bg', 'accent', 'accent-2', 'ink'] as $key): ?><span style="background:<?= e($look['colors'][$key]) ?>"></span><?php endforeach; ?>
@@ -134,7 +192,8 @@ $current = $shops[$viewing] ?? null;
                 <details class="shop-more">
                   <summary class="btn small">Gérer</summary>
                   <div class="shop-more-panel">
-                    <a href="<?= e($shopUrl($slug)) ?>/" target="_blank" rel="noopener">Ouvrir la boutique ↗</a>
+                    <a href="<?= e($shopUrl($slug)) ?>/<?= e($shopPreview) ?>" target="_blank" rel="noopener">Ouvrir la boutique ↗</a>
+                    <a href="/portail/boutique-statut.php?slug=<?= e(rawurlencode($slug)) ?>">Statut &amp; geste commercial — <?= $shopLive ? 'publiée' : (($shopState['status'] ?? '') === 'paused' ? 'en pause' : 'en test') ?></a>
                     <a href="/portail/?voir=<?= e($viewing) ?>&amp;acces=<?= e($slug) ?>">Changer l’accès admin</a>
                     <?php if ($slug !== TENANT_DEFAULT): ?>
                       <a href="/portail/?voir=<?= e($viewing) ?>&amp;reinitialiser=<?= e($slug) ?>">Réinitialiser les données</a>
@@ -210,7 +269,7 @@ $current = $shops[$viewing] ?? null;
               <h2>Aperçu — <?= e($current['name']) ?></h2>
               <p><?= e($shopLabel($viewing)) ?></p>
             </div>
-            <a class="btn small" href="<?= e($shopUrl($viewing)) ?>/" target="_blank" rel="noopener">Ouvrir ↗</a>
+            <a class="btn small" href="<?= e($shopUrl($viewing)) ?>/<?= e($currentPreview) ?>" target="_blank" rel="noopener">Ouvrir ↗</a>
           </div>
           <div class="preview-tools">
             <div class="seg" id="pages" role="group" aria-label="Page">
@@ -226,7 +285,7 @@ $current = $shops[$viewing] ?? null;
           </div>
           <div class="preview-stage" id="stage">
             <div class="stage">
-              <iframe id="frame" src="<?= e($shopUrl($viewing)) ?>/" data-origin="<?= e($shopUrl($viewing)) ?>" title="Boutique <?= e($current['name']) ?>"></iframe>
+              <iframe id="frame" src="<?= e($shopUrl($viewing)) ?>/<?= e($currentPreview) ?>" data-origin="<?= e($shopUrl($viewing)) ?>" data-preview="<?= e($currentPreview) ?>" title="Boutique <?= e($current['name']) ?>"></iframe>
             </div>
           </div>
         </div>
@@ -245,7 +304,7 @@ $current = $shops[$viewing] ?? null;
   }
   document.getElementById('pages').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
-    press(this, b); frame.src = frame.dataset.origin + b.dataset.src;
+    press(this, b); frame.src = frame.dataset.origin + b.dataset.src + (frame.dataset.preview || '');
   });
   document.getElementById('device').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;

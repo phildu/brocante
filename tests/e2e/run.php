@@ -1,9 +1,9 @@
 <?php
 
-// Lance les scénarios e2e S1–S8 sur une copie isolée de l'application.
+// Lance les scénarios e2e S1–S9 sur une copie isolée de l'application.
 // Usage : php tests/e2e/run.php [--keep] [--scenario=S3]
 //   --keep       conserve le workspace /tmp/brocs-e2e (serveurs arrêtés)
-//   --scenario   n'exécute qu'un scénario (S1…S8)
+//   --scenario   n'exécute qu'un scénario (S1…S9)
 
 declare(strict_types=1);
 
@@ -11,7 +11,7 @@ require __DIR__ . '/lib.php';
 
 $keep = in_array('--keep', $argv, true);
 $only = null;
-foreach ($argv as $a) if (preg_match('/^--scenario=(S\d)$/', $a, $m)) $only = $m[1];
+foreach ($argv as $a) if (preg_match('/^--scenario=(S\d+)$/', $a, $m)) $only = $m[1];
 
 $src = dirname(__DIR__, 2);              // racine brocante
 $ws = sys_get_temp_dir() . '/brocs-e2e';
@@ -44,7 +44,7 @@ foreach (['data/sessions', 'data/inscriptions', 'data/saas', 'data/backups', 'da
 file_put_contents("$ws/app/.secrets/stripe_plateforme.json", json_encode([
     'secret_key' => 'sk_test_e2e00000000000000000000000000',
     'webhook_secret' => 'whsec_e2e00000000000000000000000000',
-    'api_base' => 'http://127.0.0.1:8091/v1',
+    'api_base' => 'http://127.0.0.1:8191/v1',
 ], JSON_PRETTY_PRINT));
 
 // Config locale du workspace : aucune clé réelle, paiement des commandes via Stripe Connect (commission plateforme).
@@ -54,7 +54,7 @@ file_put_contents("$ws/app/config.local.php", <<<'PHP'
 define('ADMIN_PASSWORD', 'armoire-e2e');
 define('STRIPE_SECRET_KEY', '');
 define('STRIPE_PUBLISHABLE_KEY', '');
-define('SITE_URL', 'http://127.0.0.1:8099');
+define('SITE_URL', 'http://127.0.0.1:8199');
 define('GEMINI_API_KEY', '');
 define('FAL_API_KEY', '');
 define('PYTHON_BIN', '');
@@ -79,7 +79,7 @@ foreach (['e2e-boutique-a' => 'Boutique E2E A', 'e2e-boutique-b' => 'Boutique E2
 return [
     'name' => '$name',
     'tagline' => 'Boutique de test automatisé',
-    'site_url' => 'http://127.0.0.1:8099/$slug',
+    'site_url' => 'http://127.0.0.1:8199/$slug',
     'presence_mode' => 'online',
     'admin_user' => 'admin',
     'admin_password' => '$tenantPass',
@@ -94,8 +94,8 @@ PHP);
 
 // ── Serveurs ────────────────────────────────────────────────────────────────
 $php = PHP_BINARY;
-$fakeStripe = proc_open([$php, '-S', '127.0.0.1:8091', '-t', $ws, __DIR__ . '/fake-stripe.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$ws/logs/stripe.log", 'w'], 2 => ['file', "$ws/logs/stripe.err", 'w']], $pipes);
-$app = proc_open([$php, '-S', '127.0.0.1:8099', '-t', "$ws/app", "$ws/app/router.php"], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$ws/logs/app.log", 'w'], 2 => ['file', "$ws/logs/app.err", 'w']], $pipes);
+$fakeStripe = proc_open([$php, '-S', '127.0.0.1:8191', '-t', $ws, __DIR__ . '/fake-stripe.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$ws/logs/stripe.log", 'w'], 2 => ['file', "$ws/logs/stripe.err", 'w']], $pipes);
+$app = proc_open([$php, '-S', '127.0.0.1:8199', '-t', "$ws/app", "$ws/app/router.php"], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$ws/logs/app.log", 'w'], 2 => ['file', "$ws/logs/app.err", 'w']], $pipes);
 
 $ready = static function (string $url): bool {
     $ch = curl_init($url);
@@ -104,7 +104,7 @@ $ready = static function (string $url): bool {
     return $ok;
 };
 $t0 = microtime(true);
-while ((!$ready('http://127.0.0.1:8091/v1/pay/x') || !$ready('http://127.0.0.1:8099/')) && microtime(true) - $t0 < 15) usleep(100000);
+while ((!$ready('http://127.0.0.1:8191/v1/pay/x') || !$ready('http://127.0.0.1:8199/')) && microtime(true) - $t0 < 15) usleep(100000);
 echo "Serveurs prêts en " . round(microtime(true) - $t0, 1) . " s.\n";
 
 // ── Fixtures produit + amorçage des bases ───────────────────────────────────
@@ -114,10 +114,12 @@ $e->get('/e2e-boutique-b/');
 $pdo = $e->db('e2e-boutique-a');
 $pdo->prepare("INSERT INTO products (ref, name, cat, price, stock, weight_grams, description) VALUES (?, ?, 'brocante', '25 €', 3, 500, 'Article de test e2e')")
     ->execute(['E2E-REF-1', 'Chaise E2E']);
+$pdo->prepare("INSERT INTO products (ref, name, cat, price, stock, weight_grams, description) VALUES (?, ?, 'brocante', '18 €', 1, 300, 'Pièce à régler par QR')")
+    ->execute(['E2E-QR-1', 'Lampe E2E QR']);
 echo "Fixtures en place.\n";
 
 // ── Scénarios ───────────────────────────────────────────────────────────────
-$all = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'];
+$all = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
 foreach ($all as $code) {
     if ($only && $only !== $code) continue;
     $file = __DIR__ . '/scenarios/' . $code . '.php';

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/vendor-avatar.php';
 require_admin();
 
 $content = get_content();
@@ -9,6 +10,9 @@ $csrf = admin_csrf_token();
 $session = admin_session();
 $account = $session['id'] !== null ? account_find((int) $session['id']) : null; // null = compte principal (tenant.php)
 $lastLogin = $account && $account['last_login_at'] ? date('d/m/Y à H:i', strtotime($account['last_login_at'])) : '—';
+$avatar = vendor_avatar_for($session);
+$avatarBlocked = vendor_avatar_blocked_reason();
+$avatarCost = ai_format_eur(vendor_avatar_cost_eur());
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -27,6 +31,30 @@ $lastLogin = $account && $account['last_login_at'] ? date('d/m/Y à H:i', strtot
   .profile-form legend { padding: 0 8px; font-weight: 600; font-size: 0.9rem; }
   .pw-row { display: flex; gap: 6px; align-items: center; }
   .pw-row input { flex: 1; min-width: 0; }
+  .avatar-layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; margin-top: 14px; }
+  .avatar-preview { width: 150px; height: 150px; border-radius: 50%; border: 2px solid var(--line); background: #fff; object-fit: contain; }
+  .avatar-empty { display: flex; align-items: center; justify-content: center; text-align: center; border-style: dashed; color: var(--ink-soft); font-size: 0.8rem; line-height: 1.3; }
+  .avatar-actions { flex: 1 1 280px; display: grid; gap: 12px; }
+  .avatar-form { display: grid; gap: 8px; justify-items: start; }
+  .avatar-form input[type=file] { font-size: 0.88rem; max-width: 100%; }
+  .avatar-actions .btn, .avatar-actions .btn-small { justify-self: start; }
+  .avatar-source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .avatar-file-status { color: var(--ink); }
+  .asnap[hidden] { display: none !important; }
+  .asnap [hidden], .avatar-source [hidden], .avatar-file-status[hidden] { display: none !important; }
+  .asnap { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(24, 18, 12, 0.72); }
+  .asnap-dialog { background: var(--bg, #fff); color: var(--ink, #222); border-radius: 16px; width: 100%; max-width: 520px; max-height: calc(100vh - 32px); overflow: auto; padding: 18px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35); }
+  .asnap-dialog h2 { font-size: 1.15rem; margin: 0 0 6px; }
+  .asnap-stage { position: relative; margin-top: 12px; background: #111; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; }
+  .asnap-stage video, .asnap-stage img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .asnap-stage video.is-mirrored { transform: scaleX(-1); }
+  .asnap-error { margin: 10px 0 0; color: #a03123; font-size: 0.9rem; }
+  .asnap-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .asnap-actions .btn, .asnap-actions .btn-small { margin: 0; }
+  @media (max-width: 520px) {
+    .asnap { padding: 0; align-items: flex-end; }
+    .asnap-dialog { max-width: none; border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); max-height: 92vh; }
+  }
 </style>
 </head>
 <body>
@@ -41,6 +69,49 @@ $lastLogin = $account && $account['last_login_at'] ? date('d/m/Y à H:i', strtot
     <?php if ($flash): ?>
       <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin:16px 0;"><?= h($flash['message']) ?></p>
     <?php endif; ?>
+
+    <div class="admin-block" style="max-width:560px;margin-top:14px;">
+      <h2 style="font-size:1.15rem;margin:0 0 6px;">Mon avatar</h2>
+      <p class="hint" style="margin:0;">Importez une photo ou prenez un selfie : l'IA en fait une illustration fidèle, détourée. Vous pourrez ensuite l'utiliser comme logo de boutique.</p>
+      <div class="avatar-layout">
+        <?php if ($avatar): ?>
+          <img class="avatar-preview" src="/<?= h($avatar['avatar']) ?>" alt="Votre avatar">
+        <?php else: ?>
+          <div class="avatar-preview avatar-empty">Aucun avatar<br>pour l'instant</div>
+        <?php endif; ?>
+        <div class="avatar-actions">
+          <?php if ($avatarBlocked): ?>
+            <p class="hint" style="margin:0;"><?= h($avatarBlocked) ?></p>
+          <?php else: ?>
+            <form class="avatar-form" id="avatar-form" method="post" action="/admin/profile-action.php" enctype="multipart/form-data">
+              <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+              <input type="hidden" name="avatar_action" value="generate">
+              <label for="a-portrait" class="hint"><?= $avatar ? 'Changer le portrait' : 'Votre portrait' ?> <small>(JPG, PNG ou WebP — 8 Mo max)</small></label>
+              <input type="file" name="portrait" id="a-portrait" accept="image/jpeg,image/png,image/webp" required>
+              <div class="avatar-source">
+                <span class="hint">ou</span>
+                <button type="button" class="btn" data-avatar-selfie hidden>Prendre un selfie</button>
+              </div>
+              <p class="hint avatar-file-status" data-avatar-file-status role="status" hidden></p>
+              <button type="submit" class="btn btn-primary"><?= $avatar ? 'Générer un nouvel avatar' : 'Générer mon avatar' ?></button>
+              <p class="hint" style="margin:0;">Environ <?= h($avatarCost) ?> décomptés de votre crédit IA. Le portrait importé n'est pas publié sur le site.</p>
+            </form>
+          <?php endif; ?>
+          <?php if ($avatar): ?>
+            <form method="post" action="/admin/profile-action.php" onsubmit="return confirm('Votre avatar remplacera les logos actuels de la boutique (en-tête, vertical, carré). Continuer ?');">
+              <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+              <input type="hidden" name="avatar_action" value="use_logo">
+              <button type="submit" class="btn">Utiliser comme logo de boutique</button>
+            </form>
+            <form method="post" action="/admin/profile-action.php" onsubmit="return confirm('Retirer votre avatar ? Le logo de la boutique restera inchangé.');">
+              <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+              <input type="hidden" name="avatar_action" value="remove">
+              <button type="submit" class="btn-small">Retirer l'avatar</button>
+            </form>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
 
     <?php if (!$account): ?>
       <div class="admin-block">
@@ -81,6 +152,26 @@ $lastLogin = $account && $account['last_login_at'] ? date('d/m/Y à H:i', strtot
   </div>
 </section>
 </main>
+<?php if (!$avatarBlocked): ?>
+<div class="asnap" data-avatar-camera hidden>
+  <div class="asnap-dialog" role="dialog" aria-modal="true" aria-labelledby="asnap-title">
+    <h2 id="asnap-title">Prendre un selfie</h2>
+    <p class="hint" data-asnap-hint style="margin:0;">Placez votre visage au centre de l'image.</p>
+    <div class="asnap-stage">
+      <video data-asnap-video playsinline autoplay muted aria-label="Aperçu de la caméra"></video>
+      <img data-asnap-still alt="Aperçu du selfie" hidden>
+    </div>
+    <p class="asnap-error" data-asnap-error role="alert" hidden></p>
+    <div class="asnap-actions">
+      <button type="button" class="btn btn-primary" data-asnap-capture>Prendre la photo</button>
+      <button type="button" class="btn btn-primary" data-asnap-accept hidden>Utiliser ce selfie</button>
+      <button type="button" class="btn" data-asnap-retake hidden>Reprendre</button>
+      <button type="button" class="btn" data-asnap-switch hidden>Changer de caméra</button>
+      <button type="button" class="btn-small" data-asnap-close>Annuler</button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 <script>
 document.querySelectorAll('[data-pw-toggle]').forEach(function (btn) {
   btn.addEventListener('click', function () {
@@ -91,6 +182,7 @@ document.querySelectorAll('[data-pw-toggle]').forEach(function (btn) {
   });
 });
 </script>
+<script src="/assets/avatar-selfie.js" defer></script>
 <script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

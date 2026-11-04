@@ -802,10 +802,41 @@ function shooting_manual_program_map(): array
     return [
         'objet' => 'objet',
         'vetement' => 'vetement',
-        'media' => 'media',
         'chaussures' => 'chaussures',
+        'accessoires' => 'accessoires',
         'bijou' => 'bijoux',
+        'media' => 'media',
+        'vaisselle' => 'vaisselle',
+        'deco' => 'deco',
         'mobilier' => 'mobilier',
+        'luminaire' => 'luminaire',
+        'textile' => 'textile',
+        'collection' => 'collection',
+        'electronique' => 'electronique',
+        'jeux' => 'jeux',
+        'beaute' => 'beaute',
+    ];
+}
+
+/** Liste des types proposés au vendeur (clé du choix manuel → libellé). */
+function shooting_type_choices(): array
+{
+    return [
+        'objet' => 'Objet',
+        'vetement' => 'Vêtement',
+        'chaussures' => 'Chaussures',
+        'accessoires' => 'Sac / accessoire',
+        'bijou' => 'Bijou',
+        'media' => 'Livre / média',
+        'vaisselle' => 'Vaisselle / arts de la table',
+        'deco' => 'Décoration',
+        'mobilier' => 'Mobilier',
+        'luminaire' => 'Luminaire',
+        'textile' => 'Linge / textile',
+        'collection' => 'Collection',
+        'electronique' => 'Électronique',
+        'jeux' => 'Jeu / jouet',
+        'beaute' => 'Beauté',
     ];
 }
 

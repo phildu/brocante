@@ -11,6 +11,8 @@ $logos = logos_saved();
 $colors = $current['colors'];
 $fonts = $current['fonts'];
 $activeTemplate = shop_template_active();
+$siteName = trim((string) ($content['site_name'] ?? '')) ?: (string) tenant('name');
+$mediaPhotos = get_media_items('photo');
 
 // Données pour l'aperçu en direct (même calcul qu'appearance_derive, côté navigateur).
 $fontCatalog = [];
@@ -90,10 +92,34 @@ $colorFields = [
   .apx-logo-vertical .apx-logo-frame { aspect-ratio: 3 / 4; }
   .apx-logo-square .apx-logo-frame { aspect-ratio: 1; }
   .apx-logo-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .apx-logo-view { display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
   .apx-logo small { color: var(--ink-soft); font-size: 0.78rem; line-height: 1.35; }
   .apx-logo .apx-logo-format { font-family: var(--font-mono); font-size: 0.7rem; }
   .apx-logo-pick { align-self: flex-start; cursor: pointer; font-size: 0.85rem; padding: 7px 12px; }
+  .apx-logo-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .apx-logo-media-status { margin: 0; font-size: 0.78rem; color: var(--accent); word-break: break-word; }
   .apx-logo-reset { font-size: 0.8rem; color: var(--ink-soft); display: flex; gap: 6px; align-items: center; }
+  .apx-logo-zoom { position: fixed; inset: 0; z-index: 300; display: none; align-items: center; justify-content: center; padding: 22px; background: rgba(24,18,12,0.82); }
+  .apx-logo-zoom.is-open { display: flex; }
+  .apx-logo-zoom figure { margin: 0; display: grid; gap: 12px; width: min(1100px, 96vw); max-height: 94vh; }
+  .apx-logo-zoom img {
+    width: 100%; height: auto; max-height: calc(94vh - 64px); object-fit: contain; display: block;
+    background: repeating-conic-gradient(#ececec 0% 25%, #fff 0% 50%) 50% / 20px 20px;
+  }
+  .apx-logo-zoom figcaption { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: #fff; font-size: 0.9rem; }
+  .media-pick-backdrop {
+    position: fixed; inset: 0; z-index: 310; display: none; align-items: center; justify-content: center; padding: 18px;
+    background: rgba(24, 18, 12, 0.62);
+  }
+  .media-pick-backdrop.is-open { display: flex; }
+  .media-pick-box {
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line); width: min(880px, 96vw);
+    max-height: 90vh; padding: 18px; display: flex; flex-direction: column; gap: 14px; overflow: hidden;
+  }
+  .media-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; overflow-y: auto; max-height: 60vh; }
+  .media-pick-item { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; text-align: left; font-size: 0.75rem; color: var(--ink); }
+  .media-pick-item:hover { border-color: var(--accent); }
+  .media-pick-item img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--surface-2); }
   .apx-preview-wrap { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
   .apx-preview-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; color: var(--ink-soft); }
   .apx-mode { display: inline-flex; border: 1px solid var(--line); }
@@ -158,16 +184,26 @@ $colorFields = [
     <form class="apx-block apx-logos" id="logos" method="post" action="/admin/appearance-action.php" enctype="multipart/form-data" style="margin-top:20px;">
       <input type="hidden" name="action" value="logos">
       <h2>Logos</h2>
-      <p class="hint" style="margin:0;">Trois déclinaisons, chacune utilisée là où sa forme convient. Sans logo vertical, le carré est utilisé à sa place. Formats : PNG ou SVG sur fond transparent de préférence, JPG ou WebP acceptés (3 Mo maximum).</p>
+      <p class="hint" style="margin:0;">Trois déclinaisons, chacune utilisée là où sa forme convient. Sans logo vertical, le carré est utilisé à sa place. Formats : PNG ou SVG sur fond transparent de préférence, JPG ou WebP acceptés (3 Mo maximum). Cliquez sur un logo pour l'agrandir à l'écran. « Médiathèque… » reprend un visuel déjà en ligne (avatar, ancien logo, photo) ; « Agrandir ×2 » augmente la résolution du fichier sans IA, utile pour l'impression.</p>
       <div class="apx-logo-grid">
         <?php foreach (LOGO_VARIANTS as $variant => [$title, $usage, $format]): $custom = isset($logos[$variant]); ?>
           <div class="apx-logo apx-logo-<?= h($variant) ?>">
-            <div class="apx-logo-frame"><img id="logo-img-<?= h($variant) ?>" src="/<?= h(logo_url($variant)) ?>" alt="Logo <?= h(mb_strtolower($title)) ?> actuel"></div>
+            <div class="apx-logo-frame">
+              <button type="button" class="apx-logo-view" data-logo-zoom="/<?= h(logo_url($variant)) ?>" data-logo-zoom-title="<?= h($title . ' — ' . $siteName) ?>">
+                <img id="logo-img-<?= h($variant) ?>" src="/<?= h(logo_url($variant)) ?>" alt="Logo <?= h(mb_strtolower($title)) ?> actuel">
+              </button>
+            </div>
             <b><?= h($title) ?></b>
             <small><?= h($usage) ?></small>
             <small class="apx-logo-format"><?= h($format) ?> · <?= $custom ? 'personnalisé' : ($variant === 'vertical' && !isset($logos['vertical']) ? 'carré utilisé à la place' : "logo d'origine") ?></small>
-            <label class="btn btn-ghost apx-logo-pick" for="logo-<?= h($variant) ?>">Choisir un fichier…</label>
-            <input type="file" name="logo_<?= h($variant) ?>" id="logo-<?= h($variant) ?>" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" hidden data-preview="logo-img-<?= h($variant) ?>">
+            <div class="apx-logo-actions">
+              <label class="btn btn-ghost apx-logo-pick" for="logo-<?= h($variant) ?>">Choisir un fichier…</label>
+              <input type="file" name="logo_<?= h($variant) ?>" id="logo-<?= h($variant) ?>" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" hidden data-preview="logo-img-<?= h($variant) ?>" data-status="logo-status-<?= h($variant) ?>">
+              <button type="button" class="btn btn-ghost apx-logo-pick" data-open-logo-media="<?= h($variant) ?>" data-open-logo-title="<?= h($title) ?>">Médiathèque…</button>
+              <button type="submit" class="btn-small" name="enlarge" value="<?= h($variant) ?>">Agrandir ×2</button>
+            </div>
+            <input type="hidden" name="media_<?= h($variant) ?>" id="media-<?= h($variant) ?>" value="">
+            <p class="apx-logo-media-status" id="logo-status-<?= h($variant) ?>" role="status" hidden></p>
             <?php if ($custom): ?>
               <label class="apx-logo-reset"><input type="checkbox" name="reset_<?= h($variant) ?>" value="1"> Revenir au logo d'origine</label>
             <?php endif; ?>
@@ -368,6 +404,39 @@ $colorFields = [
   </div>
 </section>
 </main>
+
+<div class="apx-logo-zoom" data-logo-zoom-box>
+  <figure>
+    <img data-logo-zoom-img alt="">
+    <figcaption>
+      <span data-logo-zoom-caption></span>
+      <button type="button" class="btn-small" data-logo-zoom-close>Fermer</button>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="media-pick-backdrop" data-logo-media-box>
+  <div class="media-pick-box">
+    <p class="eyebrow" style="margin:0;">Choisir un visuel dans la médiathèque — <span data-logo-media-title></span></p>
+    <p class="hint" style="margin:0;">Le visuel sera repris tel quel pour cette déclinaison (aucun texte ajouté). Pour composer les trois logos avec le nom de la boutique, utilisez plutôt un logo généré ou l'avatar depuis « Mon profil ».</p>
+    <?php if (!$mediaPhotos): ?>
+      <p class="empty-state">La médiathèque est vide pour l'instant. <a href="/admin/media.php">Ajouter des visuels →</a></p>
+    <?php else: ?>
+      <div class="media-pick-grid">
+        <?php foreach ($mediaPhotos as $m): ?>
+          <button type="button" class="media-pick-item" data-logo-media-path="<?= h($m['path']) ?>" data-logo-media-label="<?= h($m['label']) ?>">
+            <img src="/<?= h($m['path']) ?>" alt="<?= h($m['label']) ?>" loading="lazy">
+            <span><?= h($m['label']) ?></span>
+          </button>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <a class="btn-small" href="/admin/media.php" target="_blank" rel="noopener">Gérer la médiathèque →</a>
+      <button type="button" class="btn-small" data-logo-media-cancel>Annuler</button>
+    </div>
+  </div>
+</div>
 <script>
 (function () {
   var FONTS = <?= json_encode($fontCatalog, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
@@ -462,8 +531,73 @@ $colorFields = [
   document.querySelectorAll('input[data-preview]').forEach(function (input) {
     input.addEventListener('change', function () {
       if (!input.files[0]) return;
-      document.getElementById(input.dataset.preview).src = URL.createObjectURL(input.files[0]);
-      input.previousElementSibling.textContent = input.files[0].name;
+      var url = URL.createObjectURL(input.files[0]);
+      document.getElementById(input.dataset.preview).src = url;
+      var card = input.closest('.apx-logo');
+      var zoom = card && card.querySelector('[data-logo-zoom]');
+      if (zoom) zoom.dataset.logoZoom = url;
+      var media = card && card.querySelector('input[type="hidden"][name^="media_"]');
+      if (media) media.value = '';
+      var status = input.dataset.status && document.getElementById(input.dataset.status);
+      if (status) {
+        status.hidden = false;
+        status.textContent = input.files[0].name + ' — sera enregistré avec « Enregistrer les logos ».';
+      }
+    });
+  });
+})();
+</script>
+<script>
+(function () {
+  // Agrandir un logo à l'écran.
+  var box = document.querySelector('[data-logo-zoom-box]');
+  var img = box.querySelector('[data-logo-zoom-img]');
+  var caption = box.querySelector('[data-logo-zoom-caption]');
+  function closeZoom() { box.classList.remove('is-open'); }
+  document.querySelectorAll('[data-logo-zoom]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      img.src = btn.dataset.logoZoom;
+      caption.textContent = btn.dataset.logoZoomTitle || '';
+      box.classList.add('is-open');
+      box.querySelector('[data-logo-zoom-close]').focus();
+    });
+  });
+  box.addEventListener('click', function (e) { if (e.target === box) closeZoom(); });
+  box.querySelector('[data-logo-zoom-close]').addEventListener('click', closeZoom);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('is-open')) closeZoom(); });
+
+  // Médiathèque : reprendre un visuel existant pour une déclinaison.
+  var pick = document.querySelector('[data-logo-media-box]');
+  var target = null;
+  document.querySelectorAll('[data-open-logo-media]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      target = btn.dataset.openLogoMedia;
+      pick.querySelector('[data-logo-media-title]').textContent = btn.dataset.openLogoTitle || '';
+      pick.classList.add('is-open');
+    });
+  });
+  function closePick() { pick.classList.remove('is-open'); target = null; }
+  pick.querySelector('[data-logo-media-cancel]').addEventListener('click', closePick);
+  pick.addEventListener('click', function (e) { if (e.target === pick) closePick(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && pick.classList.contains('is-open')) closePick(); });
+  pick.querySelectorAll('[data-logo-media-path]').forEach(function (item) {
+    item.addEventListener('click', function () {
+      if (!target) return;
+      var card = document.querySelector('.apx-logo-' + target);
+      var field = document.getElementById('media-' + target);
+      var file = document.getElementById('logo-' + target);
+      var status = document.getElementById('logo-status-' + target);
+      if (!card || !field) return;
+      field.value = item.dataset.logoMediaPath;
+      if (file) file.value = '';
+      card.querySelector('#logo-img-' + target).src = '/' + item.dataset.logoMediaPath;
+      var zoom = card.querySelector('[data-logo-zoom]');
+      if (zoom) zoom.dataset.logoZoom = '/' + item.dataset.logoMediaPath;
+      if (status) {
+        status.hidden = false;
+        status.textContent = item.dataset.logoMediaLabel + ' — sera enregistré avec « Enregistrer les logos ».';
+      }
+      closePick();
     });
   });
 })();

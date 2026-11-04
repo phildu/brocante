@@ -58,8 +58,8 @@ $grid = saas_grid($gallery, $siteMode);
 // Marge moyenne du type de la galerie choisie : sert au CA de rentabilité affiché sur chaque formule.
 $marginType = $galleryData ? (string) ($galleryData['type'] ?? GT_DEFAULT) : $placeType;
 $marginPct = $marginType !== '' ? marge_pct($marginType) : 0;
-// Vocabulaire du lieu de vente : un vide-grenier accueille des stands, pas des boutiques.
-$shopWord = $marginType === 'vide-grenier' ? 'Stand' : 'Boutique';
+// Vocabulaire du lieu de vente : un vide-grenier ou un marché accueille des stands, pas des boutiques.
+$shopWord = in_array($marginType, ['vide-grenier', 'marche-de-noel', 'marche-producteurs'], true) ? 'Stand' : 'Boutique';
 // Pionniers : les prix affichés sont ceux du prochain rang (ou du verrou déjà accordé à ce brouillon).
 $ebCampaign = function_exists('eb_campaign_for_signup') ? eb_campaign_for_signup($gallery) : null;
 $ebTier = $ebCampaign && $ebCampaign['progress']['open'] ? eb_tier_at($ebCampaign, $ebCampaign['progress']['next_rank']) : null;
@@ -331,6 +331,8 @@ saas_page_start('Je veux vendre en ligne — ' . $cfg['name'], 'Choisissez où v
             'puces' => ['Sur un marché aux puces', 'Un emplacement numéroté, avec les autres marchands du marché.'],
             'vide-grenier' => ['Dans un vide-grenier', 'Un stand le temps d’une édition, avec le plan et les exposants.'],
             'quartier' => ['Dans un quartier marchand', 'Les commerces d’une rue, d’un village ou d’un quartier, ensemble.'],
+            'marche-de-noel' => ['Dans un marché de Noël', 'Un chalet le temps des fêtes, avec le plan et les autres exposants.'],
+            'marche-producteurs' => ['Sur un marché de producteurs et créateurs', 'Un stand avec les producteurs locaux, artisans et créateurs du marché.'],
         ];
         ?>
         <div class="field full">

@@ -194,6 +194,7 @@ function gass_document(string $kind, array $gallery, array $data): ?array
     $pricePro = $event ? ge_place_price($event, true) : null;
     $eventTitle = trim((string) ($event['title'] ?? '')) ?: (string) $gallery['name'];
     $security = gass_security_result((array) ($data['security']['answers'] ?? []));
+    $rules = gcn_rules((array) ($data['rules'] ?? []));
     $surveyOn = !empty($data['survey']['enabled']) && !empty($data['survey']['open']);
     $surveyUrl = gass_survey_url((string) $gallery['slug']);
     $publicUrl = gallery_public_url($gallery);
@@ -310,7 +311,7 @@ function gass_document(string $kind, array $gallery, array $data): ?array
             $html .= '<p class="doc-meta">' . $h($eventTitle) . ' — ' . ($dateText !== '' ? $h($dateText) : gassd_todo('date')) . ' — ' . $where . '</p>';
             $html .= '<p><strong>Article 1 — Objet.</strong> Le présent règlement fixe les conditions de participation au ' . $h($typeName) . ' « ' . $h($eventTitle) . ' », organisé par ' . gassd_or($org, 'nom de l’organisateur') . ' ' . $when . ' à ' . $where . '. Toute inscription vaut acceptation sans réserve de ce règlement.</p>';
             $html .= '<p><strong>Article 2 — Inscription.</strong> L’inscription se fait auprès de l’organisateur, par le formulaire en ligne ou par courrier. Elle n’est définitive qu’après validation par l’organisateur et règlement de l’emplacement. Le nombre d’emplacements est limité ; les demandes sont traitées dans l’ordre de réception.</p>';
-            $html .= '<p><strong>Article 3 — Tarifs.</strong> Le tarif d’un emplacement est de <strong>' . $tarif . '</strong>' . ($tarifPro !== '' ? ', et de <strong>' . $tarifPro . '</strong> pour les professionnels' : '') . '. Le paiement peut être effectué en ligne ou sur place selon les modalités indiquées lors de l’inscription. Aucun remboursement n’est effectué en cas d’absence de l’exposant, sauf décision de l’organisateur.</p>';
+            $html .= '<p><strong>Article 3 — Tarifs.</strong> Le tarif d’un emplacement est de <strong>' . $tarif . '</strong>' . ($tarifPro !== '' ? ', et de <strong>' . $tarifPro . '</strong> pour les professionnels' : '') . '. Le paiement peut être effectué en ligne ou sur place selon les modalités indiquées lors de l’inscription. L’absence de l’exposant le jour de la manifestation ne donne pas lieu à remboursement, sauf décision de l’organisateur ; les annulations et les désistements sont régis par l’article 15.</p>';
             $html .= '<p><strong>Article 4 — Emplacements.</strong> Les emplacements sont numérotés et attribués nominativement. Ils ne peuvent être ni cédés, ni revendus, ni partagés sans accord écrit de l’organisateur. L’exposant installe son stand dans les limites de l’emplacement qui lui a été attribué et laisse les allées libres.</p>';
             $html .= '<p><strong>Article 5 — Horaires.</strong> Installation à partir de ' . gassd_todo('heure d’installation') . ', ouverture au public ' . $hoursText . ', démontage après la fermeture et au plus tard à ' . gassd_todo('heure de fin de démontage') . '. Les véhicules doivent avoir quitté la zone de vente avant l’ouverture au public.</p>';
             $html .= '<p><strong>Article 6 — Véhicules.</strong> Le stationnement sur les emplacements est interdit pendant la manifestation, sauf autorisation. Les exposants utilisent les parkings indiqués par l’organisateur et respectent les zones de déchargement.</p>';
@@ -322,6 +323,19 @@ function gass_document(string $kind, array $gallery, array $data): ?array
             $html .= '<p><strong>Article 12 — Contrôle et sanctions.</strong> L’organisateur peut refuser l’accès ou faire évacuer un stand en cas de non-respect du règlement, de trouble à l’ordre public ou de danger pour le public. Aucun remboursement n’est alors dû.</p>';
             $html .= '<p><strong>Article 13 — Données personnelles.</strong> Les informations transmises lors de l’inscription sont utilisées uniquement pour l’organisation de la manifestation et la tenue du registre des exposants. Elles ne sont ni vendues ni transmises à des tiers. Chaque exposant peut demander leur rectification ou leur suppression.</p>';
             $html .= '<p><strong>Article 14 — Litiges.</strong> En cas de difficulté d’interprétation, l’organisateur tranche après avis du responsable sécurité. Les participants s’engagent à rechercher une solution amiable avant toute action contentieuse.</p>';
+            $refundSentence = static fn (int $p): string => $p >= 100
+                ? 'l’exposant est remboursé intégralement'
+                : ($p <= 0 ? 'aucun remboursement n’est dû' : 'l’exposant est remboursé à hauteur de ' . $p . ' % du tarif');
+            $html .= '<p><strong>Article 15 — Annulation et remboursement.</strong> '
+                . 'En cas d’annulation décidée par l’organisateur, ' . $refundSentence((int) $rules['organizer_pct']) . '. '
+                . 'En cas d’annulation pour météo ou force majeure, ' . $refundSentence((int) $rules['force_majeure_pct']) . '. '
+                . 'Si l’exposant se désiste plus de ' . (int) $rules['full_days'] . ' jours avant la manifestation, il est remboursé intégralement ; '
+                . 'entre ' . (int) $rules['partial_days'] . ' et ' . (int) $rules['full_days'] . ' jours avant, ' . $refundSentence((int) $rules['partial_pct']) . ' ; '
+                . 'moins de ' . (int) $rules['partial_days'] . ' jours avant, ' . $refundSentence((int) $rules['late_pct']) . '. '
+                . 'Les sommes sont versées dans un délai de ' . (int) $rules['refund_delay_days'] . ' jours après l’annonce, par ' . gass_h($rules['refund_method']) . '. '
+                . (trim((string) $rules['custom']) !== '' ? 'Condition particulière : ' . gass_h($rules['custom']) . '. ' : '')
+                . 'Aucun remboursement n’est dû en cas d’exclusion prononcée en application de l’article 12. '
+                . 'Pour demander un remboursement, l’exposant adresse sa demande à l’organisateur en rappelant son nom et son emplacement.</p>';
             $html .= '<p class="doc-sign">Lu et approuvé, le ' . gassd_todo('date') . '<br><br>Nom de l’exposant : ' . gassd_todo('nom') . '<br><br>Signature :</p>';
             $html .= $footer;
             break;

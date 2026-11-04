@@ -21,6 +21,8 @@ function marge_defaults(): array
         'puces' => ['pct' => 60, 'note' => 'Marchands professionnels : achat, stockage et préparation des pièces.'],
         'vide-grenier' => ['pct' => 100, 'note' => 'Particuliers : objets déjà possédés, aucun achat à déduire.'],
         'quartier' => ['pct' => 45, 'note' => 'Commerces de proximité : achat des marchandises et frais de vente.'],
+        'marche-de-noel' => ['pct' => 50, 'note' => 'Artisans et créateurs : matières premières, production et emballage.'],
+        'marche-producteurs' => ['pct' => 55, 'note' => 'Producteurs et créateurs : matières premières, production et emballage.'],
     ];
 }
 
