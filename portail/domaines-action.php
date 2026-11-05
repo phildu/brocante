@@ -86,17 +86,55 @@ try {
         domain_portal_back($ip !== '' ? 'Adresse IP du serveur enregistrée : les consignes DNS des boutiques l’utilisent.' : 'Adresse IP effacée : l’adresse du serveur qui répond sera proposée.', 'ok');
     }
 
-    if ($action === 'custom_activate' || $action === 'custom_remove') {
+    if ($action === 'save_hosting') {
+        $service = strtolower(trim((string) ($_POST['hosting_service'] ?? '')));
+        $path = trim(trim((string) ($_POST['hosting_path'] ?? '')), '/');
+        $max = trim((string) ($_POST['hosting_max_domains'] ?? ''));
+        if ($service !== '' && !preg_match('/^[a-z0-9][a-z0-9.-]{2,79}$/', $service)) {
+            domain_portal_back('Nom de service d’hébergement invalide (par exemple arrimage.com).');
+        }
+        if ($path !== '' && (!preg_match('#^[A-Za-z0-9._/-]{1,120}$#', $path) || str_contains($path, '..'))) {
+            domain_portal_back('Dossier racine invalide (par exemple www/brocs).');
+        }
+        if (($service === '') !== ($path === '')) {
+            domain_portal_back('Renseignez le service d’hébergement et le dossier racine ensemble, ou laissez les deux vides pour garder le rattachement manuel.');
+        }
+        if ($max !== '' && (!ctype_digit($max) || (int) $max > 1000)) {
+            domain_portal_back('Le plafond de domaines doit être un nombre entre 0 et 1000.');
+        }
+        $cfg = saas_config();
+        $cfg['hosting_service'] = $service;
+        $cfg['hosting_path'] = $path;
+        $cfg['hosting_max_domains'] = (int) $max;
+        if (!saas_config_save($cfg)) domain_portal_back('Impossible d’enregistrer les réglages d’hébergement.');
+        domain_portal_back($service !== ''
+            ? 'Rattachement automatique réglé : les domaines demandés seront déclarés sur ' . $service . ' (dossier ' . $path . ').'
+            : 'Rattachement automatique désactivé : les alias d’hébergement restent à créer à la main.', 'ok');
+    }
+
+    if ($action === 'custom_activate' || $action === 'custom_remove' || $action === 'custom_attach_hosting') {
         $shop = strtolower(trim((string) ($_POST['shop'] ?? '')));
         if (!domain_custom_slug_valid($shop) || !is_file(tenant_dir($shop) . '/tenant.php')) {
             domain_portal_back('Boutique inconnue.');
+        }
+        if ($action === 'custom_attach_hosting') {
+            try {
+                $record = domain_custom_hosting_attach($shop);
+            } catch (InvalidArgumentException | RuntimeException $ex) {
+                domain_custom_hosting_fail($shop, $ex->getMessage());
+                throw $ex;
+            }
+            $names = implode(', ', (array) ($record['hosting']['domains'] ?? []));
+            domain_portal_back('Alias d’hébergement créé chez OVH pour ' . $names . '. Le certificat HTTPS est émis en quelques minutes : vérifiez https://' . (string) ($record['domain'] ?? '') . '/ avant d’activer.'
+                . (!empty($record['hosting']['www_error']) ? ' Le « www » n’a pas pu être ajouté : ' . (string) $record['hosting']['www_error'] : ''), 'ok');
         }
         if ($action === 'custom_activate') {
             $record = domain_custom_activate($shop);
             domain_portal_back('Adresse ' . (string) ($record['domain'] ?? '') . ' mise en service pour ' . $shop . ' : la boutique répond maintenant sur ce domaine.', 'ok');
         }
-        domain_custom_remove($shop);
-        domain_portal_back('Adresse détachée de ' . $shop . '. Pensez à retirer l’alias d’hébergement et le certificat si le domaine ne doit plus arriver ici.', 'ok');
+        $warning = domain_custom_remove($shop);
+        if ($warning !== '') domain_portal_back($warning);
+        domain_portal_back('Adresse détachée de ' . $shop . (domain_custom_hosting_settings() ? ' ; les alias d’hébergement créés automatiquement ont été retirés chez OVH.' : '. Pensez à retirer l’alias d’hébergement et le certificat si le domaine ne doit plus arriver ici.'), 'ok');
     }
 
     domain_portal_back('Action inconnue.');

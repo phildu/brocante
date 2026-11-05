@@ -7,7 +7,7 @@
 //   1. la variable d'environnement TENANT (session cloud, SetEnv Apache) ;
 //   2. le sous-domaine, s'il porte le nom d'un commerce : naty.brocenstock.test
 //      affiche tenants/naty (tests locaux avec Herd) ;
-//   3. le premier segment de l'adresse (brocs.arrimage.com/naty/) ;
+//   3. le premier segment de l'adresse (bricbrok.com/naty/) ;
 //   4. le domaine déclaré par un tenant.php (site_url sans chemin, ex.
 //      brocante.arrimage.com) ;
 //   5. le fichier .tenant à la racine (écrit par le script de déploiement) ;
@@ -44,7 +44,7 @@ function tenant_base_host(?string $host = null): string
 /**
  * Commerce dont le tenant.php déclare ce domaine comme site_url (domaine propre
  * servi à la racine, ex. brocante.arrimage.com), ou ''. Seule une adresse sans
- * chemin compte : site_url = https://brocs.arrimage.com/<identifiant> désigne
+ * chemin compte : site_url = https://bricbrok.com/<identifiant> désigne
  * une boutique sous le domaine du portail, pas le domaine lui-même.
  */
 function tenant_from_domain(?string $host = null): string
@@ -88,7 +88,7 @@ function tenant_from_domain(?string $host = null): string
 
 /**
  * Commerce désigné par le premier segment de l'adresse (« naty » pour
- * brocs.arrimage.com/naty/boutique.php), ou '' si ce segment n'est pas un
+ * bricbrok.com/naty/boutique.php), ou '' si ce segment n'est pas un
  * commerce. Un dossier ou fichier de même nom à la racine (admin/, assets/,
  * portail/…) a toujours priorité : il ne peut pas être masqué par un commerce.
  */
@@ -106,7 +106,7 @@ function tenant_from_path(?string $uri = null): string
 /**
  * Commerce actif et préfixe d'adresse éventuel : ['slug' => …, 'base' => '' ou '/slug'].
  * Le préfixe n'existe que pour un commerce servi sous le domaine d'un autre
- * (brocs.arrimage.com/<slug>/) ; un commerce choisi par sous-domaine, par
+ * (bricbrok.com/<slug>/) ; un commerce choisi par sous-domaine, par
  * variable d'environnement ou par .tenant garde des adresses sans préfixe.
  */
 function tenant_resolve(): array
@@ -143,7 +143,7 @@ function tenant_slug(): string
 /**
  * Adresse publique du commerce actif, sans barre finale : le site_url du commerce, sauf si c'est une adresse de remplissage
  * (vide, localhost, *.test, *.example.com — celle d'un commerce créé sans adresse) : on prend alors celle de la requête + le préfixe du
- * commerce (https://brocs.arrimage.com/<identifiant>). Sert aux retours de paiement Stripe et aux images des produits.
+ * commerce (https://bricbrok.com/<identifiant>). Sert aux retours de paiement Stripe et aux images des produits.
  */
 function tenant_site_url(): string
 {

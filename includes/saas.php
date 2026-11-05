@@ -127,6 +127,13 @@ function saas_config(): array
         // Adresse IP du serveur indiquée aux boutiques qui rattachent un domaine
         // déjà acheté (enregistrement A). Vide : celle du serveur est proposée.
         'domain_ip' => filter_var((string) ($saved['domain_ip'] ?? ''), FILTER_VALIDATE_IP) ?: '',
+        // Rattachement automatique des domaines des boutiques à l'hébergement OVH (API
+        // /hosting/web/<service>/attachedDomain) : nom du service d'hébergement (ex.
+        // arrimage.com), dossier racine servant la plateforme (ex. www/brocs) et plafond
+        // optionnel de domaines rattachés (0 = aucun contrôle ici, OVH reste juge).
+        'hosting_service' => preg_match('/^[a-z0-9][a-z0-9.-]{2,79}$/i', (string) ($saved['hosting_service'] ?? '')) ? strtolower((string) $saved['hosting_service']) : '',
+        'hosting_path' => (preg_match('#^[A-Za-z0-9._/-]{1,120}$#', (string) ($saved['hosting_path'] ?? '')) && !str_contains((string) $saved['hosting_path'], '..')) ? trim((string) $saved['hosting_path'], '/') : '',
+        'hosting_max_domains' => max(0, min(1000, (int) ($saved['hosting_max_domains'] ?? 0))),
         // Depuis que le portail enregistre des tarifs (includes/saas-pricing.php), les formules par défaut viennent de la grille par défaut.
         'plans' => saas_pricing()['saved'] ? saas_pricing_legacy_plans() : ($plans ?: saas_default_plans()),
         // Garde-fou : nombre maximal de boutiques GRATUITES créées par 24 h (0 = pas de plafond), puisqu'aucune validation humaine n'est exigée.

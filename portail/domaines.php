@@ -92,6 +92,11 @@ $platformHost = preg_replace('#^https?://#', '', saas_origin());
 // Domaines déjà achetés par les marchands et rattachés à leur boutique.
 $customDomains = domain_custom_list();
 $domainIp = (string) (saas_config()['domain_ip'] ?? '');
+$hostingCfg = saas_config();
+$hostingService = (string) ($hostingCfg['hosting_service'] ?? '');
+$hostingPath = (string) ($hostingCfg['hosting_path'] ?? '');
+$hostingMax = (int) ($hostingCfg['hosting_max_domains'] ?? 0);
+$hostingAuto = $hostingService !== '' && $hostingPath !== '' && $ovhReady;
 $shopNames = [];
 foreach (array_keys(tenant_list()) as $shopSlug) {
     $shopNames[$shopSlug] = (string) tenant_load($shopSlug)['name'];
@@ -367,7 +372,7 @@ if (!$owner) {
 
     <section class="dmcard">
       <h2>Domaines déjà achetés par les boutiques</h2>
-      <p class="meta">Une boutique peut rattacher un domaine qu’elle possède déjà : elle prouve la propriété par un enregistrement TXT, pointe le domaine vers le serveur, puis demande la mise en service. Avant d’activer, déclarez le domaine comme alias d’hébergement (le certificat HTTPS est alors émis) et vérifiez que <code>https://&lt;domaine&gt;/</code> affiche la boutique.</p>
+      <p class="meta">Une boutique peut rattacher un domaine qu’elle possède déjà : elle prouve la propriété par un enregistrement TXT, pointe le domaine vers le serveur, puis demande la mise en service. <?php if ($hostingAuto): ?>Dès la demande de mise en service, le domaine et son « www » sont déclarés automatiquement comme alias de l’hébergement <code><?= e($hostingService) ?></code> (le certificat HTTPS est émis dans la foulée). Vérifiez que <code>https://&lt;domaine&gt;/</code> affiche la boutique avant d’activer.<?php else: ?>Avant d’activer, déclarez le domaine comme alias d’hébergement (le certificat HTTPS est alors émis) et vérifiez que <code>https://&lt;domaine&gt;/</code> affiche la boutique. Réglez le rattachement automatique plus bas pour que ce soit fait à la demande de la boutique.<?php endif; ?></p>
       <?php if (!$customDomains): ?>
         <p class="meta">Aucune boutique n’a rattaché de domaine existant pour le moment.</p>
       <?php else: ?>
@@ -380,14 +385,29 @@ if (!$owner) {
                 $itemState = (string) ($item['state'] ?? '');
                 $itemDomain = (string) ($item['domain'] ?? '');
                 $itemChecked = (int) ($item['checked_at'] ?? 0);
+                $itemHosting = (array) ($item['hosting'] ?? []);
+                $itemAliases = array_values(array_filter(array_map('strval', (array) ($itemHosting['domains'] ?? []))));
+                $itemHostingError = (string) ($itemHosting['error'] ?? '');
+                $itemWwwError = (string) ($itemHosting['www_error'] ?? '');
               ?>
               <tr>
                 <td><strong><?= e($shopNames[$itemSlug] ?? $itemSlug) ?></strong><br><span class="meta"><?= e($itemSlug) ?></span></td>
                 <td><code><?= e($itemDomain) ?></code></td>
-                <td><span class="pill <?= $itemState === 'active' ? 'done' : ($itemState === 'ready' ? 'sent' : '') ?>"><?= e(domain_custom_state_label($itemState)) ?></span></td>
+                <td><span class="pill <?= $itemState === 'active' ? 'done' : ($itemState === 'ready' ? 'sent' : '') ?>"><?= e(domain_custom_state_label($itemState)) ?></span>
+                  <?php if ($itemAliases): ?><br><span class="meta">Alias d’hébergement : <?= e(implode(', ', $itemAliases)) ?><?= !empty($itemHosting['attached_at']) ? ' (' . e(date('d/m/Y à H:i', (int) $itemHosting['attached_at'])) . ')' : '' ?></span><?php endif; ?>
+                  <?php if ($itemWwwError !== ''): ?><br><span class="meta">« www » non ajouté : <?= e($itemWwwError) ?></span><?php endif; ?>
+                  <?php if ($itemHostingError !== ''): ?><br><span class="meta" style="color:#b3261e;">Rattachement automatique en échec : <?= e($itemHostingError) ?></span><?php endif; ?></td>
                 <td><?= $itemChecked > 0 ? e(date('d/m/Y à H:i', $itemChecked)) : '<span class="dmno">—</span>' ?></td>
                 <td>
                   <div class="dmactions">
+                    <?php if ($hostingAuto && in_array($itemState, ['dns_ok', 'ready', 'active'], true) && count($itemAliases) < 2): ?>
+                      <form method="post" action="/portail/domaines-action.php">
+                        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="custom_attach_hosting">
+                        <input type="hidden" name="shop" value="<?= e($itemSlug) ?>">
+                        <button type="submit" class="btn small"><?= $itemAliases ? 'Compléter l’alias' : 'Rattacher à l’hébergement' ?></button>
+                      </form>
+                    <?php endif; ?>
                     <?php if ($itemState === 'ready'): ?>
                       <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Activer <?= e($itemDomain) ?> pour la boutique <?= e($itemSlug) ?> ? Vérifiez d’abord que https://<?= e($itemDomain) ?>/ affiche bien la boutique.');">
                         <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
@@ -421,6 +441,25 @@ if (!$owner) {
           </div>
         </div>
         <p class="meta">Adresse donnée aux boutiques dans les consignes DNS et utilisée pour confirmer le pointage du domaine. Sur un hébergement mutualisé OVH, c’est l’adresse IP mutualisée du compte. Vide : l’adresse du serveur qui répond est proposée.</p>
+      </form>
+      <form class="dmform" method="post" action="/portail/domaines-action.php" style="margin-top:14px;">
+        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="save_hosting">
+        <div class="dmrow">
+          <label class="dmfield">Service d’hébergement OVH
+            <input type="text" name="hosting_service" maxlength="80" value="<?= e($hostingService) ?>" placeholder="Ex. arrimage.com">
+          </label>
+          <label class="dmfield">Dossier racine de la plateforme
+            <input type="text" name="hosting_path" maxlength="120" value="<?= e($hostingPath) ?>" placeholder="Ex. www/brocs">
+          </label>
+          <label class="dmfield">Plafond de domaines (0 = aucun)
+            <input type="number" name="hosting_max_domains" min="0" max="1000" value="<?= e((string) $hostingMax) ?>">
+          </label>
+          <div class="dmactions" style="align-self:end;">
+            <button type="submit" class="btn">Enregistrer</button>
+          </div>
+        </div>
+        <p class="meta">Rattachement automatique à l’hébergement : quand une boutique demande la mise en service, le domaine et son « www » sont déclarés chez OVH (<code>POST /hosting/web/&lt;service&gt;/attachedDomain</code>, certificat Let’s Encrypt demandé en même temps). Le jeton API OVH doit appartenir au compte qui possède l’hébergement et autoriser ces routes (voir API &amp; réseaux → API OVH). Laissez le service et le dossier vides pour garder la déclaration manuelle. Le plafond sert de garde-fou : OVH ne publie pas le maximum de votre offre.<?= $hostingService !== '' && !$ovhReady ? ' <strong>Les identifiants API OVH manquent : le rattachement automatique est inactif.</strong>' : '' ?></p>
       </form>
     </section>
 

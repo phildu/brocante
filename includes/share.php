@@ -20,7 +20,7 @@ function share_origin(): string
 function shop_abs_url(string $path = '/'): string
 {
     // Les routes des plugins (/api/…) se servent aussi sous /<commerce>/api/… : sans ce préfixe, un commerce hébergé avec le portail
-    // (brocs.arrimage.com/<identifiant>) enverrait ses liens (reçus, billets, retours de paiement, alertes) vers une autre boutique.
+    // (bricbrok.com/<identifiant>) enverrait ses liens (reçus, billets, retours de paiement, alertes) vers une autre boutique.
     $base = function_exists('tenant_base_path') ? tenant_base_path() : '';
     if ($base !== '' && str_starts_with($path, '/api/')) $path = $base . $path;
     return share_origin() . app_prefix($path);
