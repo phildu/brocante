@@ -18,6 +18,7 @@
       <h4>Maison</h4>
       <ul>
         <li><a href="/index.php#histoire">Notre histoire</a></li>
+        <li><a href="/dons.php">Dons &amp; invendus du vide-grenier</a></li>
         <li><a href="/index.php#contact">Contact</a></li>
         <li><a href="/admin/" class="footer-admin-link">Administration</a></li>
       </ul>

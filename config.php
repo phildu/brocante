@@ -2,9 +2,14 @@
 
 // La base est un simple fichier SQLite (comme le projet Louxor) — aucun
 // serveur de base de données à provisionner, ni en local ni sur OVH. Le même
-// chemin relatif fonctionne dans les deux environnements. BROCANTE_DB permet
-// de pointer vers une base jetable (tests, scripts/test-buvette.php).
-define('DB_PATH', getenv('BROCANTE_DB') ?: __DIR__ . '/brocante.db');
+// chemin relatif fonctionne dans les deux environnements.
+// Prédéfinissable : les tests automatiques pointent vers une base jetable pour
+// ne jamais toucher à brocante.db — soit en définissant DB_PATH avant de charger
+// ce fichier, soit via la variable d'environnement BROCANTE_DB
+// (scripts/test-buvette.php).
+if (!defined('DB_PATH')) {
+    define('DB_PATH', getenv('BROCANTE_DB') ?: __DIR__ . '/brocante.db');
+}
 
 // En local (Herd/Mac), config.local.php fournit les valeurs propres à cette
 // machine (URL, binaires) et ce fichier s'arrête là. Il n'est jamais déployé
