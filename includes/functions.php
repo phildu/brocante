@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/analytics.php';
+require_once __DIR__ . '/csrf.php';
 
 function h($s): string
 {
@@ -337,6 +339,7 @@ function product_card_html(array $p, int $i = 0): string
     if (is_fixed_price(effective_price($p))) {
         $action = '
           <form method="post" action="/cart-add.php" style="display:contents;">
+            ' . csrf_input() . '
             <input type="hidden" name="ref" value="' . h($p['ref']) . '">
             <input type="hidden" name="redirect" value="' . h($_SERVER['REQUEST_URI'] ?? '/boutique.php') . '">
             <button class="card-cta" type="submit">Ajouter</button>
@@ -652,7 +655,10 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
             $b64 = $data['candidates'][0]['content']['parts'][0]['inlineData']['data'] ?? null;
-            if ($b64) return base64_decode($b64);
+            if ($b64) {
+                log_api_usage('gemini', 'gemini_image');
+                return base64_decode($b64);
+            }
             $reason = $data['candidates'][0]['finishReason'] ?? $data['promptFeedback']['blockReason'] ?? 'no image in response';
             error_log("gemini_generate_image attempt $attempt: HTTP $status but no image ($reason)");
         } else {
@@ -705,7 +711,10 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
             $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
-            if ($text) return $text;
+            if ($text) {
+                log_api_usage('gemini', 'gemini_text');
+                return $text;
+            }
             error_log('gemini_describe_image attempt ' . $attempt . ': HTTP ' . $status . ' but no text in response');
         } else {
             error_log('gemini_describe_image attempt ' . $attempt . ': HTTP ' . $status . ', body: ' . substr((string) $body, 0, 500));
@@ -942,6 +951,7 @@ function gemini_group_photos_chunk(array $absPaths): ?array
     $data = json_decode($body, true);
     $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
     if (!$text) return null;
+    log_api_usage('gemini', 'gemini_text');
 
     $text = trim($text);
     $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', $text);
@@ -1248,7 +1258,10 @@ function fal_remove_background(string $srcAbsPath, int $retries = 1): ?string
                 $resultCh = curl_init($imageUrl);
                 curl_setopt_array($resultCh, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30]);
                 $resultBytes = curl_exec($resultCh);
-                if ($resultBytes !== false) return $resultBytes;
+                if ($resultBytes !== false) {
+                    log_api_usage('fal', 'fal_cutout');
+                    return $resultBytes;
+                }
                 error_log('fal_remove_background attempt ' . $attempt . ': failed to download result image');
             } else {
                 error_log('fal_remove_background attempt ' . $attempt . ': HTTP ' . $status . ' but no image in response');

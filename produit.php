@@ -95,6 +95,7 @@ include __DIR__ . '/includes/header.php';
           <span class="badge" style="border-color:var(--ink-soft);color:var(--ink-soft);">Vendue</span>
         <?php elseif (is_fixed_price(effective_price($product))): ?>
           <form method="post" action="/cart-add.php">
+            <?= csrf_input() ?>
             <input type="hidden" name="ref" value="<?= h($product['ref']) ?>">
             <input type="hidden" name="redirect" value="/produit.php?ref=<?= h($product['ref']) ?>">
             <button class="btn btn-primary" type="submit">Ajouter au panier</button>

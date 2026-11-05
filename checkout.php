@@ -117,16 +117,21 @@ $itemsSnapshot = array_map(function ($line) {
         'name' => $line['product']['name'],
         'qty' => $line['qty'],
         'unit_cents' => $line['unit_cents'],
+        // Prix d'achat figé au moment de la vente : la marge reste juste même si la fiche change ensuite.
+        'cost_cents' => isset($line['product']['cost_cents']) ? (int) $line['product']['cost_cents'] : null,
     ];
 }, $lines);
 
-$stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, status, items) VALUES (?, ?, ?, ?)');
+analytics_ensure_schema();
+$stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, status, items, source_channel) VALUES (?, ?, ?, ?, ?)');
 $stmt->execute([
     $session['id'],
     cart_total_cents(),
     'pending',
     json_encode($itemsSnapshot, JSON_UNESCAPED_UNICODE),
+    analytics_session_source(),
 ]);
+track_event('checkout');
 
 header('Location: ' . $session['url'], true, 303);
 exit;
