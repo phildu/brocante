@@ -355,7 +355,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   </section></main>
 
 <?php else: ?>
-  <p class="gl-login"><a href="/galerie/admin.php" rel="nofollow">Se connecter</a></p>
+  <p class="gl-login"><a href="<?= e(ga_login_url($slug)) ?>" rel="nofollow">Se connecter</a></p>
   <header class="hero<?= $bannerImages ? ' has-banner' : '' ?> h-<?= e($st['hero_height']) ?> a-<?= e($st['hero_align']) ?>">
     <?= banner_slides_html($bannerImages, (int) $st['banner_overlay'], (string) $st['banner_pos'], (bool) $st['banner_slideshow']) ?>
     <div class="wrap">
@@ -895,7 +895,7 @@ fetch('/galerie/contact.php',{method:'POST',headers:{Accept:'application/json'},
 
 <footer><div class="wrap">
   <?php if ($slug !== ''): ?><a href="/galerie/">← Toutes les galeries</a> · <?php endif; ?><?= e($st['footer_text'] !== '' && $slug !== '' ? $st['footer_text'] : 'Les pièces sont vendues et expédiées par les commerces eux-mêmes.') ?>
-  · <a href="/galerie/admin.php" rel="nofollow">Gérer ma galerie</a>
+  · <a href="<?= e(ga_login_url($slug)) ?>" rel="nofollow">Gérer ma galerie</a>
   <?php if ($slug !== '' && $gallery && $gallery['published'] && function_exists('gt_feature') && gt_feature($gallery, 'bourse')): ?>
     · <a href="/galerie/bourse.php?g=<?= e(rawurlencode($slug)) ?>">Bourse d’échanges</a>
   <?php endif; ?>

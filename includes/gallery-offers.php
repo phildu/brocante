@@ -165,7 +165,7 @@ function go_create(array $offer, string $name, string $email, string $billing, a
     $origin = saas_origin();
     $until = $free ? ' Votre essai gratuit dure ' . (int) $offer['trial_days'] . ' jours (jusqu\'au ' . date('d/m/Y', $plan['trial_until']) . ') et permet jusqu\'à ' . (int) $offer['max_members'] . ' ' . gt_word(gt_type($type), 'members') . '.' : ' Votre offre « ' . $offer['name'] . ' » permet jusqu\'à ' . (int) $offer['max_members'] . ' commerces.';
     $mailed = ga_mail($email, 'Votre ' . gt_word(gt_type($type), 'gallery') . ' « ' . $name . ' » est créé(e)',
-        "Bonjour,\n\nVotre " . gt_word(gt_type($type), 'gallery') . " « $name » est créé(e).$until\n\nConnexion : $origin/galerie/admin.php\nIdentifiant : $email\nMot de passe provisoire : $password\n\nVous devrez le remplacer à votre première connexion. Vous pourrez ensuite choisir vos commerces, personnaliser la page et la publier : $origin/galerie/$slug/\n");
+        "Bonjour,\n\nVotre " . gt_word(gt_type($type), 'gallery') . " « $name » est créé(e).$until\n\nConnexion : $origin/galerie/$slug/admin\nIdentifiant : $email\nMot de passe provisoire : $password\n\nVous devrez le remplacer à votre première connexion. Vous pourrez ensuite choisir vos commerces, personnaliser la page et la publier : $origin/galerie/$slug/\n");
     saas_event('gallery_created', ['slug' => $slug, 'email' => $email, 'plan' => $offer['key'], 'note' => gt_type($type)['name'] . ' · ' . $offer['name'], 'amount' => $free ? 0 : ($billing === 'year' ? $offer['year_cents'] : $offer['month_cents']), 'actor' => $free ? 'client' : 'stripe']);
     return [$slug, null, $password, $mailed];
 }

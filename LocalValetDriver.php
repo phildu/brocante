@@ -13,6 +13,7 @@ use Valet\Drivers\BasicValetDriver;
  *                                propre qu'un tenant.php déclare en site_url, ex. brocante.arrimage.com : sa boutique) ;
  *                                /annuaire/, /inscription/ et /portail/ sont des dossiers servis tels quels
  *   /galerie/, /galerie/<id>/  → galerie/index.php (galeries commerciales)
+ *   /galerie/<id>/admin        → galerie/admin.php (connexion à l'administration de cette galerie)
  *   /<commerce>/…              → la boutique tenants/<commerce>/ servie sous le domaine du portail
  *   /api/…, /<commerce>/api/…  → plugin-agent.php (agents externes des plugins, authentifiés par le plugin)
  *   data/, tenants/, includes/, views/, var/, scripts/, db-backup/, fichiers cachés, *.db, *.sql, *.log, *.bak → 403
@@ -85,6 +86,12 @@ class LocalValetDriver extends BasicValetDriver
         // Racine du domaine : la page d'accueil de la plateforme (déploiement portail), sauf sur le domaine d'un commerce.
         if ($uri === '/' && is_file($sitePath . '/portail/index.php') && !$this->hostHasTenant($sitePath) && !getenv('TENANT')) {
             return $this->run($sitePath, '/accueil/index.php', $query);
+        }
+
+        // Connexion à l'administration d'une galerie : /galerie/<identifiant>/admin
+        if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/admin/?$#', $uri, $m)) {
+            $_GET['g'] = strtolower($m[1]);
+            return $this->run($sitePath, '/galerie/admin.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
         }
 
         // Galeries commerciales : /galerie/ et /galerie/<identifiant>/

@@ -252,6 +252,28 @@ function portail_nav_section(string $current, array $groups): string
  * Options : title, eyebrow, desc, desc_html, actions (HTML), tabs (tableau ou HTML),
  *           nav_html (HTML, remplace la navigation), section (fil d'Ariane).
  */
+/**
+ * Habillage de l'administrateur d'une galerie (mode restreint) : nom, logo et couleur d'accent de SA galerie plutôt que la marque
+ * du portail. -> ['name', 'logo', 'accent', 'ink', 'url'] ou null (exploitant, ou galerie introuvable).
+ */
+function portail_gallery_brand(): ?array
+{
+    if (!defined('GA_LIMITED')) return null;
+    $gallery = gallery_load((string) GA_LIMITED);
+    if (!$gallery) return null;
+    $accent = (string) ($gallery['accent'] ?? '');
+    $ink = '';
+    if (sscanf($accent, '#%02x%02x%02x', $r, $g, $b) === 3) $ink = (0.299 * $r + 0.587 * $g + 0.114 * $b) > 160 ? '#1c1a17' : '#ffffff';
+    else $accent = '';
+    return [
+        'name' => (string) $gallery['name'],
+        'logo' => trim((string) ($gallery['style']['logo'] ?? '')),
+        'accent' => $accent,
+        'ink' => $ink,
+        'url' => gallery_public_url($gallery),
+    ];
+}
+
 function portail_page_start(array $opts = []): void
 {
     $title = (string) ($opts['title'] ?? 'Administration');
@@ -262,6 +284,7 @@ function portail_page_start(array $opts = []): void
     $tabs = $opts['tabs'] ?? null;
     $navHtml = (string) ($opts['nav_html'] ?? '');
     $limited = defined('GA_LIMITED');
+    $brand = portail_gallery_brand();
     $current = portail_current_script();
     $groups = $limited ? [] : portail_nav_groups();
     $section = (string) ($opts['section'] ?? ($limited ? 'Galerie' : portail_nav_section($current, $groups)));
@@ -271,10 +294,19 @@ function portail_page_start(array $opts = []): void
     $user = (string) ($_SESSION['portail_user'] ?? '');
     ?>
 <script>(function(){document.body.classList.add('has-admin-shell');try{var t=localStorage.getItem('portail-theme');if(t){document.documentElement.dataset.theme=t;}}catch(e){}})();</script>
+<?php if ($brand && $brand['accent'] !== ''): // couleur de la galerie : thème clair seulement (en sombre, l'accent du portail garde un contraste lisible) ?>
+<style>
+  :root[data-theme="light"] { --accent: <?= e($brand['accent']) ?>; --accent-ink: <?= e($brand['ink']) ?>; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme]) { --accent: <?= e($brand['accent']) ?>; --accent-ink: <?= e($brand['ink']) ?>; } }
+  .pnav-mark.is-gallery { background: <?= e($brand['accent']) ?>; color: <?= e($brand['ink']) ?>; overflow: hidden; }
+  .pnav-mark.is-gallery img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
+  .pnav-brand-text b { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+<?php endif; ?>
 <aside class="pnav" id="pnav" aria-label="Navigation de l'administration">
-  <a class="pnav-brand" href="<?= $limited ? '/portail/galerie-compte.php' : '/portail/' ?>">
-    <span class="pnav-mark"><?= portail_icon($limited ? 'gallery' : 'store', 20) ?></span>
-    <span class="pnav-brand-text"><b>brocs</b><small><?= $limited ? 'Espace galerie' : 'Administration' ?></small></span>
+  <a class="pnav-brand" href="<?= $limited ? '/portail/galerie-tableau.php' : '/portail/' ?>">
+    <span class="pnav-mark<?= $brand ? ' is-gallery' : '' ?>"><?php if ($brand && $brand['logo'] !== ''): ?><img src="/<?= e($brand['logo']) ?>" alt=""><?php else: ?><?= portail_icon($limited ? 'gallery' : 'store', 20) ?><?php endif; ?></span>
+    <span class="pnav-brand-text"><b><?= e($brand['name'] ?? 'brocs') ?></b><small><?= $limited ? 'Espace galerie' : 'Administration' ?></small></span>
   </a>
 
   <div class="pnav-scroll">
@@ -304,7 +336,7 @@ function portail_page_start(array $opts = []): void
     <span class="pnav-env<?= $isLocal ? ' is-local' : '' ?>"><i aria-hidden="true"></i><?= $isLocal ? 'Local' : 'En ligne' ?></span>
     <div class="pnav-tools">
       <button type="button" class="pnav-tool" data-theme-toggle aria-label="Changer de thème" title="Thème clair / sombre"><?= portail_icon('moon', 16) ?></button>
-      <a class="pnav-tool" href="/" target="_blank" rel="noopener" aria-label="Voir le site" title="Voir le site"><?= portail_icon('globe', 16) ?></a>
+      <a class="pnav-tool" href="<?= e($brand['url'] ?? '/') ?>" target="_blank" rel="noopener" aria-label="<?= $brand ? 'Voir la galerie' : 'Voir le site' ?>" title="<?= $brand ? 'Voir la galerie' : 'Voir le site' ?>"><?= portail_icon('globe', 16) ?></a>
       <?php if ($user !== ''): ?>
         <a class="pnav-tool" href="/portail/logout.php" aria-label="Se déconnecter" title="Se déconnecter"><?= portail_icon('logout', 16) ?></a>
       <?php endif; ?>
@@ -322,7 +354,7 @@ function portail_page_start(array $opts = []): void
   <div class="pbar-tools">
     <span class="penv<?= $isLocal ? ' is-local' : '' ?>"><?= $isLocal ? 'Local' : 'En ligne' ?></span>
     <button type="button" class="picon" data-theme-toggle aria-label="Changer de thème" title="Thème clair / sombre"><?= portail_icon('moon', 18) ?></button>
-    <a class="picon" href="/" target="_blank" rel="noopener" aria-label="Voir le site" title="Voir le site"><?= portail_icon('globe', 18) ?></a>
+    <a class="picon" href="<?= e($brand['url'] ?? '/') ?>" target="_blank" rel="noopener" aria-label="<?= $brand ? 'Voir la galerie' : 'Voir le site' ?>" title="<?= $brand ? 'Voir la galerie' : 'Voir le site' ?>"><?= portail_icon('globe', 18) ?></a>
     <?php if ($user !== ''): ?>
       <span class="puser" title="Connecté en tant que <?= e($user) ?>"><?= e(mb_strtoupper(mb_substr($user, 0, 1))) ?></span>
       <a class="picon" href="/portail/logout.php" aria-label="Se déconnecter" title="Se déconnecter"><?= portail_icon('logout', 18) ?></a>

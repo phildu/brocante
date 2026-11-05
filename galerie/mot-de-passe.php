@@ -11,6 +11,8 @@ function ga_e($s): string
 }
 
 if (empty($_SESSION['ga_csrf'])) $_SESSION['ga_csrf'] = bin2hex(random_bytes(16));
+// Galerie d'où l'on vient (?g=), pour revenir sur SA page de connexion ; l'e-mail de réinitialisation, lui, vaut pour toutes les galeries du compte.
+$loginUrl = ga_login_url((string) ($_GET['g'] ?? $_POST['g'] ?? ''));
 $email = (string) ($_GET['e'] ?? $_POST['e'] ?? '');
 $exp = (int) ($_GET['x'] ?? $_POST['x'] ?? 0);
 $sig = (string) ($_GET['t'] ?? $_POST['t'] ?? '');
@@ -27,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = ga_reset_apply($email, $exp, $sig, (string) ($_POST['password'] ?? ''), (string) ($_POST['confirm'] ?? ''));
         if ($error === null) {
             $_SESSION['ga_notice'] = 'Mot de passe modifié : connectez-vous avec le nouveau.';
-            header('Location: /galerie/admin.php');
+            header('Location: ' . $loginUrl);
             exit;
         }
     } elseif (($_POST['action'] ?? '') === 'otp') {
@@ -38,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($error === '') {
                 unset($_SESSION['ga_otp']);
                 $_SESSION['ga_notice'] = 'Mot de passe modifié : connectez-vous avec le nouveau.';
-                header('Location: /galerie/admin.php');
+                header('Location: ' . $loginUrl);
                 exit;
             }
         }
@@ -90,7 +92,7 @@ http_response_code($error ? 400 : 200);
     <?= login_password_field_html(['name' => 'confirm', 'label' => 'Confirmer', 'autocomplete' => 'new-password', 'minlength' => 10]) ?>
     <button class="btn btn-primary login-submit" type="submit">Enregistrer</button>
   </form>
-  <p class="login-foot"><a href="/galerie/admin.php">← Retour à la connexion</a></p>
+  <p class="login-foot"><a href="<?= ga_e($loginUrl) ?>">← Retour à la connexion</a></p>
 <?php elseif ($otp): ?>
   <h1>Code par SMS</h1>
   <p class="hint">Saisissez le code reçu au <?= ga_e((string) ($otp['phone'] ?? '')) ?> et choisissez un nouveau mot de passe (10 minutes).</p>
@@ -102,14 +104,14 @@ http_response_code($error ? 400 : 200);
     'hidden' => ['csrf' => $_SESSION['ga_csrf'], 'action' => 'otp'],
     'minlength' => 10,
   ]) ?>
-  <p class="login-foot"><a href="?reset=1">Recevoir un nouveau code ou un lien e-mail</a> · <a href="/galerie/admin.php">← Retour à la connexion</a></p>
+  <p class="login-foot"><a href="?reset=1">Recevoir un nouveau code ou un lien e-mail</a> · <a href="<?= ga_e($loginUrl) ?>">← Retour à la connexion</a></p>
 <?php elseif ($sent): ?>
   <h1>Mot de passe oublié</h1>
   <p class="hint">Si cette adresse administre une galerie, un e-mail avec un lien (valable 1 heure) vient de lui être envoyé. Pensez à vérifier vos courriers indésirables.</p>
   <?php $gaHost = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')); if (!str_contains($gaHost, '.') || str_ends_with($gaHost, '.test') || filter_var($gaHost, FILTER_VALIDATE_IP)): ?>
     <p class="hint">En local, le message est recopié dans <code>data/mail-outbox.log</code> : ouvrez la <a href="/portail/journal-local.php?canal=mail">boîte locale</a> pour récupérer le lien.</p>
   <?php endif; ?>
-  <p class="login-foot"><a href="/galerie/admin.php">← Retour à la connexion</a></p>
+  <p class="login-foot"><a href="<?= ga_e($loginUrl) ?>">← Retour à la connexion</a></p>
 <?php else: ?>
   <h1>Mot de passe oublié</h1>
   <p class="hint">Indiquez votre identifiant, votre nom ou votre e-mail : recevez un lien par e-mail ou un code par SMS.</p>
@@ -121,7 +123,7 @@ http_response_code($error ? 400 : 200);
     'sms' => login_otp_sms_available(),
     'note' => 'Le code par SMS n\'est proposé que si un numéro est enregistré sur votre compte.',
   ]) ?>
-  <p class="login-foot"><a href="/galerie/admin.php">← Retour à la connexion</a></p>
+  <p class="login-foot"><a href="<?= ga_e($loginUrl) ?>">← Retour à la connexion</a></p>
 <?php endif; ?>
 </main>
 <script src="/assets/pwd-toggle.js" defer></script>

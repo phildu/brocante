@@ -139,10 +139,10 @@ $pre = (string) ($_GET['offre'] ?? $_POST['offre'] ?? 'test');
 
   <?php if ($done): ?>
     <div class="ok" role="status">
-      <?php if ($done['state'] === 'trial'): ?><strong>Votre galerie est créée.</strong> Vos accès viennent de vous être envoyés par e-mail : connectez-vous sur <a href="/galerie/admin.php">/galerie/admin.php</a>, choisissez vos commerces et publiez la page.
+      <?php if ($done['state'] === 'trial'): ?><strong>Votre galerie est créée.</strong> Vos accès viennent de vous être envoyés par e-mail : connectez-vous sur <a href="<?= e(ga_login_url($done['slug'])) ?>"><?= e(ga_login_url($done['slug'])) ?></a>, choisissez vos commerces et publiez la page.
       <?php elseif ($done['state'] === 'trial_nomail'): ?><strong>Votre galerie est créée</strong>, mais l'e-mail contenant vos accès n'a pas pu partir : contactez-nous pour les recevoir.
       <?php elseif ($done['state'] === 'updated'): ?><strong>Merci !</strong> Votre nouvelle offre est active : <a href="/portail/galerie-offre.php">voir mon offre</a>.
-      <?php else: ?><strong>Merci pour votre paiement !</strong> Votre galerie est créée et vos accès vous sont envoyés par e-mail. Connexion : <a href="/galerie/admin.php">/galerie/admin.php</a>.<?php endif; ?>
+      <?php else: ?><strong>Merci pour votre paiement !</strong> Votre galerie est créée et vos accès vous sont envoyés par e-mail. Connexion : <a href="<?= e(ga_login_url($done['slug'])) ?>"><?= e(ga_login_url($done['slug'])) ?></a>.<?php endif; ?>
     </div>
   <?php else: ?>
     <?php if ($message): ?><p class="info" role="status"><?= e($message) ?></p><?php endif; ?>

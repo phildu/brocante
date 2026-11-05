@@ -112,7 +112,7 @@ if (!$verified) {
 
 if ($ctx === 'gadmin') {            // administrateur de galerie : l'adresse doit être celle d'un administrateur existant
     if ($err = ga_login_social($email)) oauth_finish_fail($ctx, $err);
-    header('Location: /galerie/admin.php', true, 303);
+    header('Location: /galerie/admin.php', true, 303);   // reprend la galerie retenue au départ ($_SESSION['ga_target'], voir galerie/admin.php)
     exit;
 }
 if ($ctx === 'gcreate') {           // création de galerie : l'adresse vérifiée remplace la saisie ; creer.php reprend la demande mémorisée au départ

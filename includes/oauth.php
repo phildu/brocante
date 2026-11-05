@@ -239,7 +239,8 @@ function oauth_g_fail(string $ctx, string $message): never
         header('Location: /galerie/creer.php' . (preg_match('/^[a-z0-9_-]{1,30}$/', $type) ? '?type=' . rawurlencode($type) : ''), true, 303);
     } else {
         $_SESSION['ga_oauth_error'] = $message;
-        header('Location: /galerie/admin.php', true, 303);
+        require_once __DIR__ . '/gallery-admin.php';
+        header('Location: ' . ga_login_url((string) ($_SESSION['ga_target'] ?? '')), true, 303);
     }
     exit;
 }
