@@ -143,3 +143,107 @@ CREATE TABLE IF NOT EXISTS orders (
   items TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ===== Module « Invendus & dons » =====
+-- Copie de unsold_schema_sql() (includes/invendus.php), qui crée ces tables à la
+-- volée : le déploiement n'envoie ni brocante.db ni les *.sql. Garder synchronisé.
+
+CREATE TABLE IF NOT EXISTS unsold_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  event_date TEXT NOT NULL,                       -- AAAA-MM-JJ
+  location TEXT NOT NULL DEFAULT '',              -- lieu du vide-grenier
+  point_name TEXT NOT NULL DEFAULT 'Point de collecte',
+  point_details TEXT NOT NULL DEFAULT '',         -- où se trouve le point, comment le repérer
+  collect_start TEXT NOT NULL,                    -- AAAA-MM-JJ HH:MM (heure de Paris)
+  collect_end TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',           -- draft | published | closed
+  desk_token TEXT NOT NULL UNIQUE,                -- lien secret des bénévoles du point
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS unsold_recipients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  address TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  accepts TEXT NOT NULL DEFAULT '',               -- ce qu'ils acceptent (texte libre)
+  hours TEXT NOT NULL DEFAULT '',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS unsold_tours (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL,
+  volunteer_name TEXT NOT NULL,
+  volunteer_phone TEXT NOT NULL DEFAULT '',
+  vehicle TEXT NOT NULL DEFAULT 'Vélo cargo',
+  capacity INTEGER NOT NULL DEFAULT 12,           -- en « unités de volume » (petit=1, moyen=2, encombrant=4)
+  token TEXT NOT NULL UNIQUE,                     -- lien secret du bénévole
+  status TEXT NOT NULL DEFAULT 'planned',         -- planned | in_progress | done
+  started_at TEXT,
+  finished_at TEXT,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (event_id) REFERENCES unsold_events(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_unsold_tours_event ON unsold_tours(event_id);
+
+CREATE TABLE IF NOT EXISTS unsold_donations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL,
+  recipient_id INTEGER NOT NULL,
+  handed_by TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (event_id) REFERENCES unsold_events(id) ON DELETE CASCADE,
+  FOREIGN KEY (recipient_id) REFERENCES unsold_recipients(id)
+);
+CREATE INDEX IF NOT EXISTS idx_unsold_donations_event ON unsold_donations(event_id);
+
+CREATE TABLE IF NOT EXISTS unsold_offers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL,
+  token TEXT NOT NULL,                            -- lien de suivi du donateur (partagé par ses propositions)
+  donor_name TEXT NOT NULL,
+  donor_email TEXT NOT NULL DEFAULT '',
+  donor_phone TEXT NOT NULL DEFAULT '',
+  stand_ref TEXT NOT NULL DEFAULT '',             -- emplacement dans le vide-grenier
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT 'autre',
+  quantity INTEGER NOT NULL DEFAULT 1,
+  size TEXT NOT NULL DEFAULT 'M',                 -- S | M | L : volume de l'ensemble
+  photo TEXT,
+  handover TEXT NOT NULL DEFAULT 'self',          -- self (j'apporte) | pickup (à récupérer à mon stand)
+  pickup_note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'proposed',        -- proposed | picked | at_point | taken | donated | withdrawn
+  confirmed_at TEXT,                              -- le donateur a confirmé « c'est bien un invendu »
+  tour_id INTEGER,
+  donation_id INTEGER,
+  admin_note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (event_id) REFERENCES unsold_events(id) ON DELETE CASCADE,
+  FOREIGN KEY (tour_id) REFERENCES unsold_tours(id) ON DELETE SET NULL,
+  FOREIGN KEY (donation_id) REFERENCES unsold_donations(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_unsold_offers_event_status ON unsold_offers(event_id, status);
+CREATE INDEX IF NOT EXISTS idx_unsold_offers_token ON unsold_offers(token);
+CREATE INDEX IF NOT EXISTS idx_unsold_offers_tour ON unsold_offers(tour_id);
+
+CREATE TABLE IF NOT EXISTS unsold_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  offer_id INTEGER NOT NULL,
+  event_id INTEGER NOT NULL,
+  at TEXT NOT NULL,
+  actor TEXT NOT NULL,                            -- admin | tour | desk | donor
+  from_status TEXT,
+  to_status TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  FOREIGN KEY (offer_id) REFERENCES unsold_offers(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_unsold_log_offer ON unsold_log(offer_id);
