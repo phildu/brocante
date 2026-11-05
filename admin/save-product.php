@@ -101,6 +101,14 @@ if (isset($_POST['restock_form'])) {
         'restock_price' => price_from_input($_POST['restock_price'] ?? '') ?: null,
     ];
 }
+// Rangement interne et délai de récupération estimé (voir product_pickup_line_html()).
+if (isset($_POST['pickup_form'])) {
+    $set .= ', storage_location = :storage_location, pickup_delay_minutes = :pickup_delay_minutes';
+    $params += [
+        'storage_location' => mb_substr(trim((string) ($_POST['storage_location'] ?? '')), 0, 80) ?: null,
+        'pickup_delay_minutes' => max(0, min(10080, (int) ($_POST['pickup_delay_minutes'] ?? 0))),
+    ];
+}
 if ($photoPath) {
     $set .= ', photo = :photo';
     $params['photo'] = $photoPath;

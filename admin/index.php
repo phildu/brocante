@@ -653,15 +653,23 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
 
       <?php
         $smsProv = sms_provider_name();
-        $smsOvh = sms_ovh_config();
+        $smsOvh = sms_ovh_config();                   // effectif, héritage du portail compris
+        $smsOvhOwn = sms_ovh_config(SMS_SOURCE_SHOP); // saisi dans cette boutique seulement
         $smsTw = sms_twilio_config();
-        $smsChosen = strtolower(sms_setting('sms_provider', 'SMS_PROVIDER'));
+        $smsTwOwn = sms_twilio_config(SMS_SOURCE_SHOP);
+        $smsChosen = strtolower((string) sms_source_setting('sms_provider', 'SMS_PROVIDER', '', SMS_SOURCE_SHOP));
         $smsFrom = $smsProv === 'ovh' ? $smsOvh['from'] : ($smsProv === 'twilio' ? $smsTw['from'] : '');
+        $smsOwn = sms_ovh_ready($smsOvhOwn) || sms_twilio_ready($smsTwOwn);
+        // Un champ vide reste vide (il hérite du portail) : l'indice montre la valeur reprise.
+        $smsTextPh = static fn (string $own, string $inherited): string => $own === '' && $inherited !== '' ? 'Hérité du portail : ' . $inherited : '';
+        $smsSecretPh = static fn (string $own, string $inherited): string => $own !== '' ? 'Déjà enregistré ici' : ($inherited !== '' ? 'Déjà enregistré sur le portail' : '');
+        $smsCredit = sms_credit_account(tenant_slug());
       ?>
       <form class="admin-block" method="post" action="/admin/save-sms.php" id="sms-settings" data-panel="general">
         <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
         <h2>SMS : OVH ou Twilio</h2>
         <p class="hint">Les numéros reçoivent le code de connexion, les annonces des actions commerciales et les alertes de l'assistance vendeur. Choisissez le fournisseur et saisissez ses identifiants ; un mot de passe ou un jeton laissé vide conserve la valeur enregistrée. Les autres champs se vident quand vous les videz.</p>
+        <p class="hint">Pour un même compte sur toutes les boutiques, réglez-le une fois dans les <a href="/portail/sms.php">réglages SMS du portail</a>. Ce qui est saisi ici ne vaut que pour cette boutique et reste prioritaire ; un champ laissé vide reprend la valeur du portail.</p>
         <div class="field">
           <label>Fournisseur</label>
           <select name="sms_provider">
@@ -672,45 +680,55 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
         </div>
         <p class="publish-status" data-kind="<?= $smsProv !== '' ? '' : 'error' ?>">
           <?= $smsProv !== ''
-            ? 'Prêt : ' . h(sms_provider_label()) . ' — expéditeur « ' . h($smsFrom) . ' ».'
+            ? 'Prêt : ' . h(sms_provider_label()) . ' — expéditeur « ' . h($smsFrom) . ' »' . ($smsOwn ? ' (identifiants de cette boutique).' : ' (identifiants hérités du portail).')
             : 'Aucun fournisseur complet : les envois de SMS restent bloqués (en local, les messages sont écrits dans data/sms-outbox.log).' ?>
+        </p>
+        <p class="hint">
+          <?php if (!$smsCredit['enabled']): ?>
+            <strong>SMS sans limite :</strong> les envois de cette boutique ne sont pas décomptés.
+          <?php elseif ($smsCredit['left'] > 0): ?>
+            <strong>Crédit SMS :</strong> <?= number_format($smsCredit['left'], 0, ',', ' ') ?> SMS restants sur <?= number_format($smsCredit['purchased'], 0, ',', ' ') ?> achetés.
+          <?php else: ?>
+            <strong>Crédit SMS épuisé :</strong> les envois sont suspendus jusqu'au rachat d'un pack.
+          <?php endif; ?>
+          <a href="/admin/sms-credits.php">Solde, packs et historique →</a>
         </p>
         <h3 style="margin-top:18px;">OVH</h3>
         <p class="hint">Identifiants OVH (espace client → Télécom → SMS) : le compte <code>sms-xxxxx-1</code>, l'utilisateur SMS et son mot de passe, puis l'expéditeur déclaré — 11 caractères alphanumériques au plus, affiché sur le téléphone du destinataire. L'adresse IP du serveur doit être autorisée sur le compte SMS, sinon OVH répond « unauthorized IP ».</p>
         <div class="field-row-2">
           <div class="field">
             <label>Compte SMS</label>
-            <input type="text" name="ovh_sms_account" value="<?= h($smsOvh['account']) ?>" autocomplete="off" placeholder="sms-xxxxx-1">
+            <input type="text" name="ovh_sms_account" value="<?= h($smsOvhOwn['account']) ?>" autocomplete="off" placeholder="<?= h($smsTextPh($smsOvhOwn['account'], $smsOvh['account']) ?: 'sms-xxxxx-1') ?>">
           </div>
           <div class="field">
             <label>Identifiant</label>
-            <input type="text" name="ovh_sms_login" value="<?= h($smsOvh['login']) ?>" autocomplete="off">
+            <input type="text" name="ovh_sms_login" value="<?= h($smsOvhOwn['login']) ?>" autocomplete="off" placeholder="<?= h($smsTextPh($smsOvhOwn['login'], $smsOvh['login'])) ?>">
           </div>
         </div>
         <div class="field-row-2">
           <div class="field">
             <label>Mot de passe</label>
-            <input type="password" name="ovh_sms_password" autocomplete="new-password" placeholder="<?= $smsOvh['password'] !== '' ? 'Déjà enregistré' : '' ?>">
+            <input type="password" name="ovh_sms_password" autocomplete="new-password" placeholder="<?= h($smsSecretPh($smsOvhOwn['password'], $smsOvh['password'])) ?>">
           </div>
           <div class="field">
             <label>Expéditeur affiché</label>
-            <input type="text" name="ovh_sms_from" value="<?= h($smsOvh['from']) ?>" maxlength="11" autocomplete="off" placeholder="Ma boutique">
+            <input type="text" name="ovh_sms_from" value="<?= h($smsOvhOwn['from']) ?>" maxlength="15" autocomplete="off" placeholder="<?= h($smsTextPh($smsOvhOwn['from'], $smsOvh['from']) ?: 'Ma boutique') ?>">
           </div>
         </div>
         <h3 style="margin-top:18px;">Twilio</h3>
         <div class="field-row-2">
           <div class="field">
             <label>Account SID</label>
-            <input type="text" name="twilio_sid" value="<?= h($smsTw['sid']) ?>" autocomplete="off" placeholder="AC...">
+            <input type="text" name="twilio_sid" value="<?= h($smsTwOwn['sid']) ?>" autocomplete="off" placeholder="<?= h($smsTextPh($smsTwOwn['sid'], $smsTw['sid']) ?: 'AC...') ?>">
           </div>
           <div class="field">
             <label>Numéro expéditeur</label>
-            <input type="text" name="twilio_from" value="<?= h($smsTw['from']) ?>" autocomplete="off" placeholder="+33...">
+            <input type="text" name="twilio_from" value="<?= h($smsTwOwn['from']) ?>" autocomplete="off" placeholder="<?= h($smsTextPh($smsTwOwn['from'], $smsTw['from']) ?: '+33...') ?>">
           </div>
         </div>
         <div class="field">
           <label>Auth token</label>
-          <input type="password" name="twilio_token" autocomplete="new-password" placeholder="<?= $smsTw['token'] !== '' ? 'Déjà enregistré' : '' ?>">
+          <input type="password" name="twilio_token" autocomplete="new-password" placeholder="<?= h($smsSecretPh($smsTwOwn['token'], $smsTw['token'])) ?>">
         </div>
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer les réglages SMS</button>
       </form>

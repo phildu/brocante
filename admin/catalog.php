@@ -367,6 +367,19 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                     <p class="hint" style="margin:4px 0 0;">1 = pièce seule. Au-delà, la fiche indique « Lot de N pièces » : le prix saisi est celui du lot entier, et le stock compte des lots.</p>
                   </div>
                 </div>
+                <div class="field-row-3">
+                  <div class="field pm-span2">
+                    <label>Rangement de l'article</label>
+                    <input type="hidden" name="pickup_form" value="1">
+                    <input type="text" name="storage_location" maxlength="80" value="<?= h($p['storage_location'] ?? '') ?>" placeholder="ex : carton 12 · étagère B">
+                    <p class="hint" style="margin:4px 0 0;">Interne : jamais affiché au client. Rappelé sur les commandes pour retrouver la pièce à la préparation.</p>
+                  </div>
+                  <div class="field">
+                    <label>Délai de récupération estimé</label>
+                    <input type="number" name="pickup_delay_minutes" min="0" max="10080" step="5" value="<?= (int) ($p['pickup_delay_minutes'] ?? 0) ?>">
+                    <p class="hint" style="margin:4px 0 0;">En minutes (0 = non précisé). Ex. : 15. La fiche affiche « Prêt au retrait sous 15 min ».</p>
+                  </div>
+                </div>
                 <div class="field">
                   <label>Canaux de vente</label>
                   <input type="hidden" name="channels_form" value="1">

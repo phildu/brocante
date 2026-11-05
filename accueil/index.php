@@ -108,10 +108,10 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
   <h1><?= $e($homeTitle) ?></h1>
   <p class="lede"><?= $e($homeLede) ?></p>
   <div class="actions">
-    <a class="btn light" href="/inscription/">Je veux vendre en ligne</a>
-    <a class="btn ghost" href="/galerie/creer.php">Organiser un marché ou une galerie</a>
-    <a class="btn ghost" href="/portail/login.php">Se connecter</a>
-    <a class="btn ghost" href="#parcours">Que souhaitez-vous faire ?</a>
+    <a class="btn light" href="/inscription/"<?= cta_attrs('home_hero_primary') ?>><?= $e(cta_label('home_hero_primary')) ?></a>
+    <a class="btn ghost" href="/galerie/creer.php"<?= cta_attrs('home_hero_gallery') ?>><?= $e(cta_label('home_hero_gallery')) ?></a>
+    <a class="btn ghost" href="/portail/login.php"<?= cta_attrs('home_hero_login') ?>><?= $e(cta_label('home_hero_login')) ?></a>
+    <a class="btn ghost" href="#parcours"<?= cta_attrs('home_hero_help') ?>><?= $e(cta_label('home_hero_help')) ?></a>
   </div>
   <ul class="stats">
     <li><strong><?= count($shops) ?></strong>commerce<?= count($shops) > 1 ? 's' : '' ?></li>
@@ -167,7 +167,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
           <p><?= $e($t['tagline']) ?></p>
           <ul class="chips" aria-label="Fonctionnalités"><?php foreach (GT_FEATURES as $fk => $fl): if (!empty($t['features'][$fk])): ?><li><?= $e(explode(' (', $fl)[0]) ?></li><?php endif; endforeach; ?></ul>
           <p class="price">Pour des <b><?= $e($t['vocab']['members']) ?></b><br><?= $test && $test['active'] ? 'Test gratuit ' . (int) $test['trial_days'] . ' jours' : '' ?><?= $from ? ($test && $test['active'] ? ' · puis ' : '') . 'dès <b>' . $e($eur($from)) . '</b> / mois' : '' ?></p>
-          <a class="btn" href="/galerie/creer.php?type=<?= $e($tk) ?>"><?= $e($t['vocab']['create_cta']) ?></a>
+          <a class="btn" href="/galerie/creer.php?type=<?= $e($tk) ?>"<?= cta_attrs('home_type_create', (string) $t['vocab']['create_cta']) ?>><?= $e(cta_label('home_type_create', (string) $t['vocab']['create_cta'])) ?></a>
         </article>
         <?= gt_landing_preview_html((string) $tk, (string) $t['tagline'], 'Aperçu ' . $t['name']) ?>
       </div>
@@ -186,7 +186,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
     </tbody>
   </table></div>
   <?php endif; ?>
-  <div class="cta-band" style="margin-top:32px"><h2>Pas sûr du type ?</h2><p>Commencez par le test gratuit : vous pourrez changer de type et d'offre plus tard, sur simple demande.</p><a class="btn" href="/galerie/creer.php">Voir tous les types et créer</a></div>
+  <div class="cta-band" style="margin-top:32px"><h2>Pas sûr du type ?</h2><p>Commencez par le test gratuit : vous pourrez changer de type et d'offre plus tard, sur simple demande.</p><a class="btn" href="/galerie/creer.php"<?= cta_attrs('home_types_cta') ?>><?= $e(cta_label('home_types_cta')) ?></a></div>
 </div></section>
 
 <?php if ($recruiting): ?>
@@ -271,7 +271,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
   <div class="cta-band">
     <h2>Prêt à commencer ?</h2>
     <p>Une boutique pour vendre, ou un lieu à organiser : lancez-vous en quelques minutes.</p>
-    <a class="btn" href="/inscription/">Je veux vendre en ligne</a> <a class="btn ghost" style="border-color:var(--accent);color:var(--accent)" href="/galerie/creer.php">Organiser un marché ou une galerie</a>
+    <a class="btn" href="/inscription/"<?= cta_attrs('home_final_primary') ?>><?= $e(cta_label('home_final_primary')) ?></a> <a class="btn ghost" style="border-color:var(--accent);color:var(--accent)" href="/galerie/creer.php"<?= cta_attrs('home_final_gallery') ?>><?= $e(cta_label('home_final_gallery')) ?></a>
   </div>
 </div>
 <?= banner_slides_script() ?>

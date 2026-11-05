@@ -55,7 +55,7 @@ function admin_menu_default_order(): array
         'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
         'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal'],
         'boutique' => ['presence', 'galeries', 'apparence', 'social', 'domaine'],
-        'reglages' => ['ia', 'plugins', 'menu', 'sync', 'reglages-general', 'reglages-pages', 'reglages-paiement', 'profil'],
+        'reglages' => ['ia', 'sms', 'plugins', 'menu', 'sync', 'reglages-general', 'reglages-pages', 'reglages-paiement', 'profil'],
         'extensions' => [],
     ];
 }
@@ -124,6 +124,7 @@ function admin_menu_icons(): array
         'cloud' => '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1-.5 9.5z"/><path d="M12 16v-5M9.5 13.5 12 11l2.5 2.5"/>',
         'collapse' => '<path d="m15 18-6-6 6-6"/>',
         'menu' => '<path d="M4 6h16M4 12h16M4 18h16"/>',
+        'message' => '<path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4V6a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 13h5"/>',
         'puzzle' => '<path d="M10 3h4v2.5a1.5 1.5 0 0 0 3 0V3h4v7h-2.5a1.5 1.5 0 0 0 0 3H21v8h-7v-2.5a1.5 1.5 0 0 0-3 0V21H3v-8h2.5a1.5 1.5 0 0 0 0-3H3V3z"/>',
     ];
 }
@@ -160,6 +161,7 @@ function admin_menu_core_items(): array
         'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
         'social' => ['/admin/social.php', 'API & réseaux', 'user'],
         'ia' => ['/admin/ai-usage.php', 'Consommation IA', 'receipt'],
+        'sms' => ['/admin/sms-credits.php', 'Crédits SMS', 'message'],
         'hero' => ['/admin/hero.php', 'Diaporama hero', 'image'],
         'slideshow' => ['/admin/slideshow.php', 'Diaporama boutique', 'play'],
         'banners' => ['/admin/banners.php', 'Bandeaux de page', 'banner'],

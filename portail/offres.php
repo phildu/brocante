@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $url = rtrim(trim((string) ($_POST['url'] ?? '')), '/');
         if (!gallery_remote_url_valid($url)) { portail_flash('Adresse non valide : une adresse http(s) publique, par exemple https://brocante.arrimage.com', 'error'); }
         elseif (in_array($url, array_column($cfg['remote'], 'url'), true)) { portail_flash('Ce commerce est déjà dans l\'annuaire.', 'error'); }
-        elseif (!($feed = catalogue_remote($url))) { portail_flash("Cette adresse ne répond pas avec un catalogue ($url/catalogue.php) : le commerce doit être à jour de la plateforme.", 'error'); }
+        elseif (!($feed = catalogue_remote($url))) { portail_flash("Cette adresse ne répond ni avec un catalogue Brocs ni avec un catalogue Shopify, WooCommerce ou PrestaShop lisible : le commerce doit être en ligne et son catalogue accessible.", 'error'); }
         else {
             $cfg['remote'][] = ['name' => trim((string) ($_POST['name'] ?? '')) ?: (string) ($feed['shop']['name'] ?? $url), 'url' => $url];
             saas_config_save($cfg);

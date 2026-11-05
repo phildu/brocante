@@ -189,6 +189,12 @@ SQL);
                 $pdo->exec('ALTER TABLE products ADD COLUMN ' . $extraColumn . ' ' . $extraType);
             }
         }
+        // Rangement interne et délai de récupération estimé (voir product_pickup_line_html()).
+        foreach (['storage_location' => 'TEXT', 'pickup_delay_minutes' => 'INTEGER NOT NULL DEFAULT 0'] as $extraColumn => $extraType) {
+            if ($productColumns && !in_array($extraColumn, $productColumns, true)) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN ' . $extraColumn . ' ' . $extraType);
+            }
+        }
         // Marque et distributeur de l'article (fiche, recherche, page publique).
         foreach (['brand', 'distributor', 'colors'] as $extraColumn) {
             if ($productColumns && !in_array($extraColumn, $productColumns, true)) {

@@ -59,7 +59,13 @@ $requestOf = static function (array $o): ?array {
     return null;
 };
 
-if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'] ?? '') === 'ai_credit')) {
+if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'] ?? '') === 'sms_credit')) {
+    // Rachat de crédit SMS d'une boutique (admin/sms-credit-action.php) : crédit ajouté une seule fois, même si la page de retour est déjà passée.
+    require_once dirname(__DIR__) . '/includes/sms-credits.php';
+    $res = sms_credit_apply_session($obj);
+    if ($res['state'] === 'added') saas_event('sms_credit_purchased', ['slug' => $res['slug'], 'amount' => $res['amount'] ?? 0, 'note' => 'Pack ' . ($res['pack'] ?? '') . ' : ' . (int) $res['sms'] . ' SMS', 'actor' => 'stripe']);
+    error_log('webhook stripe sms_credit ' . ($res['slug'] ?? '?') . ' → ' . $res['state']);
+} elseif ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'] ?? '') === 'ai_credit')) {
     // Rachat de crédit IA d'une boutique (admin/ai-credit-action.php) : crédit ajouté une seule fois, même si la page de retour est déjà passée.
     $res = saas_ai_credit_apply_session($obj);
     if ($res['state'] === 'added') saas_event('ai_credit_purchased', ['slug' => $res['slug'], 'amount' => $res['amount'] ?? 0, 'note' => 'Pack ' . ($res['pack'] ?? '') . ' : ' . number_format($res['credit_eur'], 2, ',', '') . ' € de crédit IA', 'actor' => 'stripe']);

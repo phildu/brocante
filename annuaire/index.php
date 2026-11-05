@@ -42,7 +42,7 @@ saas_page_start('Annuaire des commerces — ' . $cfg['name'], 'Tous les commerce
           </span>
           <?php if ($s['preview']): ?><span class="thumbs" aria-hidden="true"><?php foreach (array_slice($s['preview'], 0, 4) as $img): ?><span style="background-image:url('<?= saas_e($img) ?>')"></span><?php endforeach; ?></span><?php endif; ?>
           <?php if ($s['universes']): ?><span class="pills"><?php foreach (array_slice($s['universes'], 0, 4) as $u): ?><span><?= saas_e($u) ?></span><?php endforeach; ?></span><?php endif; ?>
-          <span class="more">Visiter la boutique →</span>
+          <span class="more"><?= !empty($s['external']) ? 'Voir le site' : 'Visiter la boutique' ?> →</span>
         </a>
       <?php endforeach; ?>
     </div>
@@ -50,6 +50,6 @@ saas_page_start('Annuaire des commerces — ' . $cfg['name'], 'Tous les commerce
     <p class="empty"><?= $q !== '' || $cat !== '' ? 'Aucun commerce ne correspond à cette recherche.' : 'Aucun commerce dans l\'annuaire pour le moment.' ?></p>
   <?php endif; ?>
 
-  <div class="cta-band"><h2>Votre commerce n'est pas encore là ?</h2><p>Créez votre boutique en ligne et apparaissez dans l'annuaire.</p><a class="btn" href="/inscription/">Je veux vendre en ligne</a></div>
+  <div class="cta-band"><h2>Votre commerce n'est pas encore là ?</h2><p>Créez votre boutique en ligne et apparaissez dans l'annuaire. Vous avez déjà un site ? Inscrivez-le tel quel.</p><a class="btn" href="/inscription/"<?= cta_attrs('annuaire_cta') ?>><?= saas_e(cta_label('annuaire_cta')) ?></a> <a class="btn ghost" href="/annuaire/inscrire.php">J'ai déjà un site</a></div>
 </div>
 <?php saas_page_end(); ?>

@@ -27,6 +27,7 @@ if ($navOn('messages')) {
 if ($navOn('tableau')) $navBtn('galerie-tableau.php', 'Tableau de bord');
 if ($navOn('prospects')) $navBtn('galerie-prospects.php', 'Prospects');
 if ($navOn('fidelite')) $navBtn('galerie-fidelite.php', 'Fidélité visiteurs');
+$navBtn('galerie-promos.php', 'Promos');
 $navBtn('galerie-assistant.php', 'Assistant');
 $navBtn('galerie-offre.php', 'Mon offre');
 if ($navG && function_exists('gm_modules')) $navBtn('galerie-modules.php', 'Options');

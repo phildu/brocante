@@ -11,6 +11,7 @@ require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/promo.php';
 require_once __DIR__ . '/../includes/banner-slides.php';
 require_once __DIR__ . '/../includes/gallery-types.php';
+require_once __DIR__ . '/../includes/cta.php';
 
 function e($s): string
 {
@@ -319,7 +320,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <p class="hero-share"><?= share_button_html($origin . '/galerie/', 'Galeries commerciales', "Des commerçants réunis au même endroit.") ?>
       <a class="alt" href="/galerie/admin.php" rel="nofollow" style="margin-left:14px;">Se connecter</a></p>
     <?php if ($canSignup): ?>
-      <p class="hero-cta"><a class="btn-cta" href="/inscription/">Je veux vendre en ligne</a>
+      <p class="hero-cta"><a class="btn-cta" href="/inscription/"<?= cta_attrs('galerie_hero_cta') ?>><?= e(cta_label('galerie_hero_cta')) ?></a>
         <span class="from"><?= e(saas_grid_from_text(saas_grid(''))) ?> · sans engagement</span><a class="alt" href="/#formules">Voir les tarifs</a></p>
     <?php endif; ?>
   </div></header>
@@ -722,8 +723,9 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
 
     <?php if ($shops): ?>
     <?php
-      // Promotions : les visuels promo (photo + encart CTA) des commerces membres ; chaque affichage et chaque clic est compté (monétisation de la mise en avant).
-      $promoItems = array_slice(array_values(array_filter($data['products'], static fn (array $p): bool => ($p['promo_visual'] ?? '') !== '')), 0, 6);
+      // Promotions : articles retenus par la galerie (à la main, application de prise de vue ou connecteur) et visuels promo des commerces membres.
+      // Chaque affichage et chaque clic est compté (monétisation de la mise en avant).
+      $promoItems = gallery_promos_merge($data['products'], $gallery['promos'] ?? []);
       $promoTrack = $gallery['published'];   // l'aperçu d'une galerie non publiée n'est pas compté
     ?>
     <?php if ($promoItems): ?>
@@ -733,12 +735,27 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
         <?php foreach ($promoItems as $p):
           $placement = 'galerie:' . $gallery['slug'];
           $tok = promo_token((string) $p['shop'], (string) $p['ref'], $placement);
-          $href = $promoTrack ? '/galerie/clic.php?g=' . rawurlencode($gallery['slug']) . '&s=' . rawurlencode((string) $p['shop']) . '&r=' . rawurlencode((string) $p['ref']) . '&t=' . $tok : $p['url'];
-          $alt = $p['name'] . ' — ' . $p['promo_price'] . ' au lieu de ' . $p['price'] . ', chez ' . ($shops[$p['shop']]['name'] ?? '') . '. ' . ($p['promo_cta'] ?: 'Voir l\'offre');
+          $trackable = $promoTrack && !empty($p['tracked']);
+          $href = $trackable ? '/galerie/clic.php?g=' . rawurlencode($gallery['slug']) . '&s=' . rawurlencode((string) $p['shop']) . '&r=' . rawurlencode((string) $p['ref']) . '&t=' . $tok : $p['url'];
+          $shopName = ($p['shop_name'] ?? '') !== '' ? (string) $p['shop_name'] : ($shops[$p['shop']]['name'] ?? '');
+          $alt = $p['name'] . ' — ' . ($p['promo_price'] !== '' ? $p['promo_price'] . ' au lieu de ' . $p['price'] : $p['price']) . ($shopName !== '' ? ', chez ' . $shopName : '') . '. ' . ($p['cta'] ?: 'Voir l\'offre');
+          $track = $trackable ? ' data-promo-track data-promo-shop="' . e($p['shop']) . '" data-promo-ref="' . e($p['ref']) . '" data-promo-placement="' . e($placement) . '" data-promo-token="' . e($tok) . '"' : '';
         ?>
-          <a class="promo-visual" href="<?= e($href) ?>"<?= $promoTrack ? ' data-promo-track data-promo-shop="' . e($p['shop']) . '" data-promo-ref="' . e($p['ref']) . '" data-promo-placement="' . e($placement) . '" data-promo-token="' . e($tok) . '"' : '' ?>>
-            <picture><?php if ($p['promo_visual_mobile'] !== ''): ?><source media="(max-width: 700px)" srcset="<?= e($p['promo_visual_mobile']) ?>"><?php endif; ?><img src="<?= e($p['promo_visual']) ?>" alt="<?= e($alt) ?>" loading="lazy"></picture>
-          </a>
+          <?php if (!empty($p['fallback'])): ?>
+            <a class="promo-card" href="<?= e($href) ?>"<?= $track ?>>
+              <span class="promo-card-photo"><?php if ($p['photo'] !== ''): ?><img src="<?= e($p['photo']) ?>" alt="" loading="lazy" onerror="this.remove()"><?php else: ?><b aria-hidden="true"><?= e(mb_strtoupper(mb_substr($p['name'], 0, 1))) ?></b><?php endif; ?></span>
+              <span class="promo-card-body">
+                <?php if ($shopName !== ''): ?><span class="promo-card-shop"><?= e($shopName) ?></span><?php endif; ?>
+                <span class="promo-card-name"><?= e($p['name']) ?></span>
+                <span class="promo-card-price"><?php if ($p['promo_price'] !== ''): ?><strong><?= e($p['promo_price']) ?></strong> <s><?= e($p['price']) ?></s><?php else: ?><strong><?= e($p['price'] ?: 'Voir le prix') ?></strong><?php endif; ?></span>
+                <span class="promo-card-cta"><?= e($p['cta'] ?: 'Voir l’offre') ?> →</span>
+              </span>
+            </a>
+          <?php else: ?>
+            <a class="promo-visual" href="<?= e($href) ?>"<?= $track ?>>
+              <picture><?php if ($p['promo_visual_mobile'] !== ''): ?><source media="(max-width: 700px)" srcset="<?= e($p['promo_visual_mobile']) ?>"><?php endif; ?><img src="<?= e($p['promo_visual']) ?>" alt="<?= e($alt) ?>" loading="lazy"></picture>
+            </a>
+          <?php endif; ?>
         <?php endforeach; ?>
       </div>
     </section>
@@ -845,10 +862,10 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       <li>Vous arrivez directement sur votre boutique, à votre image (modèle au choix)</li>
       <li>Photos depuis le téléphone, fiches préparées par l'IA</li></ul>
   </div>
-  <div class="act"><a class="btn-cta" href="<?= e($ctaUrl) ?>">Je veux vendre en ligne</a>
+  <div class="act"><a class="btn-cta" href="<?= e($ctaUrl) ?>"<?= cta_attrs('galerie_band_cta') ?>><?= e(cta_label('galerie_band_cta')) ?></a>
     <span class="from"><?= e(saas_grid_from_text(saas_grid($slug))) ?> · mensuel ou annuel · sans engagement</span></div>
 </div></section>
-<a class="cta-float" href="<?= e($ctaUrl) ?>">Je veux vendre en ligne</a>
+<a class="cta-float" href="<?= e($ctaUrl) ?>"<?= cta_attrs('galerie_float_cta') ?>><?= e(cta_label('galerie_float_cta')) ?></a>
 <?php endif; ?>
 
 <?php if ($slug !== '' && $gallery && $gallery['published']): ?>
@@ -872,7 +889,7 @@ fetch('/galerie/contact.php',{method:'POST',headers:{Accept:'application/json'},
 <section style="max-width:640px;margin:36px auto 0;padding:0 16px;text-align:center;">
   <h2 style="margin:0 0 6px;font-size:1.2rem;">Vous voulez créer votre propre galerie ?</h2>
   <p style="margin:0 0 12px;color:var(--ink-soft);">Test gratuit, puis abonnement selon le nombre de commerces.</p>
-  <a class="btn-cta" href="/galerie/creer.php">Créer ma galerie</a>
+  <a class="btn-cta" href="/galerie/creer.php"<?= cta_attrs('galerie_create_cta') ?>><?= e(cta_label('galerie_create_cta')) ?></a>
 </section>
 <?php endif; ?>
 
@@ -885,5 +902,6 @@ fetch('/galerie/contact.php',{method:'POST',headers:{Accept:'application/json'},
 </div></footer>
 <?= banner_slides_script() ?>
 <?= gt_landing_preview_assets() ?>
+<script src="/assets/cta-track.js?v=1" defer></script>
 </body>
 </html>

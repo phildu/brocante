@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS products (
   restock_possible INTEGER NOT NULL DEFAULT 0, -- réassort possible (délai et prix affichés sur la fiche)
   restock_delay TEXT, -- délai de réassort (« 10 jours », « 2 semaines »…)
   restock_price TEXT, -- prix d'un réassort (facultatif)
+  storage_location TEXT, -- rangement interne de la pièce (« carton 12 · étagère B »), jamais affiché au client
+  pickup_delay_minutes INTEGER NOT NULL DEFAULT 0, -- délai de récupération estimé, en minutes (0 = non précisé)
   keep_when_sold INTEGER NOT NULL DEFAULT 0, -- 1 : la pièce reste au catalogue (badge « Vendue ») une fois vendue
   lot_qty INTEGER NOT NULL DEFAULT 1, -- vente en lot : nombre de pièces vendues ensemble au prix affiché (1 = pièce seule)
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

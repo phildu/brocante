@@ -1,9 +1,9 @@
 <?php
 
-// Lance les scénarios e2e S1–S9 sur une copie isolée de l'application.
+// Lance les scénarios e2e S1–S11 sur une copie isolée de l'application.
 // Usage : php tests/e2e/run.php [--keep] [--scenario=S3]
 //   --keep       conserve le workspace /tmp/brocs-e2e (serveurs arrêtés)
-//   --scenario   n'exécute qu'un scénario (S1…S9)
+//   --scenario   n'exécute qu'un scénario (S1…S11)
 
 declare(strict_types=1);
 
@@ -119,7 +119,7 @@ $pdo->prepare("INSERT INTO products (ref, name, cat, price, stock, weight_grams,
 echo "Fixtures en place.\n";
 
 // ── Scénarios ───────────────────────────────────────────────────────────────
-$all = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
+$all = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11'];
 foreach ($all as $code) {
     if ($only && $only !== $code) continue;
     $file = __DIR__ . '/scenarios/' . $code . '.php';

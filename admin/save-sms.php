@@ -25,7 +25,7 @@ $warn = '';
 foreach ($fields as $name) {
     $value = trim((string) ($_POST[$name] ?? ''));
     if ($value === '' && in_array($name, $secrets, true)) continue;
-    if ($name === 'ovh_sms_from' && $value !== '' && !preg_match('/^([A-Za-z0-9]{1,11}|\d{1,15})$/', $value)) {
+    if ($name === 'ovh_sms_from' && $value !== '' && !sms_sender_valid($value)) {
         $warn = ' Expéditeur OVH refusé : 11 caractères alphanumériques au plus (ou 15 chiffres) — l\'ancienne valeur est conservée.';
         continue;
     }
@@ -34,9 +34,12 @@ foreach ($fields as $name) {
 shop_setting_set('sms_provider', $provider);
 
 $label = sms_provider_label();
-flash_set($label !== ''
-    ? 'SMS : fournisseur ' . $label . ' enregistré et complet.' . $warn
-    : 'Réglages SMS enregistrés, mais aucun fournisseur n\'est complet : les envois restent bloqués.' . $warn,
-    $label !== '' && $warn === '' ? 'ok' : 'error');
+$own = sms_ovh_ready(sms_ovh_config(SMS_SOURCE_SHOP)) || sms_twilio_ready(sms_twilio_config(SMS_SOURCE_SHOP));
+$message = match (true) {
+    $label === '' => 'Réglages SMS enregistrés, mais aucun fournisseur n\'est complet : renseignez les identifiants ici ou dans le portail (/portail/sms.php), sinon les envois restent bloqués.',
+    $own => 'SMS : fournisseur ' . $label . ' enregistré pour cette boutique et complet.',
+    default => 'Réglages SMS enregistrés : cette boutique utilise les identifiants du portail (' . $label . ').',
+};
+flash_set($message . $warn, $label !== '' && $warn === '' ? 'ok' : 'error');
 header('Location: /admin/index.php#sms-settings');
 exit;

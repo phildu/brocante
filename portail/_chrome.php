@@ -36,6 +36,7 @@ function portail_chrome_icons(): array
         'close' => '<path d="M6 6l12 12M18 6 6 18"/>',
         'external' => '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
         'compass' => '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5.5-5.5 2 2-5.5z"/>',
+        'target' => '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
         'briefcase' => '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 12h18M10 12v3h4v-3"/>',
         'at' => '<circle cx="12" cy="12" r="4"/><path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1"/>',
     ];
@@ -59,6 +60,21 @@ function portail_pending_inscriptions(): int
         foreach (saas_requests() as $request) {
             if (($request['status'] ?? '') === 'pending') $count++;
         }
+    } catch (Throwable $error) {
+        $count = 0;
+    }
+    return $count;
+}
+
+/** Nombre de fiches d'annuaire (sites existants) à valider (pastille du menu). */
+function portail_pending_annuaire(): int
+{
+    static $count = null;
+    if ($count !== null) return $count;
+    $count = 0;
+    try {
+        if (!function_exists('annuaire_ext_pending_count')) require_once PORTAIL_ROOT . '/includes/annuaire-externe.php';
+        $count = annuaire_ext_pending_count();
     } catch (Throwable $error) {
         $count = 0;
     }
@@ -119,6 +135,7 @@ function portail_nav_groups(): array
             ['href' => '/portail/', 'label' => "Vue d'ensemble", 'icon' => 'gauge', 'match' => ['index.php']],
             ['href' => '/portail/activite.php', 'label' => 'Activité', 'icon' => 'activity'],
             ['href' => '/portail/inscriptions.php', 'label' => 'Inscriptions', 'icon' => 'inbox', 'badge' => portail_pending_inscriptions()],
+            ['href' => '/portail/annuaire-demandes.php', 'label' => 'Fiches annuaire', 'icon' => 'globe', 'badge' => portail_pending_annuaire()],
             ['href' => '/portail/retours.php', 'label' => 'Retours testeurs', 'icon' => 'message', 'badge' => portail_new_feedback()],
             ['href' => '/portail/equipe.php', 'label' => 'Équipe', 'icon' => 'users', 'match' => ['equipe.php', 'equipe-*.php'], 'badge' => portail_pending_candidatures()],
             ['href' => '/portail/recrutement/', 'label' => 'Recrutement', 'icon' => 'briefcase', 'match' => ['recrutement/*'], 'badge' => portail_pending_recrutement()],
@@ -129,9 +146,11 @@ function portail_nav_groups(): array
             ['href' => '/portail/menu.php', 'label' => 'Menu latéral', 'icon' => 'menu'],
             ['href' => '/portail/galeries.php', 'label' => 'Galeries', 'icon' => 'gallery', 'match' => ['galeries.php', 'galerie-*.php']],
             ['href' => '/portail/stripe.php', 'label' => 'Stripe (test / réel)', 'icon' => 'key'],
+            ['href' => '/portail/sms.php', 'label' => 'SMS', 'icon' => 'message'],
             ['href' => '/portail/offres-galerie.php', 'label' => 'Types de galerie', 'icon' => 'layers'],
             ['href' => '/portail/offres.php', 'label' => 'Vitrine & annuaire', 'icon' => 'globe'],
             ['href' => '/portail/promos.php', 'label' => 'Mises en avant', 'icon' => 'megaphone'],
+            ['href' => '/portail/ctas.php', 'label' => 'Appels à l\'action', 'icon' => 'target'],
         ]],
         ['label' => 'Revenus', 'items' => [
             ['href' => '/portail/tarifs.php', 'label' => 'Tarifs', 'icon' => 'tag'],

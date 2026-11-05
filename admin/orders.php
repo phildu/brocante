@@ -103,8 +103,22 @@ $awaitingOrders = array_values(array_filter($orders, static fn ($o) => (string) 
                 <?php if (!empty($o['phone'])): ?><p style="margin:2px 0 0;font-size:0.85rem;">📞 <a href="tel:<?= h($o['phone']) ?>"><?= h(function_exists('customer_phone_display') ? customer_phone_display((string) $o['phone']) : $o['phone']) ?></a><?= !empty($o['terms_at']) ? ' <span style="color:var(--ink-soft);">· conditions acceptées le ' . h(date('d/m/Y H:i', strtotime($o['terms_at']))) . '</span>' : '' ?></p><?php endif; ?>
                 <?php if (!empty($o['buyer_address']) && ($pickup || !empty($o['ship_name']))): ?><p style="margin:2px 0 0;font-size:0.85rem;">👤 Adresse de l'acheteur : <?= h($o['buyer_address']) ?></p><?php endif; ?>
                 <p style="margin:6px 0;">
-                  <?php foreach (json_decode($o['items'], true) ?: [] as $item): ?>
-                    <?= h($item['qty']) ?> × <?= h($item['name']) ?><br>
+                  <?php static $storageByRef = []; foreach (json_decode($o['items'], true) ?: [] as $item): ?>
+                    <?php
+                      $itemRef = (string) ($item['ref'] ?? '');
+                      if (!isset($storageByRef[$itemRef])) {
+                          $itemProduct = $itemRef !== '' ? get_product($itemRef) : null;
+                          $storageByRef[$itemRef] = [
+                              trim((string) ($itemProduct['storage_location'] ?? '')),
+                              pickup_delay_label((int) ($itemProduct['pickup_delay_minutes'] ?? 0)),
+                          ];
+                      }
+                      [$storageLocation, $pickupDelay] = $storageByRef[$itemRef];
+                      $prepParts = [];
+                      if ($storageLocation !== '') $prepParts[] = '📦 ' . h($storageLocation);
+                      if ($pickupDelay !== '') $prepParts[] = 'prêt sous ' . h($pickupDelay);
+                    ?>
+                    <?= h($item['qty']) ?> × <?= h($item['name']) ?><?= $prepParts ? ' <span style="color:var(--ink-soft);font-size:0.78rem;">— ' . implode(' · ', $prepParts) . '</span>' : '' ?><br>
                   <?php endforeach; ?>
                 </p>
                 <?php if (!empty($o['gift_wrap'])): ?>

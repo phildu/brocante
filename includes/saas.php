@@ -196,6 +196,14 @@ function saas_directory(bool $refresh = false): array
         $cat = catalogue_remote((string) $r['url']);
         if ($cat) $shops[] = saas_directory_entry('r' . substr(md5((string) $r['url']), 0, 8), $cat, (string) ($r['name'] ?? ''));
     }
+    // Commerces déjà en ligne ailleurs, inscrits par la page publique /annuaire/inscrire.php puis validés.
+    require_once __DIR__ . '/annuaire-externe.php';
+    $known = [];
+    foreach ($shops as $s) $known[rtrim((string) $s['url'], '/')] = true;
+    foreach (annuaire_ext_directory_entries() as $entry) {
+        if (isset($known[rtrim($entry['url'], '/')])) continue;
+        $shops[] = $entry;
+    }
     usort($shops, static fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
     $dir = dirname($cache);
     if (is_dir($dir) || @mkdir($dir, 0755, true)) @file_put_contents($cache, json_encode($shops, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
@@ -1186,7 +1194,7 @@ function saas_page_start(string $title, string $description, string $active = ''
   <nav aria-label="Navigation principale">
     <?php foreach ($nav as $k => [$href, $label]): ?><a href="<?= $href ?>"<?= $active === $k ? ' aria-current="page"' : '' ?>><?= $label ?></a><?php endforeach; ?>
     <a href="/#connexion">Se connecter</a>
-    <a class="cta" href="/inscription/"<?= $active === 'inscription' ? ' aria-current="page"' : '' ?>>Je veux vendre en ligne</a>
+    <a class="cta" href="/inscription/"<?= $active === 'inscription' ? ' aria-current="page"' : '' ?><?= cta_attrs('site_header_cta') ?>><?= saas_e(cta_label('site_header_cta')) ?></a>
   </nav>
 </div></header>
 <main id="contenu">
@@ -1203,6 +1211,7 @@ function saas_page_end(): void
   <nav aria-label="Pied de page"><a href="/">Accueil</a><a href="/vide-greniers/">Organiser un vide-grenier</a><a href="/marche-aux-puces/">Gérer un marché aux puces</a><a href="/galerie-marchande/">Créer une galerie marchande</a><a href="/quartier-marchand/">Créer un quartier marchand</a><a href="/marche-de-noel/">Organiser un marché de Noël</a><a href="/marche-producteurs/">Créer un marché de producteurs</a><a href="/galerie/">Galeries</a><a href="/annuaire/">Annuaire</a><a href="/inscription/">Je veux vendre en ligne</a><a href="/dossier/">Dossier de subvention</a><a href="/aide/">Aide</a><a href="/accueil/conditions.php">Conditions d'utilisation</a><?php if ($cfg['contact'] !== ''): ?><a href="mailto:<?= saas_e($cfg['contact']) ?>">Contact</a><?php endif; ?></nav>
 </div></footer>
 <script src="/assets/pwd-toggle.js" defer></script>
+<script src="/assets/cta-track.js?v=1" defer></script>
 </body>
 </html>
 <?php
@@ -1211,3 +1220,4 @@ function saas_page_end(): void
 require_once __DIR__ . '/saas-pricing.php';
 require_once __DIR__ . '/saas-events.php';
 require_once __DIR__ . '/earlybird.php';
+require_once __DIR__ . '/cta.php';

@@ -5,6 +5,19 @@
 .promo-visual { display: block; overflow: hidden; border: 1px solid var(--line, #ddd); background: var(--surface, #f4f4f4); transition: transform .2s ease, box-shadow .2s ease; }
 .promo-visual:hover, .promo-visual:focus-visible { transform: translateY(-3px); box-shadow: 0 14px 30px -16px rgba(0, 0, 0, .45); }
 .promo-visual img { display: block; width: 100%; height: auto; }
-@media (max-width: 700px) { .promo-grid { grid-template-columns: 1fr 1fr; gap: 10px; } }
+/* Article retenu sans visuel promo généré : carte photo + prix + appel à l'action. */
+.promo-card { display: grid; grid-template-columns: 132px 1fr; overflow: hidden; border: 1px solid var(--line, #ddd); background: var(--surface, #fff); color: inherit; text-decoration: none; transition: transform .2s ease, box-shadow .2s ease; }
+.promo-card:hover, .promo-card:focus-visible { transform: translateY(-3px); box-shadow: 0 14px 30px -16px rgba(0, 0, 0, .45); }
+.promo-card-photo { display: flex; align-items: center; justify-content: center; min-height: 132px; background: var(--surface-2, #eee); overflow: hidden; }
+.promo-card-photo img { width: 100%; height: 100%; object-fit: cover; }
+.promo-card-photo b { font-size: 2rem; opacity: .35; }
+.promo-card-body { display: grid; align-content: center; gap: 4px; padding: 12px 14px; min-width: 0; }
+.promo-card-shop { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; opacity: .6; }
+.promo-card-name { font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.promo-card-price { font-size: .95rem; }
+.promo-card-price strong { color: var(--accent, #b5502e); }
+.promo-card-price s { opacity: .55; font-size: .85em; }
+.promo-card-cta { font-size: .85rem; font-weight: 600; }
+@media (max-width: 700px) { .promo-grid { grid-template-columns: 1fr 1fr; gap: 10px; } .promo-card { grid-template-columns: 1fr; } .promo-card-photo { min-height: 120px; aspect-ratio: 4 / 3; } }
 @media (max-width: 460px) { .promo-grid { grid-template-columns: 1fr; } }
-@media (prefers-reduced-motion: reduce) { .promo-visual { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .promo-visual, .promo-card { transition: none; } }

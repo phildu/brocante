@@ -325,7 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!gallery_remote_url_valid($url)) { portail_flash("Adresse non valide : une adresse http(s) publique, par exemple https://brocante.arrimage.com", 'error'); break; }
             foreach ($gallery['members'] as $m) if ($m['type'] === 'remote' && $m['url'] === $url) { portail_flash('Ce commerce est déjà dans la galerie.', 'error'); break 2; }
             $feed = catalogue_remote($url);
-            if (!$feed) { portail_flash("Cette adresse ne répond pas avec un catalogue (" . $url . "/catalogue.php) : le commerce doit être à jour de la plateforme.", 'error'); break; }
+            if (!$feed) { portail_flash("Cette adresse ne répond ni avec un catalogue Brocs ni avec un catalogue Shopify, WooCommerce ou PrestaShop lisible : le commerce doit être en ligne et son catalogue accessible.", 'error'); break; }
             $gallery['members'][] = ['type' => 'remote', 'name' => $name !== '' ? $name : (string) ($feed['shop']['name'] ?? $url), 'url' => $url, 'featured' => false];
             gallery_save($gallery);
             portail_flash('« ' . ($feed['shop']['name'] ?? $url) . ' » ajouté : ' . count($feed['products']) . ' pièce(s) en ligne.');

@@ -17,6 +17,7 @@ require_once __DIR__ . '/appearance.php';
 require_once __DIR__ . '/gallery-map.php';
 require_once __DIR__ . '/gallery-modules.php';
 require_once __DIR__ . '/gallery-event.php';
+require_once __DIR__ . '/gallery-promos.php';
 
 const GALLERY_CACHE_TTL = 600;
 const GALLERY_SLUG_PATTERN = '/^[a-z0-9][a-z0-9-]{1,39}$/';
@@ -100,6 +101,8 @@ function gallery_normalize(string $slug, array $data): array
         'type' => $type,
         'domain' => gallery_domain_normalize((string) ($data['domain'] ?? '')),
         'modules' => gallery_modules_normalize((array) ($data['modules'] ?? [])),
+        'promos' => gallery_promos_normalize($data['promos'] ?? []),
+        'shooting' => gallery_shooting_normalize($data['shooting'] ?? []),
         'event' => gallery_event_normalize((array) ($data['event'] ?? [])),
         'map' => gallery_map_normalize((array) ($data['map'] ?? []), array_map('gallery_member_key', $members), $typeLocations),
     ];
@@ -672,7 +675,7 @@ function catalogue_local(string $slug, string $requestOrigin): ?array
     }
 }
 
-/** Catalogue d'un commerce distant : flux /catalogue.php de sa boutique (8 s au plus) ; null en cas d'échec. */
+/** Catalogue d'un commerce distant : flux /catalogue.php, puis connecteur du site existant ; null en cas d'échec. */
 function catalogue_remote(string $url): ?array
 {
     if (!gallery_remote_url_valid($url)) return null;
@@ -682,11 +685,15 @@ function catalogue_remote(string $url): ?array
     $body = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $data = is_string($body) && $status === 200 ? json_decode($body, true) : null;
-    if (!is_array($data) || !isset($data['shop'], $data['products']) || !is_array($data['products'])) {
-        error_log("catalogue_remote($url): HTTP $status");
-        return null;
+    if (is_array($data) && isset($data['shop'], $data['products']) && is_array($data['products'])) {
+        return $data;
     }
-    return $data;
+    // Site déjà en ligne hors Brocs (Shopify, WooCommerce, PrestaShop…) : lecture par connecteur.
+    require_once __DIR__ . '/shop-connectors.php';
+    $linked = connector_catalogue($url);
+    if ($linked) return $linked;
+    error_log("catalogue_remote($url): HTTP $status");
+    return null;
 }
 
 /** Garde seulement une adresse http(s) (images et liens venant d'un flux distant). */

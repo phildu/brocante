@@ -104,9 +104,9 @@ function lp_render(array $p): void
           <h1><?= lp_e($p['h1']) ?></h1>
           <p class="lede"><?= lp_e($p['lede']) ?></p>
           <div class="actions">
-            <a class="btn light" href="<?= lp_e($create) ?>"><?= lp_e($V['create_cta']) ?></a>
-            <a class="btn ghost" href="#tarifs">Voir les tarifs</a>
-            <?php if ($live): ?><a class="btn ghost" href="#exemples"><?= lp_e($type['name']) ?> déjà en ligne</a><?php endif; ?>
+            <a class="btn light" href="<?= lp_e($create) ?>"<?= cta_attrs('lp_hero_create', (string) $V['create_cta']) ?>><?= lp_e(cta_label('lp_hero_create', (string) $V['create_cta'])) ?></a>
+            <a class="btn ghost" href="#tarifs"<?= cta_attrs('lp_hero_pricing') ?>><?= lp_e(cta_label('lp_hero_pricing')) ?></a>
+            <?php if ($live): ?><a class="btn ghost" href="#exemples"<?= cta_attrs('lp_hero_live', $type['name'] . ' déjà en ligne') ?>><?= lp_e(cta_label('lp_hero_live', $type['name'] . ' déjà en ligne')) ?></a><?php endif; ?>
           </div>
           <ul class="stats">
             <li><strong><?= count($live) ?></strong> <?= lp_e($V['gallery']) ?><?= count($live) > 1 ? 's' : '' ?> en ligne</li>
@@ -179,7 +179,7 @@ function lp_render(array $p): void
                 <li><?= lp_e($p['plan_bullet']) ?></li>
                 <li>Sans commission sur les ventes</li>
               </ul>
-              <a class="btn<?= $featured ? '' : ' ghost' ?>" href="<?= lp_e($create . '&offre=' . $o['key']) ?>">Choisir <?= lp_e($o['name']) ?></a>
+              <a class="btn<?= $featured ? '' : ' ghost' ?>" href="<?= lp_e($create . '&offre=' . $o['key']) ?>"<?= cta_attrs('lp_plan_choose', 'Choisir ' . $o['name']) ?>><?= lp_e(cta_label('lp_plan_choose', 'Choisir ' . $o['name'])) ?></a>
             </article>
           <?php endforeach; ?>
         </div>
@@ -222,7 +222,7 @@ function lp_render(array $p): void
         <div class="cta-band">
           <h2><?= lp_e($p['cta_title']) ?></h2>
           <p class="lede" style="margin:10px auto 22px;max-width:56ch"><?= lp_e($p['cta_text']) ?></p>
-          <p><a class="btn" href="<?= lp_e($create) ?>"><?= lp_e($V['create_cta']) ?></a> <a class="btn ghost" href="/galerie/">Voir les galeries</a></p>
+          <p><a class="btn" href="<?= lp_e($create) ?>"<?= cta_attrs('lp_final_create', (string) $V['create_cta']) ?>><?= lp_e(cta_label('lp_final_create', (string) $V['create_cta'])) ?></a> <a class="btn ghost" href="/galerie/"<?= cta_attrs('lp_final_galleries') ?>><?= lp_e(cta_label('lp_final_galleries')) ?></a></p>
         </div>
         <div class="lp-siblings">
           <?php foreach ($siblings as $key => [$href, $label, $ico]): ?>

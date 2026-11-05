@@ -53,6 +53,28 @@ function product_price_extras_visible(array $p): bool
     return !empty($p['negotiable']) || (!empty($p['est_show']) && ($p['est_min'] ?? null) !== null) || (!empty($p['new_show']) && pricing_safe_url($p['new_url'] ?? '') !== '');
 }
 
+/** Délai de récupération lisible (« 10 min », « 1 h 30 », « 2 jours ») ; '' si non renseigné (0 minute). */
+function pickup_delay_label(int $minutes): string
+{
+    if ($minutes <= 0) return '';
+    if ($minutes < 60) return $minutes . ' min';
+    if ($minutes < 1440) {
+        $hours = intdiv($minutes, 60);
+        $rest = $minutes % 60;
+        return $hours . ' h' . ($rest > 0 ? ' ' . sprintf('%02d', $rest) : '');
+    }
+    $days = intdiv($minutes, 1440);
+    return $days . ' jour' . ($days > 1 ? 's' : '');
+}
+
+/** Ligne « Retrait sur place — prêt sous X » de la fiche publique ('' si le vendeur n'a pas donné de délai). */
+function product_pickup_line_html(array $p): string
+{
+    $delay = pickup_delay_label((int) ($p['pickup_delay_minutes'] ?? 0));
+    if ($delay === '') return '';
+    return '<p class="pe-line pe-pickup"><span class="pe-tag">Retrait sur place</span> <span>Prêt au retrait sous ' . $delay . '</span></p>';
+}
+
 /** Ligne « Réassort possible — délai et prix » de la fiche publique ('' si le vendeur n'a pas coché l'option). */
 function product_restock_line_html(array $p): string
 {
@@ -73,8 +95,9 @@ function product_restock_line_html(array $p): string
 function product_price_extras_html(array $p): string
 {
     $restock = product_restock_line_html($p);
+    $pickup = in_stock($p) ? product_pickup_line_html($p) : '';
     $visible = product_price_extras_visible($p) && in_stock($p);
-    if (!$visible && $restock === '') return '';
+    if (!$visible && $restock === '' && $pickup === '') return '';
     $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
     $out = '<div class="price-extras">';
     if ($visible && !empty($p['negotiable'])) {
@@ -92,7 +115,7 @@ function product_price_extras_html(array $p): string
             . ($np !== '' ? '<strong>' . $h($np) . '</strong> ' : '')
             . '<a href="' . $h($url) . '" target="_blank" rel="noopener noreferrer nofollow">Voir le prix du neuf (' . $h(pricing_url_host($url)) . ') ↗</a></p>';
     }
-    $out .= $restock . '</div>';
+    $out .= $pickup . $restock . '</div>';
     if ($visible && !empty($p['negotiable'])) {
         $out .= '<dialog class="pe-dialog" data-offer-dialog aria-label="Faire une offre"><form method="post" action="' . $h(app_prefix('/offre.php')) . '" data-offer-form>'
             . '<div class="pe-head"><b>Faire une offre</b><button type="button" class="pe-x" data-offer-close aria-label="Fermer">×</button></div>'
