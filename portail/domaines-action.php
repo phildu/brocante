@@ -5,6 +5,7 @@ require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas.php';
 require_once PORTAIL_ROOT . '/includes/domain-shop.php';
 require_once PORTAIL_ROOT . '/includes/domain-custom.php';
+require_once PORTAIL_ROOT . '/includes/domain-sub.php';
 
 if (defined('GA_LIMITED')) { header('Location: /portail/galerie-tableau.php'); exit; }
 
@@ -84,6 +85,38 @@ try {
         $cfg['domain_ip'] = $ip;
         if (!saas_config_save($cfg)) domain_portal_back('Impossible d’enregistrer l’adresse IP.');
         domain_portal_back($ip !== '' ? 'Adresse IP du serveur enregistrée : les consignes DNS des boutiques l’utilisent.' : 'Adresse IP effacée : l’adresse du serveur qui répond sera proposée.', 'ok');
+    }
+
+    if ($action === 'save_subdomain_price') {
+        $raw = str_replace(',', '.', trim((string) ($_POST['subdomain_price'] ?? '')));
+        $euros = filter_var($raw, FILTER_VALIDATE_FLOAT);
+        if ($raw === '' || $euros === false || $euros < 0 || $euros > 1000) {
+            domain_portal_back('Indiquez un prix entre 0 et 1000 € (0 = adresse offerte).');
+        }
+        $cents = (int) round($euros * 100);
+        $rawRename = str_replace(',', '.', trim((string) ($_POST['subdomain_rename_price'] ?? '')));
+        $eurosRename = filter_var($rawRename, FILTER_VALIDATE_FLOAT);
+        if ($rawRename === '' || $eurosRename === false || $eurosRename < 0 || $eurosRename > 1000) {
+            domain_portal_back('Indiquez un prix de changement de nom entre 0 et 1000 € (0 = changement offert).');
+        }
+        $renameCents = (int) round($eurosRename * 100);
+        if (($cents > 0 && $cents < 50) || ($renameCents > 0 && $renameCents < 50)) {
+            domain_portal_back('Stripe n’accepte pas de paiement inférieur à 0,50 €.');
+        }
+        $cfg = saas_config();
+        $cfg['subdomain_price_cents'] = $cents;
+        $cfg['subdomain_rename_price_cents'] = $renameCents;
+        if (!saas_config_save($cfg)) domain_portal_back('Impossible d’enregistrer les prix.');
+        domain_portal_back('Prix enregistrés : adresse en sous-domaine '
+            . ($cents > 0 ? number_format($cents / 100, 2, ',', ' ') . ' €' : 'offerte')
+            . ', changement de nom ' . ($renameCents > 0 ? number_format($renameCents / 100, 2, ',', ' ') . ' €' : 'offert') . '.', 'ok');
+    }
+
+    if ($action === 'sub_remove') {
+        $shop = (string) ($_POST['shop'] ?? '');
+        if (!domain_sub_slug_valid($shop)) domain_portal_back('Identifiant de boutique invalide.');
+        domain_sub_remove($shop);
+        domain_portal_back('Adresse en sous-domaine retirée de ' . $shop . '.', 'ok');
     }
 
     if ($action === 'save_hosting') {

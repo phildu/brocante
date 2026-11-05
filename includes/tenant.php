@@ -16,6 +16,7 @@
 const TENANT_DEFAULT = 'petit-chalet';
 require_once __DIR__ . '/business-presence.php';
 require_once __DIR__ . '/domain-custom.php';
+require_once __DIR__ . '/domain-sub.php';
 
 /**
  * Commerce désigné par le sous-domaine de l'hôte (« naty » pour
@@ -29,9 +30,16 @@ function tenant_from_host(?string $host = null): string
         return '';
     }
     $candidate = $labels[0];
-    return preg_match('/^[a-z0-9][a-z0-9_-]*$/', $candidate) && is_file(tenant_dir($candidate) . '/tenant.php')
-        ? $candidate
-        : '';
+    if (!preg_match('/^[a-z0-9][a-z0-9_-]*$/', $candidate)) {
+        return '';
+    }
+    // Adresse en sous-domaine achetée par un commerce (data/domaines/sub/) : le nom
+    // choisi par le marchand désigne sa boutique, quel que soit son identifiant.
+    $alias = domain_sub_hosts()[$candidate] ?? '';
+    if ($alias !== '' && is_file(tenant_dir($alias) . '/tenant.php')) {
+        return $alias;
+    }
+    return is_file(tenant_dir($candidate) . '/tenant.php') ? $candidate : '';
 }
 
 /** Domaine sans le sous-domaine de commerce (brocenstock.test pour naty.brocenstock.test). */
@@ -151,6 +159,8 @@ function tenant_site_url(): string
     // (liens, retours de paiement, e-mails), même sous /<identifiant>/.
     $customHost = domain_custom_active_host(tenant_slug());
     if ($customHost !== '') return 'https://' . $customHost;
+    $subLabel = domain_sub_active_label(tenant_slug());
+    if ($subLabel !== '') return domain_sub_url($subLabel);
     $url = rtrim((string) tenant('site_url'), '/');
     $host = strtolower((string) parse_url($url, PHP_URL_HOST));
     $placeholder = $host === '' || $host === 'localhost' || $host === '127.0.0.1' || str_ends_with($host, '.test') || str_ends_with($host, '.example.com');

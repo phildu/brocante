@@ -6,6 +6,7 @@ require __DIR__ . '/_bootstrap.php';
 require_once PORTAIL_ROOT . '/includes/saas.php';
 require_once PORTAIL_ROOT . '/includes/domain-shop.php';
 require_once PORTAIL_ROOT . '/includes/domain-custom.php';
+require_once PORTAIL_ROOT . '/includes/domain-sub.php';
 
 if (defined('GA_LIMITED')) { header('Location: /portail/galerie-tableau.php'); exit; }
 
@@ -97,6 +98,10 @@ $hostingService = (string) ($hostingCfg['hosting_service'] ?? '');
 $hostingPath = (string) ($hostingCfg['hosting_path'] ?? '');
 $hostingMax = (int) ($hostingCfg['hosting_max_domains'] ?? 0);
 $hostingAuto = $hostingService !== '' && $hostingPath !== '' && $ovhReady;
+$subPriceCents = domain_sub_price_cents();
+$subRenamePriceCents = domain_sub_rename_price_cents();
+$subRecords = domain_sub_list();
+$subBaseHost = domain_sub_base_host();
 $shopNames = [];
 foreach (array_keys(tenant_list()) as $shopSlug) {
     $shopNames[$shopSlug] = (string) tenant_load($shopSlug)['name'];
@@ -461,6 +466,51 @@ if (!$owner) {
         </div>
         <p class="meta">Rattachement automatique à l’hébergement : quand une boutique demande la mise en service, le domaine et son « www » sont déclarés chez OVH (<code>POST /hosting/web/&lt;service&gt;/attachedDomain</code>, certificat Let’s Encrypt demandé en même temps). Le jeton API OVH doit appartenir au compte qui possède l’hébergement et autoriser ces routes (voir API &amp; réseaux → API OVH). Laissez le service et le dossier vides pour garder la déclaration manuelle. Le plafond sert de garde-fou : OVH ne publie pas le maximum de votre offre.<?= $hostingService !== '' && !$ovhReady ? ' <strong>Les identifiants API OVH manquent : le rattachement automatique est inactif.</strong>' : '' ?></p>
       </form>
+    </section>
+
+    <section class="dmcard">
+      <h2>Adresses en sous-domaine</h2>
+      <p class="meta">Chaque boutique peut passer de <code><?= e($subBaseHost) ?>/<?= e('<identifiant>') ?></code> à <code>&lt;nom&gt;.<?= e($subBaseHost) ?></code>, pour un montant fixe réglé par carte (compte Stripe de la plateforme). Le marchand choisit le nom depuis Boutique → Nom de domaine.</p>
+      <form class="dmform" method="post" action="/portail/domaines-action.php" style="margin-top:6px;">
+        <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="save_subdomain_price">
+        <div class="dmrow">
+          <label class="dmfield">Prix de l’adresse en sous-domaine (€ TTC, paiement unique)
+            <input type="number" name="subdomain_price" min="0" max="1000" step="0.01" value="<?= e(number_format($subPriceCents / 100, 2, '.', '')) ?>">
+          </label>
+          <label class="dmfield">Prix d’un changement de nom (€ TTC, par changement)
+            <input type="number" name="subdomain_rename_price" min="0" max="1000" step="0.01" value="<?= e(number_format($subRenamePriceCents / 100, 2, '.', '')) ?>">
+          </label>
+          <div class="dmactions" style="align-self:end;">
+            <button type="submit" class="btn">Enregistrer les prix</button>
+          </div>
+        </div>
+        <p class="meta">0 = offert (activation immédiate, sans paiement). Prérequis côté hébergement : un enregistrement DNS générique <code>*.<?= e($subBaseHost) ?></code> vers le serveur et un alias d’hébergement générique avec son certificat HTTPS. Sans cela, le nom est activé mais le navigateur n’y arrive pas.<?= $subPriceCents > 0 && !$stripeReady ? ' <strong>Stripe n’est pas configuré : les marchands ne peuvent pas payer.</strong>' : '' ?></p>
+      </form>
+      <?php if ($subRecords): ?>
+        <table class="dmtable">
+          <thead><tr><th>Boutique</th><th>Adresse</th><th>État</th><th>Montant</th><th></th></tr></thead>
+          <tbody>
+            <?php foreach ($subRecords as $subItem): ?>
+              <?php $subSlug = (string) $subItem['slug']; $subLabelItem = (string) $subItem['label']; ?>
+              <tr>
+                <td><?= e($shopNames[$subSlug] ?? $subSlug) ?> <span class="meta">(<?= e($subSlug) ?>)</span></td>
+                <td><?= e($subLabelItem . '.' . $subBaseHost) ?></td>
+                <td><?= e(domain_sub_state_label((string) ($subItem['state'] ?? ''))) ?><?= isset($subItem['livemode']) && !$subItem['livemode'] ? ' <span class="meta">(test)</span>' : '' ?></td>
+                <td><?= e($money((int) ($subItem['amount_cents'] ?? 0))) ?></td>
+                <td>
+                  <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Retirer cette adresse ? La boutique ne répondra plus à ce nom.');" style="margin:0">
+                    <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="sub_remove">
+                    <input type="hidden" name="shop" value="<?= e($subSlug) ?>">
+                    <button type="submit" class="btn small">Retirer</button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
     </section>
 
     <?php if ($history): ?>

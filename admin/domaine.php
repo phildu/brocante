@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/saas.php';
 require_once __DIR__ . '/../includes/domain-shop.php';
+require_once __DIR__ . '/../includes/domain-sub.php';
 require_admin();
 
 $slug = tenant_slug();
@@ -21,6 +22,24 @@ if (isset($_GET['s'])) {
     if (preg_match('/^cs_[A-Za-z0-9_]+$/', $sessionId)) {
         try {
             $session = saas_stripe_request('GET', '/checkout/sessions/' . rawurlencode($sessionId));
+            if (($session['metadata']['type'] ?? '') === 'shop_subdomain') {
+                $subResult = domain_sub_apply_session($session);
+                $subLabel = (string) ($subResult['record']['label'] ?? '');
+                if ($subResult['state'] === 'renamed') {
+                    flash_set('Merci ! Votre adresse est devenue ' . domain_sub_url($subLabel) . '/ (l’ancien nom en sous-domaine ne fonctionne plus).', 'ok');
+                } elseif ($subResult['state'] === 'activated') {
+                    $subTest = isset($subResult['record']['livemode']) && !$subResult['record']['livemode'] ? ' (paiement de test)' : '';
+                    flash_set('Merci ! Votre boutique répond maintenant à ' . domain_sub_url($subLabel) . '/' . $subTest . '.', 'ok');
+                } elseif ($subResult['state'] === 'already') {
+                    flash_set('Ce paiement est déjà pris en compte : l’adresse ' . domain_sub_url($subLabel) . '/ est en service.', 'ok');
+                } elseif ($subResult['state'] === 'unpaid') {
+                    flash_set('Le paiement n’est pas encore confirmé par Stripe. L’adresse sera activée dès sa confirmation.', 'error');
+                } else {
+                    flash_set('Le paiement a été reçu, mais l’adresse n’a pas pu être activée : ' . (string) ($subResult['message'] ?? 'contactez l’exploitant de la plateforme.'), 'error');
+                }
+                header('Location: /admin/domaine.php', true, 303);
+                exit;
+            }
             $result = domain_shop_apply_session($session);
             if ($result['state'] === 'ordered') {
                 $domain = (string) ($result['purchase']['quote']['domain'] ?? 'votre domaine');
@@ -105,6 +124,18 @@ $targetIp = (string) ($expectedIps[0] ?? '');
 $customPrefill = trim((string) ($_GET['deja'] ?? ''));
 $customActive = $customState === 'active';
 
+// Adresse en sous-domaine (nom.domaine) à prix fixe réglé dans le portail.
+$sub = domain_sub_load($slug);
+$subState = (string) ($sub['state'] ?? '');
+$subLabel = (string) ($sub['label'] ?? '');
+$subPrice = domain_sub_price_cents();
+$subBase = domain_sub_base_host();
+$subPending = $subState === 'awaiting_payment' && time() - (int) ($sub['created_at'] ?? 0) < DOMAIN_SUB_HOLD_SECONDS && !empty($sub['stripe_url']);
+$subRenamePrice = domain_sub_rename_price_cents();
+$subRename = domain_sub_pending_rename($slug);
+$subDraft = trim((string) ($_GET['nom'] ?? ''));
+if ($subDraft === '') $subDraft = $slug;
+
 $identity = legal_identity();
 $owner = (array) ($purchase['owner'] ?? []);
 if (!$owner) {
@@ -162,6 +193,9 @@ if (!$owner) {
   .dm-search .field { flex: 1 1 260px; }
   .dm-search .field label { display: block; font-size: .8rem; font-weight: 600; margin-bottom: 4px; }
   .dm-search input { width: 100%; }
+  .dm-sub-input { display: flex; align-items: stretch; width: 100%; }
+  .dm-sub-input input { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .dm-sub-suffix { display: inline-flex; align-items: center; padding: 0 10px; border: 1px solid var(--line); border-left: 0; background: var(--surface); font-family: var(--font-mono); font-size: .85rem; color: var(--ink-soft); white-space: nowrap; }
   .dm-badge { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-mono); font-size: .7rem; color: var(--ink-soft); }
   @media (max-width: 720px) {
     .dm-form .field-row-2, .dm-form .field-row-3, .dm-form .field-row-4, .dm-quote { grid-template-columns: 1fr; }
@@ -189,6 +223,91 @@ if (!$owner) {
         ? 'Votre domaine personnalisé est en service : cette adresse et l’adresse historique ci-dessus affichent la même boutique.'
         : 'Tant qu’aucun domaine propre n’est actif, cette adresse reste celle de la boutique. Un domaine acheté ici est réservé à votre nom : sa mise en service (DNS et certificat) se fait ensuite avec l’exploitant de la plateforme.' ?></p>
     </div>
+
+    <?php if ($subState === 'active'): ?>
+      <div class="dm-card" id="sous-domaine">
+        <h2>Votre adresse en sous-domaine</h2>
+        <p><strong><?= h($subLabel . '.' . $subBase) ?></strong> · <span class="dm-badge"><?= h(domain_sub_state_label($subState)) ?></span></p>
+        <p>Votre boutique répond à l’adresse <a href="<?= h(domain_sub_url($subLabel)) ?>/"><?= h(domain_sub_url($subLabel)) ?>/</a>. L’adresse historique de la plateforme, <code><?= h(strstr(domain_sub_url('x', $subBase), '://', true) . '://' . $subBase . '/' . $slug . '/') ?></code>, continue de fonctionner.</p>
+        <?php if ($subRename): ?>
+          <p style="margin-top:12px;">Changement de nom en attente de paiement : <strong><?= h((string) $subRename['label'] . '.' . $subBase) ?></strong> (<?= h($money((int) ($subRename['amount_cents'] ?? 0))) ?>). Votre adresse actuelle reste en service jusqu’à la confirmation.</p>
+          <div class="dm-actions">
+            <?php if (!empty($subRename['stripe_url'])): ?>
+              <a class="btn btn-primary" href="<?= h((string) $subRename['stripe_url']) ?>">Reprendre le paiement</a>
+            <?php endif; ?>
+            <form method="post" action="/admin/domaine-action.php" onsubmit="return confirm('Annuler ce changement de nom ?');">
+              <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+              <input type="hidden" name="action" value="sub_cancel">
+              <button type="submit" class="btn">Annuler le changement</button>
+            </form>
+          </div>
+        <?php else: ?>
+          <form class="dm-search" method="post" action="/admin/domaine-action.php" style="margin-top:12px;" onsubmit="return confirm('Changer l’adresse ? L’ancien nom en sous-domaine ne fonctionnera plus dès que le changement sera confirmé.');">
+            <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+            <input type="hidden" name="action" value="sub_rename">
+            <div class="field">
+              <label for="dm-sub-rename">Changer le nom de l’adresse</label>
+              <div class="dm-sub-input">
+                <input type="text" id="dm-sub-rename" name="label" maxlength="60" required value="" placeholder="nouveau-nom" autocomplete="off" autocapitalize="none" spellcheck="false">
+                <span class="dm-sub-suffix">.<?= h($subBase) ?></span>
+              </div>
+            </div>
+            <?php if ($subRenamePrice > 0 && !$stripeReady): ?>
+              <p class="dm-note">Le paiement en ligne n’est pas configuré sur ce serveur : contactez l’exploitant de la plateforme.</p>
+            <?php else: ?>
+              <button type="submit" class="btn"><?= $subRenamePrice > 0 ? 'Changer pour ' . h($money($subRenamePrice)) : 'Changer le nom' ?></button>
+            <?php endif; ?>
+          </form>
+          <p class="dm-note" style="margin-top:8px;"><?= $subRenamePrice > 0 ? 'Un changement de nom coûte ' . h($money($subRenamePrice)) . ' (montant fixe). ' : 'Le changement de nom est offert. ' ?>L’ancien nom en sous-domaine cesse de fonctionner et redevient disponible ; l’adresse historique de la plateforme reste valable.</p>
+        <?php endif; ?>
+      </div>
+    <?php elseif ($subPending): ?>
+      <div class="dm-card" id="sous-domaine">
+        <h2>Adresse en sous-domaine — paiement en attente</h2>
+        <p>Le paiement de <strong><?= h($subLabel . '.' . $subBase) ?></strong> (<?= h($money((int) ($sub['amount_cents'] ?? 0))) ?>) est ouvert chez Stripe mais n’a pas encore été confirmé.</p>
+        <div class="dm-actions">
+          <a class="btn btn-primary" href="<?= h((string) $sub['stripe_url']) ?>">Reprendre le paiement</a>
+          <form method="post" action="/admin/domaine-action.php" onsubmit="return confirm('Annuler ce paiement et libérer le nom ?');">
+            <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+            <input type="hidden" name="action" value="sub_cancel">
+            <button type="submit" class="btn">Changer de nom</button>
+          </form>
+        </div>
+      </div>
+    <?php else: ?>
+      <div class="dm-card" id="sous-domaine">
+        <h2>Adresse en sous-domaine</h2>
+        <p>Remplacez <code><?= h($shopAddress) ?></code> par une adresse courte et facile à retenir : <strong>votre-nom.<?= h($subBase) ?></strong>. <?= $subPrice > 0 ? 'Montant fixe, paiement unique : <strong>' . h($money($subPrice)) . '</strong>.' : 'Offerte.' ?></p>
+        <form class="dm-search" method="post" action="/admin/domaine-action.php">
+          <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+          <input type="hidden" name="action" value="sub_pay">
+          <div class="field">
+            <label for="dm-sub-name">Nom de l’adresse</label>
+            <div class="dm-sub-input">
+              <input type="text" id="dm-sub-name" name="label" maxlength="60" required value="<?= h($subDraft) ?>" placeholder="ma-boutique" autocomplete="off" autocapitalize="none" spellcheck="false">
+              <span class="dm-sub-suffix">.<?= h($subBase) ?></span>
+            </div>
+          </div>
+          <?php if ($subPrice > 0 && !$stripeReady): ?>
+            <p class="dm-note">Le paiement en ligne n’est pas configuré sur ce serveur : contactez l’exploitant de la plateforme.</p>
+          <?php else: ?>
+            <button type="submit" class="btn btn-primary"><?= $subPrice > 0 ? 'Payer ' . h($money($subPrice)) . ' par carte' : 'Activer cette adresse' ?></button>
+          <?php endif; ?>
+        </form>
+        <p class="dm-note" style="margin-top:8px;">Adresse obtenue : <code id="dm-sub-preview"><?= h(domain_sub_url(domain_sub_label_normalize($subDraft, $subBase) ?: 'nom', $subBase)) ?>/</code> — lettres, chiffres et tirets (3 à 40 caractères). La disponibilité est vérifiée avant le paiement ; l’ancienne adresse continue de fonctionner.</p>
+      </div>
+      <script>
+      (function () {
+        var input = document.getElementById('dm-sub-name'), out = document.getElementById('dm-sub-preview');
+        if (!input || !out) return;
+        var scheme = <?= json_encode(strstr(domain_sub_url('x', $subBase), '://', true)) ?>, base = <?= json_encode($subBase) ?>;
+        input.addEventListener('input', function () {
+          var s = input.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+          out.textContent = scheme + '://' + (s || 'nom') + '.' + base + '/';
+        });
+      })();
+      </script>
+    <?php endif; ?>
 
     <?php if ($customState === ''): ?>
       <div class="dm-card" id="deja">

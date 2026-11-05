@@ -134,6 +134,10 @@ function saas_config(): array
         'hosting_service' => preg_match('/^[a-z0-9][a-z0-9.-]{2,79}$/i', (string) ($saved['hosting_service'] ?? '')) ? strtolower((string) $saved['hosting_service']) : '',
         'hosting_path' => (preg_match('#^[A-Za-z0-9._/-]{1,120}$#', (string) ($saved['hosting_path'] ?? '')) && !str_contains((string) $saved['hosting_path'], '..')) ? trim((string) $saved['hosting_path'], '/') : '',
         'hosting_max_domains' => max(0, min(1000, (int) ($saved['hosting_max_domains'] ?? 0))),
+        // Prix fixe (centimes) d'une adresse en sous-domaine <nom>.<domaine> (includes/domain-sub.php) ; 0 = gratuit.
+        'subdomain_price_cents' => max(0, min(100000, (int) ($saved['subdomain_price_cents'] ?? 500))),
+        // Prix fixe (centimes) d'un changement de nom d'une adresse déjà payée ; 0 = gratuit.
+        'subdomain_rename_price_cents' => max(0, min(100000, (int) ($saved['subdomain_rename_price_cents'] ?? 200))),
         // Depuis que le portail enregistre des tarifs (includes/saas-pricing.php), les formules par défaut viennent de la grille par défaut.
         'plans' => saas_pricing()['saved'] ? saas_pricing_legacy_plans() : ($plans ?: saas_default_plans()),
         // Garde-fou : nombre maximal de boutiques GRATUITES créées par 24 h (0 = pas de plafond), puisqu'aucune validation humaine n'est exigée.
