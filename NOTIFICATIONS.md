@@ -1,0 +1,118 @@
+# Module Notifications
+
+Envoi de messages aux utilisateurs sur leurs canaux préférés : **e-mail, SMS,
+WhatsApp, Discord, Telegram**. Chaque utilisateur choisit où et sur quels
+sujets on peut lui écrire.
+
+- **Responsable** : *Administration → Notifications* (`/admin/notifications/`), même mot de passe que le reste de l'admin.
+- **Utilisateurs** : page personnelle `/notifications/preferences.php?t=…` (lien secret), pour régler ses canaux et rubriques ou se désinscrire.
+
+## Pour démarrer
+
+1. **Canaux & réglages** : renseigner au moins l'e-mail (adresse d'expédition), puis les autres canaux voulus. Le *Test rapide* valide un canal sans créer d'utilisateur.
+2. **Utilisateurs** : créer à la main, ou importer les bénévoles de la buvette / les clients ayant payé. Pour chacun : une adresse par canal, un ordre de préférence, les rubriques souhaitées.
+3. **Envoyer** : choisir la rubrique, les destinataires et le message ; *Voir qui recevra quoi* avant d'envoyer.
+4. **Cron** (recommandé) : voir « Envoi automatique » ci-dessous.
+
+## Canaux
+
+| Canal | Fournisseur | À prévoir |
+|---|---|---|
+| E-mail | `mail()` de l'hébergement, ou serveur SMTP (SSL / STARTTLS) | adresse d'expédition du domaine du site |
+| SMS | Twilio | Account SID, Auth Token, numéro ou *Messaging Service* |
+| WhatsApp | Twilio | numéro approuvé par Meta (ou bac à sable Twilio) |
+| Discord | webhook (aucun réglage) ou message privé via un bot | jeton du bot pour les MP |
+| Telegram | bot Telegram (@BotFather) | jeton ; la personne doit d'abord écrire `/start` au bot |
+
+Les identifiants sont dans `.secrets/notifications.json` (droits 0600, jamais
+dans la base ni dans Git, exclus du déploiement comme les clés Stripe/Gemini).
+Ils ne sont jamais réaffichés ; un champ secret laissé vide conserve la valeur.
+
+**WhatsApp** : un message libre n'est possible que dans les 24 h suivant la
+dernière réponse de la personne ; au-delà il faut un modèle approuvé par Meta
+(non géré : l'envoi échoue avec un message explicite).
+
+## Utilisateurs, rubriques, préférences
+
+- Une **rubrique** classe les messages. D'origine : suivi de commande, événements, bénévolat, dons & invendus (*suivi*) et actualités (*marketing*). On peut en créer.
+- **Suivi** : reçu par défaut sur les canaux actifs (chacun peut s'en retirer). **Marketing** : jamais envoyé sans abonnement explicite (opt-in) ; le caractère marketing d'une rubrique ne peut pas être modifié après création (cela abonnerait tout le monde sans consentement).
+- Les préférences sont une matrice rubrique × canal. Seuls les écarts à la valeur par défaut sont stockés ; la ligne d'un opt-in garde sa date et son origine (`admin` / `utilisateur`) comme preuve de consentement.
+- Les imports (bénévoles, clients) ne créent **aucun** abonnement marketing.
+- La page publique ne permet pas de modifier les adresses : un lien transféré par erreur ne peut pas rediriger les messages. Elle propose « plus d'actualités ni d'offres » et « ne plus rien recevoir ».
+- Supprimer un utilisateur efface ses coordonnées, préférences **et historique d'envois**.
+
+## Envoi
+
+- Variables dans le texte : `{prenom}` `{nom}` `{site}` `{lien_preferences}`.
+- *Version courte* facultative pour SMS / WhatsApp / Discord / Telegram ; sinon titre + texte complet.
+- **Stratégie** : *tous les canaux* de la personne, ou *canal préféré puis secours* (le suivant n'est utilisé que si le précédent échoue définitivement).
+- **Messages marketing** : lien de désinscription ajouté automatiquement ; e-mails avec `List-Unsubscribe` + désinscription en un clic (RFC 8058) ; SMS/WhatsApp différés hors des **heures calmes** (20 h–8 h et dimanche par défaut, réglable). Les jours fériés ne sont pas gérés : c'est une aide, pas un avis juridique.
+- Une désinscription ou un canal coupé **entre la mise en file et l'envoi** est revérifié : l'envoi est annulé.
+- Erreurs temporaires (réseau, 429, 5xx, SMTP 4xx) : 4 tentatives (après 1 min, 10 min, 1 h). Erreurs définitives (numéro invalide…) : échec immédiat. Un STOP Twilio ou un bot Telegram bloqué désactive le canal de la personne.
+
+## Envoi automatique (cron)
+
+Les petits envois partent tout de suite ; reprises, envois différés et gros
+volumes passent par une file vidée par :
+
+```bash
+php /chemin/vers/scripts/notifications-worker.php --quiet
+```
+
+À programmer toutes les 5 minutes (tâche CRON OVH ou `crontab -e`). Options :
+`--limit=200`, `--budget=50` (secondes), `--purge-days=90`. Il purge aussi
+l'historique de plus de 90 jours. Sans cron, le bouton *Traiter la file* du
+tableau de bord fait le même travail.
+
+## Utilisation depuis le reste du site
+
+```php
+require_once __DIR__ . '/includes/notifications.php';
+
+// $userId : id d'un utilisateur du module (nt_users)
+nt_notify('commande', [$userId], 'Votre colis est parti',
+          "Bonjour {prenom}, votre commande a été expédiée.");
+```
+
+Retourne le nombre d'envois mis en file et les exclusions (canal coupé,
+non abonné…). Options : `strategy` (`all`|`fallback`), `channels`,
+`short_body`, `immediate` (`false` = file seule). Aucun appel n'est encore
+branché sur les commandes ou la buvette : à faire là où c'est utile
+(ex. `admin/update-order.php` à l'expédition).
+
+## Installation et déploiement
+
+Rien à migrer : les tables (préfixe `nt_`) se créent au premier accès
+(`nt_boot()`). `deploy-brocante.sh` n'envoie ni `brocante.db` ni `.secrets/` :
+utilisateurs, historique et clés saisis en ligne ne sont pas écrasés.
+PHP 8.0+, SQLite, cURL (déjà requis par le site), mbstring.
+
+## Fichiers
+
+```
+includes/notifications.php          logique métier, schéma, pilotes de canaux
+includes/notifications-layout.php   gabarits admin et page publique
+admin/notifications/*.php           pages du responsable
+notifications/preferences.php       page publique de préférences
+scripts/notifications-worker.php    cron : file d'envoi + purge
+scripts/test-notifications.php      tests
+assets/notifications.css            styles
+```
+
+## Tests
+
+```bash
+php scripts/test-notifications.php
+```
+
+Base et configuration jetables ; aucun appel réseau (les API et `mail()` sont
+remplacés par des doubles, le client SMTP est testé contre un faux serveur
+local). Couvre adresses, préférences et consentement, heures calmes, pilotes,
+reprises, canal de repli, désinscription pendant la file, import, effacement.
+
+## Limites connues
+
+- Pas de réception : les réponses des utilisateurs et les accusés de lecture ne sont pas traités (hors STOP Twilio, géré à l'envoi suivant).
+- Pas d'accusé de livraison final : « envoyé » signifie accepté par le fournisseur.
+- STARTTLS/SSL du client SMTP non testé automatiquement (seul le dialogue en clair l'est) : tester avec le *Test rapide*.
+- Le lien personnel de préférences est un secret porté par l'URL ; il est envoyé en clair dans les messages marketing.
