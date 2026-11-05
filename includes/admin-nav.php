@@ -7,6 +7,7 @@
  * l'entrée courante ; $content doit déjà être chargé (get_content()).
  */
 $adminNavItems = [
+    'dashboard' => ['/admin/dashboard.php', 'Tableau de bord'],
     'catalogue' => ['/admin/catalog.php', 'Catalogue'],
     'batch' => ['/admin/batch-import.php', 'Import par lot'],
     'commandes' => ['/admin/orders.php', 'Commandes'],

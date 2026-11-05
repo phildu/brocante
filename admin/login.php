@@ -7,7 +7,7 @@ $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (hash_equals(ADMIN_PASSWORD, (string) ($_POST['password'] ?? ''))) {
         $_SESSION['is_admin'] = true;
-        header('Location: /admin/catalog.php');
+        header('Location: /admin/dashboard.php');
         exit;
     }
     $error = 'Mot de passe incorrect.';
