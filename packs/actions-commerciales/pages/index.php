@@ -8,7 +8,7 @@ $starts = date('Y-m-d\TH:i', time() + 3600);
 $ends = date('Y-m-d\TH:i', time() + 4 * 3600);
 $pageUrl = static fn (string $v): string => '/admin/plugin.php?' . http_build_query(['p' => $plugin['id'], 'v' => $v, 'id' => '']);
 ?>
-<div id="aco-page" style="display:grid;gap:16px;max-width:980px;" data-api="<?= h($pluginApi('operations')) ?>" data-contacts="<?= h($pluginApi('contacts')) ?>" data-csrf="<?= h($pluginCsrf) ?>" data-entitled="<?= $ent['entitled'] ? '1' : '0' ?>" data-labels="<?= h($pageUrl('etiquettes')) ?>" data-report="<?= h($pageUrl('bilan')) ?>" data-export="<?= h($pluginApi('export')) ?>">
+<div id="aco-page" style="display:grid;gap:16px;max-width:980px;" data-api="<?= h($pluginApi('operations')) ?>" data-contacts="<?= h($pluginApi('contacts')) ?>" data-csrf="<?= h($pluginCsrf) ?>" data-entitled="<?= $ent['entitled'] ? '1' : '0' ?>" data-campaigns="<?= h($pageUrl('campagnes')) ?>" data-labels="<?= h($pageUrl('etiquettes')) ?>" data-report="<?= h($pageUrl('bilan')) ?>" data-export="<?= h($pluginApi('export')) ?>">
   <p class="eyebrow">Module · <?= h($plugin['name']) ?> · v<?= h($plugin['version']) ?></p>
   <h1 style="font-size:1.8rem;margin:0;">Actions commerciales</h1>
   <?= addon_panel_html(ACO_MODULE, $pluginApi('access'), $pluginCsrf) ?>

@@ -1,11 +1,12 @@
 {
   "id": "actions-commerciales",
   "name": "Actions commerciales",
-  "version": "1.2.0",
-  "description": "Module payant (essai gratuit) : braderie, vente flash, foire ou période de soldes. Sélectionnez les pièces et les catégories, fixez la remise, les prix changent et reviennent seuls à la fin. Étiquettes à imprimer pour le stand, bandeau, étiquette en surimpression sur les photos, appel à l'action dans le hero de l'accueil et en tête du catalogue, bilan chiffré des ventes. Prévenez les visiteurs qui ont donné leur accord par e-mail, dans l'app, par SMS ou WhatsApp, avec un lien de désinscription et un accord par canal. Les pièces restent visibles avec leur prix réduit dans les galeries commerciales dont la boutique est membre.",
+  "version": "1.3.0",
+  "description": "Module payant (essai gratuit) : braderie, vente flash, foire ou période de soldes. Sélectionnez les pièces et les catégories, fixez la remise, les prix changent et reviennent seuls à la fin. Étiquettes à imprimer pour le stand, bandeau, étiquette en surimpression sur les photos, appel à l'action dans le hero de l'accueil et en tête du catalogue, bilan chiffré des ventes. Prévenez les visiteurs qui ont donné leur accord par e-mail, dans l'app, par SMS ou WhatsApp, avec un lien de désinscription et un accord par canal. Campagne de communication par opération : plan d'étapes programmées (annonce, lancement, dernier jour) sur e-mail, app, SMS, WhatsApp et rappel de publication sur les réseaux sociaux, avec suivi des envois. Les pièces restent visibles avec leur prix réduit dans les galeries commerciales dont la boutique est membre.",
   "table_prefix": "aco_",
   "pages": [
     { "id": "index", "label": "Actions commerciales", "icon": "banner", "file": "pages/index.php", "roles": ["admin", "community_manager"] },
+    { "id": "campagnes", "label": "Campagnes de communication", "icon": "cloud", "file": "pages/campagnes.php", "roles": ["admin", "community_manager"] },
     { "id": "etiquettes", "label": "Étiquettes de l'opération", "icon": "receipt", "file": "pages/etiquettes.php", "roles": ["admin", "community_manager"], "menu": false },
     { "id": "bilan", "label": "Bilan de l'opération", "icon": "gauge", "file": "pages/bilan.php", "roles": ["admin", "community_manager"], "menu": false }
   ],
@@ -13,7 +14,11 @@
     { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
     { "id": "operations", "file": "api/operations.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
     { "id": "contacts", "file": "api/contacts.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
+    { "id": "campagnes", "file": "api/campagnes.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] },
     { "id": "export", "file": "api/export.php", "methods": ["GET"], "roles": ["admin", "community_manager"] }
+  ],
+  "cron": [
+    { "file": "cron/campagnes.php" }
   ],
   "agent_api": [
     { "prefix": "/braderie", "file": "api/public.php" }
