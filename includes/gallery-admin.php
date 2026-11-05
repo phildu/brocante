@@ -35,6 +35,18 @@ function ga_write(string $slug, string $kind, array $data): bool
     return @file_put_contents(ga_file($slug, $kind), json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), LOCK_EX) !== false;
 }
 
+// ── Adresse de connexion ────────────────────────────────────────────────────
+
+/**
+ * Adresse de connexion de l'administration d'une galerie : /galerie/<identifiant>/admin (page de connexion aux couleurs de CETTE
+ * galerie, qui ouvre ensuite son tableau de bord) ; /galerie/admin.php, sans galerie précise, quand l'identifiant est vide ou invalide.
+ */
+function ga_login_url(?string $slug = null): string
+{
+    $slug = strtolower(trim((string) $slug));
+    return gallery_slug_valid($slug) ? '/galerie/' . $slug . '/admin' : '/galerie/admin.php';
+}
+
 // ── Comptes administrateurs ─────────────────────────────────────────────────
 
 /** Mot de passe provisoire lisible (sans caractères ambigus). */

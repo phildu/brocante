@@ -41,5 +41,5 @@ if ($limited) {
         foreach ($me['slugs'] as $s) echo '<option value="' . e($s) . '"' . ($s === $limited ? ' selected' : '') . '>' . e(gallery_load($s)['name'] ?? $s) . '</option>';
         echo '</select></form>';
     }
-    echo '<form method="post" action="/galerie/admin.php" style="display:inline;"><input type="hidden" name="csrf" value="' . e($_SESSION['ga_csrf']) . '"><input type="hidden" name="action" value="logout"><button class="btn" type="submit">Se déconnecter</button></form>';
+    echo '<form method="post" action="' . e(ga_login_url($limited)) . '" style="display:inline;"><input type="hidden" name="csrf" value="' . e($_SESSION['ga_csrf']) . '"><input type="hidden" name="action" value="logout"><button class="btn" type="submit">Se déconnecter</button></form>';
 }

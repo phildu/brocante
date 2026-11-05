@@ -40,6 +40,14 @@ if ($path === '/' && !getenv('TENANT') && is_file(__DIR__ . '/portail/index.php'
     return true;
 }
 
+// Connexion à l'administration d'une galerie : /galerie/<identifiant>/admin (même règle que dans le .htaccess).
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/admin/?$#', $path, $m)) {
+    $_GET['g'] = $m[1];
+    $_SERVER['SCRIPT_NAME'] = '/galerie/admin.php';
+    require __DIR__ . '/galerie/admin.php';
+    return true;
+}
+
 // Galeries commerciales : /galerie/ et /galerie/<identifiant>/ (même règle que dans le .htaccess).
 if (preg_match('#^/galerie(?:/([a-z0-9][a-z0-9-]*))?/?$#', $path, $m)) {
     $_GET['g'] = $m[1] ?? '';
