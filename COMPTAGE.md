@@ -11,7 +11,7 @@ la courbe heure par heure.
 ## Pour démarrer
 
 1. *Comptage de foule → Événements & postes* : créer l'événement (nom, date, lieu, capacité d'accueil si le site est limité). Un poste « Entrée principale » est créé ; ajouter un poste par entrée supplémentaire (parking, côté église…).
-2. *Accès bénévoles* : définir un **code**, envoyer le lien et le code aux bénévoles.
+2. *Accès bénévoles* : définir un **code**, puis donner aux bénévoles le lien (ou le **QR code** à scanner, à afficher ou à imprimer en affiche) et le code. Le QR code ne contient que le lien, jamais le code.
 3. Chaque bénévole ouvre le lien **une fois avec du réseau** et choisit « Ajouter à l'écran d'accueil » : le compteur s'ouvre ensuite comme une application, même sans réseau.
 4. Faire un essai la veille, puis *Résultats → Corriger un comptage ou tout remettre à zéro* pour repartir de 0.
 
@@ -65,6 +65,7 @@ allumé — c'est déjà le cas de `https://brocante.arrimage.com`.
 ```
 includes/comptage.php          logique métier, schéma SQLite, résultats, exports
 includes/comptage-layout.php   gabarits admin et page de connexion
+includes/qrcode.php            générateur de QR code (SVG), sans service externe
 admin/comptage/*.php           résultats, événements & postes, accès, export CSV
 comptage/index.php             le compteur (page plein écran)
 comptage/api.php               envoi des appuis + totaux (JSON, session + jeton CSRF)

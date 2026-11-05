@@ -14,6 +14,7 @@ putenv('BROCANTE_DB=' . $tmp);
 register_shutdown_function(fn() => is_file($tmp) && unlink($tmp));
 
 require_once __DIR__ . '/../includes/comptage.php';
+require_once __DIR__ . '/../includes/qrcode.php';
 
 $failures = 0;
 $checks = 0;
@@ -214,6 +215,28 @@ check('formatage des nombres', cp_n(12345), "12\u{202F}345");
 check('durée', cp_duration(8100), '2 h 15');
 check('durée courte', cp_duration(2400), '40 min');
 check('date en français', cp_fr_date('2026-05-10'), 'dimanche 10 mai 2026');
+
+echo "\nQR code du lien\n";
+$qr = QrCode::encodeText('https://brocante.arrimage.com/comptage/');
+$flat = '';
+foreach ($qr->modules as $row) $flat .= implode('', array_map(fn($b) => $b ? '1' : '0', $row)) . "\n";
+check('URL de 39 caractères -> version 3 (29×29)', [$qr->version, $qr->size], [3, 29]);
+// Empreinte relevée sur une matrice identique, module pour module, à celle de la
+// bibliothèque Python « qrcode » (mode octets, niveau M) : toute régression de
+// l'encodeur (Reed-Solomon, masque, format…) la change.
+check('matrice identique à la référence', sha1($flat), 'b8cef817a20d2808d56a6ec2023d9ff35ded13a1');
+check('repère de position en haut à gauche', substr($flat, 0, 7), '1111111');
+check('module sombre fixe', $qr->modules[$qr->size - 8][8], true);
+check('texte court -> version 1', QrCode::encodeText('HELLO')->version, 1);
+check('213 octets -> version 10', QrCode::encodeText(str_repeat('A', 213))->version, 10);
+$tooLong = false;
+try { QrCode::encodeText(str_repeat('A', 214)); } catch (InvalidArgumentException $e) { $tooLong = true; }
+check('214 octets refusés', $tooLong, true);
+$svg = qr_svg('https://brocante.arrimage.com/comptage/', 'Lien <test> & "ok"');
+check('SVG : balise et zone de silence (29 + 2×4 = 37)', str_contains($svg, 'viewBox="0 0 37 37"'), true);
+check('SVG : libellé échappé', str_contains($svg, 'aria-label="Lien &lt;test&gt; &amp; &quot;ok&quot;"'), true);
+check('SVG : noir sur blanc imposé', str_contains($svg, 'fill="#fff"') && str_contains($svg, 'fill="#000"'), true);
+check('SVG : document XML valide', (new DOMDocument())->loadXML($svg) !== false, true);
 
 echo "\n" . ($failures ? "ÉCHEC : $failures / $checks vérifications\n" : "OK : $checks vérifications\n");
 exit($failures ? 1 : 0);
