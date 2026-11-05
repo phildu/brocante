@@ -101,6 +101,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
 <link rel="stylesheet" href="/assets/object-picker.css">
 <link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/assets/share.css') ?>">
 <link rel="stylesheet" href="/assets/measure-tool.css">
+<script src="/assets/heic-convert.js"></script>
 </head>
 <body class="studio">
 <?php if (!$account): ?>

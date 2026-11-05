@@ -76,7 +76,7 @@ $uploadLimits = [
       <div class="admin-block" style="margin-top:20px;">
         <h2 style="font-size:1.1rem;">Déposer des photos</h2>
         <div class="bi-drop" id="bi-drop" data-limits="<?= h(json_encode($uploadLimits)) ?>">
-          <p class="hint" style="margin:0;">Choisissez les photos une par une (sélection multiple avec ⌘ ou Maj), ou tout un dossier, ou glissez-les ici. JPEG, PNG ou WEBP ; les photos HEIC d'iPhone sont à exporter en JPEG.</p>
+          <p class="hint" style="margin:0;">Choisissez les photos une par une (sélection multiple avec ⌘ ou Maj), ou tout un dossier, ou glissez-les ici. JPEG, PNG, WEBP ou HEIC (les photos HEIC d'iPhone sont converties en JPEG automatiquement).</p>
           <div class="bi-drop-actions">
             <label class="btn btn-primary" for="bi-files">Choisir des photos</label>
             <label class="btn btn-ghost" for="bi-folder">Choisir un dossier</label>
@@ -224,6 +224,14 @@ $uploadLimits = [
   var OK = /\.(jpe?g|png|webp)$/i;
 
   function add(files) {
+    var list = Array.prototype.slice.call(files);
+    var hasHeic = list.some(function (f) { return /\.(heic|heif)$/i.test(f.name); });
+    if (!hasHeic || !window.heicConvertFiles) { addNow(list); return; }
+    var info = $('bi-picked'); info.hidden = false; info.textContent = 'Conversion des photos HEIC en JPEG…';
+    window.heicConvertFiles(list).then(addNow);
+  }
+
+  function addNow(files) {
     Array.prototype.forEach.call(files, function (f) {
       if (f.name.charAt(0) === '.') return;                       // fichiers cachés (.DS_Store…)
       if (!OK.test(f.name)) { if (/\.(heic|heif)$/i.test(f.name) || /^image\//.test(f.type)) ignored.push(f.name); return; }
