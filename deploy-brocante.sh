@@ -53,8 +53,9 @@ err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 # Documents Markdown de la racine (README.md, notes _*.md) : jamais en ligne (fonctionnement interne de la plateforme).
 # Commerces d'essai purement locaux : jamais envoyés, quel que soit le mode (dossiers tenants/<slug>/ et assets/tenants/<slug>/).
 LOCAL_ONLY_TENANTS="kllklmk zz-sandbox-revolut librairie-des-quais"
-# Code purement local (tests, outillage, centre d'aide pas encore prêt, pages de test) : jamais envoyé.
-LOCAL_ONLY_EXCLUDES="--exclude '^tests/' --exclude '^scripts/' --exclude '^aide/' --exclude '^admin/sms-test\\.php\$' --exclude '^portail/journal-local\\.php\$' --exclude '^assets/autofeed/.*\\.lock\$'"
+# Code purement local (tests, outillage, centre d'aide pas encore prêt, pages de test), bases SQLite locales,
+# sauvegardes *.bak-*, fichiers de développement (docs, phpunit, composer, dépendances de dev de vendor/) : jamais envoyé.
+LOCAL_ONLY_EXCLUDES="--exclude '^tests/' --exclude '^scripts/' --exclude '^aide/' --exclude '^admin/sms-test\\.php\$' --exclude '^portail/journal-local\\.php\$' --exclude '^assets/autofeed/.*\\.lock\$' --exclude-glob '*.sqlite' --exclude-glob '*.bak-*' --exclude '^docs/' --exclude '^\\.gitignore\$' --exclude '^\\.phpunit\\.result\\.cache\$' --exclude '^phpunit\\.xml\$' --exclude '^composer\\.(json|lock)\$' --exclude '^schema\\.sql\$' --exclude '^vendor/(bin|composer|phpunit|nikic|sebastian|phar-io|myclabs|staabm|theseer)/' --exclude '^vendor/autoload\\.php\$'"
 
 WITH_DB=0
 PORTAIL=0
@@ -201,7 +202,7 @@ mirror --reverse --no-perms --no-umask \
   $LOCAL_ONLY_EXCLUDES $DRY_FLAG \
   --verbose \
   . ${FTP_PATH_FRONT}
-mirror --reverse --no-perms --no-umask $DRY_FLAG --verbose tenants/$TENANT ${FTP_PATH_FRONT}tenants/$TENANT
+mirror --reverse --no-perms --no-umask --exclude-glob *.sqlite --exclude-glob *.db --exclude-glob *.bak-* $DRY_FLAG --verbose tenants/$TENANT${FTP_PATH_FRONT}tenants/$TENANT
 put tenants/.htaccess -o ${FTP_PATH_FRONT}tenants/.htaccess
 $( [ -d "assets/tenants/$TENANT" ] && echo "mirror --reverse --no-perms --no-umask $DRY_FLAG --verbose assets/tenants/$TENANT ${FTP_PATH_FRONT}assets/tenants/$TENANT" )
 put $tenant_file -o ${FTP_PATH_FRONT}.tenant
