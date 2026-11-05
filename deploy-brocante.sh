@@ -15,6 +15,7 @@
 #   PORTAIL_USER, PORTAIL_PASSWORD (compte de connexion au portail en ligne).
 #
 # Usage :
+#   ./deploy-brocante.sh --portail --dry-run  → essai à blanc : liste ce qui partirait, n'écrit rien
 #   ./deploy-brocante.sh --portail            → portail + tous les commerces (bases non touchées)
 #   ./deploy-brocante.sh --portail --with-db  → idem + envoie les bases locales (1er déploiement)
 #   ./deploy-brocante.sh           → code uniquement (brocante.db JAMAIS touché,
@@ -51,20 +52,35 @@ err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 # packs/communication/assets/eb80/plugin/ (sources.js de l'éditeur).
 # Documents Markdown de la racine (README.md, notes _*.md) : jamais en ligne (fonctionnement interne de la plateforme).
 # Commerces d'essai purement locaux : jamais envoyés, quel que soit le mode (dossiers tenants/<slug>/ et assets/tenants/<slug>/).
-LOCAL_ONLY_TENANTS="kllklmk"
+LOCAL_ONLY_TENANTS="kllklmk zz-sandbox-revolut librairie-des-quais"
+# Code purement local (tests, outillage, centre d'aide pas encore prêt, pages de test) : jamais envoyé.
+LOCAL_ONLY_EXCLUDES="--exclude '^tests/' --exclude '^scripts/' --exclude '^aide/' --exclude '^admin/sms-test\\.php\$' --exclude '^portail/journal-local\\.php\$' --exclude '^assets/autofeed/.*\\.lock\$'"
 
 WITH_DB=0
 PORTAIL=0
+DRY_RUN=0
 TENANT="${TENANT:-petit-chalet}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --with-db) WITH_DB=1 ;;
         --portail) PORTAIL=1 ;;
+        --dry-run) DRY_RUN=1 ;;
         --tenant) TENANT="$2"; shift ;;
         *) err "Option inconnue : $1" ;;
     esac
     shift
 done
+# Essai à blanc : mirror --dry-run liste les envois sans rien écrire ; put/mkdir/chmod sont retirés des scripts lftp.
+DRY_FLAG=""
+[ "$DRY_RUN" = "1" ] && DRY_FLAG="--dry-run"
+[ "$DRY_RUN" = "1" ] && [ "$WITH_DB" = "1" ] && { echo "--dry-run et --with-db sont incompatibles" >&2; exit 1; }
+lftp_run() {
+    if [ "$DRY_RUN" = "1" ]; then
+        lftp -c "$(printf '%s\n' "$1" | grep -vE '^[[:space:]]*(put|mkdir|chmod|rm|mv) ')"
+    else
+        lftp -c "$1"
+    fi
+}
 [ -f "tenants/$TENANT/tenant.php" ] || err "Commerce introuvable : tenants/$TENANT/tenant.php"
 export TENANT
 
@@ -101,6 +117,7 @@ trap 'rm -f "$DENY_FILE"' EXIT
 
 echo ""
 echo -e "${BOLD}════════════════════════════════════════════════${NC}"
+[ "$DRY_RUN" = "1" ] && echo -e "${YELLOW}${BOLD}  ESSAI À BLANC (--dry-run) : rien ne sera écrit sur le serveur${NC}"
 if [ "$PORTAIL" = "1" ]; then
     echo -e "${BOLD}  DÉPLOIEMENT PREPROD — OVH — portail + tous les commerces${NC}"
 else
@@ -135,7 +152,7 @@ deploy_front() {
         shared_link_cmd="put $shared_link -o ${FTP_PATH_FRONT}.shared-secrets-from"
     fi
 
-    lftp -c "
+    lftp_run "
 set ftp:ssl-allow yes
 set ftp:ssl-force no
 set net:timeout 30
@@ -181,11 +198,12 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob tenants/ \
   --exclude-glob assets/tenants/ \
   $uploads_exclude \
+  $LOCAL_ONLY_EXCLUDES $DRY_FLAG \
   --verbose \
   . ${FTP_PATH_FRONT}
-mirror --reverse --no-perms --no-umask --verbose tenants/$TENANT ${FTP_PATH_FRONT}tenants/$TENANT
+mirror --reverse --no-perms --no-umask $DRY_FLAG --verbose tenants/$TENANT ${FTP_PATH_FRONT}tenants/$TENANT
 put tenants/.htaccess -o ${FTP_PATH_FRONT}tenants/.htaccess
-$( [ -d "assets/tenants/$TENANT" ] && echo "mirror --reverse --no-perms --no-umask --verbose assets/tenants/$TENANT ${FTP_PATH_FRONT}assets/tenants/$TENANT" )
+$( [ -d "assets/tenants/$TENANT" ] && echo "mirror --reverse --no-perms --no-umask $DRY_FLAG --verbose assets/tenants/$TENANT ${FTP_PATH_FRONT}assets/tenants/$TENANT" )
 put $tenant_file -o ${FTP_PATH_FRONT}.tenant
 $shared_link_cmd
 mkdir -p -f ${FTP_PATH_FRONT}.secrets
@@ -200,7 +218,7 @@ quit
 
     # Permissions uploads/ et var/ (écriture nécessaire : photos, logs de génération)
     # — non bloquant : lftp continue même si chmod échoue (droits déjà bons par défaut sur OVH).
-    lftp -c "
+    lftp_run "
 open ftp://$FTP_USER:$FTP_PASS@$FTP_SERVER
 chmod 755 ${FTP_PATH_FRONT}uploads
 chmod 755 ${FTP_PATH_FRONT}var
@@ -229,7 +247,7 @@ deploy_portail() {
         echo json_encode(["user" => getenv("PORTAIL_USER"), "password_hash" => password_hash(getenv("PORTAIL_PASSWORD"), PASSWORD_DEFAULT)]);
     ' > "$account_file"
 
-    lftp -c "
+    lftp_run "
 set ftp:ssl-allow yes
 set ftp:ssl-force no
 set net:timeout 30
@@ -267,6 +285,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob uploads/ \
   $local_tenants_exclude \
   $db_exclude \
+  $LOCAL_ONLY_EXCLUDES $DRY_FLAG \
   --verbose \
   . ${FTP_PATH_FRONT}
 mkdir -p -f ${FTP_PATH_FRONT}.secrets
@@ -281,7 +300,7 @@ quit
         echo -e "  ${BLUE}→${NC} $line"
     done
 
-    lftp -c "
+    lftp_run "
 open ftp://$FTP_USER:$FTP_PASS@$FTP_SERVER
 chmod 600 ${FTP_PATH_FRONT}.secrets/portail.json
 chmod 755 ${FTP_PATH_FRONT}uploads
@@ -301,7 +320,7 @@ quit
 deploy_db() {
     [ ! -f "$DB_REL" ] && err "$DB_REL introuvable en local."
     warn "Envoi de $DB_REL — la base du serveur va être remplacée par celle-ci."
-    lftp -c "
+    lftp_run "
 set ftp:ssl-allow yes
 set ftp:ssl-force no
 open ftp://$FTP_USER:$FTP_PASS@$FTP_SERVER
@@ -342,6 +361,11 @@ if [ "$PORTAIL" = "1" ]; then
 else
     deploy_front
     [ "$WITH_DB" = "1" ] && deploy_db
+fi
+if [ "$DRY_RUN" = "1" ]; then
+    echo ""
+    echo -e "${YELLOW}${BOLD}Essai à blanc terminé : les lignes « put » ci-dessus sont les fichiers qui partiraient. Rien n'a été envoyé.${NC}"
+    exit 0
 fi
 
 END=$(date +%s)
