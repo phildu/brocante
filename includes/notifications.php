@@ -1404,3 +1404,77 @@ function nt_import_customers(): array
     }
     return $res;
 }
+
+/* ====================================================================== */
+/* Intégration : commandes de la boutique                                 */
+/* ====================================================================== */
+
+/** Nom du client : premier élément de l'adresse de livraison (« Nom, rue, … »), sinon début de l'e-mail. */
+function nt_order_customer_name(array $order, string $email): string
+{
+    $first = trim((string) strtok((string) ($order['shipping_address'] ?? ''), ','));
+    if ($first !== '' && !preg_match('/\d/', $first)) return mb_substr($first, 0, 120);
+    return ucfirst((string) strstr($email, '@', true));
+}
+
+/**
+ * Prévient le client que sa commande est expédiée, sur ses canaux (rubrique « commande »).
+ * Appelée au passage du statut à « expédiée » ; ne lève jamais d'exception pour ne pas
+ * gêner la mise à jour de la commande. Une commande n'est notifiée qu'une fois.
+ *
+ * @return array{status: string, message: string} status : sent | queued | skipped | duplicate | error
+ */
+function nt_notify_order_shipped(array $order): array
+{
+    try {
+        nt_boot();
+        $id = (int) ($order['id'] ?? 0);
+        if (($order['status'] ?? '') !== 'paid') return ['status' => 'skipped', 'message' => 'commande non payée'];
+        $email = nt_normalize_address('email', (string) ($order['email'] ?? ''));
+        if ($email === null) return ['status' => 'skipped', 'message' => 'pas d\'adresse e-mail pour ce client'];
+        $marker = 'order_shipped_notified:' . $id;
+        if (nt_meta_get($marker) !== '') return ['status' => 'duplicate', 'message' => 'client déjà prévenu pour cette commande'];
+
+        $uid = nt_user_find_by_address('email', $email);
+        if ($uid === null) {
+            $uid = nt_user_create(nt_order_customer_name($order, $email), '', 'commande', $email);
+            nt_user_set_channel($uid, 'email', $email, true, 0);
+        }
+
+        $items = [];
+        foreach (json_decode((string) ($order['items'] ?? ''), true) ?: [] as $it) {
+            if (!empty($it['name'])) $items[] = (int) ($it['qty'] ?? 1) . ' × ' . $it['name'];
+        }
+        $when = !empty($order['created_at']) ? date('d/m/Y', strtotime((string) $order['created_at'])) : '';
+        $ref = 'votre commande' . ($when !== '' ? ' du ' . $when : '');
+        $tracking = trim((string) ($order['tracking_number'] ?? ''));
+        // Sans adresse de livraison (retrait à l'atelier), « expédiée » serait trompeur.
+        $shipped = trim((string) ($order['shipping_address'] ?? '')) !== '';
+        $verb = $shipped ? 'a été expédiée' : 'est prête';
+
+        $body = "Bonjour {prenom},\n\nBonne nouvelle : $ref $verb.\n";
+        if ($items) $body .= "\nContenu : " . implode(', ', $items) . "\n";
+        if ($tracking !== '') $body .= "\nNuméro de suivi : $tracking\n";
+        $body .= "\nMerci de votre confiance,\n{site}";
+        $short = '{site} : ' . $ref . ' ' . $verb . '.' . ($tracking !== '' ? ' Suivi : ' . $tracking : '');
+
+        $r = nt_notify('commande', [$uid], ucfirst($ref) . ' ' . $verb, $body, [
+            'short_body' => $short, 'created_by' => 'commande', 'immediate_budget' => 10,
+        ]);
+        if ($r['error']) return ['status' => 'error', 'message' => $r['error']];
+        if ($r['queued'] === 0) {
+            $why = $r['skipped'][0][3] ?? 'aucun canal actif';
+            return ['status' => 'skipped', 'message' => 'client non prévenu (' . mb_strtolower((string) $why) . ')'];
+        }
+        nt_meta_set($marker, nt_fmt(nt_now()));
+
+        $st = db()->prepare("SELECT channel FROM nt_deliveries WHERE message_id = ? AND status = 'sent'");
+        $st->execute([$r['message_id']]);
+        $sent = array_map('nt_channel_label', $st->fetchAll(PDO::FETCH_COLUMN));
+        if ($sent) return ['status' => 'sent', 'message' => 'client prévenu (' . implode(', ', $sent) . ')'];
+        return ['status' => 'queued', 'message' => 'notification au client en file d\'attente (voir Notifications → Historique)'];
+    } catch (Throwable $e) {
+        error_log('nt_notify_order_shipped: ' . $e->getMessage());
+        return ['status' => 'error', 'message' => 'notification non envoyée (erreur interne)'];
+    }
+}

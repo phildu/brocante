@@ -19,9 +19,24 @@ if ($action === 'fulfillment') {
         exit;
     }
     $tracking = trim((string) ($_POST['tracking_number'] ?? ''));
+    $before = db()->prepare('SELECT fulfillment_status FROM orders WHERE id = ?');
+    $before->execute([$id]);
+    $previous = $before->fetchColumn();
     $stmt = db()->prepare('UPDATE orders SET fulfillment_status = ?, tracking_number = ? WHERE id = ?');
     $stmt->execute([$status, $tracking !== '' ? $tracking : null, $id]);
-    flash_set('Suivi de commande mis à jour.');
+    $msg = 'Suivi de commande mis à jour.';
+    // Passage à « expédiée » : on prévient le client (une seule fois par commande) sans jamais
+    // faire échouer la mise à jour si l'envoi ne marche pas.
+    if ($status === 'expediee' && $previous !== false && $previous !== 'expediee') {
+        require_once __DIR__ . '/../includes/notifications.php';
+        $order = db()->prepare('SELECT * FROM orders WHERE id = ?');
+        $order->execute([$id]);
+        if ($row = $order->fetch()) {
+            $n = nt_notify_order_shipped($row);
+            if ($n['status'] !== 'duplicate') $msg .= ' ' . ucfirst($n['message']) . '.';
+        }
+    }
+    flash_set($msg, 'ok');
 } elseif ($action === 'refresh_stripe') {
     // Rattrape une commande restée "en attente" côté site alors que le
     // paiement a bien abouti chez Stripe (le client a fermé l'onglet avant

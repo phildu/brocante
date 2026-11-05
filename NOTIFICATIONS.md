@@ -76,9 +76,21 @@ nt_notify('commande', [$userId], 'Votre colis est parti',
 
 Retourne le nombre d'envois mis en file et les exclusions (canal coupé,
 non abonné…). Options : `strategy` (`all`|`fallback`), `channels`,
-`short_body`, `immediate` (`false` = file seule). Aucun appel n'est encore
-branché sur les commandes ou la buvette : à faire là où c'est utile
-(ex. `admin/update-order.php` à l'expédition).
+`short_body`, `immediate` (`false` = file seule).
+
+### Déjà branché : commande expédiée
+
+Quand, dans *Administration → Commandes*, une commande **payée** passe à
+« Expédiée » (`admin/update-order.php` → `nt_notify_order_shipped()`), le client
+est prévenu sur ses canaux (rubrique « Suivi de commande ») avec la date de sa
+commande, ses articles et le numéro de suivi s'il est saisi.
+
+- Le client est retrouvé par son e-mail, ou créé automatiquement (nom pris dans l'adresse de livraison) avec le seul canal e-mail. Il n'a aucun abonnement marketing.
+- **Une seule notification par commande** : corriger ensuite le numéro de suivi, ou repasser la commande en « À préparer » puis « Expédiée », n'envoie rien de plus tant qu'une première notification est partie (ou en file).
+- Les préférences du client sont respectées : s'il s'est retiré du suivi de commande, ou a coupé son canal, rien n'est envoyé — la commande n'est alors pas marquée notifiée.
+- Sans adresse de livraison (retrait à l'atelier), le message dit « est prête » au lieu de « a été expédiée ».
+- Un échec d'envoi (e-mail non configuré, panne du serveur de messagerie…) **ne bloque jamais** la mise à jour de la commande : le résultat s'affiche dans le message de confirmation, et les envois non partis sont repris par le cron.
+- Le texte du message est dans `nt_notify_order_shipped()` (`includes/notifications.php`).
 
 ## Installation et déploiement
 

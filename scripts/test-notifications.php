@@ -216,7 +216,7 @@ $dcBody = json_decode($dc['body'], true);
 check('Discord : aucune mention autorisée (@everyone neutralisé)', $dcBody['allowed_mentions'], ['parse' => []]);
 check('e-mail : envoyé via mail()', count($mails), 1);
 check('e-mail : destinataire', $mails[0]['to'], 'alice@example.fr');
-check('e-mail : objet', $mails[0]['subject'], 'Votre colis est parti');
+check('e-mail : objet', iconv_mime_decode($mails[0]['subject'], 0, 'UTF-8'), 'Votre colis est parti');
 check('e-mail : multipart texte + HTML', str_contains($mails[0]['headers'], 'multipart/alternative') && str_contains($mails[0]['body'], 'text/html'), true);
 check('e-mail : nom d\'expéditeur entre guillemets', str_contains($mails[0]['headers'], 'From: "La Brocante, du Petit Chalet" <boutique@brocante.fr>'), true);
 check('e-mail : pas de désinscription sur un message de suivi', str_contains($mails[0]['headers'], 'List-Unsubscribe'), false);
@@ -481,6 +481,43 @@ check('bénévole : aucun opt-in marketing', nt_user_get($lea)['prefs'], []);
 $imp = nt_import_customers();
 check('clients : seul le client ayant payé est créé (doublons fusionnés)', [$imp['created'], nt_user_find_by_address('email', 'attente@example.fr')], [1, null]);
 check('import idempotent', [nt_import_volunteers()['created'], nt_import_customers()['created']], [0, 0]);
+
+/* ------------------------------------------------------------------ */
+echo "\nCommande expédiée\n";
+$order = ['id' => 42, 'status' => 'paid', 'email' => 'Claire.Dupont@Example.fr', 'created_at' => '2026-11-03 10:15:00',
+    'shipping_address' => 'Claire Dupont, 3 rue des Lilas, 80000 Amiens, FR', 'tracking_number' => '6A12345678901',
+    'items' => json_encode([['name' => 'Lampe de chevet', 'qty' => 1], ['name' => 'Vase bleu', 'qty' => 2]])];
+check('commande non payée : rien envoyé', nt_notify_order_shipped(['status' => 'pending'] + $order)['status'], 'skipped');
+check('sans e-mail : rien envoyé', nt_notify_order_shipped(['email' => ''] + $order)['status'], 'skipped');
+$mails = [];
+$r = nt_notify_order_shipped($order);
+check('client prévenu par e-mail', [$r['status'], $r['message']], ['sent', 'client prévenu (E-mail)']);
+check('un utilisateur est créé avec le nom de l\'adresse de livraison', nt_user_get(nt_user_find_by_address('email', 'claire.dupont@example.fr'))['name'], 'Claire Dupont');
+check('e-mail : objet', iconv_mime_decode($mails[0]['subject'], 0, 'UTF-8'), 'Votre commande du 03/11/2026 a été expédiée');
+$text = quoted_printable_decode($mails[0]['body']);
+check('e-mail : prénom, articles et numéro de suivi', [str_contains($text, 'Bonjour Claire,'), str_contains($text, '1 × Lampe de chevet, 2 × Vase bleu'), str_contains($text, 'Numéro de suivi : 6A12345678901')], [true, true, true]);
+check('pas de lien de désinscription (message de suivi)', str_contains($mails[0]['headers'], 'List-Unsubscribe'), false);
+$mails = [];
+check('2e appel pour la même commande : pas de doublon', [nt_notify_order_shipped($order)['status'], count($mails)], ['duplicate', 0]);
+$mails = [];
+$r = nt_notify_order_shipped(['id' => 43, 'shipping_address' => null, 'tracking_number' => null, 'email' => 'retrait@example.fr'] + $order);
+check('retrait (sans adresse) : « est prête », pas « expédiée »', [$r['status'], iconv_mime_decode($mails[0]['subject'], 0, 'UTF-8')], ['sent', 'Votre commande du 03/11/2026 est prête']);
+check('nom de repli : début de l\'e-mail', nt_user_get(nt_user_find_by_address('email', 'retrait@example.fr'))['name'], 'Retrait');
+$optout = nt_user_find_by_address('email', 'claire.dupont@example.fr');
+nt_set_pref($optout, 'commande', 'email', false, 'utilisateur');
+$mails = [];
+$r = nt_notify_order_shipped(['id' => 44] + $order);
+check('client retiré du suivi de commande : respecté, rien envoyé', [$r['status'], count($mails)], ['skipped', 0]);
+check('… et la commande n\'est pas marquée notifiée (réessayable)', nt_meta_get('order_shipped_notified:44'), '');
+nt_set_pref($optout, 'commande', 'email', true, 'utilisateur');
+nt_user_disable_channel($optout, 'email', 'désinscrit');
+check('canal e-mail désactivé : respecté', nt_notify_order_shipped(['id' => 45] + $order)['status'], 'skipped');
+nt_user_set_channel($optout, 'email', 'claire.dupont@example.fr', true);
+$cfgBackup = nt_config()['email']['from_email'];
+nt_config_update('email', ['from_email' => '']);
+$r = nt_notify_order_shipped(['id' => 46, 'email' => 'nouveau@example.fr'] + $order);
+check('e-mail non configuré : pas d\'exception, client non prévenu', [$r['status'], str_contains($r['message'], 'non configuré')], ['skipped', true]);
+nt_config_update('email', ['from_email' => $cfgBackup]);
 
 /* ------------------------------------------------------------------ */
 echo "\nSuppression, effacement et purge\n";
