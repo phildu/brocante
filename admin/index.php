@@ -1,7 +1,12 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+if (auth_user() !== null && !auth_can_any('portail.reglages.lire', 'portail.cles_api.lire') && !auth_user()['must_change']) {
+    // Le lien « Administration » du pied de page mène ici : on envoie chacun vers sa première page.
+    header('Location: ' . auth_home_url());
+    exit;
+}
+require_permission('portail.reglages.lire', 'portail.cles_api.lire');
 
 $content = get_content();
 $mediaPhotos = get_media_items('photo');
@@ -50,6 +55,7 @@ $flash = flash_get();
 
     <div class="admin-shell">
 
+      <?php if (auth_can('portail.reglages.lire')): ?>
       <form class="admin-block" method="post" action="/admin/save-content.php" enctype="multipart/form-data">
         <h2>Identité du site</h2>
         <p class="hint">Le nom de la boutique, affiché dans l'en-tête, le pied de page et les titres d'onglet.</p>
@@ -127,7 +133,9 @@ $flash = flash_get();
 
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer les contenus</button>
       </form>
+      <?php endif; ?>
 
+      <?php if (auth_can('portail.cles_api.lire')): ?>
       <form class="admin-block" method="post" action="/admin/save-stripe-keys.php" id="stripe-settings">
         <h2>Réglages Stripe</h2>
         <p class="hint">Clés de <a href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">dashboard.stripe.com/test/apikeys</a> (mode test : <code>sk_test_...</code> / <code>pk_test_...</code>). Un champ laissé vide conserve la clé déjà enregistrée.</p>
@@ -173,6 +181,7 @@ $flash = flash_get();
         <button type="submit" class="btn btn-primary" style="margin-top:6px;">Enregistrer la clé</button>
       </form>
 
+      <?php endif; ?>
     </div>
   </div>
 </section>
@@ -233,5 +242,6 @@ $flash = flash_get();
   });
 })();
 </script>
+<?= auth_ui_gate('save-content.php', 'save-stripe-keys.php', 'save-gemini-key.php', 'save-fal-key.php') ?>
 </body>
 </html>

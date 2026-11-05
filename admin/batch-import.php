@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+require_permission('boutique.import_lot.lire');
 
 $content = get_content();
 $batch = $_SESSION['batch_import'] ?? null;
@@ -172,5 +172,6 @@ $flash = flash_get();
   </div>
 </section>
 </main>
+<?= auth_ui_gate('batch-import-action.php') ?>
 </body>
 </html>

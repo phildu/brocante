@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/invendus-layout.php';
-require_admin();
+require_permission('portail.invendus.lire');
 
 $events = unsold_events_list();
 

@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/catalog.php');
@@ -28,7 +28,7 @@ $stmt->execute([
     'price' => trim((string) ($_POST['price'] ?? '')) ?: '0 €',
     'badge' => trim((string) ($_POST['badge'] ?? '')) ?: 'Chiné',
     'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),
-    'cost_cents' => $costInput === null ? null : (int) round($costInput * 100),
+    'cost_cents' => ($costInput === null || !auth_can('boutique.produits.cout')) ? null : (int) round($costInput * 100),
 ]);
 
 flash_set('Pièce « ' . $name . ' » ajoutée — Réf. N°' . $ref . '.');

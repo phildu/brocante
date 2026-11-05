@@ -8,11 +8,28 @@ require_once __DIR__ . '/buvette.php';
 
 /* ---------- administration ---------- */
 
-/** Session + droits admin + schéma : à appeler en tête de chaque page admin/buvette/. */
+/**
+ * Droit exigé par une action POST de l'administration de la buvette, déduit de
+ * son nom : delete_* -> supprimer ; add_*, create_*, load_*, duplicate_* -> créer ;
+ * le reste (update_*, set_*, assign, toggle, reset, save_*, activate_*…) -> modifier.
+ */
+function bv_action_verb(string $action): string
+{
+    if (str_starts_with($action, 'delete')) return 'supprimer';
+    foreach (['add', 'create', 'load', 'duplicate'] as $prefix) {
+        if (str_starts_with($action, $prefix)) return 'creer';
+    }
+    return 'modifier';
+}
+
+/** Session + droits (consulter, et selon l'action : créer / modifier / supprimer) + schéma : à appeler en tête de chaque page admin/buvette/. */
 function bv_admin_init(): void
 {
     if (session_status() === PHP_SESSION_NONE) session_start();
-    require_admin();
+    require_permission('portail.buvette.lire');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        require_permission(auth_perm('portail.buvette', bv_action_verb((string) ($_POST['action'] ?? ''))));
+    }
     bv_boot();
 }
 

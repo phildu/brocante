@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/analytics.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/auth.php';
 
 function h($s): string
 {
@@ -1558,12 +1559,15 @@ function flash_get(): ?array
     return $f;
 }
 
+/**
+ * Historique : « être admin » = tout pouvoir. Depuis les rôles et droits fins
+ * (includes/auth.php), seul le PROPRIÉTAIRE passe ici. Les pages utilisent
+ * require_permission('niveau.ressource.action') ; require_admin() n'est gardé
+ * que comme refus par défaut pour une page qu'on aurait oublié de classer.
+ */
 function require_admin(): void
 {
-    if (empty($_SESSION['is_admin'])) {
-        header('Location: /admin/login.php');
-        exit;
-    }
+    require_owner();
 }
 
 /* ---------- prix & panier ---------- */

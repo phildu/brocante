@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/catalog.php');
@@ -42,7 +42,9 @@ $costInput = parse_euros($_POST['cost_price'] ?? null);
 
 $set = 'cost_cents = :cost_cents, name = :name, cat = :cat, description = :description, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock';
 $params = [
-    'cost_cents' => $costInput === null ? null : (int) round($costInput * 100),
+    // Sans le droit « prix d'achat » / « masquer », le champ n'est pas affiché : on garde la valeur
+    // existante au lieu de l'effacer (un champ absent du formulaire arrive vide).
+    'cost_cents' => !auth_can('boutique.produits.cout') ? ($product['cost_cents'] ?? null) : ($costInput === null ? null : (int) round($costInput * 100)),
     'name' => trim((string) ($_POST['name'] ?? $product['name'])),
     'cat' => $cat,
     'description' => trim((string) ($_POST['description'] ?? $product['description'])),
@@ -53,7 +55,7 @@ $params = [
     'weight_text' => trim((string) ($_POST['weight_text'] ?? $product['weight_text'])),
     'weight_grams' => isset($_POST['weight_grams']) ? max(0, (int) $_POST['weight_grams']) : $product['weight_grams'],
     'featured' => $featuredRequested ? 1 : 0,
-    'is_hidden' => !empty($_POST['is_hidden']) ? 1 : 0,
+    'is_hidden' => !auth_can('boutique.produits.publier') ? (int) $product['is_hidden'] : (!empty($_POST['is_hidden']) ? 1 : 0),
     'stock' => isset($_POST['stock']) ? max(0, (int) $_POST['stock']) : $product['stock'],
     'ref' => $ref,
 ];

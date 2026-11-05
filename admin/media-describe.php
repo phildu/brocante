@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+require_permission_json('galerie.mediatheque.ia');
 
 header('Content-Type: application/json');
 
