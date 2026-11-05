@@ -83,6 +83,10 @@ lftp_run() {
     fi
 }
 [ -f "tenants/$TENANT/tenant.php" ] || err "Commerce introuvable : tenants/$TENANT/tenant.php"
+# Un commerce d'essai local ne part jamais, même demandé explicitement avec --tenant (le mode --portail les écarte déjà).
+for t in $LOCAL_ONLY_TENANTS; do
+    [ "$TENANT" = "$t" ] && [ "$PORTAIL" = "0" ] && err "« $TENANT » est un commerce d'essai local (LOCAL_ONLY_TENANTS) : il n'est jamais déployé."
+done
 export TENANT
 
 # Base et envoi des photos : lus dans la config du commerce.
@@ -240,7 +244,7 @@ deploy_portail() {
     # Fichiers envoyés (uploads/) : jamais en mode portail (chaque serveur garde les siens ; les essais locaux ne partent pas).
     # Commerces d'essai locaux (LOCAL_ONLY_TENANTS) : ni leur configuration, ni leurs ressources.
     local local_tenants_exclude=""
-    for t in $LOCAL_ONLY_TENANTS; do local_tenants_exclude="$local_tenants_exclude --exclude-glob tenants/$t/ --exclude-glob assets/tenants/$t/"; done
+    for t in $LOCAL_ONLY_TENANTS; do local_tenants_exclude="$local_tenants_exclude --exclude-glob tenants/$t/ --exclude-glob assets/tenants/$t/ --exclude-glob data/$t.*"; done
     [ "$WITH_DB" = "1" ] && db_exclude=""
     local account_file
     account_file="$(mktemp)"
