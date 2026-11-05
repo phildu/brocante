@@ -17,6 +17,7 @@ $product = get_product($ref);
 
 if ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
     cart_add($ref, 1);
+    track_event('add_to_cart', $ref);
     flash_set('« ' . $product['name'] . ' » ajouté au panier.');
 }
 

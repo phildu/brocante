@@ -3,6 +3,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/functions.php';
 $activeNav = $activeNav ?? '';
 $cartCount = cart_count();
+track_request(basename($_SERVER['SCRIPT_NAME'] ?? '') === 'produit.php' && isset($product['ref']) ? (string) $product['ref'] : null);
 $siteContent = get_content();
 $siteName = $siteContent['site_name'] ?: 'La Brocante du Petit Chalet';
 $siteTagline = $siteContent['site_tagline'] ?: '';
