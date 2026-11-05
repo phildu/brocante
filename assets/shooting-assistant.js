@@ -29,6 +29,8 @@
     keepAll: false,
     audio: true,
     audioAnswered: false,
+    introMuted: false,
+    typeAdding: null,
     mode: 'single',
     typeValidated: false,
     draft: [],
@@ -50,7 +52,9 @@
   try {
     state.audio = localStorage.getItem('sa-audio') !== '0';
     state.audioAnswered = localStorage.getItem('sa-audio-answered') === '1';
-    if (localStorage.getItem('sa-mode') === 'batch') state.mode = 'batch';
+    var savedMode = localStorage.getItem('sa-mode');
+    if (savedMode === 'batch' || savedMode === 'group') state.mode = savedMode;
+    state.introMuted = localStorage.getItem('sa-intro-mute') === '1';
   } catch (e) {}
 
   function $(id) { return document.getElementById(id); }
@@ -117,6 +121,139 @@
     });
   }
 
+  // ── Quel type de produit ? Saisie libre, proposition approchante, autodécouverte ──
+  var TYPE_SYNONYMS = {
+    vetement: ['robe', 'pantalon', 'veste', 'manteau', 'pull', 'jupe', 'chemise', 'blouson', 'costume', 'habit', 'tee shirt', 'jean', 'gilet', 'short'],
+    chaussures: ['chaussure', 'basket', 'baskets', 'botte', 'bottes', 'sandale', 'escarpin', 'soulier', 'mocassin'],
+    accessoires: ['sac', 'sacoche', 'ceinture', 'echarpe', 'foulard', 'chapeau', 'lunettes', 'montre', 'cravate', 'gant', 'maroquinerie'],
+    bijou: ['bijoux', 'collier', 'bague', 'bracelet', 'boucle', 'broche', 'pendentif'],
+    media: ['livre', 'livres', 'disque', 'vinyle', 'cd', 'dvd', 'bd', 'film', 'magazine', 'revue'],
+    vaisselle: ['assiette', 'tasse', 'verre', 'couvert', 'plat', 'bol', 'theiere', 'carafe', 'service', 'casserole', 'cafetiere'],
+    deco: ['cadre', 'tableau', 'miroir', 'vase', 'statuette', 'bibelot', 'affiche', 'horloge', 'pendule'],
+    mobilier: ['chaise', 'table', 'fauteuil', 'armoire', 'commode', 'canape', 'etagere', 'buffet', 'tabouret', 'meuble'],
+    luminaire: ['lampe', 'lustre', 'applique', 'suspension', 'lanterne'],
+    textile: ['linge', 'drap', 'nappe', 'rideau', 'serviette', 'couverture', 'tapis', 'coussin', 'torchon'],
+    electronique: ['radio', 'telephone', 'ordinateur', 'camera', 'appareil photo', 'electromenager', 'haut parleur', 'tele'],
+    jeux: ['jouet', 'jouets', 'poupee', 'puzzle', 'lego', 'peluche', 'jeu de societe', 'console'],
+    beaute: ['parfum', 'maquillage', 'creme', 'cosmetique', 'flacon']
+  };
+
+  function normText(v) {
+    return String(v || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function levenshtein(a, b) {
+    if (a === b) return 0;
+    var prev = [], cur, i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      cur = [i];
+      for (j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  /** { key, exact } si le mot est connu, { key, via } si une proposition approchante existe, sinon null. */
+  function matchType(input) {
+    var n = normText(input);
+    if (n.length < 2) return null;
+    var types = DATA.types || FALLBACK_TYPES;
+    var terms = [];
+    Object.keys(types).forEach(function (key) {
+      terms.push([key, normText(key), types[key]]);
+      String(types[key]).split('/').forEach(function (part) { terms.push([key, normText(part), types[key]]); });
+      (TYPE_SYNONYMS[key] || []).forEach(function (w) { terms.push([key, w, w]); });
+    });
+    var i;
+    for (i = 0; i < terms.length; i++) if (terms[i][1] === n) return { key: terms[i][0], exact: true };
+    var best = null;
+    for (i = 0; i < terms.length; i++) {
+      var t = terms[i][1];
+      if (!t) continue;
+      if (n.length >= 3 && (t.indexOf(n) === 0 || n.indexOf(t) === 0 && t.length >= 4)) {
+        if (!best || best.score > 0.5) best = { key: terms[i][0], via: terms[i][2], score: 0.5 };
+        continue;
+      }
+      var limit = Math.max(1, Math.floor(n.length / 4));
+      var d = levenshtein(n, t);
+      if (d <= limit && (!best || d < best.score)) best = { key: terms[i][0], via: terms[i][2], score: d };
+    }
+    return best ? { key: best.key, via: best.via } : null;
+  }
+
+  function typeMessage(text, buttons) {
+    var box = $('sa-type-msg');
+    box.textContent = '';
+    if (!text) { box.hidden = true; return; }
+    box.appendChild(el('p', '', text));
+    if (buttons && buttons.length) {
+      var row = el('div', 'sa-typeask-actions');
+      buttons.forEach(function (b) {
+        var btn = el('button', 'btn ' + (b.primary ? 'btn-primary' : 'btn-ghost'), b.label);
+        btn.type = 'button';
+        btn.addEventListener('click', b.run);
+        row.appendChild(btn);
+      });
+      box.appendChild(row);
+    }
+    box.hidden = false;
+    if (state.audio) speak(text);
+  }
+
+  function pickType(key) {
+    setManualType(key);
+    $('sa-type-input').value = key === 'auto' ? '' : typeLabel(key);
+    typeMessage(key === 'auto' ? "Type automatique : l'IA reconnaîtra la pièce." : 'Type retenu : ' + typeLabel(key) + '.');
+  }
+
+  /** Mot inconnu : proposer de photographier le produit, de l'ajouter à la liste et d'ouvrir l'appareil photo. */
+  function proposeDiscovery(word) {
+    typeMessage('« ' + word + " » n'est pas dans la liste. Photographier le produit pour que l'IA le découvre et l'ajouter aux types ?", [
+      { label: '📷 Oui, photographier', primary: true, run: function () { acceptDiscovery(word); } },
+      { label: 'Non, type automatique', run: function () { pickType('auto'); } }
+    ]);
+  }
+
+  function acceptDiscovery(word) {
+    // L'appareil photo s'ouvre tout de suite (geste de l'utilisateur) ; le type s'enregistre en même temps.
+    $('sa-cam-first').click();
+    var fd = new FormData();
+    fd.append('action', 'add_type');
+    fd.append('label', word);
+    state.manual = 'other';
+    state.typeAdding = post(ACTION, fd).then(function (res) {
+      state.typeAdding = null;
+      if (!res.ok) { typeMessage(res.error || "Le type n'a pas pu être ajouté."); return; }
+      DATA.types = res.types;
+      renderTypeChips();
+      setManualType(res.key);
+      $('sa-type-input').value = res.label;
+      typeMessage('« ' + res.label + ' » est ajouté à la liste des types.');
+    });
+  }
+
+  function submitTypeInput() {
+    var word = $('sa-type-input').value.trim();
+    if (!word) return;
+    var m = matchType(word);
+    if (m && m.exact) { pickType(m.key); return; }
+    if (m) {
+      var label = typeLabel(m.key);
+      typeMessage('Vouliez-vous dire « ' + label + ' » ?', [
+        { label: 'Oui, ' + label, primary: true, run: function () { pickType(m.key); } },
+        { label: 'Non', run: function () { proposeDiscovery(word); } }
+      ]);
+      return;
+    }
+    proposeDiscovery(word);
+  }
+  $('sa-type-go').addEventListener('click', submitTypeInput);
+  $('sa-type-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); submitTypeInput(); }
+  });
+
   function setManualType(type) {
     state.manual = type;
     state.typeValidated = false;
@@ -140,38 +277,189 @@
     }
   }
 
+  var MODE_LABELS = { single: 'article par article', batch: 'en lot, traitement après', group: "photo d'un ensemble" };
+  var MODE_CONFIRM = { single: 'Un article à la fois.', batch: 'Articles en lot, à traiter plus tard.', group: "Photo d'un ensemble de produits." };
+  var modeRec = null;
+  var firstTexts = null;
+
+  function newLabel() {
+    if (state.mode === 'batch') return 'Photographier un autre article';
+    if (state.mode === 'group') return 'Photographier un autre ensemble';
+    return 'Ajouter une autre pièce';
+  }
+
+  /** Tant qu'une question de mise en route est affichée, le reste de l'étape reste en retrait. */
+  function updateAsking() {
+    root.classList.toggle('sa-asking', !$('sa-setup').hidden || !$('sa-mode-ask').hidden);
+  }
+
+  /** Textes de l'étape 1 selon ce qu'on photographie (une pièce, ou un ensemble de produits). */
+  function applyMode() {
+    var group = state.mode === 'group';
+    var title = $('sa-start-title');
+    var dropTitle = document.querySelector('#sa-first-drop .sa-drop-title');
+    var dropHelp = document.querySelector('#sa-first-drop .sa-drop-help');
+    if (!firstTexts) {
+      firstTexts = {
+        title: title ? title.textContent : '',
+        dropTitle: dropTitle ? dropTitle.textContent : '',
+        dropHelp: dropHelp ? dropHelp.textContent : ''
+      };
+    }
+    if (title) title.textContent = group ? "La photo de l'ensemble" : firstTexts.title;
+    if (dropTitle) dropTitle.textContent = group ? "Prenez la photo de l'ensemble" : firstTexts.dropTitle;
+    if (dropHelp && !state.cameraError) {
+      dropHelp.textContent = group
+        ? 'Tous les produits visibles, bien séparés les uns des autres, avec une marge. Pas de flash.'
+        : firstTexts.dropHelp;
+    }
+    $('sa-new').textContent = newLabel();
+    $('sa-generate').textContent = state.mode === 'batch' ? 'Ajouter cet article au lot' : 'Générer la fiche';
+  }
+
   function renderSession() {
     var box = $('sa-session');
     if (!box) return;
     box.textContent = '';
     box.appendChild(document.createTextNode('Assistance vocale : ' + (state.audio ? 'oui' : 'non')
-      + ' · ' + (state.mode === 'batch' ? 'en lot, traitement après' : 'article par article') + '. '));
+      + ' · ' + MODE_LABELS[state.mode] + '. '));
     var change = el('button', 'btn-small', 'Changer');
     change.type = 'button';
     change.addEventListener('click', function () {
-      storageSet('sa-setup', '0');
-      storageSet('sa-audio-answered', '0');
-      storageSet('sa-mode-answered', '0');
-      $('sa-setup').hidden = false;
-      box.hidden = true;
+      storageSet('sa-mode-never', '0');
+      askMode(true, false);
     });
     box.appendChild(change);
-    box.hidden = false;
+    box.hidden = !$('sa-mode-ask').hidden;
   }
 
+  // ── Question « Voulez-vous photographier… » : un, deux ou trois, touché ou dit ──
+  function modeSpeech() {
+    return 'Voulez-vous photographier : un ou des articles, un par un ? Dites un. '
+      + 'Des articles en lot, pour les traiter plus tard ? Dites deux. '
+      + "Ou une photo d'un ensemble de produits, pour les traiter rapidement ? Dites trois.";
+  }
+  /** « un », « 2 », « trois »… (les mots les plus précis d'abord : « un lot » vaut deux). */
+  function parseMode(list) {
+    for (var i = 0; i < list.length; i++) {
+      var t = ' ' + String(list[i]).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+      if (/ (trois|3|ensemble|rapide|rapidement) /.test(t)) return 'group';
+      if (/ (deux|2|lot|lots|plus tard) /.test(t)) return 'batch';
+      if (/ (un|une|1|premier|premiere|article|articles|par un) /.test(t)) return 'single';
+    }
+    return '';
+  }
+  function setMicState(on) {
+    var b = $('sa-mode-mic');
+    if (!b) return;
+    b.textContent = on ? '🎤 Je vous écoute… (toucher pour arrêter)' : '🎤 Répondre à la voix';
+    $('sa-mode-ask').classList.toggle('sa-mode-ask-listening', on);
+  }
+  function stopModeListening() {
+    if (modeRec) { try { modeRec.stop(); } catch (e) {} }
+    modeRec = null;
+    setMicState(false);
+  }
+  function listenMode() {
+    if (modeRec) return;
+    var heard = $('sa-mode-heard');
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { heard.textContent = "La reconnaissance vocale n'est pas disponible ici : touchez un choix."; return; }
+    var rec = new SR();
+    rec.lang = 'fr-FR';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 3;
+    heard.textContent = '🎤 Dites un, deux ou trois.';
+    rec.onresult = function (event) {
+      var alts = [];
+      var r = event.results && event.results[0];
+      for (var i = 0; r && i < r.length; i++) alts.push(r[i].transcript);
+      var mode = parseMode(alts);
+      if (mode) { answerMode(mode); return; }
+      heard.textContent = 'Entendu : « ' + (alts[0] || '') + ' » — pas compris. Dites un, deux ou trois, ou touchez un choix.';
+    };
+    rec.onerror = function (event) {
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') heard.textContent = 'Micro refusé : touchez un choix.';
+      else if (event.error === 'no-speech') heard.textContent = "Je n'ai rien entendu. Touchez le micro pour réessayer, ou touchez un choix.";
+    };
+    rec.onend = function () { modeRec = null; setMicState(false); };
+    try { rec.start(); modeRec = rec; setMicState(true); } catch (e) { modeRec = null; setMicState(false); }
+  }
+
+  function speakModeQuestion() {
+    if (!state.audio || $('sa-mode-ask').hidden) return;
+    speak(modeSpeech(), true, function () { if (!$('sa-mode-ask').hidden) listenMode(); });
+  }
+
+  /** quiet : pas de voix ni de micro (chargement de la page : le navigateur exige un geste de l'utilisateur). */
+  function askMode(force, quiet) {
+    if (!force && storageGet('sa-mode-never') === '1') {
+      $('sa-mode-ask').hidden = true;
+      applyMode();
+      updateAsking();
+      return;
+    }
+    stopModeListening();
+    $('sa-mode-heard').textContent = '';
+    $('sa-mode-never').checked = false;
+    $('sa-mode-ask').hidden = false;
+    $('sa-session').hidden = true;
+    document.querySelectorAll('[data-mode-answer]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.modeAnswer === state.mode));
+    });
+    updateAsking();
+    if (!quiet) speakModeQuestion();
+  }
+
+  function answerMode(mode) {
+    if (!MODE_LABELS[mode]) return;
+    stopModeListening();
+    stopSpeaking();
+    state.mode = mode;
+    storageSet('sa-mode', mode);
+    if ($('sa-mode-never').checked) storageSet('sa-mode-never', '1');
+    $('sa-mode-ask').hidden = true;
+    applyMode();
+    renderSession();
+    updateAsking();
+    if (state.audio) speak(MODE_CONFIRM[mode]);
+  }
+
+  // ── Présentation vocale : on peut ne plus l'écouter dorénavant ──────────
+  function offerIntroMute() {
+    var wrap = $('sa-intro-mute-wrap');
+    if (!wrap) return;
+    $('sa-intro-mute').checked = state.introMuted;
+    wrap.hidden = false;
+  }
+  function playIntro(then) {
+    speak(introSpeech(), true, function () {
+      offerIntroMute();
+      if (then) then();
+    });
+  }
+  $('sa-intro-mute').addEventListener('change', function () {
+    state.introMuted = this.checked;
+    storageSet('sa-intro-mute', this.checked ? '1' : '0');
+  });
+
   function completeSetupIfReady() {
-    if (storageGet('sa-audio-answered') !== '1' || storageGet('sa-mode-answered') !== '1') return;
+    if (storageGet('sa-audio-answered') !== '1') return;
     storageSet('sa-setup', '1');
     storageSet('sa-intro-seen', '1');
     $('sa-setup').hidden = true;
     var intro = $('sa-intro-fold');
     if (intro) intro.open = false;
     renderSession();
+    updateAsking();
   }
 
   var setupDone = storageGet('sa-setup') === '1';
   $('sa-setup').hidden = setupDone;
-  if (setupDone) renderSession();
+  $('sa-mode-ask').hidden = true;
+  applyMode();
+  if (setupDone) { renderSession(); askMode(false, true); } else updateAsking();
   $('sa-intro-fold').open = storageGet('sa-intro-seen') !== '1';
   $('sa-first-fold').open = storageGet('sa-first-seen') !== '1';
 
@@ -180,17 +468,18 @@
       setAudio(this.dataset.audioAnswer === '1');
       state.audioAnswered = true;
       storageSet('sa-audio-answered', '1');
-      if (state.audio) speak(introSpeech(), true);
       completeSetupIfReady();
+      // Présentation d'abord (sauf si on a choisi de ne plus l'écouter), puis la question.
+      var ask = function () { askMode(false, false); };
+      if (state.audio && !state.introMuted) playIntro(ask);
+      else ask();
     });
   });
   document.querySelectorAll('[data-mode-answer]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      state.mode = this.dataset.modeAnswer === 'batch' ? 'batch' : 'single';
-      storageSet('sa-mode', state.mode);
-      storageSet('sa-mode-answered', '1');
-      completeSetupIfReady();
-    });
+    b.addEventListener('click', function () { answerMode(this.dataset.modeAnswer); });
+  });
+  $('sa-mode-mic').addEventListener('click', function () {
+    if (modeRec) stopModeListening(); else { stopSpeaking(); listenMode(); }
   });
 
   function markExplanationsSeen() {
@@ -357,8 +646,12 @@
     });
   }
 
+  /** Téléphone ou tablette : l'appareil photo de l'appareil (réglages standard) plutôt qu'une fenêtre dans la page. */
+  function preferNativeCamera() {
+    try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; }
+  }
   function openFirstCam() {
-    if (!cameraSupported()) { $('sa-cam-first').click(); return; }
+    if (!cameraSupported() || preferNativeCamera()) { $('sa-cam-first').click(); return; }
     ensureStream().then(function (ok) {
       if (!ok) {
         var help = document.querySelector('#sa-first-drop .sa-drop-help');
@@ -440,11 +733,14 @@
   function analyzePhoto() {
     if (!state.photo) return;
     analysisLoading();
-    var fd = new FormData();
-    fd.append('action', 'analyze');
-    fd.append('photo', state.photo, 'photo.jpg');
-    fd.append('kind', state.manual);
-    post(ACTION, fd).then(function (res) {
+    // Un type tout juste ajouté doit être enregistré avant que l'analyse le reçoive.
+    (state.typeAdding || Promise.resolve()).then(function () {
+      var fd = new FormData();
+      fd.append('action', 'analyze');
+      fd.append('photo', state.photo, 'photo.jpg');
+      fd.append('kind', state.manual);
+      return post(ACTION, fd);
+    }).then(function (res) {
       if (!res.ok) { analysisError(res.error); return; }
       state.analysis = res.analysis;
       state.metrics = res.metrics;
@@ -504,6 +800,8 @@
       a.quality.advice.forEach(function (line) { advice.appendChild(el('li', '', line)); });
       box.appendChild(advice);
     }
+
+    if (state.mode === 'group') { renderGroupActions(box, a); return; }
 
     var detected = el('p', 'sa-detected');
     if (a.subject && a.subject.nature_label) {
@@ -616,6 +914,112 @@
     if (a.count > 1 && !state.keepAll) { next.disabled = true; next.title = 'Choisissez un objet, ou gardez toute la photo.'; }
     actionsRow.appendChild(next);
     box.appendChild(actionsRow);
+  }
+
+  // ── Photo d'un ensemble : un article par objet repéré, à traiter dans le Studio ──
+  function cropBlob(blob, box) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(blob), img = new Image();
+      img.onload = function () {
+        var W = img.naturalWidth, H = img.naturalHeight, m = 0.05;
+        var x0 = Math.max(0, box[0] - box[2] * m), y0 = Math.max(0, box[1] - box[3] * m);
+        var x1 = Math.min(1, box[0] + box[2] * (1 + m)), y1 = Math.min(1, box[1] + box[3] * (1 + m));
+        var sx = Math.round(x0 * W), sy = Math.round(y0 * H);
+        var sw = Math.max(1, Math.round((x1 - x0) * W)), sh = Math.max(1, Math.round((y1 - y0) * H));
+        var k = Math.min(1, 1600 / Math.max(sw, sh));
+        var c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(sw * k));
+        c.height = Math.max(1, Math.round(sh * k));
+        c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { resolve(b || blob); }, 'image/jpeg', 0.88);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); resolve(blob); };
+      img.src = url;
+    });
+  }
+
+  function groupItems() {
+    var objs = ((state.analysis && state.analysis.objects) || []).filter(function (o) { return o && o.box; });
+    return objs.length >= 2 ? objs : [{ label: 'Ensemble', box: null }];
+  }
+
+  function renderGroupActions(box, a) {
+    var items = groupItems();
+    var split = items.length >= 2 || (items[0] && items[0].box);
+    var callout = el('div', 'sa-callout');
+    if (split) {
+      callout.appendChild(el('p', '', items.length + ' produits repérés : ' + items.map(function (o) { return o.label; }).join(', ')
+        + '. Chacun devient un article à part, mis de côté pour le Studio.'));
+    } else {
+      callout.appendChild(el('p', '', "Un seul produit repéré : la photo entière devient un article, mis de côté pour le Studio."
+        + (AI ? '' : " (Sans IA, l'ensemble n'est pas découpé.)")));
+    }
+    var actions = el('div', 'sa-actions');
+    var go = el('button', 'btn btn-primary', split ? '✓ Créer ' + items.length + ' articles' : '✓ Créer l\'article');
+    go.type = 'button';
+    go.addEventListener('click', groupProcess);
+    var retake = el('button', 'btn btn-ghost', '↺ Reprendre la photo');
+    retake.type = 'button';
+    retake.addEventListener('click', function () { openFirstCam(); });
+    var auto = el('button', 'btn btn-ghost', '☀ Corriger la lumière');
+    auto.type = 'button';
+    auto.addEventListener('click', autoCorrectFirst);
+    actions.appendChild(go);
+    actions.appendChild(retake);
+    actions.appendChild(auto);
+    callout.appendChild(actions);
+    box.appendChild(callout);
+    if (a.ai_error) box.appendChild(el('p', 'sa-note', a.ai_error));
+  }
+
+  function groupProcess() {
+    if (!state.photo) return;
+    var items = groupItems();
+    var kind = (state.program || programFor()).kind || 'objet';
+    var created = [];
+    var lastError = '';
+    var i = 0;
+    function next() {
+      if (i >= items.length) { finishGroup(created, items.length - created.length, lastError); return; }
+      var it = items[i++];
+      analysisLoading('Article ' + i + ' sur ' + items.length + '…');
+      (it.box ? cropBlob(state.photo, it.box) : Promise.resolve(state.photo)).then(function (blob) {
+        var fd = new FormData();
+        fd.append('action', 'create');
+        fd.append('kind', kind);
+        fd.append('source', 'batch');
+        fd.append('notes', it.box ? it.label : '');
+        fd.append('main', '0');
+        fd.append('photos[]', blob, 'photo-ensemble-' + i + '.jpg');
+        fd.append('labels[]', it.label);
+        return post(QA, fd);
+      }).then(function (res) {
+        if (res.ok) created.push({ ref: res.ref, photo: res.photos && res.photos[0], label: it.label });
+        else lastError = res.error || 'Envoi impossible.';
+        next();
+      });
+    }
+    next();
+  }
+
+  function finishGroup(created, failed, lastError) {
+    if (!created.length) { analysisError(lastError || "Aucun article n'a pu être créé."); return; }
+    state.batch = state.batch.concat(created);
+    state.draft = [];
+    renderDraft();
+    renderBatch();
+    $('sa-visuals').textContent = '';
+    $('sa-review').hidden = true;
+    $('sa-catalog-link').hidden = true;
+    $('sa-batch-studio').hidden = false;
+    $('sa-new').textContent = newLabel();
+    $('sa-done-title').textContent = created.length + ' article' + (created.length > 1 ? 's' : '') + ' ajouté' + (created.length > 1 ? 's' : '') + ' au lot';
+    $('sa-done-text').textContent = state.batch.length + ' article' + (state.batch.length > 1 ? 's' : '')
+      + " en attente. L'IA préparera les fiches dans le Studio, quand vous aurez terminé."
+      + (failed ? ' ' + failed + ' n\'a pas pu être créé : ' + lastError : '');
+    showPanel('done');
+    if (state.audio) speak(created.length + ' article' + (created.length > 1 ? 's' : '') + ' ajouté' + (created.length > 1 ? 's' : '') + ' au lot. Vous pouvez photographier un autre ensemble, ou ouvrir le Studio.');
   }
 
   function chooseObject() {
@@ -808,7 +1212,7 @@
       if (state.audio && !$('sa-panel-start').hidden) speak(audioOnSpeech(), true);
     });
   });
-  $('sa-audio-first-play').addEventListener('click', function () { speak(introSpeech(), true); });
+  $('sa-audio-first-play').addEventListener('click', function () { playIntro(); });
 
   // ── Shooting guidé ───────────────────────────────────────────────────────
   function beginShots() {
@@ -1410,19 +1814,21 @@
     $('sa-batch').hidden = true;
     $('sa-batch-studio').hidden = true;
     $('sa-catalog-link').hidden = false;
-    $('sa-new').textContent = state.mode === 'batch' ? 'Photographier un autre article' : 'Ajouter une autre pièce';
     $('sa-video-stage').hidden = true;
     $('sa-video-help').textContent = '';
     $('sa-video-status').textContent = '';
     resetVideoResult();
     document.querySelectorAll('#sa-video-modes [data-video-mode]').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
-    $('sa-generate').textContent = state.mode === 'batch' ? 'Ajouter cet article au lot' : 'Générer la fiche';
     state.manual = 'auto';
+    state.typeAdding = null;
+    $('sa-type-input').value = '';
+    typeMessage('');
     renderTypeChips();
     updateTypeButtons();
     renderDraft();
     renderThumbs();
     showPanel('start');
+    askMode(false, false);
   }
 
   $('sa-resume-shots').addEventListener('click', function () {
@@ -1661,7 +2067,7 @@
   });
 
   $('sa-new').addEventListener('click', function () {
-    if (state.mode === 'batch' && state.batch.length) { resetArticle(); return; }
+    if ((state.mode === 'batch' || state.mode === 'group') && state.batch.length) { resetArticle(); return; }
     location.reload();
   });
   $('sa-generate-again').addEventListener('click', generate);
@@ -2396,7 +2802,7 @@
       setTimeout(finish, Math.max(2500, text.length * 120));
     } catch (e) { finish(); }
   }
-  $('sa-audio-play').addEventListener('click', function () { speak(introSpeech(), true); });
+  $('sa-audio-play').addEventListener('click', function () { playIntro(); });
   $('sa-audio-stop').addEventListener('click', stopSpeaking);
 
   function analysisSpeech(a) {

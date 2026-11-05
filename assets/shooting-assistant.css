@@ -282,3 +282,46 @@
   .sa-video-modes { grid-template-columns: 1fr; }
   .sa-live video { max-height: 58vh; }
 }
+
+/* Mobile : pas de stepper (le fil des étapes prend de la place et n'apporte rien sur un petit écran). */
+@media (max-width: 639px) {
+  .sa-steps { display: none; }
+}
+
+/* Question « Voulez-vous photographier… » : trois grands choix, dits ou touchés. */
+.sa-mode-choices { display: grid; gap: 8px; }
+.sa-mode-choice { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; text-align: left; width: 100%; padding: 12px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); font: inherit; cursor: pointer; }
+.sa-mode-choice:hover, .sa-mode-choice:focus-visible { border-color: var(--accent); }
+.sa-mode-choice[aria-pressed="true"] { border-color: var(--accent); background: var(--surface); }
+.sa-mode-choice b { display: block; font-size: 0.95rem; }
+.sa-mode-choice small { display: block; margin-top: 2px; font-size: 0.78rem; color: var(--ink-soft); }
+.sa-mode-num { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-family: var(--font-mono); font-size: 1.05rem; }
+#sa-mode-ask.sa-mode-ask-listening #sa-mode-mic { border-color: var(--accent); }
+
+/* Case « ne plus… dorénavant ». */
+.sa-check { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--ink-soft); cursor: pointer; }
+.sa-check input { width: 18px; height: 18px; flex: none; }
+.sa-check[hidden], .sa-typeask-msg[hidden], #sa-mode-ask[hidden] { display: none !important; }
+
+/* Quel type de produit ? : saisie libre, correspondance approchante, autodécouverte. */
+.sa-typeask { display: flex; flex-direction: column; gap: 8px; }
+.sa-typeask > label { font-weight: 600; font-size: 0.9rem; }
+.sa-typeask-row { display: flex; gap: 8px; }
+.sa-typeask-row input { flex: 1 1 auto; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+.sa-typeask-msg { padding: 12px; background: var(--bg); border: 1px solid var(--accent); display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem; }
+.sa-typeask-msg p { margin: 0; }
+.sa-typeask-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sa-typeask-actions .btn { flex: 1 1 160px; justify-content: center; }
+
+/* Tant qu'une question de mise en route est posée, le reste de l'étape 1 attend. */
+.sa-asking .sa-fold-first,
+.sa-asking .sa-typeask,
+.sa-asking .sa-types,
+.sa-asking #sa-type-note,
+.sa-asking .sa-draft,
+.sa-asking .sa-audio-proposal,
+.sa-asking .sa-drop,
+.sa-asking .sa-live-first,
+.sa-asking .sa-preview,
+.sa-asking .sa-analysis { display: none !important; }
+.sa-intro-mute { padding: 4px 2px; }

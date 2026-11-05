@@ -50,8 +50,8 @@ function admin_menu_default_groups(): array
 function admin_menu_default_order(): array
 {
     return [
-        'pilotage' => ['dashboard', 'emails'],
-        'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'assistant', 'batch'],
+        'pilotage' => ['assistant', 'dashboard', 'emails'],
+        'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'batch'],
         'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
         'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal'],
         'boutique' => ['presence', 'galeries', 'apparence', 'social', 'domaine'],
@@ -150,7 +150,7 @@ function admin_menu_core_items(): array
         'univers' => ['/admin/universes.php', 'Univers', 'folder'],
         'etiquettes' => ['/admin/labels.php', 'Étiquettes (impression)', 'receipt'],
         'prise' => ['/admin/quick-add.php', 'Nouvelle pièce (photo)', 'camera'],
-        'assistant' => ['/admin/shooting-assistant.php', 'Shooting', 'camera'],
+        'assistant' => ['/admin/shooting-assistant.php', 'Studio photo/vidéo', 'camera'],
         'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
         'promos' => ['/admin/promos.php', 'Mises en avant (promos)', 'banner'],
         'offres' => ['/admin/offers.php', 'Offres de prix', 'receipt'],
@@ -193,7 +193,7 @@ function admin_menu_items(string $role): array
     // du lieu (boutique, stand). Les deux se rejoignent par des onglets ; le
     // photographe, qui n'a pas les pièces, arrive directement sur le lieu.
     if (!admin_role_can_access($role, '/admin/shooting-assistant.php')) {
-        $items['assistant'] = ['/admin/shop-shooting.php', 'Reportage boutique', 'camera'];
+        $items['assistant'] = ['/admin/shop-shooting.php', 'Studio photo/vidéo', 'camera'];
     }
     // Offres de prix à traiter, en regard du menu.
     try {

@@ -25,7 +25,7 @@ $dataJson = json_encode([
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#f4eee1">
-<title>Studio photo — <?= h($siteName) ?></title>
+<title>Studio photo/vidéo — <?= h($siteName) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
@@ -42,13 +42,12 @@ $dataJson = json_encode([
     <?= shooting_tabs_html(admin_role(), 'assistant') ?>
 
     <header class="sa-head">
-      <p class="eyebrow">Articles à vendre · studio photo</p>
-      <h1>Studio photo</h1>
+      <p class="eyebrow">Article à vendre · studio photo/vidéo</p>
+      <h1>Studio photo/vidéo</h1>
       <details class="sa-fold" id="sa-intro-fold" open>
         <summary>Comment fonctionne l'assistant</summary>
         <p class="sa-lede">Une première photo suffit pour démarrer : l'IA compte les objets, contrôle la netteté, le cadrage et la lumière, reconnaît la nature de la pièce et vous guide ensuite vue par vue, avec une voix.</p>
       </details>
-      <p class="sa-classic">Vous préférez le parcours classique ? <a href="/admin/quick-add.php">Nouvelle pièce (photo)</a></p>
     </header>
 
     <ol class="sa-steps" aria-label="Étapes">
@@ -68,32 +67,65 @@ $dataJson = json_encode([
           </div>
         </div>
 
-        <!-- Première visite : deux questions, puis les explications se replient. -->
+        <!-- Première visite : la voix. Les explications se replient ensuite. -->
         <div class="sa-setup" id="sa-setup" hidden>
           <div class="sa-setup-step">
-            <h3>1. Une voix pour vous guider ?</h3>
+            <h3>Une voix pour vous guider ?</h3>
             <p>L'assistant peut annoncer chaque vue et prévenir quand la photo est floue ou trop sombre. Aucun son n'est envoyé.</p>
             <div class="sa-setup-actions">
               <button type="button" class="btn btn-primary" data-audio-answer="1">🔊 Oui, avec la voix</button>
               <button type="button" class="btn btn-ghost" data-audio-answer="0">🔇 Non, sans la voix</button>
             </div>
           </div>
+        </div>
+
+        <!-- Question posée avant chaque pièce, sauf si on a coché « ne plus demander ». -->
+        <div class="sa-setup" id="sa-mode-ask" hidden>
           <div class="sa-setup-step">
-            <h3>2. Un article à la fois, ou plusieurs ?</h3>
-            <p>En lot, chaque article est mis de côté et l'IA prépare toutes les fiches plus tard, dans le Studio.</p>
-            <div class="sa-setup-actions">
-              <button type="button" class="btn btn-primary" data-mode-answer="single">📦 Article par article</button>
-              <button type="button" class="btn btn-ghost" data-mode-answer="batch">🗂 En lot, traitement après</button>
+            <h3>Voulez-vous photographier…</h3>
+            <div class="sa-mode-choices" role="group" aria-label="Que photographier ?">
+              <button type="button" class="sa-mode-choice" data-mode-answer="single">
+                <span class="sa-mode-num" aria-hidden="true">1</span>
+                <span><b>Un ou des articles, un par un</b><small>Dites « un »</small></span>
+              </button>
+              <button type="button" class="sa-mode-choice" data-mode-answer="batch">
+                <span class="sa-mode-num" aria-hidden="true">2</span>
+                <span><b>Des articles en lot, à traiter plus tard</b><small>Dites « deux »</small></span>
+              </button>
+              <button type="button" class="sa-mode-choice" data-mode-answer="group">
+                <span class="sa-mode-num" aria-hidden="true">3</span>
+                <span><b>Une photo d'un ensemble de produits, à traiter rapidement</b><small>Dites « trois »</small></span>
+              </button>
             </div>
+            <div class="sa-setup-actions">
+              <button type="button" class="btn btn-ghost" id="sa-mode-mic">🎤 Répondre à la voix</button>
+            </div>
+            <p class="sa-note" id="sa-mode-heard" aria-live="polite"></p>
+            <label class="sa-check">
+              <input type="checkbox" id="sa-mode-never">
+              <span>Ne plus poser la question dorénavant</span>
+            </label>
           </div>
         </div>
         <p class="sa-session" id="sa-session" hidden></p>
+        <label class="sa-check sa-intro-mute" id="sa-intro-mute-wrap" hidden>
+          <input type="checkbox" id="sa-intro-mute">
+          <span>Ne plus écouter la présentation dorénavant</span>
+        </label>
 
         <details class="sa-fold sa-fold-first" id="sa-first-fold" open>
           <summary>Réussir la photo d'ensemble</summary>
           <p>Posez la pièce seule sur un fond simple, à la lumière du jour. Une seule photo pour commencer ; le programme s'occupe de la suite.</p>
         </details>
 
+        <div class="sa-typeask" id="sa-typeask">
+          <label class="sa-field" for="sa-type-input">Quel type de produit ?</label>
+          <div class="sa-typeask-row">
+            <input type="text" id="sa-type-input" autocomplete="off" enterkeyhint="go" placeholder="Ex. : théière, manteau, vinyle…">
+            <button type="button" class="btn btn-ghost" id="sa-type-go">OK</button>
+          </div>
+          <div class="sa-typeask-msg" id="sa-type-msg" aria-live="polite" hidden></div>
+        </div>
         <div class="sa-types" id="sa-types" role="group" aria-label="Type de pièce"></div>
         <p class="sa-note" id="sa-type-note">Laissez « Automatique » : l'IA reconnaît la nature de la pièce et choisit le programme.</p>
         <div class="sa-draft" id="sa-draft" hidden></div>

@@ -2,6 +2,7 @@
 // Endpoint de l'assistant de shooting (admin/shooting-assistant.php).
 //   analyze  → mesure la photo, compte les objets et reconnaît la nature (Gemini + mesures GD)
 //   objects  → objets distincts d'une photo, pour en isoler un (assets/object-picker.js)
+//   add_type → ajoute un type de produit à la liste (autodécouverte)
 //   enhance  → retouche IA de l'exposition, du contraste et de la netteté (Gemini image)
 //   validate → corrections dictées de la fiche générée (couleurs, état, prix du neuf, prix, nom, poids…)
 // La création et la génération de la fiche passent ensuite par admin/quick-add-action.php.
@@ -169,6 +170,14 @@ switch ($action) {
             'program' => $program,
             'manual' => $manual,
         ]);
+    }
+
+    // Autodécouverte : le vendeur accepte d'ajouter un type absent de la liste.
+    case 'add_type': {
+        $label = trim((string) ($_POST['label'] ?? ''));
+        if (mb_strlen($label) < 2) sa_reply(['ok' => false, 'error' => 'Nom de type trop court.'], 422);
+        [$key, $name] = shooting_custom_type_add($label);
+        sa_reply(['ok' => true, 'key' => $key, 'label' => $name, 'types' => shooting_type_choices()]);
     }
 
     case 'enhance': {

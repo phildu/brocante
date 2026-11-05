@@ -799,7 +799,9 @@ function shooting_nature_program_map(): array
 /** Choix manuel de l'utilisateur (sans IA) → clé de programme. */
 function shooting_manual_program_map(): array
 {
-    return [
+    // Les types ajoutés par le vendeur (autodécouverte) suivent le programme « objet ».
+    $custom = array_fill_keys(array_keys(shooting_custom_types()), 'objet');
+    return $custom + [
         'objet' => 'objet',
         'vetement' => 'vetement',
         'chaussures' => 'chaussures',
@@ -820,6 +822,45 @@ function shooting_manual_program_map(): array
 
 /** Liste des types proposés au vendeur (clé du choix manuel → libellé). */
 function shooting_type_choices(): array
+{
+    return shooting_base_types() + shooting_custom_types();
+}
+
+/**
+ * Types ajoutés par le vendeur : clé « c_… » => libellé, mémorisés dans les réglages
+ * de la boutique (réglage « shooting_custom_types », JSON).
+ */
+function shooting_custom_types(): array
+{
+    if (!function_exists('shop_setting')) return [];
+    $raw = json_decode(shop_setting('shooting_custom_types', '[]'), true);
+    $out = [];
+    foreach (is_array($raw) ? $raw : [] as $key => $label) {
+        if (is_string($key) && preg_match('/^c_[a-z0-9_]{1,40}$/', $key) && is_string($label) && trim($label) !== '') {
+            $out[$key] = mb_substr(trim($label), 0, 40);
+        }
+    }
+    return $out;
+}
+
+/** Ajoute un type à la liste (ou renvoie celui qui existe déjà sous ce libellé) : [clé, libellé]. */
+function shooting_custom_type_add(string $label): array
+{
+    $label = mb_substr(trim(preg_replace('/\s+/u', ' ', $label)), 0, 40);
+    $norm = static fn (string $v): string => mb_strtolower(trim((string) iconv('UTF-8', 'ASCII//TRANSLIT', $v)));
+    foreach (shooting_type_choices() as $key => $existing) {
+        if ($norm($existing) === $norm($label)) return [$key, $existing];
+    }
+    $slug = trim((string) preg_replace('/[^a-z0-9]+/', '_', $norm($label)), '_');
+    $key = 'c_' . substr($slug !== '' ? $slug : bin2hex(random_bytes(3)), 0, 36);
+    $custom = shooting_custom_types();
+    $custom[$key] = $label;
+    shop_setting_set('shooting_custom_types', json_encode($custom, JSON_UNESCAPED_UNICODE));
+    return [$key, $label];
+}
+
+/** Types fournis avec la plateforme. */
+function shooting_base_types(): array
 {
     return [
         'objet' => 'Objet',
