@@ -13,6 +13,7 @@ $adminNavItems = [
     'commandes' => ['/admin/orders.php', 'Commandes'],
     'buvette' => ['/admin/buvette/index.php', 'Buvette'],
     'invendus' => ['/admin/invendus.php', 'Invendus & dons'],
+    'comptage' => ['/admin/comptage/index.php', 'Comptage de foule'],
     'hero' => ['/admin/hero.php', 'Diaporama hero'],
     'slideshow' => ['/admin/slideshow.php', 'Diaporama boutique'],
     'banners' => ['/admin/banners.php', 'Bandeaux de page'],
