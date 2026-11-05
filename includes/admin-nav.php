@@ -10,6 +10,7 @@ $adminNavItems = [
     'catalogue' => ['/admin/catalog.php', 'Catalogue'],
     'batch' => ['/admin/batch-import.php', 'Import par lot'],
     'commandes' => ['/admin/orders.php', 'Commandes'],
+    'buvette' => ['/admin/buvette/index.php', 'Buvette'],
     'hero' => ['/admin/hero.php', 'Diaporama hero'],
     'slideshow' => ['/admin/slideshow.php', 'Diaporama boutique'],
     'banners' => ['/admin/banners.php', 'Bandeaux de page'],

@@ -143,3 +143,8 @@ CREATE TABLE IF NOT EXISTS orders (
   items TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Module Buvette (gestion de la buvette d'un vide-grenier) : ses tables
+-- (préfixe bv_) sont créées automatiquement au premier accès par
+-- includes/buvette.php (bv_boot, constante BV_SCHEMA) — rien à lancer ici,
+-- ni côté serveur ni après un déploiement.
