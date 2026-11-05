@@ -163,6 +163,13 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                           </div>
                         <?php endif; ?>
                         <div class="field-row-3">
+                          <div class="field">
+                            <label>Prix d'achat (€) — pour la marge</label>
+                            <input type="text" name="cost_price" inputmode="decimal" value="<?= isset($p['cost_cents']) && $p['cost_cents'] !== null ? h(number_format($p['cost_cents'] / 100, 2, ',', '')) : '' ?>" placeholder="ex : 8,50 — ce que la pièce vous a coûté">
+                          </div>
+                          <div></div><div></div>
+                        </div>
+                        <div class="field-row-3">
                           <label class="featured-check"><input type="checkbox" name="featured" value="1"<?= $p['featured'] ? ' checked' : '' ?>> Mise en avant (accueil)</label>
                           <label class="featured-check"><input type="checkbox" name="is_hidden" value="1"<?= $p['is_hidden'] ? ' checked' : '' ?>> Masquer (hors boutique)</label>
                           <div class="field">
@@ -217,6 +224,10 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
               </select>
             </div>
             <div class="field"><label>Prix</label><input type="text" name="price" placeholder="0 €"></div>
+          </div>
+          <div class="field-row-3">
+            <div class="field"><label>Prix d'achat (€) — pour la marge</label><input type="text" name="cost_price" inputmode="decimal" placeholder="ex : 8,50"></div>
+            <div></div><div></div>
           </div>
           <div class="field"><label>Description</label><textarea name="description"></textarea></div>
           <div class="field-row-3">
