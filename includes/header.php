@@ -17,6 +17,9 @@ $siteTagline = $siteContent['site_tagline'] ?: '';
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css">
+<?php foreach (($extraCss ?? []) as $css): ?><link rel="stylesheet" href="<?= h($css) ?>">
+<?php endforeach; ?>
+<?= $extraHead ?? '' ?>
 </head>
 <body>
 <?php include __DIR__ . '/icons.php'; ?>
@@ -29,6 +32,7 @@ $siteTagline = $siteContent['site_tagline'] ?: '';
     <nav class="primary" aria-label="Navigation principale" id="primary-nav">
       <a href="/index.php"<?= $activeNav === 'accueil' ? ' aria-current="page"' : '' ?>>Accueil</a>
       <a href="/boutique.php"<?= $activeNav === 'boutique' ? ' aria-current="page"' : '' ?>>La boutique</a>
+      <a href="/dons.php"<?= $activeNav === 'dons' ? ' aria-current="page"' : '' ?>>Dons &amp; invendus</a>
       <a href="/index.php#histoire">Notre histoire</a>
       <a href="/index.php#contact">Contact</a>
       <a href="/cart.php">Panier<?= $cartCount ? ' (' . $cartCount . ')' : '' ?></a>

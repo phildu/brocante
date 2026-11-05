@@ -3,7 +3,11 @@
 // La base est un simple fichier SQLite (comme le projet Louxor) — aucun
 // serveur de base de données à provisionner, ni en local ni sur OVH. Le même
 // chemin relatif fonctionne dans les deux environnements.
-define('DB_PATH', __DIR__ . '/brocante.db');
+// (Prédéfinissable : les tests automatiques pointent vers une base jetable
+// pour ne jamais toucher à brocante.db.)
+if (!defined('DB_PATH')) {
+    define('DB_PATH', __DIR__ . '/brocante.db');
+}
 
 // En local (Herd/Mac), config.local.php fournit les valeurs propres à cette
 // machine (URL, binaires) et ce fichier s'arrête là. Il n'est jamais déployé
