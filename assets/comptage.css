@@ -37,6 +37,9 @@ body.cp-app {
 .cp-screen[data-level="warn"] { --cp-level: #c58a1b; }
 .cp-screen[data-level="full"] { --cp-level: var(--accent); }
 
+/* style.css donne 64 px de marge verticale à tout <section> : on la retire ici. */
+.cp-screen > section { padding: 0; }
+
 .cp-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cp-event { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .cp-event strong { font-family: var(--font-display); font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -66,7 +69,7 @@ body.cp-app {
 .cp-gate.on small { color: var(--bg); opacity: 0.8; }
 
 /* tableau d'affichage */
-.cp-board { text-align: center; padding: 4px 0 0; }
+.cp-screen > .cp-board { text-align: center; padding: 4px 0 0; }
 .cp-present {
   font-family: var(--font-display); font-weight: 700; line-height: 1; color: var(--cp-level);
   font-size: clamp(4.2rem, 21vw, 7.5rem); font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
@@ -127,6 +130,55 @@ body.cp-app {
   .cp-screen { max-width: none; }
   .cp-board { display: none; }
 }
+
+/* ---------- mode caméra ---------- */
+
+.cp-mode { display: flex; gap: 6px; }
+.cp-mode button {
+  flex: 1; min-height: 40px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+  border-radius: 10px; font-weight: 700; font-size: 0.92rem;
+}
+.cp-mode button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+.cp-cam { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.cp-cam[hidden] { display: none; }
+.cp-cam-view {
+  position: relative; flex: 1; min-height: 140px; background: #111; border-radius: 12px; overflow: hidden;
+  touch-action: none;
+}
+.cp-cam-view video, .cp-cam-view canvas { position: absolute; display: block; }
+.cp-cam-view video { background: #000; }
+.cp-cam-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: 18px; text-align: center; color: #fff; background: rgba(0, 0, 0, 0.55); font-size: 0.86rem; line-height: 1.45;
+}
+.cp-cam-overlay[hidden] { display: none; }
+.cp-cam-overlay p { margin: 0; max-width: 32ch; }
+.cp-cam-start {
+  border: none; border-radius: 12px; background: var(--sage); color: #fff; font-weight: 700; font-size: 1.05rem; padding: 14px 22px; min-height: 52px;
+}
+.cp-cam-start[hidden] { display: none; }
+.cp-cam-tools { display: flex; gap: 6px; }
+.cp-cam-tools button {
+  flex: 1; min-height: 40px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 10px; font-size: 0.78rem; font-weight: 600; padding: 0 4px;
+}
+.cp-cam-hint { margin: 0; font-size: 0.72rem; color: var(--ink-soft); text-align: center; line-height: 1.4; }
+
+/* en mode caméra : le tableau se réduit pour laisser la place à l'image */
+.cp-screen[data-mode="cam"] .cp-present { font-size: clamp(2.6rem, 11vw, 3.6rem); }
+.cp-screen[data-mode="cam"] .cp-present-label { margin-top: 0; }
+.cp-screen[data-mode="cam"] .cp-sub, .cp-screen[data-mode="cam"] .cp-gauge-text { display: none; }
+.cp-screen[data-mode="cam"] .cp-gauge { margin-top: 4px; }
+.cp-screen[data-mode="cam"] .cp-controls { flex: 0 0 auto; }
+.cp-screen[data-mode="cam"] .cp-qty { display: none; }
+.cp-screen[data-mode="cam"] .cp-big { flex: 0 0 auto; min-height: 56px; flex-direction: row; gap: 10px; border-radius: 12px; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.22); }
+.cp-screen[data-mode="cam"] .cp-big-sign { font-size: 1.8rem; }
+.cp-screen[data-mode="cam"] .cp-big-label { font-size: 0.8rem; }
+.cp-screen[data-mode="cam"] .cp-out, .cp-screen[data-mode="cam"] .cp-undo { min-height: 46px; font-size: 0.95rem; }
+.cp-screen[data-mode="manual"] .cp-cam { display: none; }
+.cp-screen[data-mode="cam"] .cp-foot { display: none; }
+@media (min-height: 760px) { .cp-screen[data-mode="cam"] .cp-foot { display: flex; } }
 
 /* ====================================================================== */
 /* Administration                                                         */

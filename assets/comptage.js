@@ -203,13 +203,15 @@
 
   /* ---------- actions ---------- */
 
-  function tap(dir) {
-    var op = { op: 'tap', uid: uid(), gate: gate, dir: dir, qty: qty, ts: Math.floor(Date.now() / 1000) };
+  // n : nombre de personnes (par défaut la quantité choisie) ; auto : appui déclenché par la caméra.
+  function tap(dir, n, auto) {
+    var count = n || qty;
+    var op = { op: 'tap', uid: uid(), gate: gate, dir: dir, qty: count, ts: Math.floor(Date.now() / 1000) };
     queue.push(op);
-    history.push({ uid: op.uid, gate: gate, dir: dir, qty: qty });
+    history.push({ uid: op.uid, gate: gate, dir: dir, qty: count });
     if (history.length > 30) history.shift();
     persist();
-    qty = 1;                      // la quantité ne vaut que pour un appui
+    if (!auto) qty = 1;           // la quantité ne vaut que pour un appui manuel
     buzz(dir > 0 ? 18 : [12, 40, 12]);
     beep(dir > 0 ? 880 : 440);
     render();
@@ -309,6 +311,292 @@
   }
   function unwake() { if (lock) { lock.release().catch(function () {}); lock = null; } }
 
+
+  /* ---------- comptage par caméra ----------
+   * Le téléphone filme le passage ; un modèle de détection de personnes
+   * (MediaPipe, hébergé sur ce site) tourne sur le téléphone ; comptage-vision.js
+   * suit chaque personne et compte celles qui franchissent la ligne. Les images
+   * ne quittent jamais l'appareil et ne sont jamais enregistrées. Chaque
+   * franchissement devient un appui normal (même file d'attente, même annulation).
+   */
+
+  var VENDOR = '/assets/vendor/mediapipe/';
+  var MIN_SCORE = 0.45;       // confiance minimale d'une détection
+  var MIN_HEIGHT = 0.12;      // ignore les silhouettes trop petites (public lointain, hors de la zone)
+  var DETECT_EVERY_MS = 90;   // ~11 images analysées par seconde au maximum
+  var SLOW_FPS = 4;           // en dessous, on avertit : la précision baisse
+  var HINT = $('camHint').textContent;
+
+  var cam = {
+    mode: load('mode', 'manual', PREF) === 'cam' ? 'cam' : 'manual',
+    stream: null, detector: null, running: false, starting: false,
+    facing: load('facing', 'environment', PREF),
+    counter: null, flashes: {}, lastT: -1, lastDetect: 0, fps: 0, frames: 0, fpsAt: 0, people: 0,
+    line: load('line', null, PREF) || { x1: 0.5, y1: 0.88, x2: 0.5, y2: 0.12 },
+    invert: !!load('invert', false, PREF),
+    drag: null, rect: { left: 0, top: 0, w: 0, h: 0 }
+  };
+  var elVideo = $('camVideo'), elCanvas = $('camCanvas'), elView = $('camView');
+
+  function camStatus(text, showStart) {
+    $('camStatus').textContent = text;
+    $('camStart').hidden = !showStart;
+    $('camOverlay').hidden = !text;
+  }
+
+  function camMessage(e) {
+    var name = e && e.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') return 'Caméra refusée. Autorisez-la pour ce site dans les réglages du navigateur, puis réessayez.';
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'Aucune caméra trouvée sur cet appareil.';
+    if (name === 'NotReadableError') return 'La caméra est déjà utilisée par une autre application.';
+    if (!window.isSecureContext || !navigator.mediaDevices) return 'La caméra exige une connexion sécurisée (https).';
+    return 'Impossible de démarrer la détection (' + ((e && e.message) || 'erreur') + '). Utilisez le mode manuel.';
+  }
+
+  function setMode(mode) {
+    cam.mode = mode;
+    store('mode', mode, PREF);
+    app.setAttribute('data-mode', mode);
+    $('cam').hidden = mode !== 'cam';
+    Array.prototype.forEach.call($('mode').children, function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-mode') === mode ? 'true' : 'false');
+    });
+    if (mode === 'cam') {
+      camStatus('La caméra compte les personnes qui franchissent la ligne. Les images restent sur ce téléphone : elles ne sont ni enregistrées ni envoyées.', true);
+      layoutCam();
+    } else {
+      stopCamera();
+    }
+  }
+
+  function layoutCam() {
+    var cw = elView.clientWidth, ch = elView.clientHeight;
+    var vw = elVideo.videoWidth || 4, vh = elVideo.videoHeight || 3;
+    var va = vw / vh, w, h;
+    if (cw / ch > va) { h = ch; w = ch * va; } else { w = cw; h = cw / va; }
+    var left = (cw - w) / 2, top = (ch - h) / 2;
+    [elVideo, elCanvas].forEach(function (el) {
+      el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.width = w + 'px'; el.style.height = h + 'px';
+    });
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    elCanvas.width = Math.round(w * dpr); elCanvas.height = Math.round(h * dpr);
+    cam.rect = { left: left, top: top, w: w, h: h, dpr: dpr };
+    if (cam.counter && elVideo.videoWidth) cam.counter.setAspect(va);
+    drawCam();
+  }
+
+  function loadDetector() {
+    if (cam.detector) return Promise.resolve(cam.detector);
+    return import(VENDOR + 'vision_bundle.js').then(function (mod) {
+      return mod.FilesetResolver.forVisionTasks(VENDOR + 'wasm').then(function (fileset) {
+        function make(delegate) {
+          return mod.ObjectDetector.createFromOptions(fileset, {
+            baseOptions: { modelAssetPath: VENDOR + 'efficientdet_lite0.tflite', delegate: delegate },
+            runningMode: 'VIDEO', scoreThreshold: MIN_SCORE, maxResults: 25, categoryAllowlist: ['person']
+          });
+        }
+        return make('GPU').catch(function () { return make('CPU'); });
+      });
+    }).then(function (d) { cam.detector = d; return d; });
+  }
+
+  function startCamera() {
+    if (cam.starting || cam.running) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camStatus(camMessage(), false); return; }
+    cam.starting = true;
+    camStatus('Démarrage de la caméra…', false);
+    stopStream();
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: cam.facing }, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false
+    }).then(function (stream) {
+      cam.stream = stream;
+      elVideo.srcObject = stream;
+      return elVideo.play();
+    }).then(function () {
+      camStatus('Chargement du modèle de détection…', false);
+      return loadDetector();
+    }).then(function () {
+      if (cam.mode !== 'cam') { stopCamera(); return; }
+      cam.counter = new CpVision.LineCounter({
+        line: cam.line, invert: cam.invert, aspect: (elVideo.videoWidth / elVideo.videoHeight) || 4 / 3
+      });
+      cam.running = true; cam.starting = false; cam.lastT = -1;
+      layoutCam();
+      camStatus('', false);
+      loopCam();
+    }).catch(function (e) {
+      cam.starting = false;
+      stopStream();
+      camStatus(camMessage(e), true);
+    });
+  }
+
+  function stopStream() {
+    if (cam.stream) { cam.stream.getTracks().forEach(function (t) { t.stop(); }); cam.stream = null; }
+    elVideo.srcObject = null;
+  }
+
+  function stopCamera() {
+    cam.running = false; cam.starting = false;
+    stopStream();
+    var ctx = elCanvas.getContext('2d');
+    ctx.clearRect(0, 0, elCanvas.width, elCanvas.height);
+    if (cam.mode === 'cam') camStatus('Caméra arrêtée.', true);
+  }
+
+  function nextFrame(fn) {
+    if (elVideo.requestVideoFrameCallback) elVideo.requestVideoFrameCallback(function () { fn(); });
+    else setTimeout(fn, DETECT_EVERY_MS);
+  }
+
+  function loopCam() {
+    if (!cam.running) return;
+    var now = performance.now();
+    if (elVideo.readyState >= 2 && elVideo.videoWidth && now - cam.lastDetect >= DETECT_EVERY_MS && elVideo.currentTime !== cam.lastT) {
+      cam.lastT = elVideo.currentTime;
+      cam.lastDetect = now;
+      var result;
+      try { result = cam.detector.detectForVideo(elVideo, now); } catch (e) { result = null; }
+      if (result) handleDetections(result.detections || [], now);
+    }
+    nextFrame(loopCam);
+  }
+
+  function handleDetections(list, now) {
+    var vw = elVideo.videoWidth, vh = elVideo.videoHeight;
+    var boxes = [];
+    list.forEach(function (d) {
+      var b = d.boundingBox, score = d.categories && d.categories[0] ? d.categories[0].score : 1;
+      if (!b || score < MIN_SCORE || b.height / vh < MIN_HEIGHT) return;
+      boxes.push({ x: b.originX / vw, y: b.originY / vh, w: b.width / vw, h: b.height / vh });
+    });
+    cam.people = boxes.length;
+    cam.counter.update(boxes, now).forEach(function (ev) {
+      cam.flashes[ev.id] = { until: now + 700, dir: ev.dir };
+      tap(ev.dir, 1, true);
+    });
+    cam.frames++;
+    if (now - cam.fpsAt >= 1000) {
+      cam.fps = cam.frames * 1000 / (now - cam.fpsAt); cam.frames = 0; cam.fpsAt = now;
+      // En dessous de ~4 images/s, les personnes bougent trop entre deux analyses : des passages peuvent être manqués.
+      var slow = cam.fps < SLOW_FPS;
+      if (slow !== cam.slow) {
+        cam.slow = slow;
+        $('camHint').textContent = slow
+          ? '⚠ Détection lente (' + cam.fps.toFixed(1) + ' img/s) : des passages peuvent être manqués. Surveillez le total et corrigez avec +1 / −1, ou repassez en manuel.'
+          : HINT;
+        $('camHint').style.color = slow ? 'var(--accent)' : '';
+      }
+    }
+    drawCam(now);
+  }
+
+  function drawCam(now) {
+    var r = cam.rect, ctx = elCanvas.getContext('2d');
+    if (!r.w) return;
+    var W = elCanvas.width, H = elCanvas.height, k = r.dpr || 1;
+    ctx.clearRect(0, 0, W, H);
+
+    // personnes suivies
+    if (cam.running && cam.counter) {
+      cam.counter.visible().forEach(function (t) {
+        var f = cam.flashes[t.id], on = f && f.until > (now || 0);
+        ctx.lineWidth = (on ? 4 : 2) * k;
+        ctx.strokeStyle = on ? (f.dir > 0 ? '#7bd88f' : '#ff8a6b') : 'rgba(255,255,255,0.75)';
+        ctx.strokeRect((t.x - t.w / 2) * W, (t.y - t.h / 2) * H, t.w * W, t.h * H);
+      });
+    }
+
+    // ligne, poignées et flèche du sens « entrée »
+    var L = cam.line, x1 = L.x1 * W, y1 = L.y1 * H, x2 = L.x2 * W, y2 = L.y2 * H;
+    var dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+    var nx = -dy / len, ny = dx / len;                 // normale vers le côté « positif » (voir comptage-vision.js)
+    if (cam.invert) { nx = -nx; ny = -ny; }
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = 3 * k;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    var mx = (x1 + x2) / 2, my = (y1 + y2) / 2, a = 34 * k;
+    var tx = mx + nx * a, ty = my + ny * a;
+    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - nx * 10 * k - ny * 8 * k, ty - ny * 10 * k + nx * 8 * k);
+    ctx.lineTo(tx - nx * 10 * k + ny * 8 * k, ty - ny * 10 * k - nx * 8 * k);
+    ctx.closePath(); ctx.fillStyle = '#ffd34d'; ctx.fill();
+    ctx.font = '700 ' + 12 * k + 'px sans-serif'; ctx.fillStyle = '#ffd34d';
+    ctx.textAlign = nx >= 0 ? 'left' : 'right';
+    ctx.fillText('ENTRÉE', tx + (nx >= 0 ? 8 : -8) * k, ty + 4 * k);
+    [[x1, y1], [x2, y2]].forEach(function (p) {
+      ctx.beginPath(); ctx.arc(p[0], p[1], 11 * k, 0, 6.2832);
+      ctx.fillStyle = 'rgba(255,211,77,0.35)'; ctx.fill();
+      ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = 2.5 * k; ctx.stroke();
+    });
+
+    // état
+    if (cam.running) {
+      ctx.textAlign = 'left'; ctx.font = '600 ' + 11 * k + 'px sans-serif'; ctx.fillStyle = cam.slow ? '#ffb199' : 'rgba(255,255,255,0.9)';
+      ctx.fillText(cam.people + ' personne' + (cam.people > 1 ? 's' : '') + ' · ' + cam.fps.toFixed(cam.fps < 10 ? 1 : 0) + ' img/s' + (cam.slow ? ' ⚠' : ''), 8 * k, 16 * k);
+    }
+  }
+
+  // réglage de la ligne au doigt : on attrape l'une des deux extrémités
+  function camPoint(e) {
+    var box = elCanvas.getBoundingClientRect();
+    return { x: Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)), y: Math.min(1, Math.max(0, (e.clientY - box.top) / box.height)), box: box };
+  }
+  elCanvas.style.pointerEvents = 'auto';
+  elCanvas.addEventListener('pointerdown', function (e) {
+    var p = camPoint(e), best = null, bestD = 44;       // 44 px de rayon de saisie
+    [['1', cam.line.x1, cam.line.y1], ['2', cam.line.x2, cam.line.y2]].forEach(function (h) {
+      var d = Math.hypot((h[1] - p.x) * p.box.width, (h[2] - p.y) * p.box.height);
+      if (d < bestD) { bestD = d; best = h[0]; }
+    });
+    if (best) { cam.drag = best; elCanvas.setPointerCapture(e.pointerId); e.preventDefault(); }
+  });
+  elCanvas.addEventListener('pointermove', function (e) {
+    if (!cam.drag) return;
+    var p = camPoint(e);
+    cam.line['x' + cam.drag] = p.x; cam.line['y' + cam.drag] = p.y;
+    drawCam(performance.now());
+  });
+  function endDrag() {
+    if (!cam.drag) return;
+    cam.drag = null;
+    store('line', cam.line, PREF);
+    if (cam.counter) cam.counter.setLine(cam.line);
+  }
+  elCanvas.addEventListener('pointerup', endDrag);
+  elCanvas.addEventListener('pointercancel', endDrag);
+
+  $('mode').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-mode]');
+    if (!b) return;
+    setMode(b.getAttribute('data-mode'));
+    if (b.getAttribute('data-mode') === 'cam') startCamera();   // le clic fournit le « geste » exigé par iOS
+  });
+  $('camStart').addEventListener('click', startCamera);
+  $('camStop').addEventListener('click', stopCamera);
+  $('camFlip').addEventListener('click', function () {
+    cam.invert = !cam.invert;
+    store('invert', cam.invert, PREF);
+    if (cam.counter) cam.counter.setInvert(cam.invert);
+    drawCam(performance.now());
+  });
+  $('camSwitch').addEventListener('click', function () {
+    cam.facing = cam.facing === 'environment' ? 'user' : 'environment';
+    store('facing', cam.facing, PREF);
+    stopCamera();
+    camStatus('', false);
+    startCamera();
+  });
+  window.addEventListener('resize', layoutCam);
+  elVideo.addEventListener('loadedmetadata', layoutCam);
+  // En arrière-plan, le navigateur coupe la caméra : on la relance au retour.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && cam.mode === 'cam' && !cam.running && !cam.starting && cam.stream === null && cam.wasRunning) startCamera();
+    if (document.visibilityState === 'hidden') { cam.wasRunning = cam.running; if (cam.running) stopCamera(); }
+  });
+
   /* ---------- branchements ---------- */
 
   $('btnIn').addEventListener('click', function () { tap(1); });
@@ -347,6 +635,7 @@
   }
 
   render();
+  setMode(cam.mode);      // en mode caméra, l'utilisateur relance lui-même la caméra (geste exigé par iOS)
   wake();
   sync();
   setInterval(function () { if (document.visibilityState === 'visible') sync(); }, 10000);

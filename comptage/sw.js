@@ -2,9 +2,9 @@
  * réseau (champ, parking, 4G capricieuse). Les appuis, eux, sont mis en file
  * d'attente par comptage.js (localStorage) ; ce fichier ne s'occupe que de
  * l'application elle-même. Jamais d'API en cache. */
-var CACHE = 'comptage-v1';
+var CACHE = 'comptage-v2';
 var PAGE = '/comptage/index.php';
-var ASSETS = ['/assets/style.css', '/assets/comptage.css', '/assets/comptage.js', '/assets/logo-macaron.png'];
+var ASSETS = ['/assets/style.css', '/assets/comptage.css', '/assets/comptage.js', '/assets/comptage-vision.js', '/assets/logo-macaron.png'];
 
 // Ne garde que la vraie page du compteur (marquée par l'en-tête X-Cp-App), pas
 // la page de connexion ni une redirection.
@@ -44,6 +44,17 @@ self.addEventListener('fetch', function (e) {
     }).catch(function () {
       return caches.match(PAGE).then(function (r) {
         return r || new Response('<meta charset="utf-8"><meta name="viewport" content="width=device-width"><body style="font-family:sans-serif;padding:24px"><h1>Hors ligne</h1><p>Ouvrez le compteur une première fois avec du réseau pour pouvoir l\'utiliser ensuite sans connexion.</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 });
+      });
+    }));
+    return;
+  }
+
+  // Détecteur de personnes (une dizaine de Mo, immuable) : mis en cache à la première
+  // utilisation du mode caméra, puis servi sans jamais être retéléchargé.
+  if (url.pathname.indexOf('/assets/vendor/') === 0) {
+    e.respondWith(caches.open(CACHE).then(function (c) {
+      return c.match(req).then(function (hit) {
+        return hit || fetch(req).then(function (res) { if (res.ok) c.put(req, res.clone()); return res; });
       });
     }));
     return;

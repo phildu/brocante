@@ -62,7 +62,7 @@ if ($event && $gates) {
     <p class="cp-quit"><a href="/comptage/logout.php">Quitter</a></p>
   </main>
 <?php else: ?>
-<div class="cp-screen" id="app" data-level="ok">
+<div class="cp-screen" id="app" data-level="ok" data-mode="manual">
   <header class="cp-top">
     <div class="cp-event">
       <strong><?= h($event['name']) ?></strong>
@@ -84,6 +84,28 @@ if ($event && $gates) {
     <div class="cp-sub" id="sub"></div>
   </section>
 
+  <div class="cp-mode" id="mode" role="group" aria-label="Mode de comptage">
+    <button type="button" data-mode="manual" aria-pressed="true">✋ Manuel</button>
+    <button type="button" data-mode="cam" aria-pressed="false">📷 Caméra</button>
+  </div>
+
+  <section class="cp-cam" id="cam" hidden>
+    <div class="cp-cam-view" id="camView">
+      <video id="camVideo" playsinline muted autoplay></video>
+      <canvas id="camCanvas"></canvas>
+      <div class="cp-cam-overlay" id="camOverlay">
+        <p id="camStatus">La caméra compte les personnes qui franchissent la ligne. Les images restent sur ce téléphone : elles ne sont ni enregistrées ni envoyées.</p>
+        <button type="button" class="cp-cam-start" id="camStart">▶ Démarrer la caméra</button>
+      </div>
+    </div>
+    <div class="cp-cam-tools">
+      <button type="button" id="camFlip">⇄ Inverser le sens</button>
+      <button type="button" id="camSwitch">🔄 Autre caméra</button>
+      <button type="button" id="camStop">⏹ Arrêter</button>
+    </div>
+    <p class="cp-cam-hint" id="camHint">Fixez le téléphone en hauteur, face au passage. Faites glisser les deux bouts de la ligne ; la flèche indique le sens « entrée ».</p>
+  </section>
+
   <section class="cp-controls">
     <div class="cp-qty" id="qty" role="group" aria-label="Nombre de personnes pour le prochain appui"></div>
     <button type="button" class="cp-big cp-in" id="btnIn"><span class="cp-big-sign" id="inSign">+1</span><span class="cp-big-label">entrée</span></button>
@@ -103,6 +125,7 @@ if ($event && $gates) {
   </footer>
 </div>
 <script>window.CP = <?= json_encode($config, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
+<script src="/assets/comptage-vision.js"></script>
 <script src="/assets/comptage.js"></script>
 <?php endif; ?>
 </body>

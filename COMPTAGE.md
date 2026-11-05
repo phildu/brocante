@@ -1,9 +1,9 @@
 # Module Comptage de foule — vide-grenier
 
-Compter les visiteurs d'un vide-grenier depuis un smartphone : un gros bouton
-**+1** à l'entrée, un bouton **sortie**, et le responsable suit en direct le
-nombre de visiteurs, la fréquentation en temps réel, le pic de la journée et
-la courbe heure par heure.
+Compter les visiteurs d'un vide-grenier depuis un smartphone, **à la main**
+(gros bouton **+1** à l'entrée) **ou automatiquement avec la caméra** du
+téléphone, et suivre en direct le nombre de visiteurs, la fréquentation en
+temps réel, le pic de la journée et la courbe heure par heure.
 
 - **Responsable** : *Administration → Comptage de foule* (`/admin/comptage/`), même mot de passe que le reste de l'admin.
 - **Bénévoles aux entrées** : `/comptage/`, depuis un téléphone, avec un **code partagé**. Aucun compte, aucune donnée personnelle : on ne mémorise que des nombres et des heures.
@@ -43,6 +43,54 @@ indique des appuis en attente.
 Les téléphones d'un même événement se **rafraîchissent entre eux** : chacun voit
 le total de tous les postes.
 
+## Compter avec la caméra
+
+Un bouton **📷 Caméra** (à côté de **✋ Manuel**) transforme le téléphone en
+compteur automatique : il filme le passage, repère les personnes, les suit et
+compte celles qui **franchissent une ligne** tracée à l'écran, avec le sens
+(entrée ou sortie). Chaque passage devient un appui comme les autres : même file
+d'attente hors ligne, même bouton **Annuler**, mêmes résultats. Le mode manuel
+reste disponible à tout moment pour corriger (**+1 / −1**) ou en secours.
+
+**Vie privée** : l'analyse se fait **sur le téléphone**. Les images ne sont ni
+enregistrées, ni envoyées au serveur, ni confiées à un service extérieur ; seuls
+les nombres et les heures sont conservés. Le détecteur (MediaPipe, licence
+Apache-2.0) est hébergé sur le site lui-même (`assets/vendor/mediapipe/`). Prévenez
+tout de même les visiteurs si une caméra est visible à l'entrée.
+
+### Installation du téléphone
+
+1. **Ouvrir une première fois le mode caméra avec du réseau** (≈ 17 Mo téléchargés une
+   seule fois, puis gardés sur le téléphone : ensuite, plus besoin de réseau).
+2. Fixer le téléphone **en hauteur** (2 à 3 m), **de biais ou de face** par rapport au
+   passage, de façon à voir les gens en entier. Éviter le contre-jour.
+3. **Faire glisser les deux extrémités de la ligne jaune** pour barrer le passage, en
+   travers du flux. La flèche **ENTRÉE** montre le sens compté en entrée ; **⇄ Inverser le sens**
+   la retourne. Une personne doit traverser la ligne en entier pour être comptée.
+4. **Brancher le téléphone** : la détection en continu chauffe et vide la batterie.
+5. Contrôler quelques minutes à côté d'un compteur manuel (ou en regardant le total) avant
+   de s'y fier, puis corriger avec **+1 / −1** si besoin.
+
+### Ce qu'il faut savoir sur la précision
+
+- Une personne qui en **cache** une autre, ou deux personnes **collées** (couple, parent
+  avec enfant), peuvent être vues comme une seule : le comptage automatique **sous-estime**
+  dans la foule dense. Pour un passage large ou très fréquenté, mettre **un téléphone par
+  portion de passage**, ou compter à la main.
+- Il faut au moins **~5 images analysées par seconde**. En dessous de 4, l'écran affiche
+  « ⚠ Détection lente » : des passages peuvent être manqués. Les téléphones récents font
+  10 images/s ou plus.
+- Nécessite un navigateur récent (Chrome / Edge / Safari 16.4 ou plus) et **HTTPS**. Si la caméra
+  est refusée ou indisponible, un message l'explique et le mode manuel reste utilisable.
+- **Essai de validation** : sur une vidéo publique de piétons (jeu d'essai d'OpenCV, 79 s, des
+  personnes qui vont et viennent dans les deux sens), le suivi compte **21 passages**, de façon
+  stable de 10 à 5 images analysées par seconde (puis de moins en moins : 15 à 3 images/s, 12 à
+  1,7 image/s). Une revue image par image d'une version préliminaire du suivi (aussi 21 passages)
+  a montré que presque tous étaient de vrais passages dans le bon sens, avec deux cas douteux
+  (un changement d'identité entre deux personnes proches, et des personnes groupées comptées pour
+  une seule). **Cet essai ne remplace pas un test sur place**, avec votre téléphone, votre
+  éclairage et votre affluence.
+
 ## Ce que voit le responsable
 
 - **Résultats** : visiteurs entrés, personnes sur place, **pic de présence** (et son heure), tranche la plus chargée, graphique par tranches de 15 / 30 / 60 min (entrées, sorties, présence, ligne de capacité), détail par poste, actualisation automatique optionnelle. Export **CSV** de la courbe et du détail (s'ouvre directement dans Excel).
@@ -71,12 +119,15 @@ comptage/index.php             le compteur (page plein écran)
 comptage/api.php               envoi des appuis + totaux (JSON, session + jeton CSRF)
 comptage/login.php, logout.php accès par code (5 essais, puis blocage 15 min)
 comptage/sw.js, manifest.json  mode hors-ligne et installation sur l'écran d'accueil
-assets/comptage.js, .css       comportement et style du compteur
-scripts/test-comptage.php      tests de la logique (base jetable, php scripts/test-comptage.php)
+assets/comptage.js, .css       comportement et style du compteur (manuel et caméra)
+assets/comptage-vision.js      suivi des personnes et franchissement de ligne (sans dépendance, testé sous Node)
+assets/vendor/mediapipe/       détecteur de personnes hébergé sur le site (voir son README : origine, licences)
+scripts/test-comptage.php      tests de la logique PHP (base jetable, php scripts/test-comptage.php)
+scripts/test-comptage-vision.js tests du suivi par caméra, sur trajectoires simulées (node scripts/test-comptage-vision.js)
 ```
 
 ## Limites à connaître
 
-- C'est un **comptage manuel** : sa précision dépend des bénévoles (et d'un bon « annuler »). Pour un grand site, mettre un compteur par entrée.
+- En **manuel**, la précision dépend des bénévoles (et d'un bon « annuler ») ; en **caméra**, elle dépend du placement du téléphone et de la densité du passage (voir plus haut). Pour un grand site, mettre un compteur par entrée.
 - Les sorties ne sont fiables que si elles sont comptées à toutes les sorties ; sinon, désactiver l'option et se contenter du nombre de visiteurs.
-- Ne pas photographier ni filmer les visiteurs : l'application n'en a pas besoin.
+- Le mode caméra analyse les images en direct sans les enregistrer. Ne les enregistrez pas non plus avec une autre application.
