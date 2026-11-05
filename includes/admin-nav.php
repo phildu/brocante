@@ -57,6 +57,7 @@ if ($adminPaletteOk) {
   try { if (localStorage.getItem('adminSidebar') === 'collapsed') document.documentElement.classList.add('admin-sidebar-collapsed'); } catch (e) {}
 </script>
 <?= plugin_admin_assets_html(admin_role()) ?>
+<script src="/assets/ai-wait-timer.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/ai-wait-timer.js') ?>"></script>
 <header class="admin-topbar">
   <button type="button" class="admin-topbar-btn" id="admin-sidebar-open" aria-controls="admin-sidebar" aria-expanded="false" aria-label="Ouvrir le menu d'administration"><?= $adminIcon('menu') ?></button>
   <?php if ($adminPaletteOk): ?>
