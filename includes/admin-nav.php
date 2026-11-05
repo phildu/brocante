@@ -11,6 +11,7 @@ $adminNavItems = [
     'catalogue' => ['/admin/catalog.php', 'Catalogue'],
     'batch' => ['/admin/batch-import.php', 'Import par lot'],
     'commandes' => ['/admin/orders.php', 'Commandes'],
+    'buvette' => ['/admin/buvette/index.php', 'Buvette'],
     'invendus' => ['/admin/invendus.php', 'Invendus & dons'],
     'hero' => ['/admin/hero.php', 'Diaporama hero'],
     'slideshow' => ['/admin/slideshow.php', 'Diaporama boutique'],
