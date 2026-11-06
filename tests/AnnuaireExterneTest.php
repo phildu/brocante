@@ -34,24 +34,24 @@ final class AnnuaireExterneTest extends TestCase
         }
     }
 
-    private function profile(string $url = 'https://atelier.test', string $name = 'Atelier Test'): array
+    private function profile(string $url = 'https://atelier.example', string $name = 'Atelier Test'): array
     {
         return ['url' => $url, 'name' => $name, 'tagline' => 'Chine et brocante', 'platform' => 'shopify'];
     }
 
     public function testKeyAndUrlValidation(): void
     {
-        self::assertMatchesRegularExpression('/^[a-f0-9]{16}$/', annuaire_ext_key('https://atelier.test'));
-        self::assertSame(annuaire_ext_key('https://Atelier.test/'), annuaire_ext_key('https://atelier.test'));
-        self::assertTrue(annuaire_ext_valid_url('https://atelier.test/boutique'));
-        self::assertFalse(annuaire_ext_valid_url('ftp://atelier.test'));
+        self::assertMatchesRegularExpression('/^[a-f0-9]{16}$/', annuaire_ext_key('https://atelier.example'));
+        self::assertSame(annuaire_ext_key('https://Atelier.example/'), annuaire_ext_key('https://atelier.example'));
+        self::assertTrue(annuaire_ext_valid_url('https://atelier.example/boutique'));
+        self::assertFalse(annuaire_ext_valid_url('ftp://atelier.example'));
         self::assertFalse(annuaire_ext_valid_url('javascript:alert(1)'));
     }
 
     public function testNormalizeRecord(): void
     {
         $r = annuaire_ext_normalize([
-            'url' => 'https://atelier.test/',
+            'url' => 'https://atelier.example/',
             'name' => '  Atelier   Test ',
             'universes' => 'Brocante, Décoration; Brocante, Lumière',
             'accent' => '#B5502E',
@@ -60,8 +60,8 @@ final class AnnuaireExterneTest extends TestCase
             'status' => 'inconnu',
             'gallery' => 'x',
         ]);
-        self::assertSame(annuaire_ext_key('https://atelier.test'), $r['id']);
-        self::assertSame('https://atelier.test', $r['url']);
+        self::assertSame(annuaire_ext_key('https://atelier.example'), $r['id']);
+        self::assertSame('https://atelier.example', $r['url']);
         self::assertSame('Atelier Test', $r['name']);
         self::assertSame(['Brocante', 'Décoration', 'Lumière'], $r['universes']);
         self::assertSame('#b5502e', $r['accent']);
@@ -70,18 +70,18 @@ final class AnnuaireExterneTest extends TestCase
         self::assertSame('pending', $r['status']);
         self::assertSame('', $r['gallery']);
 
-        $list = annuaire_ext_normalize(['url' => 'https://atelier.test', 'universes' => ['Brocante', 'Brocante', ' ']]);
+        $list = annuaire_ext_normalize(['url' => 'https://atelier.example', 'universes' => ['Brocante', 'Brocante', ' ']]);
         self::assertSame(['Brocante'], $list['universes']);
     }
 
     public function testSaveAndLoadRoundTrip(): void
     {
-        $record = annuaire_ext_normalize($this->profile() + ['contact_email' => 'jean@atelier.test']);
+        $record = annuaire_ext_normalize($this->profile() + ['contact_email' => 'jean@atelier.example']);
         self::assertTrue(annuaire_ext_save($record));
         self::assertFileExists($this->dir . '/' . $record['id'] . '.json');
         $loaded = annuaire_ext_load($record['id']);
         self::assertSame('Atelier Test', $loaded['name']);
-        self::assertSame('jean@atelier.test', $loaded['contact_email']);
+        self::assertSame('jean@atelier.example', $loaded['contact_email']);
         self::assertNull(annuaire_ext_load('invalide'));
         self::assertNull(annuaire_ext_load(str_repeat('z', 16)));
     }
@@ -91,25 +91,25 @@ final class AnnuaireExterneTest extends TestCase
         $refused = annuaire_ext_submit($this->profile(), []);
         self::assertFalse($refused['ok']);
 
-        $ok = annuaire_ext_submit($this->profile(), ['contact_email' => 'jean@atelier.test']);
+        $ok = annuaire_ext_submit($this->profile(), ['contact_email' => 'jean@atelier.example']);
         self::assertTrue($ok['ok']);
         self::assertSame('pending', $ok['record']['status']);
         self::assertSame('public', $ok['record']['source']);
 
-        $again = annuaire_ext_submit($this->profile(), ['contact_email' => 'jean@atelier.test']);
+        $again = annuaire_ext_submit($this->profile(), ['contact_email' => 'jean@atelier.example']);
         self::assertFalse($again['ok']);
         self::assertStringContainsString('déjà en cours', $again['error']);
     }
 
     public function testRejectedListingCanBeSubmittedAgain(): void
     {
-        $sub = annuaire_ext_submit($this->profile(), ['contact_email' => 'jean@atelier.test']);
+        $sub = annuaire_ext_submit($this->profile(), ['contact_email' => 'jean@atelier.example']);
         $reviewed = annuaire_ext_review($sub['record']['id'], 'rejected', 'Adresse incomplète');
         self::assertSame('rejected', $reviewed['status']);
         self::assertSame('Adresse incomplète', $reviewed['note']);
         self::assertNull(annuaire_ext_review($sub['record']['id'], 'peut-être'));
 
-        $again = annuaire_ext_submit($this->profile('https://atelier.test/', 'Atelier corrigé'), ['contact_email' => 'jean@atelier.test']);
+        $again = annuaire_ext_submit($this->profile('https://atelier.example/', 'Atelier corrigé'), ['contact_email' => 'jean@atelier.example']);
         self::assertTrue($again['ok']);
         self::assertSame('Atelier corrigé', $again['record']['name']);
         self::assertSame('pending', $again['record']['status']);
@@ -130,8 +130,8 @@ final class AnnuaireExterneTest extends TestCase
 
     public function testListPendingAndDirectoryEntry(): void
     {
-        $pending = annuaire_ext_submit($this->profile(), ['contact_email' => 'jean@atelier.test'])['record'];
-        $approved = annuaire_ext_submit($this->profile('https://autre.test', 'Autre'), [], 'portal')['record'];
+        $pending = annuaire_ext_submit($this->profile(), ['contact_email' => 'jean@atelier.example'])['record'];
+        $approved = annuaire_ext_submit($this->profile('https://autre.example', 'Autre'), [], 'portal')['record'];
         self::assertSame(1, annuaire_ext_pending_count());
         self::assertSame([$pending['id']], array_column(annuaire_ext_list('pending'), 'id'));
         self::assertSame([$approved['id']], array_column(annuaire_ext_list('approved'), 'id'));
@@ -141,7 +141,7 @@ final class AnnuaireExterneTest extends TestCase
         $e = $entries[0];
         self::assertSame('x' . $approved['id'], $e['key']);
         self::assertSame('Autre', $e['name']);
-        self::assertSame('https://autre.test', $e['url']);
+        self::assertSame('https://autre.example', $e['url']);
         self::assertTrue($e['external']);
         self::assertSame('shopify', $e['platform']);
         self::assertSame(0, $e['count']);
@@ -149,10 +149,10 @@ final class AnnuaireExterneTest extends TestCase
 
     public function testEntryFallsBackToHostWhenNameIsEmpty(): void
     {
-        $record = annuaire_ext_normalize(['url' => 'https://sans-nom.test', 'name' => '', 'status' => 'approved']);
+        $record = annuaire_ext_normalize(['url' => 'https://sans-nom.example', 'name' => '', 'status' => 'approved']);
         self::assertTrue(annuaire_ext_save($record));
         $entries = annuaire_ext_directory_entries();
-        self::assertSame('sans-nom.test', $entries[0]['name']);
+        self::assertSame('sans-nom.example', $entries[0]['name']);
     }
 
     public function testRateLimit(): void
