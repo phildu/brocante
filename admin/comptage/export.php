@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/comptage.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
-require_admin();
+require_permission('portail.comptage.exporter');
 cp_boot();
 
 $event = cp_event_get((int) ($_GET['event'] ?? 0));

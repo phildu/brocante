@@ -9,11 +9,14 @@ require_once __DIR__ . '/comptage.php';
 
 const CP_FONTS = 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap';
 
-/** Session + droits admin + schéma : à appeler en tête de chaque page admin/comptage/. */
+/** Session + droits (consulter, et selon l'action POST : créer / modifier / supprimer) + schéma : à appeler en tête de chaque page admin/comptage/. */
 function cp_admin_init(): void
 {
     if (session_status() === PHP_SESSION_NONE) session_start();
-    require_admin();
+    require_permission('portail.comptage.lire');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        auth_require_action('comptage/' . basename($_SERVER['SCRIPT_NAME'] ?? ''), (string) ($_POST['action'] ?? ''));
+    }
     cp_boot();
 }
 

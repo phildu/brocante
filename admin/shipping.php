@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+require_permission('boutique.livraison.lire');
 
 $content = get_content();
 $carriers = shipping_carriers_list();
@@ -199,5 +199,6 @@ $flash = flash_get();
   </div>
 </section>
 </main>
+<?= auth_ui_gate('shipping-action.php') ?>
 </body>
 </html>

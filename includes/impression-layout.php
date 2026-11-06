@@ -7,11 +7,14 @@
 
 require_once __DIR__ . '/impression.php';
 
-/** Session + droits admin + schéma : à appeler en tête de chaque page admin/impression/. */
+/** Session + droits (consulter, et selon l'action POST : créer / modifier / supprimer / commander) + schéma : à appeler en tête de chaque page admin/impression/. */
 function pr_admin_init(): void
 {
     if (session_status() === PHP_SESSION_NONE) session_start();
-    require_admin();
+    require_permission('portail.impression.lire');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        auth_require_action('impression/' . basename($_SERVER['SCRIPT_NAME'] ?? ''), (string) ($_POST['action'] ?? ''));
+    }
     pr_boot();
 }
 

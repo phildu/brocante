@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+require_permission('boutique.commandes.lire');
 
 $orders = db()->query("SELECT * FROM orders ORDER BY created_at DESC")->fetchAll();
 $content = get_content();
@@ -107,5 +107,6 @@ $flash = flash_get();
   </div>
 </section>
 </main>
+<?= auth_ui_gate('update-order.php') ?>
 </body>
 </html>

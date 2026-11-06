@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/invendus-layout.php';
-require_admin();
+require_permission('portail.invendus.lire');
 
 $o = unsold_offer_get((int) unsold_param($_GET, 'id'));
 if (!$o) {

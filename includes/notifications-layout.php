@@ -8,23 +8,31 @@ require_once __DIR__ . '/notifications.php';
 
 /* ---------- administration ---------- */
 
-/** Session + droits admin + schéma : à appeler en tête de chaque page admin/notifications/. */
+/**
+ * Session + droits (consulter, et selon l'action POST : créer / modifier / supprimer / envoyer —
+ * table auth_action_map(), toute action non répertoriée est refusée) + schéma :
+ * à appeler en tête de chaque page admin/notifications/.
+ */
 function nt_admin_init(): void
 {
     if (session_status() === PHP_SESSION_NONE) session_start();
-    require_admin();
+    require_permission('portail.notifications.lire');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        auth_require_action('notifications/' . basename($_SERVER['SCRIPT_NAME'] ?? ''), (string) ($_POST['action'] ?? ''));
+    }
     nt_boot();
 }
 
+/** Sections du module : clé => [url, libellé, droit exigé pour y accéder]. */
 function nt_admin_sections(): array
 {
     return [
-        'dashboard' => ['/admin/notifications/index.php', 'Tableau de bord'],
-        'utilisateurs' => ['/admin/notifications/utilisateurs.php', 'Utilisateurs'],
-        'envoyer' => ['/admin/notifications/envoyer.php', 'Envoyer'],
-        'historique' => ['/admin/notifications/historique.php', 'Historique'],
-        'rubriques' => ['/admin/notifications/rubriques.php', 'Rubriques'],
-        'canaux' => ['/admin/notifications/canaux.php', 'Canaux & réglages'],
+        'dashboard' => ['/admin/notifications/index.php', 'Tableau de bord', 'portail.notifications.lire'],
+        'utilisateurs' => ['/admin/notifications/utilisateurs.php', 'Utilisateurs', 'portail.notifications.lire'],
+        'envoyer' => ['/admin/notifications/envoyer.php', 'Envoyer', 'portail.notifications.envoyer'],
+        'historique' => ['/admin/notifications/historique.php', 'Historique', 'portail.notifications.lire'],
+        'rubriques' => ['/admin/notifications/rubriques.php', 'Rubriques', 'portail.notifications.lire'],
+        'canaux' => ['/admin/notifications/canaux.php', 'Canaux & réglages', 'portail.cles_api.lire'],
     ];
 }
 
@@ -66,7 +74,7 @@ function nt_admin_header(string $title, string $section): void
 <section class="tight">
   <div class="wrap">
     <nav class="nt-subnav" aria-label="Sections des notifications">
-      <?php foreach (nt_admin_sections() as $key => [$href, $label]): ?>
+      <?php foreach (nt_admin_sections() as $key => [$href, $label, $perm]): if (!auth_can($perm)) continue; ?>
         <a href="<?= h($href) ?>"<?= $section === $key ? ' aria-current="page"' : '' ?>><?= h($label) ?></a>
       <?php endforeach; ?>
     </nav>

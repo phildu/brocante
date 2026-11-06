@@ -7,6 +7,8 @@ switch (nt_post_action()) {
     case 'save_topic': {
         $key = trim((string) ($_POST['key'] ?? ''));
         $isNew = !empty($_POST['is_new']);
+        // La table des actions accepte « créer » OU « modifier » : on précise ici selon le cas.
+        require_permission($isNew ? 'portail.notifications.creer' : 'portail.notifications.modifier');
         if ($isNew && isset(nt_topics()[$key])) nt_redirect($self . '#nouvelle-rubrique', 'Cette clé existe déjà.', 'error');
         if (!$isNew && !isset(nt_topics()[$key])) nt_redirect($self, 'Rubrique introuvable.', 'error');
         $err = nt_topic_save($key, (string) ($_POST['label'] ?? ''), (string) ($_POST['description'] ?? ''), !empty($_POST['is_marketing']));

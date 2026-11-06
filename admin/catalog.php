@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/connectors.php';
-require_admin();
+require_permission('boutique.produits.lire');
 connectors_ensure_schema(); // colonnes d'import (source_id…) créées à la volée sur une base existante
 
 $content = get_content();
@@ -99,11 +99,17 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
       <div class="bulk-toolbar">
         <label class="featured-check"><input type="checkbox" id="bulk-select-all"> Tout sélectionner</label>
         <span id="bulk-count" class="hint" style="margin:0;">0 sélectionnée(s)</span>
+        <?php if (auth_can('boutique.produits.publier')): ?>
         <button type="button" class="btn-small" data-bulk-action="hide" disabled>Masquer</button>
         <button type="button" class="btn-small" data-bulk-action="unhide" disabled>Réafficher</button>
+        <?php endif; ?>
+        <?php if (auth_can('boutique.produits.modifier')): ?>
         <button type="button" class="btn-small" data-bulk-action="promo" disabled>Mettre en promo</button>
         <button type="button" class="btn-small" data-bulk-action="unpromo" disabled>Retirer la promo</button>
+        <?php endif; ?>
+        <?php if (auth_can('boutique.produits.supprimer')): ?>
         <button type="button" class="admin-delete" data-bulk-action="delete" data-bulk-confirm="Supprimer définitivement {n} du catalogue ?" disabled>Supprimer la sélection</button>
+        <?php endif; ?>
       </div>
       <form method="post" action="/admin/bulk-action.php" id="bulk-action-form">
         <input type="hidden" name="redirect" value="<?= h($currentUrl) ?>">
@@ -175,6 +181,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                             <div></div><div></div>
                           </div>
                         <?php endif; ?>
+                        <?php if (auth_can('boutique.produits.cout')): ?>
                         <div class="field-row-3">
                           <div class="field">
                             <label>Prix d'achat (€) — pour la marge</label>
@@ -182,16 +189,21 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                           </div>
                           <div></div><div></div>
                         </div>
+                        <?php endif; ?>
                         <div class="field-row-3">
                           <label class="featured-check"><input type="checkbox" name="featured" value="1"<?= $p['featured'] ? ' checked' : '' ?>> Mise en avant (accueil)</label>
+                          <?php if (auth_can('boutique.produits.publier')): ?>
                           <label class="featured-check"><input type="checkbox" name="is_hidden" value="1"<?= $p['is_hidden'] ? ' checked' : '' ?>> Masquer (hors boutique)</label>
+                          <?php else: ?><span class="featured-check"><?= $p['is_hidden'] ? 'Masquée (hors boutique)' : 'Visible en boutique' ?></span><?php endif; ?>
                           <div class="field">
                             <label>Stock<?= (int) $p['stock'] <= 0 ? ' — Vendue' : '' ?></label>
                             <input type="number" name="stock" min="0" step="1" value="<?= (int) $p['stock'] ?>">
                           </div>
                         </div>
                         <div class="field-row-3">
+                          <?php if (auth_can('galerie.photos_produits.lire')): ?>
                           <a class="btn-small" style="text-align:center;text-decoration:none;" href="/admin/gallery.php?ref=<?= h($p['ref']) ?>">🖼 Gérer les photos →</a>
+                          <?php else: ?><span></span><?php endif; ?>
                           <a class="btn-small" style="text-align:center;text-decoration:none;" href="/produit.php?ref=<?= h($p['ref']) ?>" target="_blank">Voir la fiche</a>
                         </div>
                         <?php $thumbs = product_photos_list($p['ref']); ?>
@@ -223,6 +235,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
       </div>
     <?php endif; ?>
 
+    <?php if (auth_can('boutique.produits.creer')): ?>
     <div class="admin-block" style="margin-top:24px;">
       <details>
         <summary class="add-product-btn" style="cursor:pointer;">+ Ajouter une pièce</summary>
@@ -238,10 +251,12 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
             </div>
             <div class="field"><label>Prix</label><input type="text" name="price" placeholder="0 €"></div>
           </div>
+          <?php if (auth_can('boutique.produits.cout')): ?>
           <div class="field-row-3">
             <div class="field"><label>Prix d'achat (€) — pour la marge</label><input type="text" name="cost_price" inputmode="decimal" placeholder="ex : 8,50"></div>
             <div></div><div></div>
           </div>
+          <?php endif; ?>
           <div class="field"><label>Description</label><textarea name="description"></textarea></div>
           <div class="field-row-3">
             <div class="field"><label>Mention</label><input type="text" name="badge" value="Chiné" list="badge-options"></div>
@@ -252,6 +267,7 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
         </form>
       </details>
     </div>
+    <?php endif; ?>
   </div>
 </section>
 </main>
@@ -342,5 +358,6 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
 })();
 </script>
 <script src="/assets/admin-upload-check.js"></script>
+<?= auth_ui_gate('save-product.php', 'add-product.php', 'delete-product.php') ?>
 </body>
 </html>

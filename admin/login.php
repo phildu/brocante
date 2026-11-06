@@ -4,32 +4,26 @@ require_once __DIR__ . '/../includes/functions.php';
 
 $content = get_content();
 $error = null;
-// Sans mot de passe configuré (fichier .secrets/admin_password.txt absent ou vide), l'accès reste fermé :
-// avant, un mot de passe vide était accepté et ouvrait l'administration à n'importe qui.
-$notConfigured = !admin_password_configured();
+
+// Déjà connecté : direction la première page accessible.
+if (auth_user() !== null && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: ' . (auth_user()['must_change'] ? '/admin/account.php?force=1' : auth_home_url()));
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $attempt = admin_login_attempt((string) ($_POST['password'] ?? ''));
-    if ($attempt['ok']) {
-        session_regenerate_id(true); // évite la fixation de session
-        $_SESSION['is_admin'] = true;
-        header('Location: /admin/dashboard.php');
-        exit;
-    }
-    if ($attempt['blocked']) {
-        // Trop d'essais depuis cette adresse : même le bon mot de passe est refusé jusqu'à la fin du délai.
-        http_response_code(429);
-        header('Retry-After: ' . $attempt['retry_after']);
-        $minutes = (int) ceil($attempt['retry_after'] / 60);
-        $error = 'Trop de tentatives. Réessayez dans ' . $minutes . ' minute' . ($minutes > 1 ? 's' : '') . '.';
-    } elseif ($notConfigured) {
-        $error = 'Connexion impossible : aucun mot de passe administrateur n\'est configuré.';
+    if (!validate_csrf()) {
+        $error = 'Session expirée : rechargez la page et réessayez.';
     } else {
-        $left = $attempt['remaining'];
-        $error = 'Mot de passe incorrect.' . ($left === 0
-            ? ' Trop d\'essais : cette adresse est bloquée pendant 15 minutes.'
-            : ($left <= 2 ? ' Il vous reste ' . $left . ' essai' . ($left > 1 ? 's' : '') . ' avant un blocage de 15 minutes.' : ''));
+        $error = auth_login((string) ($_POST['email'] ?? ''), (string) ($_POST['password'] ?? ''));
+        if ($error === null) {
+            $u = auth_user();
+            header('Location: ' . ($u['must_change'] ? '/admin/account.php?force=1' : auth_home_url()));
+            exit;
+        }
     }
 }
+$noAccess = auth_no_access_configured();
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -45,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   .login-box { background: var(--surface); border: 1px solid var(--line); padding: 32px; }
   .login-box h1 { font-size: 1.5rem; margin-bottom: 6px; }
   .login-box p.lede { font-size: 0.9rem; margin-bottom: 22px; }
-  .login-box input[type="password"] {
+  .login-box input[type="password"], .login-box input[type="email"] {
     width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--ink);
     padding: 12px 14px; font-family: var(--font-body); font-size: 0.95rem; margin-bottom: 16px;
   }
@@ -58,10 +52,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <p class="eyebrow">Espace boutique</p>
     <h1>Administration</h1>
     <p class="lede">Connectez-vous pour gérer les contenus et le catalogue.</p>
+    <?php if ($noAccess): ?>
+      <p class="login-error">Aucun accès n'est configuré. Sur le serveur, créez un compte propriétaire avec <code>php scripts/create-owner.php votre@email.fr</code>, ou déposez un mot de passe dans <code>.secrets/admin_password.txt</code>.</p>
+    <?php endif; ?>
     <?php if ($error): ?><p class="login-error"><?= h($error) ?></p><?php endif; ?>
-    <?php if ($notConfigured): ?><p class="login-error">Administrateur : créez le fichier <code>.secrets/admin_password.txt</code> sur le serveur, contenant le mot de passe sur une ligne.</p><?php endif; ?>
     <form method="post">
-      <input type="password" name="password" placeholder="Mot de passe" autofocus required>
+      <?= csrf_input() ?>
+      <input type="email" name="email" placeholder="E-mail (laisser vide pour le mot de passe principal)" autocomplete="username" autofocus>
+      <input type="password" name="password" placeholder="Mot de passe" autocomplete="current-password" required>
       <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Se connecter</button>
     </form>
   </div>

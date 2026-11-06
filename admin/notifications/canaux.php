@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../../includes/notifications-layout.php';
 nt_admin_init();
+// Cette page porte les clés d'API et mots de passe des canaux : même droit que les autres clés (Stripe, Gemini…).
+require_permission('portail.cles_api.lire');
 $self = '/admin/notifications/canaux.php';
 
 function nt_saved(bool $ok, string $what, string $anchor): void

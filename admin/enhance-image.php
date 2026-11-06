@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+require_permission_json('galerie.photos_produits.ia', 'galerie.mediatheque.ia', 'boutique.import_lot.ia');
 
 header('Content-Type: application/json');
 

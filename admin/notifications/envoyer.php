@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/notifications-layout.php';
 nt_admin_init();
+require_permission('portail.notifications.envoyer'); // même pour l'aperçu : il liste des personnes et leurs canaux
 $self = '/admin/notifications/envoyer.php';
 
 $topics = nt_topics();

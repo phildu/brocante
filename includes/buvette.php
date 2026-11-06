@@ -880,7 +880,8 @@ function bv_volunteer_space_url(): string
 
 function bv_is_volunteer(): bool
 {
-    return !empty($_SESSION['bv_volunteer']) || !empty($_SESSION['is_admin']);
+    // Le personnel connecté n'a besoin du code bénévole que s'il a le droit de consulter la buvette.
+    return !empty($_SESSION['bv_volunteer']) || auth_can('portail.buvette.lire');
 }
 
 function bv_require_volunteer(): void

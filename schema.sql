@@ -310,6 +310,48 @@ CREATE TABLE IF NOT EXISTS dash_settings (
   v TEXT NOT NULL DEFAULT ''
 );
 
+-- ---------------------------------------------------------------------------
+-- Collaborateurs, rôles et droits fins (includes/auth.php). Ces tables sont
+-- aussi créées à la volée par auth_boot() : une base existante n'a aucune
+-- migration à lancer à la main. Copie de auth_schema_sql() — garder synchronisé
+-- (scripts/test-auth.php le vérifie).
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS admin_roles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  is_owner INTEGER NOT NULL DEFAULT 0,            -- 1 = Propriétaire : tous les droits, non modifiable
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS admin_role_permissions (
+  role_id INTEGER NOT NULL,
+  perm TEXT NOT NULL,                             -- « niveau.ressource.action »
+  PRIMARY KEY (role_id, perm),
+  FOREIGN KEY (role_id) REFERENCES admin_roles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  name TEXT NOT NULL DEFAULT '',
+  password_hash TEXT NOT NULL,
+  role_id INTEGER NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  must_change_password INTEGER NOT NULL DEFAULT 0,
+  last_login_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (role_id) REFERENCES admin_roles(id)
+);
+CREATE INDEX IF NOT EXISTS idx_admin_users_role ON admin_users(role_id);
+
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+  ip TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_login_attempts ON admin_login_attempts(ip, at);
+
 -- Module Buvette (gestion de la buvette d'un vide-grenier) : ses tables
 -- (préfixe bv_) sont créées automatiquement au premier accès par
 -- includes/buvette.php (bv_boot, constante BV_SCHEMA) — rien à lancer ici,

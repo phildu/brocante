@@ -3,7 +3,7 @@ session_start();
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/charts.php';
-require_admin();
+require_permission('portail.tableau_bord.lire');
 analytics_ensure_schema();
 analytics_seed_costs();
 
@@ -805,5 +805,6 @@ $costsAll = shop_costs_all();
   if (location.hash === '#frais-gerer') { var d = document.getElementById('frais-gerer'); if (d) d.open = true; }
 })();
 </script>
+<?= auth_ui_gate('dashboard-action.php') ?>
 </body>
 </html>

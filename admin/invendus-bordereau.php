@@ -2,7 +2,7 @@
 /** Bordereau de remise à une donnerie — page autonome, pensée pour l'impression. */
 session_start();
 require_once __DIR__ . '/../includes/invendus-layout.php';
-require_admin();
+require_permission('portail.invendus.exporter');
 
 $donation = unsold_donation_get((int) unsold_param($_GET, 'id'));
 if (!$donation) {

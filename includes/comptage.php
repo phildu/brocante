@@ -162,7 +162,7 @@ function cp_volunteer_space_url(): string
 
 function cp_is_volunteer(): bool
 {
-    return !empty($_SESSION['cp_volunteer']) || !empty($_SESSION['is_admin']);
+    return !empty($_SESSION['cp_volunteer']) || auth_can('portail.comptage.lire');
 }
 
 function cp_require_volunteer(): void

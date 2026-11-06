@@ -4,7 +4,7 @@ Envoi de messages aux utilisateurs sur leurs canaux préférés : **e-mail, SMS,
 WhatsApp, Discord, Telegram**. Chaque utilisateur choisit où et sur quels
 sujets on peut lui écrire.
 
-- **Responsable** : *Administration → Notifications* (`/admin/notifications/`), même mot de passe que le reste de l'admin.
+- **Responsable** : *Administration → Notifications* (`/admin/notifications/`), selon les droits de son rôle (voir « Droits d'accès »).
 - **Utilisateurs** : page personnelle `/notifications/preferences.php?t=…` (lien secret), pour régler ses canaux et rubriques ou se désinscrire.
 
 ## Pour démarrer
@@ -91,6 +91,23 @@ commande, ses articles et le numéro de suivi s'il est saisi.
 - Sans adresse de livraison (retrait à l'atelier), le message dit « est prête » au lieu de « a été expédiée ».
 - Un échec d'envoi (e-mail non configuré, panne du serveur de messagerie…) **ne bloque jamais** la mise à jour de la commande : le résultat s'affiche dans le message de confirmation, et les envois non partis sont repris par le cron.
 - Le texte du message est dans `nt_notify_order_shipped()` (`includes/notifications.php`).
+
+## Droits d'accès
+
+Le module s'appuie sur les rôles et droits fins du back-office (`includes/auth.php`) : ressource **Notifications** (niveau Portail), avec les droits Consulter, Créer, Modifier, Supprimer et **Envoyer**. Le propriétaire a tous les droits.
+
+| Pour… | Droit exigé |
+|---|---|
+| Voir le tableau de bord, les utilisateurs, rubriques et l'historique | Notifications · Consulter |
+| Créer utilisateurs / rubriques, importer bénévoles et clients | Notifications · Créer |
+| Modifier utilisateurs, préférences, rubriques | Notifications · Modifier |
+| Supprimer un utilisateur (effacement), une rubrique, purger l'historique | Notifications · Supprimer |
+| Envoyer un message (même l'aperçu), traiter la file, relancer un envoi, tester un canal | Notifications · Envoyer |
+| Voir ou modifier les **réglages des canaux** (clés API, mots de passe SMTP, jetons) | **Clés API** (droit existant, comme Stripe ou Gemini) |
+
+- Le droit Notifications donne accès aux **coordonnées** des clients et bénévoles : il n'est donc pas inclus dans les rôles de lecture seule proposés au départ.
+- Comme partout ailleurs, toute action non répertoriée dans `auth_action_map()` est refusée, et `scripts/test-auth.php` vérifie que chaque action du module y figure.
+- La page publique de préférences (`/notifications/preferences.php?t=…`) et le script cron n'ont pas de compte : le premier s'ouvre par lien secret, le second en ligne de commande seulement.
 
 ## Installation et déploiement
 
