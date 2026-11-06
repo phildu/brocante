@@ -50,9 +50,9 @@ function admin_menu_default_groups(): array
 function admin_menu_default_order(): array
 {
     return [
-        'pilotage' => ['assistant', 'dashboard', 'emails'],
+        'pilotage' => ['assistant', 'dashboard', 'rentabilite', 'emails'],
         'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'batch'],
-        'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
+        'ventes' => ['commandes', 'buvette', 'invendus', 'comptage', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
         'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal'],
         'boutique' => ['presence', 'galeries', 'apparence', 'social', 'domaine'],
         'reglages' => ['ia', 'sms', 'plugins', 'menu', 'sync', 'reglages-general', 'reglages-pages', 'reglages-paiement', 'profil'],
