@@ -8,13 +8,27 @@ $error = null;
 // avant, un mot de passe vide était accepté et ouvrait l'administration à n'importe qui.
 $notConfigured = !admin_password_configured();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (admin_check_password((string) ($_POST['password'] ?? ''))) {
+    $attempt = admin_login_attempt((string) ($_POST['password'] ?? ''));
+    if ($attempt['ok']) {
         session_regenerate_id(true); // évite la fixation de session
         $_SESSION['is_admin'] = true;
         header('Location: /admin/dashboard.php');
         exit;
     }
-    $error = $notConfigured ? 'Connexion impossible : aucun mot de passe administrateur n\'est configuré.' : 'Mot de passe incorrect.';
+    if ($attempt['blocked']) {
+        // Trop d'essais depuis cette adresse : même le bon mot de passe est refusé jusqu'à la fin du délai.
+        http_response_code(429);
+        header('Retry-After: ' . $attempt['retry_after']);
+        $minutes = (int) ceil($attempt['retry_after'] / 60);
+        $error = 'Trop de tentatives. Réessayez dans ' . $minutes . ' minute' . ($minutes > 1 ? 's' : '') . '.';
+    } elseif ($notConfigured) {
+        $error = 'Connexion impossible : aucun mot de passe administrateur n\'est configuré.';
+    } else {
+        $left = $attempt['remaining'];
+        $error = 'Mot de passe incorrect.' . ($left === 0
+            ? ' Trop d\'essais : cette adresse est bloquée pendant 15 minutes.'
+            : ($left <= 2 ? ' Il vous reste ' . $left . ' essai' . ($left > 1 ? 's' : '') . ' avant un blocage de 15 minutes.' : ''));
+    }
 }
 ?><!DOCTYPE html>
 <html lang="fr">

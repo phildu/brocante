@@ -1575,6 +1575,67 @@ function admin_check_password(string $given): bool
     return admin_password_configured() && admin_password_matches((string) ADMIN_PASSWORD, $given);
 }
 
+const ADMIN_LOGIN_MAX_ATTEMPTS = 5;        // mots de passe essayés par adresse IP…
+const ADMIN_LOGIN_WINDOW_SECONDS = 900;    // …sur 15 minutes glissantes
+
+/**
+ * Tente la connexion admin avec limitation des essais par adresse IP (REMOTE_ADDR : les
+ * en-têtes X-Forwarded-For sont falsifiables, on ne s'y fie pas).
+ *
+ * L'essai est enregistré AVANT d'être vérifié, dans une transaction exclusive : une rafale
+ * de requêtes parallèles ne peut donc pas dépasser la limite (« vérifier puis enregistrer »
+ * laisserait passer tout le lot avant le premier échec). Au-delà de la limite, le mot de passe
+ * n'est même pas examiné — le bon mot de passe est refusé aussi, sinon la limite ne protégerait rien —
+ * et ces essais bloqués ne prolongent pas le blocage.
+ *
+ * $ip, $now et $expected ne servent qu'aux tests.
+ * @return array{ok: bool, blocked: bool, retry_after: int, remaining: int}
+ */
+function admin_login_attempt(string $given, ?string $ip = null, ?int $now = null, ?string $expected = null): array
+{
+    $ip = $ip ?? (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $now = $now ?? time();
+    $expected = $expected ?? (defined('ADMIN_PASSWORD') ? (string) ADMIN_PASSWORD : '');
+    $result = ['ok' => false, 'blocked' => false, 'retry_after' => 0, 'remaining' => 0];
+
+    // Sans mot de passe configuré, personne ne peut se connecter : inutile de compter.
+    if (trim($expected) === '') return $result;
+
+    $pdo = db();
+    $pdo->exec('CREATE TABLE IF NOT EXISTS admin_login_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT NOT NULL, at INTEGER NOT NULL)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_admin_login_ip ON admin_login_attempts(ip, at)');
+
+    $since = $now - ADMIN_LOGIN_WINDOW_SECONDS;
+    $pdo->exec('BEGIN IMMEDIATE');
+    try {
+        $pdo->prepare('DELETE FROM admin_login_attempts WHERE at < ?')->execute([$since]);
+        $pdo->prepare('INSERT INTO admin_login_attempts (ip, at) VALUES (?, ?)')->execute([$ip, $now]);
+        $myId = (int) $pdo->lastInsertId();
+        $st = $pdo->prepare('SELECT COUNT(*), MIN(at) FROM admin_login_attempts WHERE ip = ? AND at >= ?');
+        $st->execute([$ip, $since]);
+        [$count, $oldest] = array_map('intval', $st->fetch(PDO::FETCH_NUM));
+        if ($count > ADMIN_LOGIN_MAX_ATTEMPTS) {
+            $pdo->prepare('DELETE FROM admin_login_attempts WHERE id = ?')->execute([$myId]);
+            $result['blocked'] = true;
+            $result['retry_after'] = max(1, $oldest + ADMIN_LOGIN_WINDOW_SECONDS - $now);
+            $pdo->exec('COMMIT');
+            return $result;
+        }
+        $pdo->exec('COMMIT');
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->exec('ROLLBACK');
+        throw $e;
+    }
+
+    if (admin_password_matches($expected, $given)) {
+        $pdo->prepare('DELETE FROM admin_login_attempts WHERE ip = ?')->execute([$ip]);
+        $result['ok'] = true;
+        return $result;
+    }
+    $result['remaining'] = max(0, ADMIN_LOGIN_MAX_ATTEMPTS - $count);
+    return $result;
+}
+
 function require_admin(): void
 {
     if (empty($_SESSION['is_admin'])) {
