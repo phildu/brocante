@@ -135,6 +135,7 @@ $subRenamePrice = domain_sub_rename_price_cents();
 $subRename = domain_sub_pending_rename($slug);
 $subDraft = trim((string) ($_GET['nom'] ?? ''));
 if ($subDraft === '') $subDraft = $slug;
+$seoNotice = '<strong>Référencement (SEO) :</strong> changer d’adresse peut dégrader temporairement votre visibilité sur Google et les autres moteurs de recherche. Il leur faut quelques jours, parfois plusieurs semaines, pour découvrir la nouvelle adresse et lui transférer la réputation de l’ancienne ; vos positions peuvent baisser pendant cette période, puis se rétablir. Les liens déjà partagés (réseaux sociaux, annuaires, cartes de visite) restent valables tant que l’ancienne adresse n’est pas retirée. Évitez de changer d’adresse à l’approche d’un événement important.';
 
 $identity = legal_identity();
 $owner = (array) ($purchase['owner'] ?? []);
@@ -196,6 +197,8 @@ if (!$owner) {
   .dm-sub-input { display: flex; align-items: stretch; width: 100%; }
   .dm-sub-input input { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
   .dm-sub-suffix { display: inline-flex; align-items: center; padding: 0 10px; border: 1px solid var(--line); border-left: 0; background: var(--surface); font-family: var(--font-mono); font-size: .85rem; color: var(--ink-soft); white-space: nowrap; }
+  .dm-seo { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid #b26a00; background: #fff6e5; color: #5c3a00; font-size: .84rem; line-height: 1.45; }
+  .dm-seo strong { color: #5c3a00; }
   .dm-badge { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-mono); font-size: .7rem; color: var(--ink-soft); }
   @media (max-width: 720px) {
     .dm-form .field-row-2, .dm-form .field-row-3, .dm-form .field-row-4, .dm-quote { grid-template-columns: 1fr; }
@@ -242,7 +245,7 @@ if (!$owner) {
             </form>
           </div>
         <?php else: ?>
-          <form class="dm-search" method="post" action="/admin/domaine-action.php" style="margin-top:12px;" onsubmit="return confirm('Changer l’adresse ? L’ancien nom en sous-domaine ne fonctionnera plus dès que le changement sera confirmé.');">
+          <form class="dm-search" method="post" action="/admin/domaine-action.php" style="margin-top:12px;" onsubmit="return confirm('Changer l’adresse ? L’ancien nom en sous-domaine ne fonctionnera plus dès que le changement sera confirmé. Votre référencement Google peut baisser temporairement le temps que la nouvelle adresse soit prise en compte.');">
             <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
             <input type="hidden" name="action" value="sub_rename">
             <div class="field">
@@ -258,6 +261,7 @@ if (!$owner) {
               <button type="submit" class="btn"><?= $subRenamePrice > 0 ? 'Changer pour ' . h($money($subRenamePrice)) : 'Changer le nom' ?></button>
             <?php endif; ?>
           </form>
+          <p class="dm-seo"><?= $seoNotice ?></p>
           <p class="dm-note" style="margin-top:8px;"><?= $subRenamePrice > 0 ? 'Un changement de nom coûte ' . h($money($subRenamePrice)) . ' (montant fixe). ' : 'Le changement de nom est offert. ' ?>L’ancien nom en sous-domaine cesse de fonctionner et redevient disponible ; l’adresse historique de la plateforme reste valable.</p>
         <?php endif; ?>
       </div>
@@ -294,6 +298,7 @@ if (!$owner) {
             <button type="submit" class="btn btn-primary"><?= $subPrice > 0 ? 'Payer ' . h($money($subPrice)) . ' par carte' : 'Activer cette adresse' ?></button>
           <?php endif; ?>
         </form>
+        <p class="dm-seo"><?= $seoNotice ?></p>
         <p class="dm-note" style="margin-top:8px;">Adresse obtenue : <code id="dm-sub-preview"><?= h(domain_sub_url(domain_sub_label_normalize($subDraft, $subBase) ?: 'nom', $subBase)) ?>/</code> — lettres, chiffres et tirets (3 à 40 caractères). La disponibilité est vérifiée avant le paiement ; l’ancienne adresse continue de fonctionner.</p>
       </div>
       <script>
