@@ -314,3 +314,9 @@ CREATE TABLE IF NOT EXISTS dash_settings (
 -- (préfixe bv_) sont créées automatiquement au premier accès par
 -- includes/buvette.php (bv_boot, constante BV_SCHEMA) — rien à lancer ici,
 -- ni côté serveur ni après un déploiement.
+
+-- Module Impression (commande d'affiches, cartes de visite, flyers, plans et
+-- goodies auprès de fournisseurs, par API) : ses tables (préfixe pr_) sont
+-- créées automatiquement au premier accès par includes/impression.php
+-- (pr_boot, constante PR_SCHEMA) — rien à lancer ici, ni côté serveur ni
+-- après un déploiement.
