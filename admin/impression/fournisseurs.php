@@ -3,6 +3,9 @@ require_once __DIR__ . '/../../includes/impression-layout.php';
 pr_admin_init();
 
 switch (pr_post_action()) {
+    case 'cp_products':
+        break; // traité plus bas : le résultat s'affiche sur cette page (pas de redirection)
+
     case 'save_key': {
         $name = (string) ($_POST['key_name'] ?? '');
         $value = trim((string) ($_POST['key_value'] ?? ''));
@@ -24,6 +27,19 @@ switch (pr_post_action()) {
     case 'delete_supplier': {
         $err = pr_supplier_delete((int) ($_POST['id'] ?? 0));
         pr_redirect('/admin/impression/fournisseurs.php', $err ?? 'Fournisseur supprimé.', $err ? 'error' : 'ok');
+    }
+}
+
+// Liste des produits Cloudprinter (aide à trouver les références à copier dans le catalogue).
+$cpProducts = null;
+$cpError = '';
+if (($_POST['action'] ?? '') === 'cp_products') {
+    $cp = new PrCloudprinter();
+    if (!$cp->isConfigured(pr_is_test())) {
+        $cpError = 'Clé Cloudprinter ' . (pr_is_test() ? 'sandbox' : 'live') . ' non renseignée.';
+    } else {
+        $r = $cp->listProducts(pr_is_test());
+        if ($r['ok']) $cpProducts = $r['products']; else $cpError = $r['error'];
     }
 }
 
@@ -64,14 +80,23 @@ pr_admin_header('Fournisseurs & clés API', 'fournisseurs');
 ?>
 <div class="bv-card" id="cles">
   <h2>Clés API</h2>
-  <p class="bv-hint">Les clés sont enregistrées dans <code>.secrets/</code> sur le serveur (jamais affichées en entier, jamais déployées avec le code). Laisser un champ vide ne modifie pas la clé existante. Créez vos clés dans le tableau de bord de chaque fournisseur : <a href="https://dashboard.gelato.com/" target="_blank" rel="noopener noreferrer">Gelato</a> · <a href="https://dashboard.prodigi.com/" target="_blank" rel="noopener noreferrer">Prodigi</a> (ouvrir un compte est gratuit ; la facturation se règle chez eux, par carte).</p>
+  <p class="bv-hint">Les clés sont enregistrées dans <code>.secrets/</code> sur le serveur (jamais affichées en entier, jamais déployées avec le code). Laisser un champ vide ne modifie pas la clé existante. Créez vos clés dans le tableau de bord de chaque fournisseur : <a href="https://dashboard.gelato.com/" target="_blank" rel="noopener noreferrer">Gelato</a> · <a href="https://dashboard.prodigi.com/" target="_blank" rel="noopener noreferrer">Prodigi</a> · <a href="https://account.cloudprinter.com/registration" target="_blank" rel="noopener noreferrer">Cloudprinter</a> (clé dans « CloudCore API Interfaces » de leur tableau de bord). Ouvrir un compte est gratuit chez les trois ; la facturation se règle chez eux, par carte. <strong>Cloudprinter facture un abonnement mensuel</strong> dès que vous enregistrez votre carte pour passer en live.</p>
   <div class="bv-table-wrap pr-table-narrow">
     <table class="bv-table">
       <thead><tr><th>Clé</th><th>État</th><th>Nouvelle valeur</th></tr></thead>
       <tbody>
       <?php foreach (pr_secret_names() as $name => $label): $cur = pr_secret_get($name); ?>
         <tr>
-          <td><strong><?= h($label) ?></strong><?= $name === 'gelato' ? '<br><span class="bv-muted">sert en test et en live (le test passe par des commandes « brouillon »)</span>' : ($name === 'prodigi_sandbox' ? '<br><span class="bv-muted">bac à sable : gratuit, rien n\'est produit</span>' : '<br><span class="bv-muted">production réelle et facturée</span>') ?></td>
+          <td><strong><?= h($label) ?></strong><?php
+            $notes = [
+                'gelato' => 'sert en test et en live (le test passe par des commandes « brouillon »)',
+                'prodigi_sandbox' => 'bac à sable : gratuit, rien n\'est produit',
+                'prodigi_live' => 'production réelle et facturée',
+                'cloudprinter_sandbox' => 'clé d\'une interface CloudCore API en mode Sandbox : gratuit, rien n\'est produit',
+                'cloudprinter_live' => 'clé d\'une interface CloudCore API en mode Live : production réelle et facturée',
+            ];
+            echo isset($notes[$name]) ? '<br><span class="bv-muted">' . h($notes[$name]) . '</span>' : '';
+          ?></td>
           <td><?= $cur !== '' ? '<span class="bv-badge ok">enregistrée ' . h(pr_mask_secret($cur)) . '</span>' : '<span class="bv-badge warn">absente</span>' ?></td>
           <td>
             <?= pr_form_open('save_key', ['key_name' => $name], '', 'bv-inline') ?>
@@ -84,6 +109,36 @@ pr_admin_header('Fournisseurs & clés API', 'fournisseurs');
       </tbody>
     </table>
   </div>
+</div>
+
+<div class="bv-card" id="cp-produits">
+  <h2>Produits Cloudprinter</h2>
+  <p class="bv-hint">Cloudprinter n'active que certains produits sur chaque compte. Cette liste (lue avec la clé <?= pr_is_test() ? 'sandbox' : 'live' ?>) donne les <strong>références exactes</strong> à copier dans « Catalogue &amp; références » : affiches, cartes de visite… s'ils existent chez eux.</p>
+  <?= pr_form_open('cp_products', [], '', 'bv-inline') ?><button class="btn-small" type="submit">Voir les produits Cloudprinter</button></form>
+  <?php if ($cpError !== ''): ?><p class="pr-warn" style="margin-top:12px;"><?= h($cpError) ?></p><?php endif; ?>
+  <?php if ($cpProducts !== null): ?>
+    <?php if (!$cpProducts): ?>
+      <p class="bv-callout">Aucun produit activé sur ce compte : activez-en dans le tableau de bord Cloudprinter.</p>
+    <?php else: ?>
+      <p style="margin:14px 0 6px;"><input type="text" id="cp-filter" class="bv-input" style="max-width:320px;" placeholder="Filtrer (poster, card, a2…)" aria-label="Filtrer les produits"> <span class="bv-muted"><?= count($cpProducts) ?> produit(s)</span></p>
+      <div class="bv-table-wrap">
+        <table class="bv-table" id="cp-table">
+          <thead><tr><th>Référence</th><th>Nom</th><th>Catégorie</th><th class="num">À partir de</th></tr></thead>
+          <tbody>
+          <?php foreach ($cpProducts as $p): ?>
+            <tr><td><code><?= h($p['reference']) ?></code></td><td><?= h($p['name']) ?><?= $p['note'] !== '' && $p['note'] !== $p['name'] ? '<br><span class="bv-muted">' . h($p['note']) . '</span>' : '' ?></td><td><?= h($p['category']) ?></td><td class="num"><?= $p['from_price'] !== '' ? h($p['from_price'] . ' ' . $p['currency']) : '—' ?></td></tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <script>
+      document.getElementById('cp-filter').addEventListener('input', function () {
+        var q = this.value.toLowerCase();
+        document.querySelectorAll('#cp-table tbody tr').forEach(function (tr) { tr.style.display = tr.textContent.toLowerCase().indexOf(q) === -1 ? 'none' : ''; });
+      });
+      </script>
+    <?php endif; ?>
+  <?php endif; ?>
 </div>
 
 <h2 class="bv-cat-title">Annuaire des fournisseurs</h2>

@@ -42,6 +42,15 @@ function check(string $label, $actual, $expected = true): void
     }
 }
 
+/** Copie propre du fichier d'une commande (chaque commande a le sien : sa suppression ne doit pas toucher les autres). */
+function freshFile(): array
+{
+    global $png, $storedFiles;
+    $p = pr_file_store($png, pr_file_inspect($png, 'a.png', filesize($png)), false);
+    $storedFiles[] = dirname(__DIR__) . '/' . $p;
+    return ['path' => $p, 'name' => 'a.png', 'mime' => 'image/png', 'bytes' => filesize($png), 'width' => 1000, 'height' => 600];
+}
+
 /* ---------- faux fournisseurs ---------- */
 $calls = [];
 $script = [];   // [ 'METHOD substring-of-url' => réponse ]
@@ -89,13 +98,14 @@ check('12 produits au départ', (int) db()->query('SELECT COUNT(*) FROM pr_produ
 check('seule référence d\'exemple : Prodigi', (int) db()->query('SELECT COUNT(*) FROM pr_product_map')->fetchColumn(), 1);
 pr_seed_defaults();
 check('chargement idempotent (pas de doublons)', (int) db()->query('SELECT COUNT(*) FROM pr_suppliers')->fetchColumn(), 7);
-check('2 fournisseurs connectés', (int) db()->query("SELECT COUNT(*) FROM pr_suppliers WHERE kind = 'api'")->fetchColumn(), 2);
+check('3 fournisseurs connectés (Gelato, Prodigi, Cloudprinter)', (int) db()->query("SELECT COUNT(*) FROM pr_suppliers WHERE kind = 'api'")->fetchColumn(), 3);
 check('mode test par défaut', pr_mode(), 'test');
 check('plafond par défaut 150 €', pr_max_order_cents(), 15000);
 
 $gelato = (int) db()->query("SELECT id FROM pr_suppliers WHERE slug = 'gelato'")->fetchColumn();
 $prodigi = (int) db()->query("SELECT id FROM pr_suppliers WHERE slug = 'prodigi'")->fetchColumn();
 $exaprint = (int) db()->query("SELECT id FROM pr_suppliers WHERE slug = 'exaprint'")->fetchColumn();
+$cloudprinter = (int) db()->query("SELECT id FROM pr_suppliers WHERE slug = 'cloudprinter'")->fetchColumn();
 $affiche = (int) db()->query("SELECT id FROM pr_products WHERE slug = 'affiche-40x60'")->fetchColumn();
 $carte = (int) db()->query("SELECT id FROM pr_products WHERE slug = 'carte-visite-85x55'")->fetchColumn();
 
@@ -167,7 +177,7 @@ check('URL publique du fichier', pr_job_file_url($job), rtrim(SITE_URL, '/') . '
 resetCalls();
 $res = pr_job_quote_all($jobId);
 check('sans références : 0 offre', $res['offers'], 0);
-check('2 fournisseurs connectés signalés en échec', $res['failures'], 2);
+check('3 fournisseurs connectés signalés en échec', $res['failures'], 3);
 check('aucun appel réseau sans clé / sans référence', count($calls), 0);
 check('statut inchangé sans offre', pr_job_get($jobId)['status'], 'draft');
 
@@ -365,6 +375,147 @@ check('live : hôte de production Prodigi', str_starts_with($calls[0]['url'], 'h
 check('live : clé live utilisée', in_array('X-API-Key: live-key', $calls[0]['headers'], true));
 check('live : la commande mémorise qu\'elle n\'est pas en mode test', (int) pr_job_get($liveJob)['test_mode'], 0);
 pr_setting_set('mode', 'test');
+
+/* ======================================================================= */
+echo "Cloudprinter (clé dans le corps, devis valables 48 h)\n";
+$cpQuote = ['body' => [
+    'price' => '36.00', 'vat' => '7.20', 'currency' => 'EUR', 'expire_date' => gmdate('c', time() + 172800),
+    'subtotals' => ['items' => '30.00', 'fee' => '6.00', 'app_fee' => '0.0000'],
+    'shipments' => [['total_weight' => '712', 'items' => [['reference' => 'item-1']], 'quotes' => [
+        ['quote' => 'hash-postal', 'service' => 'Postal - Untracked', 'shipping_level' => 'cp_postal', 'shipping_option' => 'Poste', 'price' => '4.2000', 'vat' => '0.84', 'currency' => 'EUR'],
+        ['quote' => 'hash-fast', 'service' => 'Express fast - Tracked', 'shipping_level' => 'cp_fast', 'shipping_option' => 'DHL Express', 'price' => '14.5000', 'vat' => '2.90', 'currency' => 'EUR'],
+    ]]],
+]];
+$cpMap = pr_map_save($affiche, $cloudprinter, 'poster_a2_test', '{"paper_170":1}');
+check('référence + options Cloudprinter enregistrées', $cpMap, null);
+check('clé sandbox absente → signalée sans appel', (function () use ($affiche, $clean) { global $calls; resetCalls();
+    $j = pr_job_create(array_merge($clean, ['title' => 'CP', 'product_id' => $affiche, 'quantity' => 2]), freshFile()); pr_job_quote_all($j);
+    $row = array_values(array_filter(pr_quotes_for_job($j), fn($q) => $q['supplier_adapter'] === 'cloudprinter'))[0];
+    pr_job_cancel($j); pr_job_delete($j);
+    return [str_contains($row['error'], 'non renseignée'), count(array_filter($calls, fn($c) => str_contains($c['url'], 'cloudprinter')))]; })(), [true, 0]);
+
+pr_secret_set('cloudprinter_sandbox', 'cp-sandbox-key');
+$cpJob = pr_job_create(array_merge($clean, ['title' => 'Affiches CP', 'product_id' => $affiche, 'quantity' => 2, 'rec_state' => '']), freshFile());
+resetCalls();
+$script = ['POST /orders/quote' => $cpQuote];
+$r = pr_job_quote_all($cpJob);
+$cq = array_values(array_filter($calls, fn($c) => str_contains($c['url'], 'cloudprinter')))[0];
+check('Cloudprinter : URL de devis', $cq['url'], 'https://api.cloudprinter.com/cloudcore/1.0/orders/quote');
+check('Cloudprinter : clé dans le CORPS (apikey)', $cq['json']['apikey'], 'cp-sandbox-key');
+check('Cloudprinter : jamais de clé dans les en-têtes', array_filter($cq['headers'], fn($h) => stripos($h, 'cp-sandbox-key') !== false), []);
+check('Cloudprinter : pays, devise, produit', [$cq['json']['country'], $cq['json']['currency'], $cq['json']['items'][0]['product']], ['FR', 'EUR', 'poster_a2_test']);
+check('Cloudprinter : quantité envoyée en chaîne', $cq['json']['items'][0]['count'], '2');
+check('Cloudprinter : options {type: quantité} converties', $cq['json']['items'][0]['options'], [['type' => 'paper_170', 'count' => '1']]);
+$cqs = array_values(array_filter(pr_quotes_for_job($cpJob), fn($q) => $q['supplier_adapter'] === 'cloudprinter' && $q['total_cents'] !== null));
+check('Cloudprinter : 2 offres (une par niveau de livraison)', count($cqs), 2);
+check('Cloudprinter : total TTC = (36,00+7,20) + (4,20+0,84) = 48,24 €', (int) $cqs[0]['total_cents'], 4824);
+check('Cloudprinter : articles TTC / port TTC', [(int) $cqs[0]['items_cents'], (int) $cqs[0]['shipping_cents']], [4320, 504]);
+check('Cloudprinter : option = hash de devis', $cqs[0]['option_key'], 'hash-postal');
+check('Cloudprinter : validité 48 h indiquée', str_contains($cqs[0]['note'], 'valable'));
+
+// Réponse invalide : plusieurs colis
+resetCalls();
+$script = ['POST /orders/quote' => ['body' => ['price' => '1', 'vat' => '0', 'shipments' => [['quotes' => []], ['quotes' => []]]]]];
+pr_job_quote_all($cpJob);
+$er = array_values(array_filter(pr_quotes_for_job($cpJob), fn($q) => $q['supplier_adapter'] === 'cloudprinter'))[0];
+check('Cloudprinter : envoi fractionné signalé', str_contains($er['error'], 'plusieurs colis'));
+// Erreur 400 avec error + info
+$script = ['POST /orders/quote' => ['status' => 400, 'body' => ['error' => 'Invalid product', 'info' => 'poster_a2_test is not enabled']]];
+pr_job_quote_all($cpJob);
+$er = array_values(array_filter(pr_quotes_for_job($cpJob), fn($q) => $q['supplier_adapter'] === 'cloudprinter'))[0];
+check('Cloudprinter : erreur 400 = error + info', [str_contains($er['error'], 'Invalid product'), str_contains($er['error'], 'not enabled')], [true, true]);
+
+// Commande
+$script = ['POST /orders/quote' => $cpQuote];
+pr_job_quote_all($cpJob);
+$cqs = array_values(array_filter(pr_quotes_for_job($cpJob), fn($q) => $q['supplier_adapter'] === 'cloudprinter' && $q['total_cents'] !== null));
+resetCalls();
+$script = ['POST /orders/add' => ['status' => 201, 'body' => ['order' => 'x']]];
+$r = pr_job_order($cpJob, (int) $cqs[0]['id']);
+check('Cloudprinter : commande acceptée (HTTP 201)', $r, ['ok' => true, 'error' => '']);
+$o = lastCall();
+$cpRef = $o['json']['reference'];
+check('Cloudprinter : URL de commande', $o['url'], 'https://api.cloudprinter.com/cloudcore/1.0/orders/add');
+check('Cloudprinter : référence unique (réf. + clé anti-doublon)', (bool) preg_match('/^PR-\d{4}-[a-f0-9]{8}$/', $cpRef));
+check('Cloudprinter : clé dans le corps', $o['json']['apikey'], 'cp-sandbox-key');
+check('Cloudprinter : devis passé par son hash, sans shipping_level', [$o['json']['items'][0]['quote'], isset($o['json']['items'][0]['shipping_level'])], ['hash-postal', false]);
+check('Cloudprinter : fichier type « product » + URL + md5', [$o['json']['items'][0]['files'][0]['type'], str_starts_with($o['json']['items'][0]['files'][0]['url'], 'https://'), (bool) preg_match('/^[a-f0-9]{32}$/', $o['json']['items'][0]['files'][0]['md5sum'])], ['product', true, true]);
+check('Cloudprinter : adresse (firstname, street1, zip, country…)', [$o['json']['addresses'][0]['type'], $o['json']['addresses'][0]['firstname'], $o['json']['addresses'][0]['street1'], $o['json']['addresses'][0]['zip'], $o['json']['addresses'][0]['country']], ['delivery', 'Marie', '12 rue des Lilas', '80000', 'FR']);
+check('Cloudprinter : e-mail de contact et quantité', [$o['json']['email'], $o['json']['items'][0]['count']], ['marie@example.org', '2']);
+$cj = pr_job_get($cpJob);
+check('Cloudprinter : statut, n° de commande = référence, canal', [$cj['status'], $cj['provider_order_id'], $cj['channel']], ['ordered', $cpRef, 'api']);
+check('Cloudprinter : total estimé conservé', (int) $cj['estimate_cents'], 4824);
+
+// Suivi
+$script = ['POST /orders/info' => ['body' => ['reference' => $cpRef, 'state' => '100', 'state_code' => 'order_state_complete', 'items' => [['reference' => 'item-1', 'tracking' => '1Z999AA10123456784']]]]];
+check('Cloudprinter : synchronisation', pr_job_sync($cpJob)['ok']);
+$cj = pr_job_get($cpJob);
+check('Cloudprinter : état 100 → expédiée + suivi', [$cj['status'], $cj['tracking_code']], ['shipped', '1Z999AA10123456784']);
+check('Cloudprinter : référence relue envoyée à /orders/info', lastCall()['json']['reference'], $cpRef);
+foreach ([1 => 'ordered', 5 => 'ordered', 15 => 'ordered', 32 => 'ordered', 45 => 'in_production', 100 => 'shipped', 500 => 'cancelled', 501 => 'shipped'] as $st => $exp) {
+    check("Cloudprinter : état $st → $exp", PrCloudprinter::mapStatus($st), $exp);
+}
+foreach ([7, 11, 31, 35, 39, 41] as $st) check("Cloudprinter : état d'erreur $st → failed", PrCloudprinter::mapStatus($st), 'failed');
+$script = ['POST /orders/info' => ['status' => 410, 'body' => ['error' => 'gone']]];
+check('Cloudprinter : 410 → message sur le mode sandbox/live', str_contains(pr_job_sync($cpJob)['error'], 'sandbox'));
+
+// Annulation
+$script = ['POST /orders/cancel' => ['status' => 409, 'body' => ['error' => 'state']]];
+check('Cloudprinter : annulation refusée (409)', pr_job_cancel($cpJob)['ok'], false);
+$script = ['POST /orders/cancel' => ['body' => []]];
+check('Cloudprinter : annulation acceptée', pr_job_cancel($cpJob)['ok']);
+check('Cloudprinter : référence envoyée à /orders/cancel', lastCall()['json']['reference'], $cpRef);
+
+// Devis périmé (> 48 h) : refus avant tout appel et sans verrouiller la commande
+$old = pr_job_create(array_merge($clean, ['title' => 'Vieux devis', 'product_id' => $affiche, 'quantity' => 1]), freshFile());
+resetCalls();
+$script = ['POST /orders/quote' => $cpQuote];
+pr_job_quote_all($old);
+$oq = array_values(array_filter(pr_quotes_for_job($old), fn($q) => $q['supplier_adapter'] === 'cloudprinter' && $q['total_cents'] !== null))[0];
+db()->prepare('UPDATE pr_quotes SET created_at = ? WHERE id = ?')->execute([gmdate('Y-m-d H:i:s', time() - 49 * 3600), $oq['id']]);
+resetCalls();
+$r = pr_job_order($old, (int) $oq['id']);
+check('Cloudprinter : devis de plus de 48 h refusé', [$r['ok'], str_contains($r['error'], 'expiré')], [false, true]);
+check('devis périmé : aucun appel et commande toujours modifiable', [count($calls), pr_job_get($old)['status']], [0, 'quoted']);
+pr_job_cancel($old); pr_job_delete($old);
+
+// Liste des produits (réponse = tableau JSON)
+$script = ['POST /products' => ['body' => [
+    ['name' => 'Poster A2', 'note' => 'Poster A2 mat', 'reference' => 'poster_a2', 'category' => 'Posters', 'from_price' => '3.33', 'currency' => 'EUR'],
+    ['name' => 'sans référence'],
+]]];
+$lp = (new PrCloudprinter())->listProducts(true);
+check('Cloudprinter : liste des produits lue (entrées sans référence ignorées)', [$lp['ok'], count($lp['products']), $lp['products'][0]['reference']], [true, 1, 'poster_a2']);
+check('Cloudprinter : liste → POST /products avec la clé sandbox', [lastCall()['url'], lastCall()['json']['apikey']], ['https://api.cloudprinter.com/cloudcore/1.0/products', 'cp-sandbox-key']);
+// mode live : clé live distincte
+pr_setting_set('mode', 'live');
+check('Cloudprinter live : clé sandbox ignorée', (new PrCloudprinter())->isConfigured(false), false);
+pr_secret_set('cloudprinter_live', 'cp-live-key');
+check('Cloudprinter live : clé live détectée', (new PrCloudprinter())->isConfigured(false), true);
+pr_setting_set('mode', 'test');
+pr_job_cancel($cpJob); pr_job_delete($cpJob);
+
+echo "Migration de l'annuaire (installation existante)\n";
+$cpId = (int) db()->query("SELECT id FROM pr_suppliers WHERE slug = 'cloudprinter'")->fetchColumn();
+$exId = (int) db()->query("SELECT id FROM pr_suppliers WHERE slug = 'exaprint'")->fetchColumn();
+$OLD_CP = 'API publique (Core API : devis, commande). Connecteur non fourni dans ce module. À étudier si vous voulez imprimer en France via une API.';
+$OLD_EX = 'Imprimerie en ligne française. Aucune API publique vérifiée : commande directe sur leur site, puis suivi à la main ici.';
+db()->prepare("UPDATE pr_suppliers SET kind = 'api_externe', adapter = '', notes = ? WHERE id = ?")->execute([$OLD_CP, $cpId]);
+db()->prepare("UPDATE pr_suppliers SET kind = 'devis', docs_url = '', notes = ? WHERE id = ?")->execute([$OLD_EX, $exId]);
+pr_migrate_suppliers();
+$c = pr_supplier_get($cpId); $e = pr_supplier_get($exId);
+check('ancienne fiche Cloudprinter → API connectée', [$c['kind'], $c['adapter']], ['api', 'cloudprinter']);
+check('note d\'origine remplacée', str_contains($c['notes'], 'abonnement mensuel'));
+check('ancienne fiche Exaprint → API existante (ExaConnect)', [$e['kind'], str_contains($e['notes'], 'ExaConnect'), $e['docs_url']], ['api_externe', true, 'https://connect.exaprint.com/documentation/']);
+// note éditée par l'utilisateur : jamais écrasée
+db()->prepare("UPDATE pr_suppliers SET kind = 'devis', notes = 'Ma note perso' WHERE id = ?")->execute([$exId]);
+db()->prepare("UPDATE pr_suppliers SET kind = 'api_externe', adapter = '', notes = 'Mon avis' WHERE id = ?")->execute([$cpId]);
+pr_migrate_suppliers();
+check('note personnalisée Exaprint conservée (et type inchangé)', [pr_supplier_get($exId)['notes'], pr_supplier_get($exId)['kind']], ['Ma note perso', 'devis']);
+check('Cloudprinter : connecteur activé, note personnalisée conservée', [pr_supplier_get($cpId)['adapter'], pr_supplier_get($cpId)['notes']], ['cloudprinter', 'Mon avis']);
+pr_migrate_suppliers();
+check('migration idempotente', pr_supplier_get($cpId)['adapter'], 'cloudprinter');
+db()->prepare("UPDATE pr_suppliers SET kind = 'api_externe', notes = ? WHERE id = ?")->execute([$OLD_EX, $exId]); // remet Exaprint dans l'état attendu par la suite
 
 /* ======================================================================= */
 echo "Fournisseurs sans API (devis à la main)\n";

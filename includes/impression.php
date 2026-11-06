@@ -178,6 +178,7 @@ function pr_boot(): void
     if ($done === $dbKey) return;
     db()->exec(PR_SCHEMA);
     pr_seed_defaults();
+    pr_migrate_suppliers();
     $done = $dbKey;
 }
 
@@ -227,6 +228,8 @@ function pr_secret_names(): array
         'gelato' => 'Gelato — clé API',
         'prodigi_live' => 'Prodigi — clé API live',
         'prodigi_sandbox' => 'Prodigi — clé API sandbox',
+        'cloudprinter_sandbox' => 'Cloudprinter — clé API sandbox',
+        'cloudprinter_live' => 'Cloudprinter — clé API live',
     ];
 }
 
@@ -374,6 +377,7 @@ function pr_api_error(array $res): string
     $msg = $b['message'] ?? ($b['error']['message'] ?? ($b['error'] ?? ($b['statusText'] ?? '')));
     if (is_array($msg)) $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
     if (($msg === '' || $msg === null) && !empty($b['failures'])) $msg = json_encode($b['failures'], JSON_UNESCAPED_UNICODE);
+    if (!empty($b['info']) && is_string($b['info']) && is_string($msg)) $msg .= ' — ' . $b['info'];
     if ($msg === '' || $msg === null) $msg = mb_substr(trim($res['raw']), 0, 300);
     return 'HTTP ' . $res['status'] . ($msg !== '' ? ' — ' . mb_substr((string) $msg, 0, 400) : '');
 }
@@ -386,6 +390,12 @@ abstract class PrProvider
 {
     abstract public function adapter(): string;
     abstract public function label(): string;
+
+    /** Le devis a-t-il expiré ? (seuls certains fournisseurs limitent la validité d'un devis) */
+    public function quoteExpired(array $quote): bool
+    {
+        return false;
+    }
     /** Nom du secret à lire selon le mode (voir pr_secret_names()). */
     abstract public function secretName(bool $test): string;
 
@@ -687,12 +697,190 @@ class PrProdigi extends PrProvider
     }
 }
 
+/**
+ * Cloudprinter — https://docs.cloudprinter.com/client/cloudprinter-core-api-v1-0 (Core API 1.0).
+ * Particularités : tous les appels sont des POST JSON ; la clé API voyage dans le CORPS
+ * (champ « apikey »), pas en en-tête. Le mode test n'est pas un paramètre d'appel : il
+ * dépend de l'« interface CloudCore API » créée dans leur tableau de bord (Sandbox =
+ * commandes gratuites, jamais envoyées à un imprimeur ; Live = production réelle), donc
+ * de la clé utilisée — d'où deux clés, comme pour Prodigi.
+ * Les prix sont renvoyés HT avec la TVA à part : le module additionne les deux (TTC).
+ * Un devis (hash « quote ») est valable 48 h et se passe tel quel dans la commande.
+ */
+class PrCloudprinter extends PrProvider
+{
+    private const BASE = 'https://api.cloudprinter.com/cloudcore/1.0';
+    /** Validité d'un devis Cloudprinter, en secondes (48 h d'après la doc). */
+    public const QUOTE_TTL = 172800;
+
+    public function adapter(): string { return 'cloudprinter'; }
+    public function label(): string { return 'Cloudprinter'; }
+    public function secretName(bool $test): string { return $test ? 'cloudprinter_sandbox' : 'cloudprinter_live'; }
+
+    /** POST JSON avec la clé dans le corps. */
+    private function call(string $path, array $body, bool $test): array
+    {
+        return pr_http('POST', self::BASE . $path, [], ['apikey' => pr_secret_get($this->secretName($test))] + $body);
+    }
+
+    /** Référence de commande envoyée à Cloudprinter : unique sur tout le compte (sandbox et live compris). */
+    public static function orderReference(array $job): string
+    {
+        return $job['ref'] . '-' . substr((string) $job['idem_key'], 0, 8);
+    }
+
+    /** Options du produit : {"type": quantité} dans la fiche de référence → [{type, count}]. */
+    private function options(array $attrs): array
+    {
+        $out = [];
+        foreach ($attrs as $type => $count) {
+            if (is_scalar($count)) $out[] = ['type' => (string) $type, 'count' => (string) $count];
+        }
+        return $out;
+    }
+
+    public function quoteExpired(array $quote): bool
+    {
+        $at = strtotime((string) ($quote['created_at'] ?? '') . ' UTC');
+        return $at !== false && (time() - $at) > self::QUOTE_TTL;
+    }
+
+    public function quote(array $job, string $sku, array $attrs, bool $test): array
+    {
+        $item = ['reference' => 'item-1', 'product' => $sku, 'count' => (string) (int) $job['quantity']];
+        if ($opts = $this->options($attrs)) $item['options'] = $opts;
+        $body = ['currency' => 'EUR', 'country' => $job['rec_country'], 'items' => [$item]];
+        if ($job['rec_state'] !== '') $body['state'] = $job['rec_state'];
+        $res = $this->call('/orders/quote', $body, $test);
+        if ($err = pr_api_error($res)) return $this->fail($err);
+
+        $b = $res['body'] ?? [];
+        $shipments = $b['shipments'] ?? [];
+        if (count($shipments) !== 1) {
+            return $this->fail(count($shipments) > 1
+                ? 'Cloudprinter propose un envoi en plusieurs colis : non géré par ce module (1 ligne = 1 colis).'
+                : 'Cloudprinter n\'a proposé aucune livraison pour cette destination / ce produit.');
+        }
+        $items = pr_cents($b['price'] ?? 0) + pr_cents($b['vat'] ?? 0);
+        $expires = isset($b['expire_date']) ? strtotime((string) $b['expire_date']) : false;
+        $options = [];
+        foreach (($shipments[0]['quotes'] ?? []) as $q) {
+            if (empty($q['quote'])) continue;
+            $ship = pr_cents($q['price'] ?? 0) + pr_cents($q['vat'] ?? 0);
+            $options[] = [
+                'key' => (string) $q['quote'],
+                'label' => trim((string) ($q['service'] ?? '') . (!empty($q['shipping_option']) ? ' — ' . $q['shipping_option'] : '')),
+                'items_cents' => $items, 'shipping_cents' => $ship, 'total_cents' => $items + $ship,
+                'currency' => (string) ($q['currency'] ?? $b['currency'] ?? 'EUR'),
+                'days_min' => null, 'days_max' => null,
+                'note' => $expires ? 'Devis valable jusqu\'au ' . pr_fr_datetime(gmdate('Y-m-d H:i:s', $expires)) . ' (TVA comprise)' : 'Devis valable 48 h (TVA comprise)',
+            ];
+        }
+        if (!$options) return $this->fail('Cloudprinter n\'a proposé aucun mode de livraison.');
+        return ['ok' => true, 'error' => '', 'options' => $options];
+    }
+
+    public function order(array $job, string $sku, array $attrs, array $quote, bool $test): array
+    {
+        $address = [
+            'type' => 'delivery', 'firstname' => $job['rec_first'], 'lastname' => $job['rec_last'],
+            'street1' => $job['rec_address1'], 'zip' => $job['rec_postcode'], 'city' => $job['rec_city'],
+            'country' => $job['rec_country'], 'email' => $job['rec_email'],
+        ];
+        foreach (['company' => 'rec_company', 'street2' => 'rec_address2', 'state' => 'rec_state', 'phone' => 'rec_phone'] as $api => $col) {
+            if (trim((string) $job[$col]) !== '') $address[$api] = $job[$col];
+        }
+        $file = ['type' => 'product', 'url' => pr_job_file_url($job)];
+        $local = dirname(__DIR__) . '/' . $job['file_path'];
+        if (is_file($local)) $file['md5sum'] = md5_file($local); // Cloudprinter vérifie l'intégrité du fichier téléchargé
+
+        $item = [
+            'reference' => 'item-1', 'product' => $sku, 'quote' => $quote['option_key'], // le hash de devis porte déjà le niveau de livraison
+            'title' => mb_substr($job['title'], 0, 100), 'count' => (string) (int) $job['quantity'], 'files' => [$file],
+        ];
+        if ($opts = $this->options($attrs)) $item['options'] = $opts;
+
+        $reference = self::orderReference($job);
+        $res = $this->call('/orders/add', [
+            'reference' => $reference, 'email' => $job['rec_email'], 'addresses' => [$address], 'items' => [$item],
+        ], $test);
+        if ($err = pr_api_error($res)) return $this->fail($err);
+        return [
+            'ok' => true, 'error' => '', 'provider_order_id' => $reference, 'status' => 'ordered', 'raw_status' => 'order_created',
+            'tracking_url' => '', 'tracking_code' => '', 'charged_cents' => null,
+        ];
+    }
+
+    public function status(string $providerOrderId, bool $test): array
+    {
+        $res = $this->call('/orders/info', ['reference' => $providerOrderId], $test);
+        if ($res['status'] === 410) return $this->fail('Commande introuvable chez Cloudprinter (410) : vérifiez que la clé correspond au bon mode (sandbox / live).');
+        if ($err = pr_api_error($res)) return $this->fail($err);
+        $b = $res['body'] ?? [];
+        $tracking = '';
+        foreach (($b['items'] ?? []) as $it) {
+            if (!empty($it['tracking']) && is_string($it['tracking'])) { $tracking = $it['tracking']; break; }
+        }
+        $state = (int) ($b['state'] ?? 0);
+        return [
+            'ok' => true, 'error' => '', 'status' => self::mapStatus($state),
+            'raw_status' => (string) ($b['state_code'] ?? ('état ' . $state)),
+            'tracking_url' => '', 'tracking_code' => $tracking, 'charged_cents' => null,
+        ];
+    }
+
+    public function cancel(string $providerOrderId, bool $test): array
+    {
+        $res = $this->call('/orders/cancel', ['reference' => $providerOrderId], $test);
+        if ($res['status'] === 409) return ['ok' => false, 'error' => 'Cloudprinter refuse l\'annulation : la commande n\'est plus dans un état annulable (production commencée).'];
+        if ($res['status'] === 410) return ['ok' => false, 'error' => 'Commande introuvable chez Cloudprinter (410).'];
+        if ($err = pr_api_error($res)) return ['ok' => false, 'error' => $err];
+        return ['ok' => true, 'error' => ''];
+    }
+
+    /**
+     * Produits activés sur le compte (référence à copier dans « Catalogue & références »).
+     * @return array{ok:bool,error:string,products:array}
+     */
+    public function listProducts(bool $test): array
+    {
+        $res = $this->call('/products', [], $test);
+        if ($err = pr_api_error($res)) return ['ok' => false, 'error' => $err, 'products' => []];
+        $out = [];
+        foreach (($res['body'] ?? []) as $p) {
+            if (!is_array($p) || empty($p['reference'])) continue;
+            $out[] = [
+                'reference' => (string) $p['reference'], 'name' => (string) ($p['name'] ?? ''), 'note' => (string) ($p['note'] ?? ''),
+                'category' => (string) ($p['category'] ?? ''), 'from_price' => (string) ($p['from_price'] ?? ''), 'currency' => (string) ($p['currency'] ?? 'EUR'),
+            ];
+        }
+        return ['ok' => true, 'error' => '', 'products' => $out];
+    }
+
+    /**
+     * États Cloudprinter (« State definitions ») → statuts du module.
+     * 1–45 : commande en cours de vérification / préparation / envoi des fichiers à l'imprimeur ;
+     * 45 : fichiers remis à l'imprimeur ; 100 : toute la commande expédiée ou livrée
+     * (Cloudprinter ne distingue pas « expédiée » de « livrée ») ; 500 : annulée ;
+     * 501 : commande sandbox terminée ; 7, 11, 31, 35, 39, 41 : erreurs.
+     */
+    public static function mapStatus(int $state): string
+    {
+        if (in_array($state, [7, 11, 31, 35, 39, 41], true)) return 'failed';
+        if ($state === 500) return 'cancelled';
+        if ($state === 100 || $state === 501) return 'shipped';
+        if ($state === 45) return 'in_production';
+        return 'ordered';
+    }
+}
+
 /** Connecteur d'un fournisseur (null si le fournisseur n'a pas de connecteur fourni). */
 function pr_provider(string $adapter): ?PrProvider
 {
     return match ($adapter) {
         'gelato' => new PrGelato(),
         'prodigi' => new PrProdigi(),
+        'cloudprinter' => new PrCloudprinter(),
         default => null,
     };
 }
@@ -879,6 +1067,63 @@ function pr_map_attrs(array $map): array
     return is_array($d) ? $d : [];
 }
 
+/** Fiches de l'annuaire de base : [slug, nom, type, connecteur, site, doc API, catalogue, e-mail, pays, spécialités, notes]. */
+function pr_builtin_rows(): array
+{
+    return [
+            ['gelato', 'Gelato', 'api', 'gelato', 'https://www.gelato.com', 'https://dashboard.gelato.com/docs/', 'https://dashboard.gelato.com/', '', 'International (production locale, plus de 30 pays)',
+                'Affiches, cartes de visite, flyers, goodies (mugs, textile…)',
+                'API v4 : devis, commande, suivi, annulation. Clé à créer dans le tableau de bord Gelato (section développeur). Mode test = commande « brouillon » : enregistrée chez Gelato mais jamais produite ni facturée. Les références produit (productUid) se prennent dans leur catalogue.'],
+            ['prodigi', 'Prodigi', 'api', 'prodigi', 'https://www.prodigi.com', 'https://www.prodigi.com/print-api/docs/', 'https://www.prodigi.com/print-api/docs/', '', 'Royaume-Uni, UE, États-Unis (laboratoires partenaires)',
+                'Affiches et tirages d\'art, cadres, photo-books, coques et autres goodies',
+                'API v4 : devis, commande, suivi, annulation. Deux clés : sandbox (gratuite — aucune production ni coût) et live. Références = SKU (ex : GLOBAL-FAP-16x24).'],
+            ['cloudprinter', 'Cloudprinter', 'api', 'cloudprinter', 'https://www.cloudprinter.com', 'https://docs.cloudprinter.com/client/cloudprinter-core-api-v1-0', 'https://www.cloudprinter.com/countries/local-printing-in-france-with-global-print-api', '', 'International — impression locale en France annoncée',
+                'Livres, brochures et produits imprimés à la demande (catalogue activé compte par compte)',
+                'API Core : devis, commande, suivi, annulation. Le mode test dépend de l\'interface API créée dans leur tableau de bord (Sandbox : commandes gratuites, jamais produites ; Live : réel) — d\'où deux clés. Compte gratuit, mais un abonnement mensuel démarre quand vous enregistrez votre carte pour passer en live. Prix HT + TVA à part (le module affiche le TTC). Devis valables 48 h. Catalogue surtout orienté livres et produits imprimés : vérifiez la présence d\'affiches / cartes de visite avec « Voir les produits » (Fournisseurs & clés API).'],
+            ['print-com', 'Print.com', 'api_externe', '', 'https://www.print.com', 'https://www.print.com/fr/api/', 'https://www.print.com/fr/', '', 'Pays-Bas — livraison en Europe',
+                'Cartes de visite, flyers, supports imprimés ; expédition en marque blanche (dropshipping)',
+                'API pour connecter une boutique ou une plateforme et externaliser les commandes. Connecteur non fourni dans ce module.'],
+            ['helloprint', 'Helloprint Connect', 'api_externe', '', 'https://connect.helloprint.fr/landing', 'https://connect.helloprint.fr/landing', 'https://connect.helloprint.fr/landing', '', 'Europe',
+                'Plus de 10 000 produits : cartes de visite, flyers, brochures, signalétique, stickers, cadeaux promo, vêtements',
+                'Plateforme réservée aux revendeurs print vérifiés ; commande via Connect ou via leur API. Inscription et validation nécessaires. Connecteur non fourni dans ce module.'],
+            ['exaprint', 'Exaprint', 'api_externe', '', 'https://www.exaprint.fr', 'https://connect.exaprint.com/documentation/', 'https://www.exaprint.fr/exaconnect/', '', 'France',
+                'Cartes de visite, flyers, dépliants, brochures, affiches, cartes postales',
+                'API « ExaConnect » gratuite (jeton d\'accès, création de commande, envoi des fichiers, suivi, annulation) mais accès SUR DEMANDE : formulaire sur la page ExaConnect. Catalogue API limité aux produits les plus courants. Aucun devis dans les fonctions annoncées. Connecteur non fourni : en attendant, commande sur leur site et suivi à la main ici.'],
+            ['pixartprinting', 'Pixartprinting', 'devis', '', 'https://www.pixartprinting.com', '', 'https://www.pixartprinting.com', '', 'Europe',
+                'Cartes de visite, étiquettes, livres et magazines, grands formats',
+                'Imprimeur en ligne orienté professionnels. Aucune API publique vérifiée : commande sur leur site, suivi à la main ici.'],
+    ];
+}
+
+/**
+ * Met à niveau les fiches de l'annuaire de base d'une installation existante
+ * (Cloudprinter devient un connecteur fourni ; Exaprint a une API sur demande).
+ * Ne modifie que les fiches de base, et ne remplace une note que si elle est
+ * encore celle d'origine : un texte que vous avez édité n'est jamais écrasé.
+ */
+function pr_migrate_suppliers(): void
+{
+    $pdo = db();
+    $rows = [];
+    foreach ($pdo->query("SELECT * FROM pr_suppliers WHERE is_builtin = 1 AND slug IN ('cloudprinter', 'exaprint')")->fetchAll() as $r) $rows[$r['slug']] = $r;
+
+    $oldNotes = [
+        'cloudprinter' => 'API publique (Core API : devis, commande). Connecteur non fourni dans ce module. À étudier si vous voulez imprimer en France via une API.',
+        'exaprint' => 'Imprimerie en ligne française. Aucune API publique vérifiée : commande directe sur leur site, puis suivi à la main ici.',
+    ];
+    $fresh = [];
+    foreach (pr_builtin_rows() as $r) if (in_array($r[0], ['cloudprinter', 'exaprint'], true)) $fresh[$r[0]] = $r;
+
+    if (isset($rows['cloudprinter']) && $rows['cloudprinter']['adapter'] === '') {
+        $n = $rows['cloudprinter']['notes'] === $oldNotes['cloudprinter'] ? $fresh['cloudprinter'][10] : $rows['cloudprinter']['notes'];
+        $pdo->prepare("UPDATE pr_suppliers SET kind = 'api', adapter = 'cloudprinter', notes = ? WHERE slug = 'cloudprinter'")->execute([$n]);
+    }
+    if (isset($rows['exaprint']) && $rows['exaprint']['kind'] === 'devis' && $rows['exaprint']['notes'] === $oldNotes['exaprint']) {
+        $f = $fresh['exaprint'];
+        $pdo->prepare("UPDATE pr_suppliers SET kind = 'api_externe', docs_url = ?, catalog_url = ?, notes = ? WHERE slug = 'exaprint'")->execute([$f[5], $f[6], $f[10]]);
+    }
+}
+
 /**
  * Annuaire de départ + catalogue de produits courants. Uniquement des faits
  * vérifiés dans la documentation publique des fournisseurs (nov. 2026) ; tout
@@ -888,29 +1133,7 @@ function pr_seed_defaults(): void
 {
     $pdo = db();
     if ((int) $pdo->query('SELECT COUNT(*) FROM pr_suppliers')->fetchColumn() === 0) {
-        $rows = [
-            ['gelato', 'Gelato', 'api', 'gelato', 'https://www.gelato.com', 'https://dashboard.gelato.com/docs/', 'https://dashboard.gelato.com/', '', 'International (production locale, plus de 30 pays)',
-                'Affiches, cartes de visite, flyers, goodies (mugs, textile…)',
-                'API v4 : devis, commande, suivi, annulation. Clé à créer dans le tableau de bord Gelato (section développeur). Mode test = commande « brouillon » : enregistrée chez Gelato mais jamais produite ni facturée. Les références produit (productUid) se prennent dans leur catalogue.'],
-            ['prodigi', 'Prodigi', 'api', 'prodigi', 'https://www.prodigi.com', 'https://www.prodigi.com/print-api/docs/', 'https://www.prodigi.com/print-api/docs/', '', 'Royaume-Uni, UE, États-Unis (laboratoires partenaires)',
-                'Affiches et tirages d\'art, cadres, photo-books, coques et autres goodies',
-                'API v4 : devis, commande, suivi, annulation. Deux clés : sandbox (gratuite — aucune production ni coût) et live. Références = SKU (ex : GLOBAL-FAP-16x24).'],
-            ['cloudprinter', 'Cloudprinter', 'api_externe', '', 'https://www.cloudprinter.com', 'https://docs.cloudprinter.com/client/cloudprinter-core-api-v1-0', 'https://www.cloudprinter.com/countries/local-printing-in-france-with-global-print-api', '', 'International — impression locale en France annoncée',
-                'Livres, brochures et produits imprimés à la demande',
-                'API publique (Core API : devis, commande). Connecteur non fourni dans ce module. À étudier si vous voulez imprimer en France via une API.'],
-            ['print-com', 'Print.com', 'api_externe', '', 'https://www.print.com', 'https://www.print.com/fr/api/', 'https://www.print.com/fr/', '', 'Pays-Bas — livraison en Europe',
-                'Cartes de visite, flyers, supports imprimés ; expédition en marque blanche (dropshipping)',
-                'API pour connecter une boutique ou une plateforme et externaliser les commandes. Connecteur non fourni dans ce module.'],
-            ['helloprint', 'Helloprint Connect', 'api_externe', '', 'https://connect.helloprint.fr/landing', 'https://connect.helloprint.fr/landing', 'https://connect.helloprint.fr/landing', '', 'Europe',
-                'Plus de 10 000 produits : cartes de visite, flyers, brochures, signalétique, stickers, cadeaux promo, vêtements',
-                'Plateforme réservée aux revendeurs print vérifiés ; commande via Connect ou via leur API. Inscription et validation nécessaires. Connecteur non fourni dans ce module.'],
-            ['exaprint', 'Exaprint', 'devis', '', 'https://www.exaprint.fr', '', 'https://www.exaprint.fr', '', 'France',
-                'Cartes de visite, flyers, dépliants, brochures, affiches, cartes postales',
-                'Imprimerie en ligne française. Aucune API publique vérifiée : commande directe sur leur site, puis suivi à la main ici.'],
-            ['pixartprinting', 'Pixartprinting', 'devis', '', 'https://www.pixartprinting.com', '', 'https://www.pixartprinting.com', '', 'Europe',
-                'Cartes de visite, étiquettes, livres et magazines, grands formats',
-                'Imprimeur en ligne orienté professionnels. Aucune API publique vérifiée : commande sur leur site, suivi à la main ici.'],
-        ];
+        $rows = pr_builtin_rows();
         $st = $pdo->prepare('INSERT INTO pr_suppliers (slug, name, kind, adapter, website, docs_url, catalog_url, email, country, specialties, notes, is_active, is_builtin, created_at)
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)');
         foreach ($rows as $r) $st->execute(array_merge($r, [pr_now()]));
@@ -1157,11 +1380,11 @@ function pr_job_quote_all(int $jobId): array
 
     $offers = 0;
     $failures = 0;
-    $ins = db()->prepare('INSERT INTO pr_quotes (job_id, supplier_id, option_key, label, items_cents, shipping_cents, total_cents, currency, days_min, days_max, manual, error, created_at)
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)');
+    $ins = db()->prepare('INSERT INTO pr_quotes (job_id, supplier_id, option_key, label, items_cents, shipping_cents, total_cents, currency, days_min, days_max, manual, error, note, created_at)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)');
     $errRow = function (array $sup, string $msg) use ($ins, $jobId, &$failures) {
         $failures++;
-        $ins->execute([$jobId, $sup['id'], '', '', null, null, null, 'EUR', null, null, $msg, pr_now()]);
+        $ins->execute([$jobId, $sup['id'], '', '', null, null, null, 'EUR', null, null, $msg, '', pr_now()]);
     };
     foreach (pr_suppliers_list(true) as $sup) {
         $prov = $sup['adapter'] !== '' ? pr_provider($sup['adapter']) : null;
@@ -1185,7 +1408,7 @@ function pr_job_quote_all(int $jobId): array
             continue;
         }
         foreach ($res['options'] as $o) {
-            $ins->execute([$jobId, $sup['id'], $o['key'], $o['label'], $o['items_cents'], $o['shipping_cents'], $o['total_cents'], $o['currency'], $o['days_min'], $o['days_max'], '', pr_now()]);
+            $ins->execute([$jobId, $sup['id'], $o['key'], $o['label'], $o['items_cents'], $o['shipping_cents'], $o['total_cents'], $o['currency'], $o['days_min'], $o['days_max'], '', $o['note'] ?? '', pr_now()]);
             $offers++;
         }
     }
@@ -1229,6 +1452,9 @@ function pr_job_order(int $jobId, int $quoteId): array
     }
     $map = pr_map_get((int) $job['product_id'], (int) $sup['id']);
     if (!$map) return ['ok' => false, 'error' => 'Référence produit manquante chez ' . $sup['name'] . '.'];
+    if ($prov->quoteExpired($quote)) {
+        return ['ok' => false, 'error' => 'Ce devis ' . $sup['name'] . ' a expiré : relancez « Comparer les fournisseurs » pour obtenir un prix à jour.'];
+    }
 
     // Verrou atomique : un seul envoi à la fois, même en cas de double clic.
     $lock = db()->prepare("UPDATE pr_jobs SET status = 'ordering', updated_at = ? WHERE id = ? AND status IN ('draft','quoted','quote_requested','failed') AND provider_order_id = ''");

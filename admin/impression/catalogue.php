@@ -7,7 +7,7 @@ switch (pr_post_action()) {
     case 'save_product': {
         $pid = ($_POST['action'] === 'save_product') ? (int) ($_POST['id'] ?? 0) : null;
         [$saved, $err] = pr_product_save($pid, $_POST);
-        pr_redirect('/admin/impression/catalogue.php' . ($saved ? '#p' . $saved : ''), $err ?? ($pid ? 'Produit enregistré.' : 'Produit ajouté. Renseignez maintenant sa référence chez vos fournisseurs.'), $err ? 'error' : 'ok');
+        pr_redirect('/admin/impression/catalogue.php' . ($saved ? '?open=' . $saved . '#p' . $saved : ''), $err ?? ($pid ? 'Produit enregistré.' : 'Produit ajouté. Renseignez maintenant sa référence chez vos fournisseurs.'), $err ? 'error' : 'ok');
     }
 
     case 'delete_product': {
@@ -18,7 +18,7 @@ switch (pr_post_action()) {
     case 'save_map': {
         $pid = (int) ($_POST['product_id'] ?? 0);
         $err = pr_map_save($pid, (int) ($_POST['supplier_id'] ?? 0), (string) ($_POST['sku'] ?? ''), (string) ($_POST['options'] ?? ''), (string) ($_POST['note'] ?? ''));
-        pr_redirect('/admin/impression/catalogue.php#p' . $pid, $err ?? 'Référence enregistrée.', $err ? 'error' : 'ok');
+        pr_redirect('/admin/impression/catalogue.php?open=' . $pid . '#p' . $pid, $err ?? 'Référence enregistrée.', $err ? 'error' : 'ok');
     }
 }
 
@@ -70,11 +70,11 @@ pr_admin_header('Catalogue & références', 'catalogue');
         <?php foreach ($connected as $s): $m = $maps[(int) $s['id']] ?? null; ?>
           <?= pr_form_open('save_map', ['product_id' => $p['id'], 'supplier_id' => $s['id']]) ?>
             <div class="bv-form-grid" style="margin-top:10px;">
-              <div class="field"><label><?= h($s['name']) ?> — <?= $s['adapter'] === 'gelato' ? 'productUid' : 'SKU' ?></label>
-                <input type="text" name="sku" value="<?= h($m['sku'] ?? '') ?>" maxlength="200" placeholder="<?= $s['adapter'] === 'gelato' ? 'ex : cards_pf_…' : 'ex : GLOBAL-FAP-16x24' ?>"></div>
-              <?php if ($s['adapter'] === 'prodigi'): ?>
-                <div class="field"><label>Attributs (JSON, si le produit en demande)</label>
-                  <input type="text" name="options" value="<?= h($m['options'] ?? '') ?>" placeholder='{"color":"black"}'></div>
+              <div class="field"><label><?= h($s['name']) ?> — <?= ['gelato' => 'productUid', 'prodigi' => 'SKU', 'cloudprinter' => 'référence produit'][$s['adapter']] ?? 'référence' ?></label>
+                <input type="text" name="sku" value="<?= h($m['sku'] ?? '') ?>" maxlength="200" placeholder="<?= ['gelato' => 'ex : cards_pf_…', 'prodigi' => 'ex : GLOBAL-FAP-16x24', 'cloudprinter' => 'ex : poster_a2 (voir Fournisseurs → Produits Cloudprinter)'][$s['adapter']] ?? '' ?>"></div>
+              <?php if (in_array($s['adapter'], ['prodigi', 'cloudprinter'], true)): ?>
+                <div class="field"><label><?= $s['adapter'] === 'prodigi' ? 'Attributs (JSON, si le produit en demande)' : 'Options (JSON {type: quantité}, si le produit en demande)' ?></label>
+                  <input type="text" name="options" value="<?= h($m['options'] ?? '') ?>" placeholder='<?= $s['adapter'] === 'prodigi' ? '{"color":"black"}' : '{"paper_170":1}' ?>'></div>
               <?php else: ?><input type="hidden" name="options" value="<?= h($m['options'] ?? '') ?>"><?php endif; ?>
               <div class="field"><label>Note</label><input type="text" name="note" value="<?= h($m['note'] ?? '') ?>" maxlength="300"></div>
               <div class="bv-actions" style="margin:0;"><button class="btn-small" type="submit"><?= $m ? 'Enregistrer' : 'Ajouter' ?></button></div>
