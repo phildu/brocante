@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/invendus-layout.php';
-require_admin();
+require_permission('portail.invendus.lire');
 
 $id = (int) unsold_param($_GET, 'id');
 $event = unsold_event_get($id);

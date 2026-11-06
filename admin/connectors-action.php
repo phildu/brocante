@@ -1,7 +1,14 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/connectors.php';
-require_admin();
+
+// Droit de base selon l'action. Les appels AJAX (test, synchro page par page) attendent du JSON : refus en JSON.
+$action = (string) ($_POST['action'] ?? '');
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, ['test', 'sync_page', 'sync_finish'], true)) {
+    require_permission_json(...auth_action_requirement('connectors-action.php', $action));
+} else {
+    auth_require_action(basename(__FILE__), $action);
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/connectors.php');
@@ -86,6 +93,7 @@ switch ($action) {
 
     case 'save': {
         $id = (int) ($_POST['id'] ?? 0);
+        require_permission($id > 0 ? 'boutique.connecteurs.modifier' : 'boutique.connecteurs.creer'); // créer ≠ modifier
         $existing = $id > 0 ? connector_source_get($id) : null;
         if ($id > 0 && !$existing) { flash_set('Boutique introuvable.', 'error'); connectors_back(); }
 

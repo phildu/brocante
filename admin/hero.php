@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+require_permission('galerie.hero.lire');
 
 $content = get_content();
 $slides = hero_slides_list();
@@ -157,5 +157,6 @@ $flash = flash_get();
 })();
 </script>
 <script src="/assets/admin-upload-check.js"></script>
+<?= auth_ui_gate('hero-action.php') ?>
 </body>
 </html>

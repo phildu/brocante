@@ -2,7 +2,7 @@
 /** Export CSV des propositions d'une édition (compatible Excel français : UTF-8 avec BOM, séparateur « ; »). */
 session_start();
 require_once __DIR__ . '/../includes/invendus.php';
-require_admin();
+require_permission('portail.invendus.exporter');
 
 $event = unsold_event_get((int) unsold_param($_GET, 'event'));
 if (!$event) {

@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/connectors.php';
-require_admin();
+require_permission('boutique.connecteurs.lire');
 
 connectors_ensure_schema();
 $content = get_content();
@@ -301,5 +301,6 @@ $pushUrl = ($siteBase !== '' ? $siteBase : ((!empty($_SERVER['HTTPS']) ? 'https:
   });
 })();
 </script>
+<?= auth_ui_gate('connectors-action.php') ?>
 </body>
 </html>

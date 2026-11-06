@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+require_permission('galerie.slideshow.lire');
 
 $content = get_content();
 $slides = slideshow_slides_list();
@@ -234,5 +234,6 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
 })();
 </script>
 <script src="/assets/admin-upload-check.js"></script>
+<?= auth_ui_gate('slideshow-action.php') ?>
 </body>
 </html>

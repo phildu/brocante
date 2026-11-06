@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
-require_admin();
+auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/orders.php');

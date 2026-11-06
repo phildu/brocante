@@ -2,7 +2,7 @@
 session_start();
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/csrf.php';
-require_admin();
+auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/dashboard.php');
@@ -32,6 +32,11 @@ function dash_valid_date(?string $d): ?string
 
 $action = (string) ($_POST['action'] ?? '');
 $pdo = db();
+
+// Créer ≠ modifier un frais (selon la présence d'un id).
+if ($action === 'cost_save') {
+    require_permission((int) ($_POST['id'] ?? 0) > 0 ? 'portail.tableau_bord.modifier' : 'portail.tableau_bord.creer');
+}
 
 if ($action === 'cost_save') {
     $id = (int) ($_POST['id'] ?? 0);
