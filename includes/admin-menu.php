@@ -53,11 +53,11 @@ function admin_menu_default_order(): array
 {
     return [
         'pilotage' => ['assistant', 'dashboard', 'rentabilite', 'emails'],
-        'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'batch'],
+        'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'batch', 'connecteurs'],
         'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
-        'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal'],
+        'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal', 'impression'],
         'boutique' => ['presence', 'galeries', 'apparence', 'social', 'domaine'],
-        'reglages' => ['ia', 'sms', 'plugins', 'menu', 'sync', 'reglages-general', 'reglages-pages', 'reglages-paiement', 'profil'],
+        'reglages' => ['ia', 'sms', 'notifications', 'plugins', 'menu', 'sync', 'reglages-general', 'reglages-pages', 'reglages-paiement', 'profil'],
         'extensions' => [],
     ];
 }
@@ -154,6 +154,9 @@ function admin_menu_core_items(): array
         'prise' => ['/admin/quick-add.php', 'Nouvelle pièce (photo)', 'camera'],
         'assistant' => ['/admin/shooting-assistant.php', 'Studio photo/vidéo', 'camera'],
         'batch' => ['/admin/batch-import.php', 'Import par lot', 'upload'],
+        'connecteurs' => ['/admin/connectors.php', 'Boutiques connectées', 'cloud'],
+        'impression' => ['/admin/impression/index.php', 'Impression', 'image'],
+        'notifications' => ['/admin/notifications/index.php', 'Notifications', 'message'],
         'promos' => ['/admin/promos.php', 'Mises en avant (promos)', 'banner'],
         'offres' => ['/admin/offers.php', 'Offres de prix', 'receipt'],
         'bareme-etat' => ['/admin/condition-pricing.php', 'Barème des états', 'receipt'],

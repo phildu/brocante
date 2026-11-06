@@ -28,6 +28,7 @@ require_once __DIR__ . '/payments.php';
 require_once __DIR__ . '/order-availability.php';
 require_once __DIR__ . '/analytics.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/auth.php';
 
 function h($s): string
 {

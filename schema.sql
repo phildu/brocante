@@ -254,6 +254,48 @@ CREATE TABLE IF NOT EXISTS dash_settings (
   v TEXT NOT NULL DEFAULT ''
 );
 
+-- ---------------------------------------------------------------------------
+-- Collaborateurs, rôles et droits fins (includes/auth.php). Ces tables sont
+-- aussi créées à la volée par auth_boot() : une base existante n'a aucune
+-- migration à lancer à la main. Copie de auth_schema_sql() — garder synchronisé
+-- (scripts/test-auth.php le vérifie).
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS admin_roles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  is_owner INTEGER NOT NULL DEFAULT 0,            -- 1 = Propriétaire : tous les droits, non modifiable
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS admin_role_permissions (
+  role_id INTEGER NOT NULL,
+  perm TEXT NOT NULL,                             -- « niveau.ressource.action »
+  PRIMARY KEY (role_id, perm),
+  FOREIGN KEY (role_id) REFERENCES admin_roles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  name TEXT NOT NULL DEFAULT '',
+  password_hash TEXT NOT NULL,
+  role_id INTEGER NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  must_change_password INTEGER NOT NULL DEFAULT 0,
+  last_login_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (role_id) REFERENCES admin_roles(id)
+);
+CREATE INDEX IF NOT EXISTS idx_admin_users_role ON admin_users(role_id);
+
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+  ip TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_login_attempts ON admin_login_attempts(ip, at);
+
 -- Module Buvette (gestion de la buvette d'un vide-grenier) : ses tables
 -- (préfixe bv_) sont créées automatiquement au premier accès par
 -- includes/buvette.php (bv_boot, constante BV_SCHEMA) — rien à lancer ici,
@@ -324,3 +366,32 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email COLLATE NOCASE);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_username ON accounts(username COLLATE NOCASE) WHERE username IS NOT NULL;
+-- ---------------------------------------------------------------------------
+-- Boutiques connectées (admin/connectors.php, api/catalog-push.php). Tables et
+-- colonnes créées à la volée par connectors_ensure_schema()
+-- (includes/connectors.php) : rien à lancer à la main. Garder synchronisé.
+-- Les identifiants (clés API) ne sont PAS en base : .secrets/connector-<id>.json.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS import_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  platform TEXT NOT NULL,                 -- shopify | woocommerce | prestashop | api
+  base_url TEXT NOT NULL DEFAULT '',
+  settings TEXT NOT NULL DEFAULT '{}',    -- JSON : univers par défaut, publication, stock, TVA…
+  is_active INTEGER NOT NULL DEFAULT 1,
+  last_sync_at TEXT,                      -- UTC
+  last_sync_status TEXT,                  -- ok | partial | error
+  last_sync_summary TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+-- Colonnes ajoutées à products : source_id INTEGER, external_id TEXT,
+-- external_url TEXT, synced_at TEXT, plus l'index unique (source_id, external_id)
+-- idx_products_source_ext. Elles sont absentes du CREATE TABLE products plus haut :
+-- connectors_ensure_schema() les ajoute par ALTER TABLE (base neuve comme existante).
+
+-- Module Impression (commande d'affiches, cartes de visite, flyers, plans et
+-- goodies auprès de fournisseurs, par API) : ses tables (préfixe pr_) sont
+-- créées automatiquement au premier accès par includes/impression.php
+-- (pr_boot, constante PR_SCHEMA) — rien à lancer ici, ni côté serveur ni
+-- après un déploiement.
