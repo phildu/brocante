@@ -3,14 +3,15 @@
 // avec un catalogue de surfaces, des emplacements numérotés et la division de zones. La localisation de la marchandise se règle dans
 // l'espace de la galerie (/portail/galeries.php) et dans celui de la boutique (/admin/ma-galerie.php).
 require __DIR__ . '/_galerie-layout.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/gallery-map.php';
 
 $self = '/portail/galerie-plan.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
 if (!gm_enabled($gaGallery, 'carte')) {
     ga_head('Plan des commerces');
-    ?><section class="gcard"><h2>Option « Carte interactive » non active</h2>
-      <p>Le plan interactif (fond IGN, zones et emplacements) est une option de votre type de galerie. Activez-la depuis vos options pour retrouver l'éditeur de plan ; les exposants continuent de réserver sur la liste numérotée de l'événement.</p>
-      <p><a class="btn btn-primary" href="/portail/galerie-modules.php<?= $limited ? '' : '?g=' . e(urlencode($gaSlug)) ?>">Gérer les options de la galerie</a></p></section><?php
+    ?><section class="gcard"><h2>{Ext} « Carte interactive » non {?actif|active}</h2>
+      <p>Le plan interactif (fond IGN, zones et emplacements) est {un ext} de votre type de galerie. Activez-{?le|la} depuis vos {exts} pour retrouver l'éditeur de plan ; les exposants continuent de réserver sur la liste numérotée de l'événement.</p>
+      <p><a class="btn btn-primary" href="/portail/galerie-modules.php<?= $limited ? '' : '?g=' . e(urlencode($gaSlug)) ?>">Gérer {les exts} de la galerie</a></p></section><?php
     ga_foot();
     exit;
 }

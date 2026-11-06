@@ -5,6 +5,7 @@
 // (admin/feedback-api.php, voir includes/feedback.php). Export CSV.
 
 require __DIR__ . '/_bootstrap.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/feedback.php';
 
 $by = trim((string) ($_SESSION['portail_user'] ?? '')) ?: 'Exploitant local';
@@ -251,7 +252,7 @@ if (function_exists('saas_config')) {
         <div class="fb-checks" style="max-height:none;">
           <label class="fb-toggle"><input type="checkbox" name="widget" value="1"<?= !empty($settings['widget']) ? ' checked' : '' ?>><span><strong>Afficher le widget « Un retour ? »</strong><br><span class="muted">Dans l’administration des boutiques couvertes.</span></span></label>
           <label class="fb-toggle"><input type="checkbox" name="open_to_all" value="1"<?= !empty($settings['open_to_all']) ? ' checked' : '' ?>><span><strong>Ouvrir à toutes les boutiques</strong><br><span class="muted">Le widget apparaît même hors programme testeurs.</span></span></label>
-          <label class="fb-toggle"><input type="checkbox" name="include_beta_testers" value="1"<?= !empty($settings['include_beta_testers']) ? ' checked' : '' ?>><span><strong>Inclure les testeurs des modules « En test »</strong><br><span class="muted">Boutiques et galeries déjà déclarées dans Tarifs des plugins.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="include_beta_testers" value="1"<?= !empty($settings['include_beta_testers']) ? ' checked' : '' ?>><span><strong>Inclure les testeurs {des exts} « En test »</strong><br><span class="muted">Boutiques et galeries déjà déclarées dans Tarifs {des exts}.</span></span></label>
         </div>
         <div class="fb-row2">
           <label>Prévenir par e-mail à chaque nouveau retour (vide = adresse de contact<?= $contactFallback !== '' ? ' — ' . e($contactFallback) : '' ?>)
@@ -323,7 +324,7 @@ if (function_exists('saas_config')) {
               <span>Réf. <code><?= e($f['id']) ?></code></span>
               <?php $fbUrl = trim((string) ($f['url'] ?? '')); ?>
               <?php if ($fbUrl !== ''): ?><span>Page <a class="fb-link" href="<?= e($fbUrl) ?>" target="_blank" rel="noopener"><?= e($f['page'] !== '' ? $f['page'] : $fbUrl) ?></a></span><?php elseif ($f['page'] !== ''): ?><span>Page <code><?= e($f['page']) ?></code></span><?php endif; ?>
-              <?php if ($f['module'] !== ''): ?><span>Module <code><?= e($f['module']) ?></code></span><?php endif; ?>
+              <?php if ($f['module'] !== ''): ?><span>{Ext} <code><?= e($f['module']) ?></code></span><?php endif; ?>
               <?php if (!empty($f['context']['viewport'])): ?><span>Écran <?= e((string) $f['context']['viewport']) ?></span><?php endif; ?>
               <?php if ($f['email'] !== ''): ?><span>E-mail <a class="fb-link" href="mailto:<?= e($f['email']) ?>"><?= e($f['email']) ?></a></span><?php else: ?><span class="fb-warn">Aucune adresse e-mail</span><?php endif; ?>
               <?php if (!empty($f['context']['ua'])): ?><span title="<?= e((string) $f['context']['ua']) ?>">Navigateur connu</span><?php endif; ?>

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/plugins.php';
 require_once __DIR__ . '/../includes/appearance.php';
 require_once __DIR__ . '/../includes/legal.php';
 require_admin();
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 
 $content = get_content();
 $flash = flash_get();
@@ -17,7 +18,7 @@ $tabs = [
     'ventes' => 'Ventes',
     'visites' => 'Visites',
     'ia' => 'Consommation IA',
-    'modules' => 'Modules & essais',
+    'modules' => ext_t('{Exts} & essais'),
     'todo' => 'Avant la mise en ligne',
 ];
 // IA facultative : l'onglet de consommation disparaît pour une boutique dont l'IA est désactivée dans le portail.
@@ -364,7 +365,7 @@ $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'
         <p class="dash-note" style="margin:8px 0 0;">Mesure sans cookie : l’adresse IP et le navigateur ne sont jamais conservés, et vos propres visites (connecté à l’administration) ne comptent pas.</p>
       <?php else: ?>
         <div class="dash-empty">
-          <p style="margin:0 0 10px;">Le suivi des visites n’est pas encore actif. Il s’active avec le module <strong>Tableau de bord</strong> (essai gratuit), qui mesure aussi les pièces les plus vues et les liens de campagne.</p>
+          <p style="margin:0 0 10px;">Le suivi des visites n’est pas encore actif. Il s’active avec {le ext} <strong>Tableau de bord</strong> (essai gratuit), qui mesure aussi les pièces les plus vues et les liens de campagne.</p>
           <a class="btn btn-primary" href="/admin/plugins.php">Activer le suivi des visites →</a>
         </div>
       <?php endif; ?>
@@ -408,14 +409,14 @@ $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'
     <?php elseif ($tab === 'modules'): ?>
       <?php if (!$modules): ?>
         <div class="dash-empty">
-          <p style="margin:0 0 10px;">Aucun module payant activé pour l’instant.</p>
-          <a class="btn btn-primary" href="/admin/plugins.php">Découvrir les modules →</a>
+          <p style="margin:0 0 10px;">Aucun{e} {ext} payant{e} {?activé|activée} pour l’instant.</p>
+          <a class="btn btn-primary" href="/admin/plugins.php">Découvrir {les exts} →</a>
         </div>
       <?php else: ?>
         <div class="dash-card">
-          <h2>Modules et essais</h2>
+          <h2>{Exts} et essais</h2>
           <table class="dash-table">
-            <thead><tr><th>Module</th><th>État</th><th>Temps restant</th></tr></thead>
+            <thead><tr><th>{Ext}</th><th>État</th><th>Temps restant</th></tr></thead>
             <tbody>
               <?php foreach ($modules as $m): ?>
                 <tr>
@@ -436,7 +437,7 @@ $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'
               <?php endforeach; ?>
             </tbody>
           </table>
-          <p style="margin:14px 0 0;"><a class="btn-small" href="/admin/plugins.php">Gérer les modules et abonnements →</a></p>
+          <p style="margin:14px 0 0;"><a class="btn-small" href="/admin/plugins.php">Gérer {les exts} et abonnements →</a></p>
         </div>
       <?php endif; ?>
 

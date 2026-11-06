@@ -20,7 +20,7 @@ function plugin_json(mixed $data, int $status = 200): never
 
 set_exception_handler(static function (Throwable $e): void {
     error_log('Plugin agent : ' . $e->getMessage() . ' (' . $e->getFile() . ':' . $e->getLine() . ')');
-    plugin_json(['error' => 'Erreur interne du module.'], 500);
+    plugin_json(['error' => ext_t('Erreur interne {du ext}.')], 500);
 });
 
 $agentPath = '/' . trim((string) ($_GET['agent_path'] ?? ''), '/');

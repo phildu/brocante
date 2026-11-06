@@ -30,7 +30,7 @@ function plugin_input(): array
 
 set_exception_handler(static function (Throwable $e): void {
     error_log('Plugin API : ' . $e->getMessage() . ' (' . $e->getFile() . ':' . $e->getLine() . ')');
-    plugin_json(['error' => 'Erreur interne du module.'], 500);
+    plugin_json(['error' => ext_t('Erreur interne {du ext}.')], 500);
 });
 
 $session = admin_session();
@@ -40,9 +40,9 @@ $role = $session['role'];
 $plugin = plugin_manifest((string) ($_GET['p'] ?? ''));
 $route = $plugin['api'][(string) ($_GET['r'] ?? '')] ?? null;
 $status = $plugin ? plugin_shop_status($plugin['id']) : 'absent';
-if (!$plugin || !$route || !in_array($status, ['ready', 'update', 'newer'], true)) plugin_json(['error' => 'Module ou route introuvable.'], 404);
+if (!$plugin || !$route || !in_array($status, ['ready', 'update', 'newer'], true)) plugin_json(['error' => ext_t('{Ext} ou route introuvable.')], 404);
 if (!plugin_role_allowed($route['roles'], $role)) plugin_json(['error' => 'Accès refusé pour votre rôle.'], 403);
-if ($status !== 'ready') plugin_json(['error' => 'Module en cours de mise à jour, réessayez plus tard.'], 503);
+if ($status !== 'ready') plugin_json(['error' => ext_t('{Ext} en cours de mise à jour, réessayez plus tard.')], 503);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if (!in_array($method, $route['methods'], true)) {

@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/plugins.php';
 require_once __DIR__ . '/../includes/addons.php';
 require_admin();
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 
 $hasPortal = is_file(__DIR__ . '/../portail/index.php');
 $catalog = plugin_catalog();
@@ -27,18 +28,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string) ($_POST['action'] ?? '');
     $m = $catalog[(string) ($_POST['plugin'] ?? '')] ?? null;
     if (!$m || !in_array($action, ['enable', 'update', 'disable'], true)) {
-        flash_set('Plugin introuvable.', 'error');
+        flash_set('{Ext} introuvable.', 'error');
     } elseif ($hasPortal && $action !== 'disable' && (($ai = addon_info($m['id'])) === null || $ai['access'] === 'unavailable')) {
-        flash_set('Ce plugin n’est pas proposé pour votre boutique.', 'error');
+        flash_set('{Ce ext} n’est pas {?proposé|proposée} pour votre boutique.', 'error');
     } else {
         try {
             $pdo = admin_plugins_pdo();
             if ($action === 'disable') {
                 plugin_disable($pdo, $m['id']);
-                flash_set('Plugin « ' . $m['name'] . ' » désactivé (ses données sont conservées).');
+                flash_set('{Ext} « ' . $m['name'] . ' » {?désactivé|désactivée} (ses données sont conservées).');
             } else {
                 $r = $action === 'enable' ? plugin_enable($pdo, DB_PATH, $m) : plugin_install($pdo, DB_PATH, $m);
-                flash_set(($action === 'enable' ? 'Plugin activé : ' : 'Plugin mis à jour : ') . '« ' . $m['name'] . ' » v' . $r['to']
+                flash_set(($action === 'enable' ? '{Ext} activé{e} : ' : '{Ext} mis{e} à jour : ') . '« ' . $m['name'] . ' » v' . $r['to']
                     . ($r['applied'] ? ' (' . $r['applied'] . ' migration' . ($r['applied'] > 1 ? 's' : '') . ', base sauvegardée avant)' : '') . '.');
             }
         } catch (Throwable $e) {
@@ -64,7 +65,7 @@ try {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Plugins — <?= h($content['site_name']) ?></title>
+<title>{Exts} — <?= h($content['site_name']) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
@@ -86,9 +87,9 @@ try {
 <section class="tight">
   <div class="wrap">
     <p class="eyebrow">Administration</p>
-    <h1 style="font-size:1.8rem;margin:12px 0 8px;">Plugins</h1>
+    <h1 style="font-size:1.8rem;margin:12px 0 8px;">{Exts}</h1>
     <?php if ($flash): ?><p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin-bottom:20px;"><?= h($flash['message']) ?></p><?php endif; ?>
-    <p class="lede">Activez les modules de votre boutique. Les modules payants démarrent par leur propre page (essai, abonnement) ; les modules en test sont gratuits, en échange de vos retours. La désactivation conserve les données.</p>
+    <p class="lede">Activez {les exts} de votre boutique. {Les exts} payant{es} démarrent par leur propre page (essai, abonnement) ; {les exts} en test {?sont gratuits|sont gratuites}, en échange de vos retours. La désactivation conserve les données.</p>
       <?php if ($stateError): ?><p class="publish-status" data-kind="error"><?= h($stateError) ?></p><?php endif; ?>
       <div class="pl">
       <?php foreach ($catalog as $m):
@@ -98,14 +99,14 @@ try {
         if ($hasPortal && (!$ent || $ent['access'] === 'unavailable') && $status !== 'ready' && $status !== 'update') continue;
       ?>
         <div class="pl-item">
-          <h2><?= h($m['name']) ?><?php if ($ent && $ent['stage'] === 'beta'): ?> <span class="pl-state warn">En test</span><?php endif; ?></h2>
+          <h2><?= h($m['name']) ?><?= ext_scope_badge(ext_scope($m['id'], (string) $m['scope'])) ?><?php if ($ent && $ent['stage'] === 'beta'): ?> <span class="pl-state warn">En test</span><?php endif; ?></h2>
           <?php if ($m['description'] !== ''): ?><p><?= h($m['description']) ?></p><?php endif; ?>
           <?php if ($ent): ?><p class="pl-state"><?= h($ent['label']) ?><?php $pr = array_filter([$ent['monthly_label'], $ent['yearly_label'], $ent['once_label']]); if ($pr && !$ent['beta_tester'] && $ent['access'] !== 'included'): ?> · <?= h(implode(' ou ', $pr)) ?><?= $ent['trial_days'] > 0 && !$ent['trial_used'] ? ' · essai ' . (int) $ent['trial_days'] . ' j' : '' ?><?php endif; ?></p><?php endif; ?>
           <p class="pl-state <?php /* état technique */ ?><?= $status === 'ready' ? 'ok' : ($status === 'update' || $status === 'newer' ? 'warn' : '') ?>"><?= h(plugin_status_label($status, $row, $m)) ?></p>
           <form method="post"><input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="plugin" value="<?= h($m['id']) ?>">
             <?php if ($status === 'absent' || $status === 'disabled'): ?><button class="btn btn-primary" name="action" value="enable">Activer</button>
-            <?php elseif ($status === 'update'): ?><button class="btn btn-primary" name="action" value="update">Mettre à jour</button> <a class="btn" href="<?= h(plugin_page_url($m['id'], 'index')) ?>">Ouvrir</a> <button class="btn" name="action" value="disable" onclick="return confirm('Désactiver ce plugin ?')">Désactiver</button>
-            <?php elseif ($status === 'ready'): ?><a class="btn btn-primary" href="<?= h(plugin_page_url($m['id'], 'index')) ?>">Ouvrir</a> <button class="btn" name="action" value="disable" onclick="return confirm('Désactiver ce plugin ? Ses données sont conservées.')">Désactiver</button>
+            <?php elseif ($status === 'update'): ?><button class="btn btn-primary" name="action" value="update">Mettre à jour</button> <a class="btn" href="<?= h(plugin_page_url($m['id'], 'index')) ?>">Ouvrir</a> <button class="btn" name="action" value="disable" onclick="return confirm('Désactiver {ce ext} ?')">Désactiver</button>
+            <?php elseif ($status === 'ready'): ?><a class="btn btn-primary" href="<?= h(plugin_page_url($m['id'], 'index')) ?>">Ouvrir</a> <button class="btn" name="action" value="disable" onclick="return confirm('Désactiver {ce ext} ? Ses données sont conservées.')">Désactiver</button>
             <?php endif; ?>
           </form>
         </div>

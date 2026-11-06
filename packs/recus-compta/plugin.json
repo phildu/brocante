@@ -2,7 +2,7 @@
   "id": "recus-compta",
   "name": "Reçus & journal des ventes",
   "version": "1.0.0",
-  "description": "Module payant (essai gratuit) : reçu d'achat avec mentions légales de l'occasion envoyé par e-mail à chaque vente, et journal des ventes exportable en CSV (Excel) ou FEC pour l'expert-comptable.",
+  "description": "{Ext} payant{e} (essai gratuit) : reçu d'achat avec mentions légales de l'occasion envoyé par e-mail à chaque vente, et journal des ventes exportable en CSV (Excel) ou FEC pour l'expert-comptable.",
   "table_prefix": "rc_",
   "pages": [
     { "id": "index", "label": "Reçus & compta", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin"] }

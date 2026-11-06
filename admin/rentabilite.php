@@ -4,6 +4,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/charts.php';
 require_admin();
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 analytics_ensure_schema();
 analytics_seed_costs();
 
@@ -148,7 +149,7 @@ if ($view === 'year') {
     $legendA = $seriesA;
     $seriesB = [
         ['name' => 'Résultat cumulé (réel)', 'type' => 'line', 'values' => $cumRes, 'color' => $colRes],
-        ['name' => 'Résultat cumulé (options payantes)', 'type' => 'line', 'values' => $cumResSim, 'color' => $colSim, 'dashed' => true],
+        ['name' => 'Résultat cumulé ({exts} payant{es})', 'type' => 'line', 'values' => $cumResSim, 'color' => $colSim, 'dashed' => true],
     ];
     $chartB = dash_chart($labels, $seriesB, [], null, "Résultat cumulé depuis janvier $y");
     $legendB = $seriesB;
@@ -303,7 +304,7 @@ $costsAll = shop_costs_all();
         <p class="kpi-s"><?= $netRate !== null ? $pct($netRate) . ' du CA' : 'CA − achats − frais' ?></p>
       </article>
       <article class="kpi kpi-sim <?= $sim['result'] >= 0 ? 'is-pos' : 'is-neg' ?>">
-        <h3>Résultat si les options de test deviennent payantes</h3>
+        <h3>Résultat si {les exts} de test deviennent payant{es}</h3>
         <p class="kpi-v"><?= $eur($sim['result']) ?></p>
         <p class="kpi-s"><?= $extraCost > 0.5 ? '−' . $eur($extraCost) . ' de frais en plus' : 'Aucun surcoût simulé sur la période' ?></p>
       </article>
@@ -391,7 +392,7 @@ $costsAll = shop_costs_all();
           <div><span>CA cumulé</span><strong><?= $eur($cum['revenue']) ?></strong></div>
           <div><span>Achats + frais cumulés</span><strong><?= $eur($cum['cogs'] + $cum['costs']) ?></strong></div>
           <div class="<?= $cum['result'] >= 0 ? 'pos' : 'neg' ?>"><span>Résultat cumulé</span><strong><?= $eur($cum['result']) ?></strong></div>
-          <div class="<?= $cumSim['result'] >= 0 ? 'pos' : 'neg' ?>"><span>…avec options payantes</span><strong><?= $eur($cumSim['result']) ?></strong></div>
+          <div class="<?= $cumSim['result'] >= 0 ? 'pos' : 'neg' ?>"><span>…avec {exts} payant{es}</span><strong><?= $eur($cumSim['result']) ?></strong></div>
         </div>
         <p class="hint" style="margin:10px 0 0;">
           <?php if ($cum['result'] >= 0): ?>Les investissements et frais engagés depuis le lancement sont déjà amortis.
@@ -443,11 +444,11 @@ $costsAll = shop_costs_all();
         </div>
 
         <div>
-          <h3>Simulation : si les options de test deviennent payantes</h3>
+          <h3>Simulation : si {les exts} de test deviennent payant{es}</h3>
           <?php $simLines = array_values(array_filter($sim['lines'], fn($l) => $l['status'] === 'test')); ?>
           <?php if ($simLines): ?>
             <table class="dash-table sim">
-              <thead><tr><th>Option actuellement gratuite / en test</th><th>Usage</th><th class="r">Coût simulé</th></tr></thead>
+              <thead><tr><th>{Ext} actuellement {?gratuit|gratuite} / en test</th><th>Usage</th><th class="r">Coût simulé</th></tr></thead>
               <tbody>
                 <?php foreach ($simLines as $l): ?>
                   <tr><th scope="row"><?= h($l['label']) ?><small><?= h(cost_categories()[$l['category']] ?? '') ?></small></th><td><?= h($l['detail']) ?></td><td class="r"><?= $eur($l['cents']) ?></td></tr>
@@ -462,7 +463,7 @@ $costsAll = shop_costs_all();
             </div>
             <p class="hint">Les montants unitaires sont des estimations des tarifs publics, à ajuster dans « Gérer les frais ». Les appels aux API IA sont comptés depuis le <?= $apiSince ? h($apiSince->format('d/m/Y')) : 'première utilisation' ?>.</p>
           <?php else: ?>
-            <p class="dash-empty">Aucune option de test enregistrée. Ajoutez-en une avec le statut « Test / gratuit aujourd'hui » pour voir ce qu'elle coûterait.</p>
+            <p class="dash-empty">Aucun{e} {ext} de test enregistré{e}. Ajoutez-en {?un|une} avec le statut « Test / gratuit aujourd'hui » pour voir ce que {?il|elle} coûterait.</p>
           <?php endif; ?>
         </div>
       </div>

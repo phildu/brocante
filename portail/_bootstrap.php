@@ -15,6 +15,7 @@ $portailLocal = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], tr
     && ($host === 'localhost' || $host === '127.0.0.1' || str_ends_with($host, '.test'));
 
 session_start();
+require_once __DIR__ . '/../includes/vocabulary.php';   // mot unique pour les « extensions » (plugins, options, modules) : ext_t()
 require_once __DIR__ . '/../includes/tenant.php';
 require_once __DIR__ . '/../includes/business-presence.php';
 require_once __DIR__ . '/../includes/seed.php';

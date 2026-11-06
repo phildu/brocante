@@ -5,6 +5,7 @@
 // le menu de chaque boutique la lit et n'affiche que les entrées de son rôle et
 // de ses plugins actifs.
 require __DIR__ . '/_bootstrap.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/admin-menu.php';
 require_once __DIR__ . '/_menu.php';
 
@@ -77,7 +78,7 @@ $itemCount = array_sum(array_map(static fn (array $g): int => count($g['items'])
 <?php portail_page_start([
     'title' => 'Menu latéral',
     'eyebrow' => 'Boutiques',
-    'desc' => 'Catégories et ordre communs à toutes les boutiques, pages de plugins comprises.',
+    'desc' => ext_t('Catégories et ordre communs à toutes les boutiques, pages {des exts} comprises.'),
 ]); ?>
 
   <?php if ($flash): ?>
@@ -88,8 +89,8 @@ $itemCount = array_sum(array_map(static fn (array $g): int => count($g['items'])
     <p class="menu-help">Rangez les entrées de la barre latérale d’administration une fois pour <strong>toutes les boutiques</strong> :
       renommez les catégories, déplacez-les, classez les pages. Cochez <strong>Masqué</strong> pour retirer une entrée du menu de toutes les
       boutiques sans la supprimer (elle reste ici pour la réafficher). Un <strong>item créé</strong> ici peut être supprimé définitivement ; les
-      pages de la plateforme et des plugins, elles, ne font que se masquer. Chaque boutique n’affiche que les entrées ouvertes à ses rôles et
-      les pages de ses plugins actifs ; une entrée absente y est simplement ignorée.</p>
+      pages de la plateforme et {des exts}, elles, ne font que se masquer. Chaque boutique n’affiche que les entrées ouvertes à ses rôles et
+      les pages de ses {exts} {?actifs|actives} ; une entrée absente y est simplement ignorée.</p>
     <p class="menu-status">
       <span class="menu-tag<?= $personalized ? ' ok' : '' ?>"><?= $personalized ? 'Classement personnalisé' : 'Valeurs de départ' ?></span>
       <span class="menu-count"><?= (int) $itemCount ?> entrées · <?= (int) $hiddenCount ?> masquée<?= $hiddenCount > 1 ? 's' : '' ?> · <?= count($shops) ?> boutique(s)</span>
@@ -125,7 +126,7 @@ $itemCount = array_sum(array_map(static fn (array $g): int => count($g['items'])
                   <span class="menu-item-icon" aria-hidden="true"><?= admin_menu_icon_svg((string) $icon) ?></span>
                   <span class="menu-item-label"><?= e($label) ?>
                     <small><?= $pluginName !== ''
-                      ? 'Plugin ' . e($pluginName) . ' · actif dans ' . (int) ($activity[$pluginId] ?? 0) . ' boutique(s)'
+                      ? ext_t('{Ext} ') . e($pluginName) . ' · actif dans ' . (int) ($activity[$pluginId] ?? 0) . ' boutique(s)'
                       : e($href) ?></small>
                   </span>
                   <label class="menu-hide" title="Masquer cette entrée dans toutes les boutiques">

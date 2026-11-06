@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/plugins.php';
 require_admin();
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 
 $content = get_content();
 $role = admin_role();
@@ -14,16 +15,16 @@ $pluginPage = $plugin ? ($plugin['pages'][(string) ($_GET['v'] ?? '')] ?? reset(
 
 if (!$plugin || !$pluginPage || !in_array($status, ['ready', 'update', 'newer'], true)) {
     http_response_code(404);
-    $problem = "Ce module n'est pas activé pour votre boutique.";
+    $problem = "{Ce ext} n'est pas {?activé|activée} pour votre boutique.";
 } elseif (!plugin_role_allowed($pluginPage['roles'], $role)) {
     admin_forbidden($role);
 } elseif ($status !== 'ready') {
     http_response_code(503);
     $problem = $status === 'update'
-        ? 'Ce module vient d\'être mis à jour : il reprendra dès que la plateforme aura appliqué la mise à jour à votre boutique.'
-        : 'Ce module est momentanément indisponible (version de la boutique plus récente que celle du site).';
+        ? '{Ce ext} vient d\'être {?mis|mise} à jour : {?il reprendra|elle reprendra} dès que la plateforme aura appliqué la mise à jour à votre boutique.'
+        : '{Ce ext} est momentanément indisponible (version de la boutique plus récente que celle du site).';
 }
-$title = isset($problem) ? 'Module indisponible' : $pluginPage['label'];
+$title = isset($problem) ? '{Ext} indisponible' : $pluginPage['label'];
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -43,7 +44,7 @@ $title = isset($problem) ? 'Module indisponible' : $pluginPage['label'];
 <section class="tight">
   <div class="wrap">
 <?php if (isset($problem)): ?>
-    <p class="eyebrow">Module</p>
+    <p class="eyebrow">{Ext}</p>
     <h1 style="font-size:1.8rem;margin:12px 0 12px;"><?= h($title) ?></h1>
     <p class="hint"><?= h($problem) ?></p>
 <?php else:

@@ -2,7 +2,7 @@
   "id": "espace-visiteur",
   "name": "Espace visiteur & fidélité",
   "version": "1.0.0",
-  "description": "Module payant (essai gratuit) : une web app pour les visiteurs (fidélité avec points et récompenses, alertes chineur, réservations et billets, scan des QR codes) et sa gestion dans l'administration (points par euro, paliers, membres, ajustements). Les rubriques des autres modules n'apparaissent que si ces modules sont actifs.",
+  "description": "{Ext} payant{e} (essai gratuit) : une web app pour les visiteurs (fidélité avec points et récompenses, alertes chineur, réservations et billets, scan des QR codes) et sa gestion dans l'administration (points par euro, paliers, membres, ajustements). Les rubriques des autres {exts} n'apparaissent que si ces {exts} sont {?actifs|actives}.",
   "table_prefix": "ev_",
   "pages": [
     { "id": "index", "label": "Espace visiteur", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }

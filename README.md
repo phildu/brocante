@@ -969,6 +969,27 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   l'ancienne version, remplacer la base de la boutique par la sauvegarde d'avant la mise à jour (site au repos ; les écritures faites
   depuis sont perdues).
 
+## Vocabulaire des extensions : un seul mot, modifiable
+
+La plateforme a deux systèmes pour les fonctions complémentaires : les **plugins** des boutiques (`packs/`, `includes/plugins.php`,
+`includes/addons.php`) et les **options** des galeries (`includes/gallery-modules.php`, onglet « Options » de l'espace galerie), appelées
+aussi « modules ». Pour ne pas les nommer de trois façons, le portail règle **un seul mot** : portail → Boutiques →
+**« Extensions · nom et portée »** (`portail/vocabulaire.php`, enregistré dans `data/saas/vocabulary.json`, hors déploiement).
+
+- **Le mot** : singulier, pluriel et genre (« une extension » / « un plugin »), au choix parmi six propositions (extension, option,
+  plugin, module, complément, fonction) ou en mot libre. Par défaut : **extension**. Il remplace « plugin », « module » et « option »
+  dans le portail, l'administration des boutiques, l'espace des galeries, l'accueil et l'inscription. Les conditions générales de vente
+  (`includes/platform-terms.php`) sont un texte contractuel : elles ne suivent pas ce réglage.
+- **La portée** : chaque extension est étiquetée **Boutique**, **Galerie** ou **Les deux** (pastille dans les listes et les fiches). Elle
+  vient du manifeste du plugin (`"scope"` dans `plugin.json`, « shop » par défaut) ou, pour une option de galerie, de « gallery », et
+  l'exploitant peut la changer extension par extension sur la même page. Pour l'instant c'est une **indication** : les prix et la
+  disponibilité se règlent toujours côté boutiques (Tarifs) et côté galeries (Types de galerie).
+- **Dans le code** (`includes/vocabulary.php`) : on écrit des jetons, remplacés en respectant le genre : `{ext}` `{exts}` `{Ext}` `{Exts}`,
+  `{un ext}` `{le ext}` `{ce ext}` `{du ext}` `{au ext}` `{les exts}` `{des exts}` (majuscule initiale : `{Un ext}`…), `{e}` `{es}` pour
+  les accords (`activé{e}`, `proposé{es}`) et `{?inclus|incluse}` pour les accords irréguliers. Dans une page HTML, `ext_page()` en tête
+  remplace les jetons de toute la page ; ailleurs (messages JSON, e-mails, libellés), on appelle `ext_t('…')`.
+  Test : `php scripts/test-vocabulary.php`.
+
 ## Retours testeurs : widget « Un retour ? », triage et relances
 
 Un dispositif distinct des retours par module (`includes/addons.php`) : il recueille **tous** les bugs, idées et gênes des

@@ -2,6 +2,7 @@
 // Espace organisateur (vide-grenier, marché aux puces) : création de l'événement (date, lieu, places ou mètres, prix au mètre),
 // numérotation automatique des places (Place 1 à Place N) sans éditeur visuel, réglages des réservations et accès au tableau de bord.
 require __DIR__ . '/_galerie-layout.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/gallery-event.php';
 require_once PORTAIL_ROOT . '/includes/gallery-booking.php';
 require_once PORTAIL_ROOT . '/includes/gallery-cancellation.php';
@@ -105,7 +106,7 @@ $eurVal = static fn (?int $c): string => $c === null ? '' : number_format($c / 1
 ga_head('Événement');
 ?>
     <?php if (!$orgOn): ?>
-    <p class="flash" data-kind="error">L'option « Espace organisateur » n'est pas active pour cette galerie : vous pouvez préparer l'événement, mais les réservations publiques et le tableau de bord resteront fermés. <a href="<?= e($options) ?>">Activer l'option</a>.</p>
+    <p class="flash" data-kind="error">{Le ext} « Espace organisateur » n'est pas {?actif|active} pour cette galerie : vous pouvez préparer l'événement, mais les réservations publiques et le tableau de bord resteront fermés. <a href="<?= e($options) ?>">Activer {le ext}</a>.</p>
     <?php endif; ?>
 
     <?php if ($cancelled && $cancelSummary): ?>
@@ -192,7 +193,7 @@ ga_head('Événement');
         <a class="btn btn-primary" href="<?= e($inscriptions) ?>">Tableau de bord des inscriptions</a>
         <a class="btn" href="<?= e($registre) ?>">Registre de police (Excel / PDF)</a>
         <a class="btn" href="<?= e($publicUrl) ?>" target="_blank" rel="noopener">Voir la page publique</a>
-        <a class="btn" href="<?= e($options) ?>">Options de la galerie</a>
+        <a class="btn" href="<?= e($options) ?>">{Exts} de la galerie</a>
       </div>
     </section>
     <?php endif; ?>

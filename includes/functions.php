@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/vocabulary.php';   // mot unique pour les « extensions » (plugins, options, modules) : ext_t()
 require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/connect.php';
 require_once __DIR__ . '/capture.php';

@@ -2,7 +2,7 @@
   "id": "qr-story",
   "name": "QR Code Story & certificat",
   "version": "1.0.0",
-  "description": "Module payant (essai gratuit) : page « histoire de la pièce » accessible par QR Code collé sur l'objet, étiquettes QR imprimables et certificat d'authenticité à imprimer ou enregistrer en PDF.",
+  "description": "{Ext} payant{e} (essai gratuit) : page « histoire de la pièce » accessible par QR Code collé sur l'objet, étiquettes QR imprimables et certificat d'authenticité à imprimer ou enregistrer en PDF.",
   "table_prefix": "qs_",
   "pages": [
     { "id": "index", "label": "QR Story & certificats", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }

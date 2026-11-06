@@ -2,6 +2,7 @@
 // Webhook Stripe de la plateforme (à déclarer dans le tableau de bord Stripe : <domaine>/inscription/webhook.php, événements
 // checkout.session.completed, checkout.session.async_payment_succeeded, customer.subscription.deleted, et pour le suivi de l'activité : invoice.paid, invoice.payment_failed, charge.refunded). La signature est vérifiée avec le « secret de signature » (whsec_…) enregistré
 // dans le portail → Offres et annuaire. Sert de filet : la boutique est générée même si le client ferme la page de retour.
+require_once __DIR__ . '/../includes/vocabulary.php';
 require_once __DIR__ . '/../includes/saas.php';
 
 http_response_code(400);
@@ -80,7 +81,7 @@ if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'
     require_once dirname(__DIR__) . '/includes/addons.php';
     $res = addon_apply_checkout_session($obj);
     if (($res['state'] ?? '') === 'added') {
-        saas_event('addon_subscribed', ['slug' => $res['slug'] ?? '', 'amount' => (int) ($obj['amount_total'] ?? 0), 'note' => 'Module ' . ($res['module'] ?? ''), 'actor' => 'stripe']);
+        saas_event('addon_subscribed', ['slug' => $res['slug'] ?? '', 'amount' => (int) ($obj['amount_total'] ?? 0), 'note' => ext_t('{Ext} ') . ($res['module'] ?? ''), 'actor' => 'stripe']);
     }
     error_log('webhook stripe module_addon ' . ($res['slug'] ?? '?') . ' ' . ($res['module'] ?? '?') . ' → ' . ($res['state'] ?? '?'));
 } elseif ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'] ?? '') === 'marketplace_addon')) {
@@ -102,7 +103,7 @@ if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'
     $res = gm_apply_session($obj);
     if (($res['state'] ?? '') === 'added') {
         saas_event('gallery_module_subscribed', ['slug' => $res['slug'] ?? '', 'amount' => (int) ($obj['amount_total'] ?? 0),
-            'note' => 'Option ' . (gm_module((string) ($res['module'] ?? ''))['name'] ?? (string) ($res['module'] ?? '')), 'actor' => 'stripe']);
+            'note' => ext_t('{Ext} ') . (gm_module((string) ($res['module'] ?? ''))['name'] ?? (string) ($res['module'] ?? '')), 'actor' => 'stripe']);
     }
     error_log('webhook stripe gallery_module ' . ($res['slug'] ?? '?') . ' ' . ($res['module'] ?? '?') . ' → ' . ($res['state'] ?? '?'));
 } elseif (in_array($event['type'], ['checkout.session.completed', 'checkout.session.async_payment_succeeded'], true)
@@ -168,14 +169,14 @@ if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'
     if ($sub !== '') {
         require_once dirname(__DIR__) . '/includes/gallery-modules.php';
         if ($gm = gm_cancel_subscription($sub)) {
-            saas_event('gallery_module_canceled', ['slug' => $gm[0], 'note' => 'Option ' . $gm[1], 'actor' => 'stripe']);
+            saas_event('gallery_module_canceled', ['slug' => $gm[0], 'note' => ext_t('{Ext} ') . $gm[1], 'actor' => 'stripe']);
         }
     }
     // Modules payants des plugins (includes/addons.php).
     if ($sub !== '') {
         require_once dirname(__DIR__) . '/includes/addons.php';
         if ($mod = addon_cancel_subscription($sub)) {
-            saas_event('addon_canceled', ['slug' => $mod[0], 'note' => 'Module ' . $mod[1], 'actor' => 'stripe']);
+            saas_event('addon_canceled', ['slug' => $mod[0], 'note' => ext_t('{Ext} ') . $mod[1], 'actor' => 'stripe']);
         }
     }
     // Option Annonces (abonnement distinct de celui de la boutique).

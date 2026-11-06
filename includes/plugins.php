@@ -28,6 +28,8 @@
 // Une boutique dont la base est en retard sur le code (nouvelle version déployée) garde le plugin en pause jusqu'à
 // « Mettre à jour » dans le portail, qui sauvegarde la base (data/backups/) avant d'appliquer les migrations.
 
+require_once __DIR__ . '/vocabulary.php';   // mot unique pour les « extensions » : ext_t()
+
 const PLUGIN_ROLES = ['admin', 'community_manager'];
 const PLUGIN_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -152,8 +154,8 @@ function plugin_manifest_read(string $file, ?array &$errors = null): ?array
     ksort($migrations);
     if ($errors) return null;
     return [
-        'id' => $id, 'name' => $name, 'version' => $version, 'description' => trim((string) ($raw['description'] ?? '')),
-        'table_prefix' => $prefix, 'pages' => $pages, 'api' => $api, 'admin_assets' => $assets, 'cron' => $cron, 'agent_api' => $agentApi, 'sync' => $sync, 'migrations' => $migrations, 'dir' => $dir,
+        'id' => $id, 'name' => $name, 'version' => $version, 'description' => ext_t(trim((string) ($raw['description'] ?? ''))),
+        'table_prefix' => $prefix, 'pages' => $pages, 'api' => $api, 'admin_assets' => $assets, 'cron' => $cron, 'agent_api' => $agentApi, 'sync' => $sync, 'scope' => in_array($raw['scope'] ?? '', ['shop', 'gallery', 'both'], true) ? (string) $raw['scope'] : 'shop', 'migrations' => $migrations, 'dir' => $dir,
     ];
 }
 
@@ -249,7 +251,7 @@ function plugin_rules_save(array $rules): void
     $json = json_encode(['version' => 1, 'plugins' => $saved], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
     $tmp = $file . '.tmp';
     if ($json === false || @file_put_contents($tmp, $json . "\n") === false || !@rename($tmp, $file)) {
-        throw new RuntimeException("Impossible d'enregistrer le catalogue des plugins (écriture refusée dans data/saas/).");
+        throw new RuntimeException(ext_t("Impossible d'enregistrer le catalogue {des exts} (écriture refusée dans data/saas/)."));
     }
 }
 

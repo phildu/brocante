@@ -32,7 +32,7 @@ if ($navOn('fidelite')) $navBtn('galerie-fidelite.php', 'Fidélité visiteurs');
 $navBtn('galerie-promos.php', 'Promos');
 $navBtn('galerie-assistant.php', 'Assistant');
 $navBtn('galerie-offre.php', 'Mon offre');
-if ($navG && function_exists('gm_modules')) $navBtn('galerie-modules.php', 'Options');
+if ($navG && function_exists('gm_modules')) $navBtn('galerie-modules.php', ext_t('{Exts}'));
 if ($limited) {
     echo '<button type="button" class="btn" data-pwa-install>Installer l’application</button>';
     $navBtn('galerie-compte.php', 'Mon compte');

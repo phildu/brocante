@@ -13,10 +13,16 @@
 // un essai gratuit ou un abonnement Stripe (metadata type=gallery_module). Les prix et durées d'essai par défaut sont dans
 // data/saas/galeries-modules.json, surchargeables depuis le portail, et retombent sur les valeurs ci-dessous.
 //
-// Ce fichier ne dépend d'aucun autre include à son chargement : il est appelé par gallery_normalize() (includes/galleries.php),
+// Ce fichier ne dépend d'aucun autre include à son chargement (hors vocabulary.php, lui-même autonome) : il est appelé par gallery_normalize() (includes/galleries.php),
 // gallery-types.php et les pages du portail.
 
-const GM_MODE_LABELS = ['included' => 'Inclus dans l\'offre', 'option' => 'Option payante', 'off' => 'Non proposé'];
+/** Libellés des trois modes d'un module (selon le vocabulaire des extensions : « Option payante », « Plugin payant »…). */
+function gm_mode_labels(): array
+{
+    return ['included' => ext_t("{?Inclus|Incluse} dans l'offre"), 'option' => ext_t('{Ext} payant{e}'), 'off' => ext_t('{?Non proposé|Non proposée}')];
+}
+require_once __DIR__ . '/vocabulary.php';
+
 const GM_STATUS_LABELS = [
     'included' => 'Inclus', 'trial' => 'Essai en cours', 'active' => 'Abonné', 'complimentary' => 'Accès offert',
     'canceled' => 'Résilié', 'expired' => 'Essai terminé', 'off' => 'Non proposé',
@@ -192,10 +198,10 @@ function gallery_modules_normalize(array $m): array
 function gm_start_trial(array &$gallery, string $key): ?string
 {
     $st = gm_state($gallery, $key);
-    if (!$st['module']) return 'Module inconnu.';
-    if ($st['mode'] !== 'option') return $st['mode'] === 'included' ? 'Ce module est déjà inclus dans votre offre.' : "Ce module n'est pas proposé pour ce type de galerie.";
-    if ($st['enabled']) return 'Ce module est déjà actif.';
-    if ($st['module']['trial_days'] < 1) return "L'essai n'est pas disponible pour ce module.";
+    if (!$st['module']) return ext_t('{Ext} inconnu{e}.');
+    if ($st['mode'] !== 'option') return $st['mode'] === 'included' ? ext_t('{Ce ext} est déjà {?inclus|incluse} dans votre offre.') : ext_t("{Ce ext} n'est pas {?proposé|proposée} pour ce type de galerie.");
+    if ($st['enabled']) return ext_t('{Ce ext} est déjà {?actif|active}.');
+    if ($st['module']['trial_days'] < 1) return ext_t("L'essai n'est pas disponible pour {ce ext}.");
     if ($st['trial_used']) return "L'essai gratuit a déjà été utilisé : souscrivez pour continuer.";
     $gallery['modules'][$key] = [
         'enabled' => true, 'status' => 'trial', 'since' => time(), 'until' => time() + $st['module']['trial_days'] * 86400,
@@ -260,13 +266,13 @@ function gm_request_load(string $id): ?array
 function gm_checkout(array $gallery, string $key, string $successPath, string $cancelUrl, string $billing = 'month'): array
 {
     $st = gm_state($gallery, $key);
-    if (!$st['module']) return [null, 'Module inconnu.'];
-    if ($st['mode'] === 'included') return [null, 'Ce module est déjà inclus dans votre offre.'];
-    if ($st['mode'] !== 'option') return [null, "Ce module n'est pas proposé pour ce type de galerie."];
-    if ($st['enabled'] && $st['status'] === 'active') return [null, 'Ce module est déjà souscrit.'];
+    if (!$st['module']) return [null, ext_t('{Ext} inconnu{e}.')];
+    if ($st['mode'] === 'included') return [null, ext_t('{Ce ext} est déjà {?inclus|incluse} dans votre offre.')];
+    if ($st['mode'] !== 'option') return [null, ext_t("{Ce ext} n'est pas {?proposé|proposée} pour ce type de galerie.")];
+    if ($st['enabled'] && $st['status'] === 'active') return [null, ext_t('{Ce ext} est déjà {?souscrit|souscrite}.')];
     $billing = $billing === 'year' ? 'year' : 'month';
     $cents = $billing === 'year' ? (int) $st['module']['year_cents'] : (int) $st['module']['month_cents'];
-    if ($cents <= 0) return [null, 'Cette option est gratuite : activez-la depuis la page Options.'];
+    if ($cents <= 0) return [null, ext_t('{Ce ext} est {?gratuit|gratuite} : activez-{?le|la} depuis la page {Exts}.')];
     require_once __DIR__ . '/saas.php';
     if (!saas_stripe_configured()) return [null, "Le paiement en ligne n'est pas encore disponible : démarrez l'essai gratuit ou contactez l'exploitant."];
     $req = ['id' => bin2hex(random_bytes(8)), 'created' => time(), 'module' => $key, 'slug' => $gallery['slug'], 'billing' => $billing,

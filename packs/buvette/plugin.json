@@ -2,7 +2,8 @@
   "id": "buvette",
   "name": "Buvette du vide-grenier",
   "version": "1.0.0",
-  "description": "Module payant pour vide-greniers : la carte et ses prix, les recettes et leur coût de revient, les fournitures et la liste de courses, le planning des bénévoles (avec un lien d'accès pour eux), la check-list du jour, le prévisionnel et le bilan.",
+  "description": "{Ext} payant{e} pour vide-greniers : la carte et ses prix, les recettes et leur coût de revient, les fournitures et la liste de courses, le planning des bénévoles (avec un lien d'accès pour eux), la check-list du jour, le prévisionnel et le bilan.",
+  "scope": "gallery",
   "table_prefix": "bv_",
   "pages": [
     {

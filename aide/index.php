@@ -1,6 +1,7 @@
 <?php
 // Centre d'aide public : recherche (?q=), filtres par rôle, FAQ, tutoriels, glossaire et assistant documentaire.
 require_once __DIR__ . '/_base.php';
+require_once __DIR__ . '/../includes/vocabulary.php';
 
 $roles = aide_roles();
 $roleFilter = (string) ($_GET['role'] ?? '');
@@ -49,7 +50,7 @@ $renderAnswer = static function (array $a): void {
             <p class="aide-msg-who">Assistant</p>
             <p><?= saas_e($a['message']) ?></p>
             <?php if ($a['contact'] !== '' && $a['mailto'] !== ''): ?><p><a class="aide-btn" href="<?= saas_e($a['mailto']) ?>">Écrire à <?= saas_e($a['contact']) ?></a></p><?php endif; ?>
-            <p class="aide-hint">Le formulaire de contact d'une boutique se trouve sur la fiche d'une pièce, quand le module Messagerie est activé.</p>
+            <p class="aide-hint">Le formulaire de contact d'une boutique se trouve sur la fiche d'une pièce, quand <?= htmlspecialchars(ext_t('{le ext}'), ENT_QUOTES, 'UTF-8') ?> Messagerie est <?= htmlspecialchars(ext_t('{?activé|activée}'), ENT_QUOTES, 'UTF-8') ?>.</p>
         </div><?php
     }
 };

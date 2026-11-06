@@ -2,7 +2,8 @@
   "id": "comptage-foule",
   "name": "Comptage de foule",
   "version": "1.0.0",
-  "description": "Module payant pour vide-greniers : comptez les visiteurs aux entrées avec un téléphone (appuis ou détection par caméra), même hors ligne, par événement et par porte ; courbes de fréquentation et export.",
+  "description": "{Ext} payant{e} pour vide-greniers : comptez les visiteurs aux entrées avec un téléphone (appuis ou détection par caméra), même hors ligne, par événement et par porte ; courbes de fréquentation et export.",
+  "scope": "gallery",
   "table_prefix": "cp_",
   "pages": [
     {

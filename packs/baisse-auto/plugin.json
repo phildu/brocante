@@ -2,7 +2,7 @@
   "id": "baisse-auto",
   "name": "Baisse de prix automatique",
   "version": "1.0.0",
-  "description": "Module payant (essai gratuit) : les pièces qui tardent à partir baissent de prix par paliers selon leur ancienneté, sans descendre sous le prix plancher. Mode validation ou automatique, historique et annulation.",
+  "description": "{Ext} payant{e} (essai gratuit) : les pièces qui tardent à partir baissent de prix par paliers selon leur ancienneté, sans descendre sous le prix plancher. Mode validation ou automatique, historique et annulation.",
   "table_prefix": "bp_",
   "pages": [
     { "id": "index", "label": "Baisse de prix auto", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin"] }

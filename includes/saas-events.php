@@ -20,8 +20,8 @@ const SAAS_EVENT_TYPES = [
     'ai_credit_purchased'   => ['Crédit IA racheté', 'paiement', 'ok'],
     'sms_credit_purchased'  => ['Crédit SMS racheté', 'paiement', 'ok'],
     'sms_credit_granted'    => ['Crédit SMS accordé (exploitant)', 'paiement', 'info'],
-    'addon_subscribed'      => ['Option Annonces souscrite', 'paiement', 'ok'],
-    'addon_canceled'        => ['Option Annonces résiliée', 'suppression', 'bad'],
+    'addon_subscribed'      => ['{Ext} Annonces {?souscrit|souscrite}', 'paiement', 'ok'],
+    'addon_canceled'        => ['{Ext} Annonces {?résilié|résiliée}', 'suppression', 'bad'],
     'domain_ordered'        => ['Nom de domaine commandé (OVH)', 'paiement', 'ok'],
     'payment_failed'        => ['Paiement refusé', 'paiement', 'bad'],
     'payment_refunded'      => ['Paiement remboursé', 'paiement', 'warn'],
@@ -36,10 +36,10 @@ const SAAS_EVENT_TYPES = [
     'link_resent'           => ['Lien de création renvoyé', 'inscription', 'info'],
     'request_rejected'      => ['Demande refusée', 'suppression', 'warn'],
     'request_forgotten'     => ['Demande retirée de la liste', 'suppression', 'info'],
-    'plugin_enabled'        => ['Plugin activé', 'boutique', 'ok'],
-    'plugin_disabled'       => ['Plugin désactivé', 'boutique', 'warn'],
-    'plugin_updated'        => ['Plugin mis à jour', 'boutique', 'ok'],
-    'plugin_failed'         => ['Plugin : échec d\'activation ou de mise à jour', 'boutique', 'bad'],
+    'plugin_enabled'        => ['{Ext} activé{e}', 'boutique', 'ok'],
+    'plugin_disabled'       => ['{Ext} désactivé{e}', 'boutique', 'warn'],
+    'plugin_updated'        => ['{Ext} mis{e} à jour', 'boutique', 'ok'],
+    'plugin_failed'         => ['{Ext} : échec d\'activation ou de mise à jour', 'boutique', 'bad'],
     'config_changed'        => ['Réglage modifié', 'reglage', 'info'],
     'webhook'               => ['Webhook Stripe reçu', 'reglage', 'info'],
     'note'                  => ['Note', 'note', 'info'],
@@ -139,7 +139,7 @@ function saas_events(): array
 
 function saas_event_label(string $type): string
 {
-    return SAAS_EVENT_TYPES[$type][0] ?? $type;
+    return ext_t(SAAS_EVENT_TYPES[$type][0] ?? $type);
 }
 
 /** Montant en centimes → « 19,90 € » (sans décimales si rond). */

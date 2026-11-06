@@ -2,7 +2,7 @@
   "id": "annonces-marche",
   "name": "Annonces places de marché",
   "version": "1.4.0",
-  "description": "Option payante : publier plus vite sur Leboncoin et Vinted depuis le catalogue de la boutique, via une extension Chrome (préremplissage assisté, validation humaine).",
+  "description": "{Ext} payant{e} : publier plus vite sur Leboncoin et Vinted depuis le catalogue de la boutique, via une extension Chrome (préremplissage assisté, validation humaine).",
   "table_prefix": "am_",
   "pages": [
     { "id": "index", "label": "Annonces LBC / Vinted", "icon": "cloud", "file": "pages/index.php", "roles": ["admin", "community_manager"] },

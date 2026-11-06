@@ -3,6 +3,7 @@
 // constate les absences le jour même et laisse les stands existants agrandir leur emplacement à prix réduit.
 // Toute la logique vit dans includes/gallery-waitlist.php ; cette page ne fait que régler, déclencher et suivre.
 require __DIR__ . '/_galerie-layout.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/gallery-waitlist.php';
 require_once PORTAIL_ROOT . '/includes/gallery-event.php';
 
@@ -18,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $msg = null;
     $kind = 'ok';
     if (!gwl_available($gaGallery)) {
-        [$msg, $kind] = ["La file d'attente n'est pas active : vérifiez l'option du module et les réservations en ligne.", 'error'];
+        [$msg, $kind] = ["La file d'attente n'est pas active : vérifiez {le ext} et les réservations en ligne.", 'error'];
     } elseif ($action === 'settings') {
         $err = gwl_save_settings($gaGallery, $_POST, $actor);
         [$msg, $kind] = $err ? [$err, 'error'] : ['Réglages enregistrés.', 'ok'];
@@ -72,8 +73,8 @@ ga_head("File d'attente");
     <?php if (!gwl_available($gaGallery)): ?>
       <section class="gcard">
         <h2>File d'attente indisponible</h2>
-        <p class="meta" style="margin:0;">Ce module a besoin de l'option « File d'attente &amp; places voisines », de la fonctionnalité exposants du type de galerie et de réservations en ligne ouvertes (événement publié avec places, ou plan activé).</p>
-        <div class="row"><a class="btn" href="/portail/galerie-modules.php<?= $limited ? '' : '?g=' . e(urlencode($gaSlug)) ?>">Ouvrir les options</a></div>
+        <p class="meta" style="margin:0;">{Ce ext} a besoin {du ext} « File d'attente &amp; places voisines », de la fonctionnalité exposants du type de galerie et de réservations en ligne ouvertes (événement publié avec places, ou plan activé).</p>
+        <div class="row"><a class="btn" href="/portail/galerie-modules.php<?= $limited ? '' : '?g=' . e(urlencode($gaSlug)) ?>">Ouvrir {les exts}</a></div>
       </section>
     <?php else: ?>
     <section class="gcard">

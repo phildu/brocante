@@ -2,6 +2,7 @@
 // Types de galerie et leurs offres (réservé à l'exploitant) : chaque type (galerie marchande, marché aux puces, vide-grenier, quartier marchand…)
 // a son nom, son vocabulaire, ses fonctionnalités et ses trois offres (prix, nombre de membres, essai) ; chaque galerie a son type et son offre.
 require __DIR__ . '/_bootstrap.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/saas-events.php';
 require_once PORTAIL_ROOT . '/includes/gallery-offers.php';
 require_once PORTAIL_ROOT . '/includes/addons.php';
@@ -141,23 +142,23 @@ $origin = saas_origin();
         </div>
         <p><button class="btn small" type="button" data-locadd>Ajouter un lieu</button></p>
 
-        <h3>Plugins proposés aux vendeurs</h3>
-        <p class="meta" style="margin:0;">Chaque plugin payant peut être hérité du réglage de la plateforme, proposé à la vente, inclus gratuitement ou masqué pour les boutiques de ce type de galerie. Ce choix prime sur le ciblage global du plugin.</p>
+        <h3>{Exts} proposé{es} aux vendeurs (boutiques)</h3>
+        <p class="meta" style="margin:0;">Chaque {ext} payant{e} peut être {?hérité|héritée} du réglage de la plateforme, {?proposé|proposée} à la vente, {?inclus|incluse} gratuitement ou {?masqué|masquée} pour les boutiques de ce type de galerie. Ce choix prime sur le ciblage global {du ext}.</p>
         <div class="cols">
           <?php foreach (addon_defaults() as $ak => $ad): $vmode = (string) ($t['vendor_plugins'][$ak] ?? 'inherit'); ?>
-            <label class="f2"><?= e($ad['name']) ?>
+            <label class="f2"><span><?= e($ad['name']) ?><?= ext_scope_badge(ext_scope($ak, 'shop')) ?></span>
               <select name="t[vendor_plugins][<?= e($ak) ?>]"><?php foreach (GT_VENDOR_PLUGIN_MODES as $vm => $vl): ?><option value="<?= e($vm) ?>"<?= $vmode === $vm ? ' selected' : '' ?>><?= e($vl) ?></option><?php endforeach; ?></select>
             </label>
           <?php endforeach; ?>
         </div>
 
-        <h3>Modules (plugins partagés)</h3>
-        <p class="meta" style="margin:0;">Un module est une fonctionnalité proposée par ce type : inclus dans l'offre, option payante (essai puis abonnement Stripe) ou non proposé. Les galeries de ce type le retrouvent dans leurs Options.</p>
+        <h3>{Exts} de la galerie (organisateur)</h3>
+        <p class="meta" style="margin:0;">{Un ext} est une fonctionnalité proposée par ce type : {?inclus|incluse} dans l'offre, payant{e} (essai puis abonnement Stripe) ou non proposé{e}. Les galeries de ce type retrouvent {les exts} proposé{es} dans leur onglet {Exts}.</p>
         <div class="cols">
           <?php foreach (gm_modules() as $mk => $md): ?>
-            <label class="f2"><span><?= e($md['emoji']) ?> <?= e($md['name']) ?></span><span class="meta" style="font-weight:400;"><?= e($md['description']) ?></span>
+            <label class="f2"><span><?= e($md['emoji']) ?> <?= e($md['name']) ?><?= ext_scope_badge(ext_scope($mk, 'gallery')) ?></span><span class="meta" style="font-weight:400;"><?= e($md['description']) ?></span>
               <select name="t[modules][<?= e($mk) ?>]">
-                <?php foreach (GM_MODE_LABELS as $mode => $label): ?>
+                <?php foreach (gm_mode_labels() as $mode => $label): ?>
                   <option value="<?= e($mode) ?>"<?= ($t['modules'][$mk] ?? '') === $mode ? ' selected' : '' ?>><?= e($label) ?><?= $mode === 'option' ? ' — ' . e(gm_price_text($md['month_cents'])) : '' ?></option>
                 <?php endforeach; ?>
               </select></label>

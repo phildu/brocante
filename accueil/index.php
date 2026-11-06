@@ -11,11 +11,13 @@ if (!empty($_SERVER['HTTP_HOST'])) {
 }
 // Page d'accueil de la plateforme (racine du domaine du portail) : quatre parcours (vendre, organiser, exposer, découvrir), les types de galerie
 // comparés, les options à la carte, les formules d'une boutique, les galeries, les commerces à la une.
+require_once __DIR__ . '/../includes/vocabulary.php';
 require_once __DIR__ . '/../includes/saas.php';
 require_once __DIR__ . '/../includes/gallery-types.php';
 require_once __DIR__ . '/../includes/gallery-booking.php';
 require_once __DIR__ . '/../includes/addons.php';
 require_once __DIR__ . '/../includes/banner-slides.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 
 $cfg = saas_config();
 $home = $cfg['home'];
@@ -121,7 +123,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
 </div></section>
 
 <nav class="band-nav" aria-label="Sur cette page"><div class="wrap">
-  <a href="#parcours">Par où commencer</a><a href="#boutique">Ma boutique</a><a href="#organiser">Galeries, marchés, vides-greniers</a><?php if ($recruiting): ?><a href="#exposer">Trouver un emplacement</a><?php endif; ?><a href="#options">Options</a><a href="#decouvrir">Découvrir</a><a href="#faq">Questions</a>
+  <a href="#parcours">Par où commencer</a><a href="#boutique">Ma boutique</a><a href="#organiser">Galeries, marchés, vides-greniers</a><?php if ($recruiting): ?><a href="#exposer">Trouver un emplacement</a><?php endif; ?><a href="#options">{Exts}</a><a href="#decouvrir">Découvrir</a><a href="#faq">Questions</a>
 </div></nav>
 
 <section class="block" id="parcours"><div class="wrap">
@@ -143,7 +145,7 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
     <article class="feature"><div class="ico" aria-hidden="true">✨</div><h3>Photos et fiches par l'IA</h3><p>Détourage, mises en situation, petites vidéos, titre, description, matières et prix suggérés : l'IA prépare, vous validez.</p></article>
     <article class="feature"><div class="ico" aria-hidden="true">📱</div><h3>Le Studio sur smartphone</h3><p>Prenez vos pièces en photo depuis votre téléphone, avec la caisse et le scan de QR codes : elles arrivent prêtes à vendre.</p></article>
     <article class="feature"><div class="ico" aria-hidden="true">💳</div><h3>Paiement direct</h3><p>Vos clients paient par carte (Stripe) et l'argent arrive sur votre propre compte, avec retrait en boutique ou envoi postal.</p></article>
-    <article class="feature"><div class="ico" aria-hidden="true">🎁</div><h3>Fidélité et alertes</h3><p>Points et récompenses pour vos clients, alertes chineur, réservations avec arrhes ou acompte : en option, ci-dessous.</p></article>
+    <article class="feature"><div class="ico" aria-hidden="true">🎁</div><h3>Fidélité et alertes</h3><p>Points et récompenses pour vos clients, alertes chineur, réservations avec arrhes ou acompte : à activer parmi {les exts}, ci-dessous.</p></article>
     <article class="feature"><div class="ico" aria-hidden="true">🧭</div><h3>Visible partout</h3><p>Votre boutique apparaît dans l'annuaire et peut rejoindre une galerie, un marché ou un quartier marchand.</p></article>
   </div>
   <div class="sec-head" style="margin-top:44px"><h2 style="font-size:1.6rem">Les formules de la boutique</h2>
@@ -203,8 +205,8 @@ saas_page_start($cfg['name'] . ' — ' . $cfg['tagline'], 'Boutique en ligne, ga
 <?php endif; ?>
 
 <section class="block" id="options"><div class="wrap">
-  <div class="sec-head"><span class="sec-tag" style="--c:#8a5a9e">Options</span><h2>Des compléments à la carte</h2>
-    <p class="lede">Activez ce dont vous avez besoin, boutique par boutique. Chaque option s'essaie gratuitement avant de s'abonner.</p></div>
+  <div class="sec-head"><span class="sec-tag" style="--c:#8a5a9e">{Exts}</span><h2>Des compléments à la carte</h2>
+    <p class="lede">Activez ce dont vous avez besoin, boutique par boutique. Chaque {ext} s'essaie gratuitement avant de s'abonner.</p></div>
   <div class="addons">
     <?php foreach ($addons as $id => $a): ?>
       <article class="addon"><h3><?= $e($a['name']) ?></h3><p><?= $e($a['description']) ?></p>

@@ -65,7 +65,7 @@ function shop_module_page(array $plugin, callable $pluginApi, string $pluginCsrf
     [$name, $home, $cta] = SHOP_MODULES[$id] ?? [(string) $plugin['name'], '/admin/', 'Ouvrir'];
     $ent = addon_entitlement($id);
     ?>
-  <p class="eyebrow">Module · <?= h($plugin['name']) ?> · v<?= h($plugin['version']) ?></p>
+  <p class="eyebrow">{Ext} · <?= h($plugin['name']) ?> · v<?= h($plugin['version']) ?></p>
   <h1 style="font-size:1.8rem;margin:12px 0 4px;"><?= h($name) ?></h1>
   <?= addon_panel_html($id, $pluginApi('access'), $pluginCsrf) ?>
   <?php if (!$ent['entitled']): ?>

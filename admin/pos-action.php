@@ -37,7 +37,7 @@ try {
 
         case 'pickup_collect':
         case 'pickup_release':
-            if (!pos_plugin('retrait-stand', 'rt')) pos_reply(['ok' => false, 'error' => 'Le module « Retrait sur stand » n\'est pas actif.'], 422);
+            if (!pos_plugin('retrait-stand', 'rt')) pos_reply(['ok' => false, 'error' => ext_t('{Le ext} « Retrait sur stand » n\'est pas {?actif|active}.')], 422);
             $id = (int) ($in['id'] ?? 0);
             $err = $action === 'pickup_collect' ? rt_collect($id) : rt_release($id);
             if ($err) pos_reply(['ok' => false, 'error' => $err], 422);

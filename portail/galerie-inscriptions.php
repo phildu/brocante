@@ -2,6 +2,7 @@
 // Tableau de bord des inscriptions d'une galerie (vide-grenier, marché aux puces) : demandes reçues, validées, en attente ou expirées,
 // avec mise à jour automatique (toutes les 12 s) et les mêmes actions que la page Exposants (accepter, refuser, libérer).
 require __DIR__ . '/_galerie-layout.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/gallery-booking.php';
 require_once PORTAIL_ROOT . '/includes/gallery-waitlist.php';
 require_once PORTAIL_ROOT . '/includes/gallery-event.php';
@@ -79,7 +80,7 @@ ga_head('Inscriptions');
 
     <?php if (!$event && !$mapSlots): ?>
       <section class="gcard"><h2>Aucun emplacement à réserver</h2>
-        <p>Créez l'événement et son nombre de places : la numérotation est automatique. Vous pouvez aussi dessiner un plan si l'option Carte interactive est active.</p>
+        <p>Créez l'événement et son nombre de places : la numérotation est automatique. Vous pouvez aussi dessiner un plan si {le ext} Carte interactive est {?actif|active}.</p>
         <p><a class="btn btn-primary" href="<?= e($evenement) ?>">Créer l'événement</a> <a class="btn" href="<?= e('/portail/galerie-plan.php' . ($limited ? '' : '?g=' . urlencode($gaSlug))) ?>">Ouvrir le plan</a></p></section>
     <?php endif; ?>
 

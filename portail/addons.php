@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/_bootstrap.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/plugins.php';
 require_once PORTAIL_ROOT . '/includes/addons.php';
 require_once PORTAIL_ROOT . '/includes/galleries.php';
@@ -157,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'shop' => [$shopSlug],
                 default => [$shopSlug],
             };
-            if (!$manifest) $activationErrors[] = 'Le manifeste du plugin est introuvable.';
+            if (!$manifest) $activationErrors[] = 'Le manifeste {du ext} est introuvable.';
             else foreach ($activationSlugs as $activationSlug) {
                 if (!isset($shops[$activationSlug])) continue;
                 try {
@@ -168,10 +169,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-        if ($ok) saas_event('config_changed', ['note' => 'Modalités du plugin ' . $module . ' mises à jour (' . $scope . ')', 'actor' => 'exploitant']);
+        if ($ok) saas_event('config_changed', ['note' => ext_t('Modalités {du ext} ') . $module . ' mises à jour (' . $scope . ')', 'actor' => 'exploitant']);
         if (!$ok) portail_flash("Impossible d'écrire data/saas/addons.json.", 'error');
         elseif ($activationErrors) portail_flash('Modalités enregistrées, mais activation incomplète : ' . implode(' ; ', $activationErrors), 'error');
-        else portail_flash('Modalités du plugin enregistrées.' . (($normalized['access'] ?? '') === 'included' ? ' Plugin installé et activé pour les boutiques concernées.' : ''), 'ok');
+        else portail_flash('Modalités {du ext} enregistrées.' . (($normalized['access'] ?? '') === 'included' ? ' {Ext} installé{e} et activé{e} pour les boutiques concernées.' : ''), 'ok');
     } elseif ($action === 'remind') {
         $n = addon_beta_send_reminders();
         portail_flash($n ? "$n rappel(s) envoyé(s)." : 'Aucun rappel à envoyer (retours à jour ou rappel déjà envoyé).', 'ok');
@@ -202,7 +203,7 @@ $scopeLabel = match ($scope) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Tarifs des plugins — Portail</title>
+<title>Tarifs des {exts} — Portail</title>
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
@@ -220,7 +221,7 @@ $scopeLabel = match ($scope) {
 <body>
 <div class="app">
 <?php portail_page_start([
-    'title' => 'Tarifs et modalités des plugins',
+    'title' => 'Tarifs et modalités {des exts}',
     'eyebrow' => 'Revenus',
     'desc_html' => e($scopeLabel),
     'actions' => '<a class="btn" href="/portail/galeries.php' . ($gallerySlug !== '' ? '?g=' . e(rawurlencode($gallerySlug)) : '') . '">Galeries</a>',
@@ -238,7 +239,7 @@ $scopeLabel = match ($scope) {
             <?php endforeach; ?>
           </select>
         </label>
-        <label>Plugin
+        <label>{Ext}
           <select id="addon-plugin" onchange="location.href='/portail/addons.php?scope='+encodeURIComponent('<?= e($scope) ?>')+'&plugin='+encodeURIComponent(this.value)+'&gallery='+encodeURIComponent('<?= e($gallerySlug) ?>')+'&shop='+encodeURIComponent('<?= e($shopSlug) ?>')">
             <?php foreach ($catalog as $id => $info): ?><option value="<?= e($id) ?>"<?= $module === $id ? ' selected' : '' ?>><?= e($info['name']) ?></option><?php endforeach; ?>
           </select>
@@ -256,16 +257,16 @@ $scopeLabel = match ($scope) {
           </select></label>
         <?php endif; ?>
       </div>
-      <p class="muted">Héritage : plateforme → galerie → configuration boutique. La configuration boutique est prioritaire. Une galerie peut aussi régler séparément un plugin pour l’une de ses boutiques membres.</p>
-      <?php if ($scope === 'shop' && $effectiveGallery !== ''): ?><p class="muted">Cette boutique hérite des règles de la galerie « <?= e($galleries[$effectiveGallery]['name'] ?? $effectiveGallery) ?> » pour ce plugin.</p><?php endif; ?>
-      <?php if (count($shopGalleries) > 1): ?><p class="muted">Cette boutique appartient à plusieurs galeries. Pour ce plugin, la première galerie (ordre alphabétique de l’identifiant) ayant une règle spécifique s’applique ; la surcharge boutique reste prioritaire.</p><?php endif; ?>
-      <?php if ($limited !== ''): ?><p class="muted">Vous gérez uniquement les plugins pour les boutiques membres de votre galerie.</p><?php endif; ?>
+      <p class="muted">Héritage : plateforme → galerie → configuration boutique. La configuration boutique est prioritaire. Une galerie peut aussi régler séparément {un ext} pour l’une de ses boutiques membres.</p>
+      <?php if ($scope === 'shop' && $effectiveGallery !== ''): ?><p class="muted">Cette boutique hérite des règles de la galerie « <?= e($galleries[$effectiveGallery]['name'] ?? $effectiveGallery) ?> » pour {ce ext}.</p><?php endif; ?>
+      <?php if (count($shopGalleries) > 1): ?><p class="muted">Cette boutique appartient à plusieurs galeries. Pour {ce ext}, la première galerie (ordre alphabétique de l’identifiant) ayant une règle spécifique s’applique ; la surcharge boutique reste prioritaire.</p><?php endif; ?>
+      <?php if ($limited !== ''): ?><p class="muted">Vous gérez uniquement {les exts} pour les boutiques membres de votre galerie.</p><?php endif; ?>
     </section>
     <form class="ac" method="post">
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="save">
       <input type="hidden" name="scope" value="<?= e($scope) ?>"><input type="hidden" name="plugin" value="<?= e($module) ?>">
       <input type="hidden" name="gallery" value="<?= e($gallerySlug) ?>"><input type="hidden" name="shop" value="<?= e($shopSlug) ?>">
-      <h2><?= e($catalog[$module]['name']) ?> — <?= e($scopeLabel) ?></h2>
+      <h2><?= e($catalog[$module]['name']) ?><?= ext_scope_badge(ext_scope($module, (string) (plugin_manifest($module)['scope'] ?? 'shop'))) ?> — <?= e($scopeLabel) ?></h2>
       <?php if ($scope === 'global'): ?>
         <div class="ag"><label>Nom affiché<input name="name" maxlength="120" value="<?= e((string) $form['name']) ?>"></label>
           <label>Description<textarea name="description" maxlength="500"><?= e((string) $form['description']) ?></textarea></label></div>
@@ -287,7 +288,7 @@ $scopeLabel = match ($scope) {
         $testers = (array) ($form['testers'] ?? []);
         $modeLabels = BUSINESS_PRESENCE_MODES; ?>
       <fieldset><legend>État et ciblage</legend>
-        <div class="ag"><label>État du module<select name="stage">
+        <div class="ag"><label>État {du ext}<select name="stage">
           <option value="live"<?= $stageVal === 'live' ? ' selected' : '' ?>>Validé — en production, vendu selon les tarifs</option>
           <option value="beta"<?= $stageVal === 'beta' ? ' selected' : '' ?>>En test — réservé aux testeurs, gratuit, avec retours</option>
         </select></label></div>
@@ -305,7 +306,7 @@ $scopeLabel = match ($scope) {
         <div class="amodes"><?php foreach ($modeLabels as $key => $label): ?>
           <label><input type="checkbox" name="shop_modes[]" value="<?= e($key) ?>"<?= in_array($key, (array) ($form['shop_modes'] ?? []), true) ? ' checked' : '' ?>><?= e($label) ?></label>
         <?php endforeach; ?></div>
-        <p class="muted">Testeurs (utilisés quand le module est « En test ») : leurs boutiques l’obtiennent gratuitement jusqu’à la mise en production et doivent envoyer des retours. Une galerie testeuse ouvre le module à tous ses membres.</p>
+        <p class="muted">Testeurs (utilisés quand {le ext} est « En test ») : leurs boutiques l’obtiennent gratuitement jusqu’à la mise en production et doivent envoyer des retours. Une galerie testeuse ouvre {le ext} à tous ses membres.</p>
         <p class="muted"><strong>Galeries testeuses</strong></p>
         <div class="amodes"><?php foreach ($galleries as $gs => $g): ?>
           <label><input type="checkbox" name="testers[galleries][]" value="<?= e($gs) ?>"<?= in_array($gs, (array) ($testers['galleries'] ?? []), true) ? ' checked' : '' ?>><?= e($g['name']) ?></label>
@@ -344,7 +345,7 @@ $scopeLabel = match ($scope) {
     <section class="ac">
       <h2>Retours des testeurs (<?= count($fbList) ?>)</h2>
       <?php if (($effective['stage'] ?? 'live') === 'beta'): ?>
-        <p class="muted">Boutiques testeuses : <?php foreach ($testerShops as $ts): ?><span><?= e($ts) ?> <?= isset($fbShops[$ts]) ? '✔' : '⏳ (aucun retour)' ?></span> · <?php endforeach; ?><?= $testerShops ? '' : 'aucune — personne ne voit encore ce module.' ?></p>
+        <p class="muted">Boutiques testeuses : <?php foreach ($testerShops as $ts): ?><span><?= e($ts) ?> <?= isset($fbShops[$ts]) ? '✔' : '⏳ (aucun retour)' ?></span> · <?php endforeach; ?><?= $testerShops ? '' : 'aucune — personne ne voit encore {ce ext}.' ?></p>
       <?php endif; ?>
       <?php foreach (array_slice($fbList, 0, 20) as $f): ?>
         <p><strong><?= e($f['shop']) ?></strong> · <?= str_repeat('★', (int) $f['rating']) . str_repeat('☆', 5 - (int) $f['rating']) ?> · <small><?= e(substr((string) $f['at'], 0, 10)) ?></small><br><?= nl2br(e((string) $f['text'])) ?></p>
