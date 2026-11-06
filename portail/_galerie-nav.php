@@ -1,5 +1,7 @@
 <?php
 // Boutons de navigation d'une galerie. Variables attendues : $limited (slug en mode restreint), $edit (galeries.php) ou $gaGallery (pages galerie-*).
+// La barre appelle gmsg_unread_admin() (pastille « Messages ») : galeries.php, qui l'inclut, ne charge pas la messagerie (les pages galerie-*, si, via _galerie-layout.php).
+require_once dirname(__DIR__) . '/includes/gallery-messages.php';
 $navSlug = $limited ?: (isset($gaGallery) ? $gaGallery['slug'] : (isset($edit) && $edit ? $edit['slug'] : ''));
 $q = $limited ? '' : '?g=' . urlencode($navSlug);
 $here = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
