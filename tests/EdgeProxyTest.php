@@ -46,15 +46,26 @@ final class EdgeProxyTest extends TestCase
         $this->assertSame('naty.bricbrok.com', $o['HTTP_HOST']);
     }
 
-    public function testForgedHeaderIgnoredOutsideCloudflare(): void
+    public function testClientIpHeaderIgnoredOutsideCloudflare(): void
     {
         $o = edge_proxy_overrides([
             'REMOTE_ADDR' => '203.0.113.9',
             'HTTP_HOST' => 'bricbrok.com',
-            'HTTP_X_ORIG_HOST' => 'naty.bricbrok.com',
             'HTTP_CF_CONNECTING_IP' => '1.2.3.4',
         ]);
-        $this->assertSame([], $o);
+        $this->assertArrayNotHasKey('REMOTE_ADDR', $o);
+    }
+
+    public function testSubdomainRestoredWhenHostingHidesProxyIp(): void
+    {
+        // OVH renseigne REMOTE_ADDR avec l'IP du visiteur, pas celle de Cloudflare.
+        $o = edge_proxy_overrides([
+            'REMOTE_ADDR' => '2a01:e0a:1160:c90::1',
+            'HTTP_HOST' => 'bricbrok.com',
+            'HTTP_X_ORIG_HOST' => 'naty.bricbrok.com',
+        ]);
+        $this->assertSame('naty.bricbrok.com', $o['HTTP_HOST']);
+        $this->assertArrayNotHasKey('REMOTE_ADDR', $o);
     }
 
     #[DataProvider('badOrigins')]

@@ -2,15 +2,16 @@
 
 // Requêtes qui arrivent par Cloudflare (proxy devant bricbrok.com).
 //
-// 1. Adresse du visiteur : derrière le proxy, REMOTE_ADDR est une IP Cloudflare.
-//    L'en-tête CF-Connecting-IP n'est cru que si la connexion vient bien d'une
-//    plage Cloudflare ; sinon il serait falsifiable (limites de tentatives,
-//    comptage de visiteurs).
+// 1. Adresse du visiteur : chez OVH, REMOTE_ADDR contient déjà l'IP réelle du
+//    visiteur. Si une IP Cloudflare arrive tout de même (autre hébergeur),
+//    CF-Connecting-IP n'est cru que si la connexion vient bien d'une plage
+//    Cloudflare ; sinon il serait falsifiable (limites de tentatives).
 // 2. Sous-domaines des boutiques : l'hébergement OVH ne sert pas les noms qu'il
 //    ne connaît pas. Cloudflare réécrit donc le Host de nom.bricbrok.com en
 //    bricbrok.com et place le nom d'origine dans X-Orig-Host. On ne le reprend
 //    que s'il est un sous-domaine direct de l'hôte reçu (nom.<hôte>), ce qui
-//    évite qu'un en-tête forgé désigne un autre domaine.
+//    évite qu'un en-tête forgé désigne un autre domaine. OVH masque l'IP du
+//    proxy : on ne peut pas exiger qu'elle soit celle de Cloudflare.
 
 const EDGE_PROXY_CLOUDFLARE_RANGES = [
     '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22',
@@ -76,7 +77,7 @@ function edge_proxy_overrides(array $server): array
     $base = (string) preg_replace('/^www\./', '', $host);
     $orig = strtolower(trim((string) ($server['HTTP_X_ORIG_HOST'] ?? '')));
     $orig = (string) preg_replace('/:\d+$/', '', $orig);
-    if ($viaCloudflare && $base !== '' && $orig !== ''
+    if ($base !== '' && $orig !== ''
         && preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.' . preg_quote($base, '/') . '$/', $orig) === 1) {
         $out['HTTP_HOST'] = $orig;
     }
