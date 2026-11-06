@@ -304,7 +304,7 @@ function portail_page_start(array $opts = []): void
 </style>
 <?php endif; ?>
 <aside class="pnav" id="pnav" aria-label="Navigation de l'administration">
-  <a class="pnav-brand" href="<?= $limited ? '/portail/galerie-tableau.php' : '/portail/' ?>">
+  <a class="pnav-brand" href="<?= $limited ? '/portail/galerie-tableau.php' : '/portail/' ?>"<?= $brand ? ' title="' . e($brand['name']) . '"' : '' ?>>
     <span class="pnav-mark<?= $brand ? ' is-gallery' : '' ?>"><?php if ($brand && $brand['logo'] !== ''): ?><img src="/<?= e($brand['logo']) ?>" alt=""><?php else: ?><?= portail_icon($limited ? 'gallery' : 'store', 20) ?><?php endif; ?></span>
     <span class="pnav-brand-text"><b><?= e($brand['name'] ?? 'brocs') ?></b><small><?= $limited ? 'Espace galerie' : 'Administration' ?></small></span>
   </a>
