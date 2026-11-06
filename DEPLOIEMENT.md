@@ -29,9 +29,13 @@ Un serveur sans `.app-env` est traité comme **préprod** (jamais comme prod) : 
   (sans git, ~50 fichiers PHP, modèle `PROJECT_CONTEXT.md` jamais rempli) est une ébauche abandonnée : il ne sert plus.
 - **Serveur** : préprod = `/www/pre-bricbrok/`, prod = `/www/bricbrok/`. Historiquement le portail est en ligne dans `/www/brocs/`
   (domaine `brocs.arrimage.com`) et Petit Chalet seul dans `/www/brocante/` (abandonné : `petit-chalet` n'est plus déployé).
-- **Renommer la préprod existante** (action manuelle, le script ne le fait pas) : chez OVH, renommer `/www/brocs/` en `/www/pre-bricbrok/`
-  (les bases, `.secrets/` et `uploads/` suivent), mettre à jour le dossier racine du domaine dans Hébergement → Multisite, puis
-  changer `FTP_PATH_FRONT` dans `.env.deploy.portail`. Les adresses (`brocs.arrimage.com`) ne changent pas.
+- **Renommer la préprod existante** (action manuelle, le script ne le fait pas). Entre les deux premières étapes le site est en erreur 500
+  (le dossier racine du domaine n'existe plus : OVH renvoie alors vers le WordPress `/wp-eifetest`, en boucle) : les enchaîner sans pause.
+  1. Chez OVH, renommer `/www/brocs/` en `/www/pre-bricbrok/` (les bases, `.secrets/` et `uploads/` suivent).
+  2. Aussitôt : Hébergement → Mes sites → site « brocs » → ⋮ → Modifier le site → Répertoire racine = `www/pre-bricbrok`.
+  3. Changer `FTP_PATH_FRONT` dans `.env.deploy.portail`.
+  4. Contrôler : `scripts/smoke-remote.sh https://www.bricbrok.com preprod` (ou `/health.php` en 200).
+  Les adresses (`brocs.arrimage.com`, `bricbrok.com`) ne changent pas. Diagnostic d'un 500 : OVH → Logs → « HTTP error logs ».
 
 ## Cycle de travail
 
