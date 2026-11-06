@@ -6,8 +6,8 @@
  */
 require_once __DIR__ . '/../includes/comptage.php';
 require_once __DIR__ . '/../includes/session.php';
-require_once __DIR__ . '/../includes/shop-modules.php';
-shop_module_require_public('comptage-foule');
+cp_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/comptage/…), extension active
+cp_url_map_off();    // réponse JSON : rien à réécrire
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');

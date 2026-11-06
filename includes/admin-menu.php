@@ -161,7 +161,7 @@ function admin_menu_core_items(): array
         'galeries' => ['/admin/ma-galerie.php', 'Mes galeries', 'users'],
         'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
         // Page économique de la boutique (chiffre d'affaires, marge, frais, fréquentation), ligne « main » : voir admin/rentabilite.php.
-        // Buvette, Invendus & dons et Comptage de foule sont des plugins payants (packs/, includes/shop-modules.php) : leurs entrées de menu viennent d'eux.
+        // Buvette, Invendus & dons et Comptage de foule ne sont pas des plugins de boutique : ce sont des extensions de galerie (includes/gallery-modules.php).
         'rentabilite' => ['/admin/rentabilite.php', 'Rentabilité', 'gauge'],
         'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
         'social' => ['/admin/social.php', 'API & réseaux', 'user'],

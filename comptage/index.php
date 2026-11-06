@@ -6,7 +6,7 @@
  */
 require_once __DIR__ . '/../includes/comptage-layout.php';
 require_once __DIR__ . '/../includes/session.php';
-shop_module_require_public('comptage-foule');
+cp_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/comptage/…), extension active
 cp_boot();
 cp_require_volunteer();
 
@@ -14,8 +14,7 @@ cp_require_volunteer();
 header('X-Cp-App: 1');
 header('Cache-Control: no-cache');
 
-$content = get_content();
-$siteName = $content['site_name'] ?? 'La Brocante';
+$siteName = cp_site_name() ?: 'La Brocante';
 $event = cp_active_event();
 $gates = $event ? cp_gates((int) $event['id']) : [];
 $totals = $event ? cp_totals((int) $event['id']) : null;
@@ -30,7 +29,10 @@ if ($event && $gates) {
         'gates' => array_map(fn($g) => ['id' => (int) $g['id'], 'name' => $g['name']], $gates),
         'totals' => $totals,
         'csrf' => shop_csrf_token(),
-        'api' => '/comptage/api.php',
+        'api' => cp_url_map('/comptage/api.php'),
+        'login' => cp_url_map('/comptage/login.php'),
+        'sw' => cp_url_map('/comptage/sw.js'),
+        'base' => cp_url_map('/comptage/'),
         'qtyChoices' => CP_QTY_CHOICES,
         'configHash' => cp_config_hash($event, $gates),
         'generated' => time(),

@@ -19,6 +19,7 @@ $active = cp_active_event();
 // Le QR code ne contient que le lien, jamais le code d'accès : l'affiche peut être
 // imprimée ou affichée sans rien révéler.
 if (($_GET['qr'] ?? '') === 'svg') {
+    cp_url_map_off();   // téléchargement : le contenu du fichier reste tel quel
     header('Content-Type: image/svg+xml; charset=utf-8');
     header('Content-Disposition: attachment; filename="comptage-qr-code.svg"');
     echo qr_svg($url, 'QR code du lien du comptage de foule');

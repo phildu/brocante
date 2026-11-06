@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/comptage-layout.php';
 require_once __DIR__ . '/../includes/session.php';
-shop_module_require_public('comptage-foule');
+cp_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/comptage/…), extension active
 cp_boot();
 
 if (cp_is_volunteer()) {

@@ -69,6 +69,13 @@ function gm_defaults(): array
             'default_mode' => 'option',
             'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
         ],
+        'comptage' => [
+            'name' => 'Comptage de foule', 'emoji' => '👥', 'active' => true, 'order' => 6,
+            'description' => "Comptez les visiteurs aux entrées avec un téléphone (appuis ou détection par caméra), même hors ligne : un poste par entrée, la fréquentation en direct, le pic de présence, la jauge de capacité, la courbe de la journée et l'export CSV. Les bénévoles n'ont besoin que d'un lien et d'un code.",
+            'types' => ['vide-grenier'],
+            'default_mode' => 'option',
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
+        ],
     ];
 }
 

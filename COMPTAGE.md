@@ -5,8 +5,14 @@ Compter les visiteurs d'un vide-grenier depuis un smartphone, **à la main**
 téléphone, et suivre en direct le nombre de visiteurs, la fréquentation en
 temps réel, le pic de la journée et la courbe heure par heure.
 
-- **Responsable** : *Administration → Comptage de foule* (`/admin/comptage/`), même mot de passe que le reste de l'admin.
-- **Bénévoles aux entrées** : `/comptage/`, depuis un téléphone, avec un **code partagé**. Aucun compte, aucune donnée personnelle : on ne mémorise que des nombres et des heures.
+- **C'est une extension de galerie** (pour l'organisateur d'un vide-grenier) : elle se trouve dans l'espace de la galerie, onglet **Extensions**, où
+  on l'essaie gratuitement puis on s'abonne ; une fois active, un bouton **Comptage de foule** apparaît dans son menu
+  (`/portail/galerie-comptage.php`). Proposée d'office aux galeries de type « vide-grenier » ; prix, essai et types concernés se règlent dans le
+  portail → *Tarifs des extensions de galerie*, et le mode par type dans *Types de galerie*.
+- **Responsable** : l'administrateur de la galerie (ou l'exploitant du portail), depuis l'espace de la galerie.
+- **Bénévoles aux entrées** : `/galerie/<galerie>/comptage/`, depuis un téléphone, avec un **code partagé** propre à la galerie. Aucun compte, aucune donnée personnelle : on ne mémorise que des nombres et des heures.
+- **Données** : base SQLite de la galerie (`data/galeries/<galerie>.db`, tables `cp_…`, créée au premier accès), jamais partagée avec une autre galerie ni une boutique. Les pages du module (`admin/comptage/`, `comptage/`) ne sont plus servies seules : leurs adresses d'origine sont réécrites vers la galerie (`cp_url_map()`), et `/comptage/…` sans galerie renvoie une 404.
+- **Tests** : `php scripts/test-comptage.php` (module) et `php scripts/test-comptage-galerie.php` (galerie : base, adresses, accès).
 
 ## Pour démarrer
 

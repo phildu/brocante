@@ -11,8 +11,10 @@
  * accès par code partagé, utilisable hors connexion : les appuis sont mis en
  * file d'attente sur le téléphone puis envoyés dès que le réseau revient).
  *
- * Le schéma se crée tout seul au premier accès (cp_boot) : le déploiement
- * (deploy-brocante.sh) n'envoie jamais brocante.db.
+ * C'est une extension de GALERIE (includes/gallery-modules.php, clé « comptage »), réservée aux
+ * organisateurs de vide-greniers : ses données vivent dans la base SQLite de la galerie
+ * (includes/gallery-sql.php), jamais dans celle d'une boutique. Le schéma se crée tout seul
+ * au premier accès (cp_boot), une fois la galerie choisie (cp_enter_gallery).
  *
  * Aucune donnée personnelle n'est collectée : uniquement des compteurs.
  */
@@ -94,6 +96,104 @@ function cp_boot(): void
 }
 
 /* ====================================================================== */
+/* Contexte : le comptage est une extension de galerie                    */
+/* ====================================================================== */
+
+/**
+ * Galerie dans laquelle le comptage tourne : ['slug', 'name', 'limited', 'map'] (limited : administrateur de cette galerie, sinon exploitant du
+ * portail ou bénévole ; map : réécrire les adresses). Null hors d'une galerie (scripts de test en ligne de commande) : le comptage n'est jamais
+ * servi par une boutique.
+ */
+function cp_gallery_context(?array $set = null): ?array
+{
+    static $ctx = null;
+    if ($set !== null) $ctx = $set;
+    return $ctx;
+}
+
+/**
+ * Entre dans le comptage d'une galerie : ses données sont celles de la base de CETTE galerie (includes/gallery-sql.php, tables cp_…), jamais
+ * celles d'une autre galerie ni d'une boutique. Les adresses du module (/admin/comptage/…, /comptage/…) sont réécrites vers la galerie, dans la
+ * page et dans les redirections (cp_url_map()). $limited : administrateur de la galerie.
+ */
+function cp_enter_gallery(array $gallery, bool $limited = false): void
+{
+    require_once __DIR__ . '/gallery-sql.php';
+    $slug = (string) $gallery['slug'];
+    cp_gallery_context(['slug' => $slug, 'name' => (string) $gallery['name'], 'limited' => $limited, 'map' => true]);
+    $GLOBALS['db_pdo_override'] = gallery_sql($slug);   // db() (config.php) rend cette base pour toute la requête
+    if (!defined('CP_URLS_MAPPED')) {
+        define('CP_URLS_MAPPED', true);
+        ob_start('cp_url_map');
+        header_register_callback(static function (): void {   // redirections : Location réécrit avant l'envoi des en-têtes
+            foreach (headers_list() as $h) {
+                if (stripos($h, 'Location:') === 0) header('Location: ' . cp_url_map(trim(substr($h, 9))), true);
+            }
+        });
+    }
+}
+
+/** Arrête la réécriture du corps de la réponse (téléchargements, JSON). Les redirections restent réécrites. */
+function cp_url_map_off(): void
+{
+    $ctx = cp_gallery_context();
+    if ($ctx !== null) cp_gallery_context(['map' => false] + $ctx);
+}
+
+/**
+ * Adresses du module -> adresses de la galerie courante (sans effet hors d'une galerie) :
+ *   /admin/comptage/<page>.php[?x]  ->  /portail/galerie-comptage.php?s=<section>[&g=<galerie>][&x]   (espace de la galerie)
+ *   /comptage/…                     ->  /galerie/<galerie>/comptage/…                                   (espace des bénévoles)
+ * Passe-plat de ob_start() : le second paramètre ($phase) est ignoré.
+ */
+function cp_url_map(string $text, int $phase = 0): string
+{
+    $ctx = cp_gallery_context();
+    if ($ctx === null || empty($ctx['map']) || !str_contains($text, 'comptage/')) return $text;
+    $slug = $ctx['slug'];
+    $g = $ctx['limited'] ? '' : '&g=' . rawurlencode($slug);
+    $sections = ['index' => 'resultats', 'evenements' => 'evenements', 'acces' => 'acces', 'export' => 'export'];
+    $text = preg_replace_callback('~(?<![A-Za-z0-9_.-])/admin/comptage/([a-z]+)\.php(\?)?~', static fn (array $m): string => '/portail/galerie-comptage.php?s=' . ($sections[$m[1]] ?? $m[1]) . $g . (($m[2] ?? '') !== '' ? '&' : ''), $text) ?? $text;
+    return preg_replace('~(?<![A-Za-z0-9_.-])/comptage/~', '/galerie/' . $slug . '/comptage/', $text) ?? $text;
+}
+
+/** Nom affiché dans les pages : celui de la galerie (ou, hors galerie, celui du site). */
+function cp_site_name(): string
+{
+    $ctx = cp_gallery_context();
+    if ($ctx !== null) return $ctx['name'];
+    return (string) (get_content()['site_name'] ?? '');
+}
+
+/** L'utilisateur est-il responsable de CETTE galerie (administrateur de la galerie ou exploitant du portail) ? */
+function cp_is_staff(): bool
+{
+    $ctx = cp_gallery_context();
+    if ($ctx === null) return !empty($_SESSION['is_admin']);
+    if (!empty($_SESSION['portail_user'])) return true;
+    if (!function_exists('ga_current')) require_once __DIR__ . '/gallery-admin.php';
+    $admin = ga_current();
+    return $admin !== null && in_array($ctx['slug'], $admin['slugs'], true);
+}
+
+/**
+ * Page publique du comptage (espace des bénévoles) : la galerie vient de l'adresse (/galerie/<galerie>/comptage/…, réécrite avec ?g=), et
+ * doit avoir cette extension active ; sinon la page n'existe pas. À appeler après la session.
+ */
+function cp_public_enter(): void
+{
+    require_once __DIR__ . '/gallery-admin.php';
+    $slug = strtolower((string) ($_GET['g'] ?? ''));
+    $gallery = gallery_slug_valid($slug) ? gallery_load($slug) : null;
+    if (!$gallery || !gm_enabled($gallery, 'comptage')) {
+        http_response_code(404);
+        header('Content-Type: text/html; charset=utf-8');
+        exit('<!DOCTYPE html><meta charset="utf-8"><title>Page introuvable</title><p style="font-family:sans-serif;padding:40px;">Cette page n\'existe pas.</p>');
+    }
+    cp_enter_gallery($gallery, false);
+}
+
+/* ====================================================================== */
 /* Utilitaires                                                            */
 /* ====================================================================== */
 
@@ -156,19 +256,27 @@ function cp_volunteer_code(): string
 
 function cp_volunteer_space_url(): string
 {
+    $ctx = cp_gallery_context();
+    if ($ctx !== null) {
+        $origin = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        return $origin . '/galerie/' . $ctx['slug'] . '/comptage/';
+    }
     $base = defined('SITE_URL') ? rtrim((string) SITE_URL, '/') : '';
     return $base . '/comptage/';
 }
 
 function cp_is_volunteer(): bool
 {
+    $ctx = cp_gallery_context();
+    // Dans une galerie, l'accès bénévole vaut pour CETTE galerie seulement (la session retient son identifiant) ; ses responsables passent d'office.
+    if ($ctx !== null) return (string) ($_SESSION['cp_volunteer'] ?? '') === $ctx['slug'] || cp_is_staff();
     return !empty($_SESSION['cp_volunteer']) || !empty($_SESSION['is_admin']);
 }
 
 function cp_require_volunteer(): void
 {
     if (!cp_is_volunteer()) {
-        header('Location: /comptage/login.php');
+        header('Location: ' . cp_url_map('/comptage/login.php'));
         exit;
     }
 }
@@ -202,7 +310,7 @@ function cp_volunteer_login(string $submitted): ?string
     if (hash_equals($code, trim($submitted))) {
         db()->prepare('DELETE FROM cp_login_attempts WHERE ip = ?')->execute([cp_client_ip()]);
         session_regenerate_id(true);
-        $_SESSION['cp_volunteer'] = true;
+        $_SESSION['cp_volunteer'] = cp_gallery_context()['slug'] ?? true;
         return null;
     }
     db()->prepare('INSERT INTO cp_login_attempts (ip, at) VALUES (?, ?)')->execute([cp_client_ip(), time()]);
@@ -531,7 +639,7 @@ function cp_export_taps(int $eventId): string
 function cp_redirect(string $url, ?string $message = null, string $kind = 'ok'): void
 {
     if ($message !== null) flash_set($message, $kind);
-    header('Location: ' . $url);
+    header('Location: ' . cp_url_map($url));
     exit;
 }
 

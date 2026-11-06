@@ -57,6 +57,20 @@ if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/buvette(?:/(?:([a-z]+)\.php)?)?$
     return true;
 }
 
+// Comptage de foule d'une galerie : /galerie/<identifiant>/comptage/[<page>.php], sw.js et manifest.json (même règles que dans le .htaccess).
+if (preg_match('#^/galerie/[a-z0-9][a-z0-9-]*/comptage/(sw\.js|manifest\.json)$#', $path, $m)) {
+    header('Content-Type: ' . ($m[1] === 'sw.js' ? 'application/javascript' : 'application/manifest+json') . '; charset=utf-8');
+    readfile(__DIR__ . '/comptage/' . $m[1]);
+    return true;
+}
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/comptage(?:/|/(index|login|logout|api)\.php)?$#', $path, $m)) {
+    $_GET['g'] = $m[1];
+    $page = ($m[2] ?? '') === '' ? 'index' : $m[2];
+    $_SERVER['SCRIPT_NAME'] = '/comptage/' . $page . '.php';
+    require __DIR__ . '/comptage/' . $page . '.php';
+    return true;
+}
+
 // Dons et invendus d'une galerie : /galerie/<identifiant>/dons/[<page>.php] (même règle que dans le .htaccess).
 if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/dons(?:/|/(point|proposer|suivi|tournee)\.php)?$#', $path, $m)) {
     $_GET['g'] = $m[1];

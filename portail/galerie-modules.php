@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $type = gt_of($gaGallery);
 $stripeOn = saas_stripe_configured();
-$openUrl = static fn (string $key): string => '/portail/' . ($key === 'carte' ? 'galerie-plan.php' : ($key === 'attente' ? 'galerie-attente.php' : ($key === 'buvette' ? 'galerie-buvette.php' : ($key === 'invendus' ? 'galerie-invendus.php' : 'galerie-evenement.php'))))
+$openUrl = static fn (string $key): string => '/portail/' . ($key === 'carte' ? 'galerie-plan.php' : ($key === 'attente' ? 'galerie-attente.php' : ($key === 'buvette' ? 'galerie-buvette.php' : ($key === 'invendus' ? 'galerie-invendus.php' : ($key === 'comptage' ? 'galerie-comptage.php' : 'galerie-evenement.php')))))
     . ($limited ? '' : '?g=' . urlencode($gaSlug));
 ga_head('{Exts}');
 ?>
