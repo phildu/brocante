@@ -1,6 +1,6 @@
-# Extension « Annulation & remboursements » d'un vide-grenier
+# Extension « Annulation & remboursements » (vide-grenier, puces, marché de Noël)
 
-> **Extension de galerie** (`annulation`, `includes/gallery-modules.php`), proposée d'office aux galeries de type « vide-grenier » : l'organisateur
+> **Extension de galerie** (`annulation`, `includes/gallery-modules.php`), proposée d'office aux galeries de type « vide-grenier », « puces » et « marché de Noël » (les autres types la règlent dans *Types de galerie*) : l'organisateur
 > l'active (essai gratuit de 14 jours, puis abonnement) depuis l'onglet **Extensions** de son espace ; un bouton **Annulation** apparaît dans son
 > menu (`/portail/galerie-annulation.php`). Prix, essai et types concernés : portail → *Tarifs des extensions de galerie* ; mode par type :
 > *Types de galerie*. Aucun prix n'est imposé.

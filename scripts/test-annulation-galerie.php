@@ -96,6 +96,13 @@ $vg = make_gallery('vg-a');
 $mar = gallery_normalize('mar-b', ['name' => 'Galerie B', 'type' => 'marchande', 'members' => []]);
 check('proposée d\'office aux vide-greniers (option payante)', gm_state($vg, 'annulation')['mode'], 'option');
 check('non proposée aux autres types', gm_state($mar, 'annulation')['mode'], 'off');
+foreach (['puces', 'marche-de-noel'] as $t) {
+    $other = gallery_normalize('t-' . substr($t, 0, 6), ['name' => 'Galerie ' . $t, 'type' => $t, 'members' => []]);
+    check("proposée aux galeries de type « $t » (option payante)", gm_state($other, 'annulation')['mode'], 'option');
+    check("…avec essai gratuit ($t)", [gm_start_trial($other, 'annulation'), gcn_available($other)], [null, true]);
+}
+$prod = gallery_normalize('mp-c', ['name' => 'Marché producteurs', 'type' => 'marche-producteurs', 'members' => []]);
+check('non proposée au marché de producteurs (non demandé)', gm_state($prod, 'annulation')['mode'], 'off');
 check('inactive tant qu\'elle n\'est ni essayée ni souscrite', gcn_available($vg), false);
 check('essai gratuit démarré', gm_start_trial($vg, 'annulation'), null);
 check('active pendant l\'essai', gcn_available($vg), true);
