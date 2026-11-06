@@ -50,6 +50,7 @@ if (!shop_state_is_public($shopState) && !$shopPreview && !in_array($shopStateSc
 }
 $activeNav = $activeNav ?? '';
 $cartCount = cart_count();
+track_request(basename($_SERVER['SCRIPT_NAME'] ?? '') === 'produit.php' && isset($product['ref']) ? (string) $product['ref'] : null);
 $siteContent = get_content();
 $siteName = $siteContent['site_name'] ?: tenant('name');
 $siteTagline = $siteContent['site_tagline'] ?: tenant('tagline');
@@ -90,6 +91,9 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
 <?php endforeach; ?>
 <?php foreach ((array) ($pageScripts ?? []) as $pageScript): ?><script src="<?= h((string) $pageScript) ?>" defer></script>
 <?php endforeach; ?>
+<?php foreach (($extraCss ?? []) as $css): ?><link rel="stylesheet" href="<?= h($css) ?>">
+<?php endforeach; ?>
+<?= $extraHead ?? '' ?>
 </head>
 <body>
 <?php include __DIR__ . '/icons.php'; ?>

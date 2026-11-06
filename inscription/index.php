@@ -4,6 +4,7 @@
 //   formule gratuite, ou paiement en ligne indisponible → étape 3, qui recueille l'e-mail et les accès de la boutique.
 // ÉTAPE 3 (creer.php) : nom, adresse et compte de la boutique — elle GÉNÈRE la boutique avec un design par défaut.
 // Protections : jeton CSRF, champ piège, 5 demandes par heure et par adresse IP. Rien n'est créé avant l'étape 3.
+require_once __DIR__ . '/../includes/vocabulary.php';
 require_once __DIR__ . '/../includes/saas.php';
 require_once __DIR__ . '/../includes/addons.php';
 require_once __DIR__ . '/../includes/plugins.php';
@@ -11,6 +12,7 @@ require_once __DIR__ . '/../includes/marges.php';
 require_once __DIR__ . '/../includes/branding-services.php';
 
 session_start();
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 if (empty($_SESSION['saas_csrf'])) $_SESSION['saas_csrf'] = bin2hex(random_bytes(16));
 
 $cfg = saas_config();
@@ -210,11 +212,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pluginsInput = $_POST['plugins'] ?? [];
             $editPlugins = [];
             if (!is_array($pluginsInput)) {
-                $errors['plugins'] = 'La sélection des plugins est invalide.';
+                $errors['plugins'] = 'La sélection {des exts} est invalide.';
             } else {
                 foreach ($pluginsInput as $pluginId) {
                     if (!is_string($pluginId) || !isset($pluginCatalog[$pluginId])) {
-                        $errors['plugins'] = 'Un plugin sélectionné n’est pas reconnu.';
+                        $errors['plugins'] = '{Un ext} {?sélectionné|sélectionnée} n’est pas {?reconnu|reconnue}.';
                         break;
                     }
                     $editPlugins[] = $pluginId;
@@ -440,7 +442,7 @@ saas_page_start('Je veux vendre en ligne — ' . $cfg['name'], 'Choisissez où v
               <span><strong><?= $shopWord === 'Stand' ? 'Vente en ligne uniquement' : 'Boutique en ligne uniquement' ?></strong><small>Pas de local ouvert au public : tout se passe en ligne.</small></span>
             </label>
           </div>
-          <small>Ce choix adapte la liste des plugins : les modules de point de vente physique ne sont pas proposés pour une boutique en ligne uniquement.</small>
+          <small>Ce choix adapte la liste {des exts} : {les exts} de point de vente physique ne sont pas {?proposés|proposées} pour une boutique en ligne uniquement.</small>
         </fieldset></div>
         <div class="field full"><fieldset class="mode-field">
           <legend>Intelligence artificielle</legend>
@@ -463,11 +465,11 @@ saas_page_start('Je veux vendre en ligne — ' . $cfg['name'], 'Choisissez où v
 
         <details class="field full signup-extra plugin-block"<?= $selectedPlugins || isset($errors['plugins']) ? ' open' : '' ?>>
           <summary class="plugin-block-summary">
-            <span><strong>Plugins &amp; options</strong> <small>facultatif</small></span>
+            <span><strong>{Exts}</strong> <small>facultatif</small></span>
             <span class="plugin-block-count" id="plugin-count" data-empty="Aucun sélectionné"><?= count($selectedPlugins) ? count($selectedPlugins) . ' sélectionné' . (count($selectedPlugins) > 1 ? 's' : '') : 'Aucun sélectionné' ?></span>
           </summary>
           <p class="plugin-block-intro">Cochez dès maintenant ce qui vous intéresse : nous en tenons compte à la création de la boutique. Leur abonnement s’active ensuite depuis l’administration, avec l’essai éventuel — rien n’est prélevé à cette étape.</p>
-          <?php if ($shopPresence === 'online'): ?><p class="plugin-block-intro">Boutique en ligne uniquement : les modules de point de vente physique (retrait sur stand, assistance vendeur, QR Code, registre de police) ne sont pas proposés ici.</p><?php endif; ?>
+          <?php if ($shopPresence === 'online'): ?><p class="plugin-block-intro">Boutique en ligne uniquement : {les exts} de point de vente physique (retrait sur stand, assistance vendeur, QR Code, registre de police) ne sont pas {?proposés|proposées} ici.</p><?php endif; ?>
           <?php if ($pluginRows): ?>
             <div class="plugin-picks">
               <?php foreach ($pluginRows as $pluginId => $row):
@@ -486,7 +488,7 @@ saas_page_start('Je veux vendre en ligne — ' . $cfg['name'], 'Choisissez où v
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <p>Aucun plugin n’est actuellement disponible.</p>
+            <p>Aucun{e} {ext} n’est actuellement disponible.</p>
           <?php endif; ?>
           <?php if (isset($errors['plugins'])): ?><span class="err" role="alert"><?= saas_e($errors['plugins']) ?></span><?php endif; ?>
         </details>
@@ -540,10 +542,10 @@ saas_page_start('Je veux vendre en ligne — ' . $cfg['name'], 'Choisissez où v
     $stickerTotal = $stickerPlanMonth === null ? null : $stickerPlanMonth + $stickerPlugMonth;
     $stickerTotalText = $stickerTotal === null ? 'Sur devis' : ($stickerTotal === 0 ? 'Gratuit' : saas_money($stickerTotal) . ' / mois');
     $stickerPlugBits = [];
-    if ($stickerPlugMonth > 0) $stickerPlugBits[] = ($stickerTotal === null ? 'plugins : ' : 'dont ') . saas_money($stickerPlugMonth) . ' / mois de plugins';
+    if ($stickerPlugMonth > 0) $stickerPlugBits[] = ($stickerTotal === null ? '{exts} : ' : 'dont ') . saas_money($stickerPlugMonth) . ' / mois en {exts}';
     if ($stickerPlugOnce > 0) $stickerPlugBits[] = saas_money($stickerPlugOnce) . ' en une fois';
-    if ($stickerPlugQuote > 0) $stickerPlugBits[] = $stickerPlugQuote . ' plugin' . ($stickerPlugQuote > 1 ? 's' : '') . ' au tarif à confirmer';
-    if ($stickerPlugMonth === 0 && $stickerPlugOnce === 0 && $stickerPlugQuote === 0) $stickerPlugBits[] = 'aucun plugin sélectionné';
+    if ($stickerPlugQuote > 0) $stickerPlugBits[] = $stickerPlugQuote . ' ' . ($stickerPlugQuote > 1 ? '{exts}' : '{ext}') . ' au tarif à confirmer';
+    if ($stickerPlugMonth === 0 && $stickerPlugOnce === 0 && $stickerPlugQuote === 0) $stickerPlugBits[] = 'aucun{e} {ext} {?sélectionné|sélectionnée}';
     $stickerPlugBits[] = 'activation après la création';
     $stickerPlugNote = implode(' · ', $stickerPlugBits);
     ?>
@@ -557,15 +559,15 @@ saas_page_start('Je veux vendre en ligne — ' . $cfg['name'], 'Choisissez où v
         <div><dt>Facturation</dt><dd id="sticker-billing"><?= $v['billing'] === 'year' ? 'Annuelle' : 'Mensuelle' ?></dd></div>
         <div><dt>Point de vente</dt><dd id="sticker-presence"><?= $shopPresence === 'online' ? 'En ligne uniquement' : 'Physique et en ligne' ?></dd></div>
         <div><dt>Intelligence artificielle</dt><dd id="sticker-ai"><?= $aiMode === 'without' ? 'Sans IA' : 'Avec l’IA' ?></dd></div>
-        <div><dt>Plugins</dt><dd id="sticker-plugins" data-empty="Aucun" data-more="+%d"><?= $selectedPlugins ? saas_e(implode(', ', array_map(static fn ($id) => $pluginCatalog[$id]['name'] ?? $id, $selectedPlugins))) : 'Aucun' ?></dd></div>
+        <div><dt>{Exts}</dt><dd id="sticker-plugins" data-empty="Aucun" data-more="+%d"><?= $selectedPlugins ? saas_e(implode(', ', array_map(static fn ($id) => $pluginCatalog[$id]['name'] ?? $id, $selectedPlugins))) : 'Aucun' ?></dd></div>
         <div><dt>Prestations</dt><dd id="sticker-services" data-empty="Aucune"><?= $selectedServices ? saas_e(implode(', ', array_map(static fn ($k) => $serviceQuoteCatalog[$k]['name'] ?? $k, $selectedServices))) : 'Aucune' ?></dd></div>
       </dl>
       <p class="sticker-total"><span>À payer aujourd’hui</span><strong id="sticker-price"><?= saas_e($stickerPrice) ?></strong></p>
-      <p class="sticker-total sticker-total-all"><span>Total avec les plugins</span><strong id="sticker-plugins-total"><?= saas_e($stickerTotalText) ?></strong></p>
+      <p class="sticker-total sticker-total-all"><span>Total avec {les exts}</span><strong id="sticker-plugins-total"><?= saas_e($stickerTotalText) ?></strong></p>
       <p class="sticker-estimate-note" id="sticker-plugins-note"><?= saas_e($stickerPlugNote) ?></p>
       <?php $ebSticker = $ebTier && (int) $ebTier['discount_pct'] > 0 ? (string) $ebTier['label'] . ' −' . (int) $ebTier['discount_pct'] . ' %' : ''; ?>
       <p class="sticker-badge" id="sticker-eb"<?= $ebSticker === '' || !$stickerOffer || (int) saas_offer_cents($stickerOffer, $v['billing']) <= 0 ? ' style="display:none"' : '' ?>><?= $ebSticker !== '' ? saas_e($ebSticker) . ' appliqué' : '' ?></p>
-      <p class="sticker-note">Les plugins et les prestations ne sont pas prélevés à cette étape. Stripe vous demandera votre e-mail au paiement ; abonnement résiliable à tout moment.</p>
+      <p class="sticker-note">{Les exts} et les prestations ne sont pas {?prélevés|prélevées} à cette étape. Stripe vous demandera votre e-mail au paiement ; abonnement résiliable à tout moment.</p>
     </aside>
   </div>
   <?php endif; ?>
@@ -630,10 +632,10 @@ window.signupReload = function (key, value) {
     }
     if (note) {
       var bits = [];
-      if (month > 0) bits.push((planCents === null ? 'plugins : ' : 'dont ') + money(month) + ' / mois de plugins');
+      if (month > 0) bits.push((planCents === null ? '{exts} : ' : 'dont ') + money(month) + ' / mois en {exts}');
       if (once > 0) bits.push(money(once) + ' en une fois');
-      if (quote > 0) bits.push(quote + ' plugin' + (quote > 1 ? 's' : '') + ' au tarif à confirmer');
-      if (month === 0 && once === 0 && quote === 0) bits.push('aucun plugin sélectionné');
+      if (quote > 0) bits.push(quote + ' ' + (quote > 1 ? '{exts}' : '{ext}') + ' au tarif à confirmer');
+      if (month === 0 && once === 0 && quote === 0) bits.push('aucun{e} {ext} {?sélectionné|sélectionnée}');
       bits.push('activation après la création');
       note.textContent = bits.join(' · ');
     }

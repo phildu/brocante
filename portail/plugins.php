@@ -8,6 +8,7 @@
 // portail montre si la copie est à jour et propose « Recopier » (le script d'extraction du plugin) ; le résultat se vérifie,
 // se teste, puis se commite et se déploie comme tout le code. En ligne, il indique seulement de quel commit vient la copie.
 require __DIR__ . '/_bootstrap.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 require_once PORTAIL_ROOT . '/includes/saas-events.php';
 require_once PORTAIL_ROOT . '/includes/plugins.php';
 require_once PORTAIL_ROOT . '/includes/addons.php';
@@ -102,13 +103,13 @@ function plugins_apply(string $action, string $slug, array $m): string
     if ($action === 'disable') {
         plugin_disable($pdo, $m['id']);
         saas_event('plugin_disabled', ['slug' => $slug, 'note' => $m['name'] . ' (données conservées)']);
-        return "Plugin $label désactivé (ses données sont conservées).";
+        return "{Ext} $label désactivé{e} (ses données sont conservées).";
     }
     $r = $action === 'enable' ? plugin_enable($pdo, $file, $m) : plugin_install($pdo, $file, $m);
     $what = $r['from'] === $r['to'] ? 'v' . $r['to'] : ($r['from'] !== '' ? 'v' . $r['from'] . ' → v' . $r['to'] : 'v' . $r['to']);
     $note = $m['name'] . ' ' . $what . ($r['applied'] ? ' (' . $r['applied'] . ' migration' . ($r['applied'] > 1 ? 's' : '') . ', sauvegarde ' . basename((string) $r['backup']) . ')' : '');
     saas_event($action === 'enable' ? 'plugin_enabled' : 'plugin_updated', ['slug' => $slug, 'note' => $note]);
-    return ($action === 'enable' ? 'Plugin activé : ' : 'Plugin mis à jour : ') . $label . ', ' . $what . '.';
+    return ($action === 'enable' ? '{Ext} activé{e} : ' : '{Ext} mis{e} à jour : ') . $label . ', ' . $what . '.';
 }
 
 /** Premier exécutable trouvé parmi $candidates. */
@@ -190,7 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $catData['plugins'] = $saved;
         try {
             plugins_categories_save($catData);
-            portail_flash('Catégories des plugins enregistrées.');
+            portail_flash('Catégories {des exts} enregistrées.');
         } catch (Throwable $e) {
             portail_flash($e->getMessage(), 'error');
         }
@@ -206,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $catData['categories'][] = ['id' => $id, 'label' => mb_substr($label, 0, 40)];
             try {
                 plugins_categories_save($catData);
-                portail_flash('Catégorie « ' . $label . ' » ajoutée — affectez-lui des plugins dans le tableau.');
+                portail_flash('Catégorie « ' . $label . ' » ajoutée — affectez-lui {des exts} dans le tableau.');
             } catch (Throwable $e) {
                 portail_flash($e->getMessage(), 'error');
             }
@@ -222,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $catData['plugins'] = array_filter($catData['plugins'], static fn (string $v): bool => $v !== $cid);
             try {
                 plugins_categories_save($catData);
-                portail_flash('Catégorie supprimée ; les plugins concernés sont repassés en « sans catégorie ».');
+                portail_flash('Catégorie supprimée ; {les exts} concerné{es} {?sont repassés|sont repassées} en « sans catégorie ».');
             } catch (Throwable $e) {
                 portail_flash($e->getMessage(), 'error');
             }
@@ -231,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'save_rules') {
         $sent = (array) ($_POST['rules'] ?? []);
         if (!$sent) {
-            portail_flash('Aucun plugin reçu : le catalogue n’a pas été modifié.', 'error');
+            portail_flash('Aucun{e} {ext} reçu{e} : le catalogue n’a pas été modifié.', 'error');
             $back('catalogue');
         }
         foreach ($catalog as $pid => $pm) {
@@ -249,14 +250,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             plugin_rules_save($rules);
             $free = count(array_filter($rules, static fn (array $r): bool => plugin_rule_free($r)));
-            saas_event('config_changed', ['note' => 'Catalogue des plugins : ' . count($rules) . ' plugin(s), ' . $free . ' gratuit(s)']);
-            portail_flash('Catalogue enregistré : il est appliqué à la prochaine inscription. Les boutiques existantes gardent leurs plugins.');
+            saas_event('config_changed', ['note' => 'Catalogue {des exts} : ' . count($rules) . ' plugin(s), ' . $free . ' gratuit(s)']);
+            portail_flash('Catalogue enregistré : il est appliqué à la prochaine inscription. Les boutiques existantes gardent leurs {exts}.');
         } catch (Throwable $e) {
             portail_flash($e->getMessage(), 'error');
         }
         $back('catalogue');
     } elseif (!$m) {
-        portail_flash('Plugin introuvable.', 'error');
+        portail_flash('{Ext} introuvable.', 'error');
         $back();
     } elseif (in_array($action, ['enable', 'disable', 'update'], true)) {
         if (!isset($shops[$slug])) {
@@ -280,7 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $files = plugins_changed_files($m['id']);
             $_SESSION['plugins_sync'][$m['id']] = ['ok' => $code === 0, 'at' => date('Y-m-d H:i:s'), 'out' => $out, 'err' => $err, 'files' => $files];
             portail_flash($code === 0
-                ? 'Copie ' . plugins_de($m['sync']['source']) . ' refaite : ' . count($files) . ' fichier(s) du plugin diffèrent du dernier commit. À relire et tester avant le commit.'
+                ? 'Copie ' . plugins_de($m['sync']['source']) . ' refaite : ' . count($files) . ' fichier(s) {du ext} diffèrent du dernier commit. À relire et tester avant le commit.'
                 : 'Copie interrompue, aucun fichier modifié : ' . (strtok(trim($err ?: $out), "\n") ?: 'erreur inconnue') . '.', $code === 0 ? 'ok' : 'error');
         }
         $back('plugin-' . $m['id']);
@@ -333,7 +334,7 @@ $catLabel = static function (string $id) use ($catData): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Plugins — Portail des commerces</title>
+<title>{Exts} — Portail des commerces</title>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
@@ -378,21 +379,21 @@ $catLabel = static function (string $id) use ($catData): string {
 <body>
 <div class="app">
 <?php portail_page_start([
-    'title' => 'Plugins',
+    'title' => '{Exts} des boutiques',
     'eyebrow' => 'Boutiques',
-    'desc' => 'Modules ajoutés aux boutiques : un seul code pour toutes, activé boutique par boutique, rangé par catégorie.',
+    'desc' => '{Exts} ajouté{es} aux boutiques : un seul code pour toutes, activé{e} boutique par boutique, rangé{e} par catégorie.',
     'actions' => '<a class="btn" href="/portail/menu.php">Réglage du menu</a>',
 ]); ?>
   <?php if ($flash): ?><p class="flash" data-kind="<?= e($flash['kind']) ?>" role="status"><?= e($flash['message']) ?></p><?php endif; ?>
 
   <div class="owrap">
-    <p class="hint">Le code d'un plugin arrive avec le déploiement (dossier <code>packs/</code>). Ses données vivent dans la base de chaque boutique.
-      <strong>Désactiver</strong> retire son menu et ses pages, sans rien effacer. Quand une nouvelle version est déployée, le plugin reste en pause
+    <p class="hint">Le code d’{un ext} arrive avec le déploiement (dossier <code>packs/</code>). Ses données vivent dans la base de chaque boutique.
+      <strong>Désactiver</strong> retire son menu et ses pages, sans rien effacer. Quand une nouvelle version est déployée, {le ext} reste en pause
       dans les boutiques qui l'ont jusqu'à <strong>Mettre à jour</strong> : la base de la boutique est d'abord sauvegardée dans <code>data/backups/</code>.
-      Chaque plugin est replié : cliquez son nom pour voir la situation de ses boutiques.</p>
+      Chaque {ext} est {?replié|repliée} : cliquez son nom pour voir la situation de ses boutiques.</p>
 
     <?php if (!$catalog): ?>
-      <section class="ocard" style="padding:16px;"><p class="hint">Aucun plugin dans <code>packs/</code>.</p></section>
+      <section class="ocard" style="padding:16px;"><p class="hint">Aucun{e} {ext} dans <code>packs/</code>.</p></section>
     <?php else: ?>
 
     <div class="toolbar">
@@ -416,7 +417,7 @@ $catLabel = static function (string $id) use ($catData): string {
     </div>
 
     <details class="ocard" id="categories">
-      <summary><span class="sum-name">Catégories des plugins</span><span class="sum-meta"><?= count($catData['categories']) ?> catégorie(s)</span>
+      <summary><span class="sum-name">Catégories {des exts}</span><span class="sum-meta"><?= count($catData['categories']) ?> catégorie(s)</span>
         <span class="sum-where">ajouter, affecter, supprimer</span></summary>
       <div class="ocard-body">
         <p class="hint">Rangez les plugins par usage : « Vente » pour la boutique et le paiement, « Promo » pour les opérations commerciales,
@@ -435,11 +436,11 @@ $catLabel = static function (string $id) use ($catData): string {
             <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
             <input type="hidden" name="action" value="save_categories">
             <table class="t">
-              <thead><tr><th>Plugin</th><th>Catégorie</th></tr></thead>
+              <thead><tr><th>{Ext}</th><th>Catégorie</th></tr></thead>
               <tbody>
               <?php foreach ($catalog as $id => $m): ?>
                 <tr>
-                  <td><?= e($m['name']) ?> <span class="hint"><?= e($id) ?></span></td>
+                  <td><?= e($m['name']) ?><?= ext_scope_badge(ext_scope($id, (string) $m['scope'])) ?> <span class="hint"><?= e($id) ?></span></td>
                   <td>
                     <select name="plugin_cat[<?= e($id) ?>]" style="min-width:200px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:inherit;">
                       <option value="">Sans catégorie</option>
@@ -458,7 +459,7 @@ $catLabel = static function (string $id) use ($catData): string {
         <div class="catlist">
           <?php foreach ($catData['categories'] as $c): ?>
             <span class="chip"><?= e($c['label']) ?> <span><?= $countByCat[$c['id']] ?? 0 ?></span></span>
-            <form method="post" action="/portail/plugins.php" onsubmit="return confirm(<?= plugins_confirm_js('Supprimer la catégorie « ' . $c['label'] . ' » ? Les plugins concernés repasseront en « sans catégorie ».') ?>);">
+            <form method="post" action="/portail/plugins.php" onsubmit="return confirm(<?= plugins_confirm_js('Supprimer la catégorie « ' . $c['label'] . ' » ? Les {exts} concerné{es} repasseront en « sans catégorie ».') ?>);">
               <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
               <input type="hidden" name="action" value="delete_category">
               <input type="hidden" name="cat_id" value="<?= e($c['id']) ?>">
@@ -485,11 +486,11 @@ $catLabel = static function (string $id) use ($catData): string {
           <input type="hidden" name="action" value="save_rules">
           <div class="scroll">
             <table class="t">
-              <thead><tr><th>Plugin</th><th>Proposé</th><th>État</th><th>Gratuit</th><th>Réservé aux activités</th><th>Vente en ligne</th><th>D’office</th></tr></thead>
+              <thead><tr><th>{Ext}</th><th>Proposé</th><th>État</th><th>Gratuit</th><th>Réservé aux activités</th><th>Vente en ligne</th><th>D’office</th></tr></thead>
               <tbody>
               <?php foreach ($catalog as $id => $m): $rule = $rules[$id] ?? plugin_rule_defaults($id); ?>
                 <tr>
-                  <td><strong><?= e($m['name']) ?></strong> <span class="hint"><?= e($id) ?></span></td>
+                  <td><strong><?= e($m['name']) ?></strong><?= ext_scope_badge(ext_scope($id, (string) $m['scope'])) ?> <span class="hint"><?= e($id) ?></span></td>
                   <td><input type="checkbox" name="rules[<?= e($id) ?>][listed]" value="1"<?= !empty($rule['listed']) ? ' checked' : '' ?> aria-label="Proposer <?= e($m['name']) ?> à l’inscription"></td>
                   <td>
                     <select name="rules[<?= e($id) ?>][stage]" aria-label="État de <?= e($m['name']) ?>">
@@ -521,7 +522,7 @@ $catLabel = static function (string $id) use ($catData): string {
     </details>
 
     <?php if (!$visible): ?>
-      <section class="ocard" style="padding:16px;"><p class="hint">Aucun plugin dans cette catégorie. <a href="/portail/plugins.php">Voir tous les plugins</a>.</p></section>
+      <section class="ocard" style="padding:16px;"><p class="hint">Aucun{e} {ext} dans cette catégorie. <a href="/portail/plugins.php">Voir {?tous|toutes} {les exts}</a>.</p></section>
     <?php endif; ?>
 
     <?php foreach ($visible as $id => $m):
@@ -588,7 +589,7 @@ $catLabel = static function (string $id) use ($catData): string {
                     <br><span style="font-family:'IBM Plex Mono',monospace;font-size:.78rem"><?= e($st['source']) ?></span>
                   <?php else: ?>
                     <span class="tag bad">À revoir</span><br><?= e(trim($err ?: $out) ?: 'État inconnu.') ?>
-                    <br>Une retouche qui ne trouve plus son motif se corrige dans le script d'extraction du plugin ; rien n'est recopié d'ici là.
+                    <br>Une retouche qui ne trouve plus son motif se corrige dans le script d'extraction {du ext} ; rien n'est recopié d'ici là.
                   <?php endif; ?>
                 </p>
                 <?php if (is_array($st)): ?>

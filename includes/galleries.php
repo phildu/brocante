@@ -24,7 +24,8 @@ const GALLERY_SLUG_PATTERN = '/^[a-z0-9][a-z0-9-]{1,39}$/';
 
 function galleries_dir(): string
 {
-    return dirname(__DIR__) . '/data/galeries';
+    // BROCANTE_GALLERIES_DIR : dossier jetable pour les tests (scripts/test-buvette-galerie.php).
+    return getenv('BROCANTE_GALLERIES_DIR') ?: dirname(__DIR__) . '/data/galeries';
 }
 
 function gallery_slug_valid(string $slug): bool
@@ -354,6 +355,8 @@ function gallery_delete(string $slug): bool
         if (is_file($image) && !@unlink($image)) return false;
     }
     if (!@unlink($file)) return false;
+    // Base SQL des extensions de la galerie (includes/gallery-sql.php) : elle disparaît avec elle.
+    foreach (['.db', '.db-wal', '.db-shm', '.db-journal'] as $suffix) @unlink(galleries_dir() . '/' . $slug . $suffix);
     gallery_cache_clear($slug);
     return true;
 }

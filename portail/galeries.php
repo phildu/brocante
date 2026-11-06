@@ -616,7 +616,7 @@ portail_page_start([
         <button class="btn small" type="submit" name="action" value="pause"><?= !empty($g['paused']) ? 'Réactiver la galerie' : 'Mettre en pause' ?></button>
       </form>
       <?php endif; ?>
-      <p><a class="btn small" href="/portail/addons.php?scope=gallery&amp;gallery=<?= e(rawurlencode($g['slug'])) ?>">Gérer les plugins et tarifs des boutiques membres</a></p>
+      <p><a class="btn small" href="/portail/addons.php?scope=gallery&amp;gallery=<?= e(rawurlencode($g['slug'])) ?>"><?= e(ext_t('Gérer {les exts} et tarifs des boutiques membres')) ?></a></p>
       <form method="post" class="row"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="slug" value="<?= e($g['slug']) ?>">
         <button class="btn small" type="submit" name="action" value="refresh">Actualiser le catalogue maintenant</button>
         <button class="btn small" type="submit" name="action" value="export">Exporter JSON</button>

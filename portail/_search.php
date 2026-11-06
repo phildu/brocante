@@ -398,9 +398,9 @@ function portail_search_data_entries(): array
         foreach (plugin_catalog() as $id => $manifest) {
             $description = (string) ($manifest['description'] ?? '');
             $add(
-                'Plugins',
+                ext_t('{Exts}'),
                 (string) ($manifest['name'] ?? $id),
-                'Plugin · ' . mb_substr($description, 0, 110),
+                ext_t('{Ext} · ') . mb_substr($description, 0, 110),
                 '/portail/plugins.php#plugin-' . rawurlencode((string) $id),
                 (string) $id . ' ' . $description
             );

@@ -190,7 +190,10 @@ p { text-wrap: pretty; }
 }
 
 .pnav-custom { display: grid; gap: 3px; }
-.pnav-custom .btn {
+/* a.btn:not(.btn-primary) { color: var(--ink) } (plus bas) l'emporte sur « .pnav-custom .btn » : sans le 2e sélecteur, les liens du menu
+   d'une galerie prenaient la couleur du contenu (presque noire en thème clair) sur le fond vert foncé de la barre. */
+.pnav-custom .btn,
+.pnav-custom a.btn:not(.btn-primary) {
   display: flex;
   justify-content: flex-start;
   width: 100%;
@@ -204,7 +207,8 @@ p { text-wrap: pretty; }
   font-weight: 500;
   text-align: left;
 }
-.pnav-custom .btn:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.pnav-custom .btn:hover,
+.pnav-custom a.btn:not(.btn-primary):hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
 .pnav-custom .btn.btn-primary { background: rgba(255, 255, 255, 0.12); color: #fff; font-weight: 600; }
 .pnav-custom form { display: block; margin: 4px 0 0; }
 .pnav-custom select {

@@ -21,7 +21,13 @@ wd_install();
 // La base est un simple fichier SQLite (comme le projet Louxor) — aucun
 // serveur de base de données à provisionner, ni en local ni sur OVH. Un
 // fichier par commerce (tenant.php → db_file ; brocante.db pour le Petit Chalet).
-define('DB_PATH', tenant_path('db_file'));
+// Prédéfinissable : les tests automatiques pointent vers une base jetable pour
+// ne jamais toucher à la vraie base — soit en définissant DB_PATH avant de charger
+// ce fichier, soit via la variable d'environnement BROCANTE_DB
+// (scripts/test-buvette.php, scripts/test-invendus.php).
+if (!defined('DB_PATH')) {
+    define('DB_PATH', getenv('BROCANTE_DB') ?: tenant_path('db_file'));
+}
 
 // Clés API (Stripe, Gemini, fal.ai) enregistrées depuis l'administration.
 define('SECRETS_DIR', tenant_path('secrets_dir'));

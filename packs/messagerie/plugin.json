@@ -2,7 +2,7 @@
   "id": "messagerie",
   "name": "Messagerie & WhatsApp",
   "version": "1.0.0",
-  "description": "Module payant (essai gratuit) : bouton WhatsApp et formulaire de question sur chaque fiche pièce ; messages reçus dans l'administration et par e-mail, réponse en un clic.",
+  "description": "{Ext} payant{e} (essai gratuit) : bouton WhatsApp et formulaire de question sur chaque fiche pièce ; messages reçus dans l'administration et par e-mail, réponse en un clic.",
   "table_prefix": "ms_",
   "pages": [
     { "id": "index", "label": "Messagerie", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }

@@ -21,6 +21,9 @@ if ($navG && $navMod('organisateur') && $navOn('exposants')) {
     $navBtn('galerie-registre.php', 'Registre');
 }
 if ($navG && $navMod('attente') && $navOn('exposants')) $navBtn('galerie-attente.php', "File d'attente");
+if ($navG && $navMod('buvette')) $navBtn('galerie-buvette.php', 'Buvette');
+if ($navG && $navMod('invendus')) $navBtn('galerie-invendus.php', 'Invendus & dons');
+if ($navG && $navMod('comptage')) $navBtn('galerie-comptage.php', 'Comptage de foule');
 if ($navOn('bourse')) $navBtn('galerie-bourse.php', 'Bourse d’échanges');
 if ($navOn('messages')) {
     $navUnread = $navG ? gmsg_unread_admin((string) ($navG['slug'] ?? $navSlug)) : 0;
@@ -32,7 +35,7 @@ if ($navOn('fidelite')) $navBtn('galerie-fidelite.php', 'Fidélité visiteurs');
 $navBtn('galerie-promos.php', 'Promos');
 $navBtn('galerie-assistant.php', 'Assistant');
 $navBtn('galerie-offre.php', 'Mon offre');
-if ($navG && function_exists('gm_modules')) $navBtn('galerie-modules.php', 'Options');
+if ($navG && function_exists('gm_modules')) $navBtn('galerie-modules.php', ext_t('{Exts}'));
 if ($limited) {
     echo '<button type="button" class="btn" data-pwa-install>Installer l’application</button>';
     $navBtn('galerie-compte.php', 'Mon compte');

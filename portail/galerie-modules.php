@@ -3,6 +3,7 @@
 // Un module inclus est actif d'office ; une option payante s'active par un essai gratuit ou un abonnement Stripe.
 require __DIR__ . '/_galerie-layout.php';
 require_once PORTAIL_ROOT . '/includes/gallery-modules.php';
+ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 
 $self = '/portail/galerie-modules.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
 $back = static fn (string $extra = ''): string => $self . ($extra !== '' ? (str_contains($self, '?') ? '&' : '?') . $extra : '');
@@ -12,7 +13,7 @@ if (isset($_GET['r'], $_GET['s']) && preg_match('/^cs_[A-Za-z0-9_]+$/', (string)
     try {
         $session = saas_stripe_request('GET', '/checkout/sessions/' . rawurlencode((string) $_GET['s']));
         $res = gm_apply_session($session);
-        portail_flash(in_array($res['state'], ['added', 'already'], true) ? 'Option activée : elle est disponible dès maintenant.' : "Le paiement n'est pas encore confirmé par Stripe : l'option s'activera dès sa confirmation.", in_array($res['state'], ['added', 'already'], true) ? 'ok' : 'error');
+        portail_flash(in_array($res['state'], ['added', 'already'], true) ? '{Ext} activé{e} : disponible dès maintenant.' : "Le paiement n'est pas encore confirmé par Stripe : {le ext} s'activera dès sa confirmation.", in_array($res['state'], ['added', 'already'], true) ? 'ok' : 'error');
     } catch (Throwable $e) {
         portail_flash('Impossible de vérifier le paiement pour le moment. Actualisez la page dans un instant.', 'error');
     }
@@ -26,10 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $st = gm_module($key) ? gm_state($gaGallery, $key) : null;
     $action = (string) ($_POST['action'] ?? '');
     if (!$st) {
-        portail_flash('Module inconnu.', 'error');
+        portail_flash('{Ext} inconnu{e}.', 'error');
     } elseif ($action === 'trial') {
         $err = gm_start_trial($gaGallery, $key);
-        if (!$err && !gallery_save($gaGallery)) $err = "Impossible d'enregistrer l'option.";
+        if (!$err && !gallery_save($gaGallery)) $err = "Impossible d'enregistrer {le ext}.";
         portail_flash($err ?? 'Essai de ' . (int) $st['module']['trial_days'] . ' jours démarré.', $err ? 'error' : 'ok');
     } elseif ($action === 'subscribe') {
         [$url, $err] = gm_checkout($gaGallery, $key, $self, $back('annule=1'), ($_POST['billing'] ?? 'month') === 'year' ? 'year' : 'month');
@@ -42,12 +43,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         gm_deactivate($gaGallery, $key, $action === 'stop_trial' ? 'expired' : 'canceled');
         $ok = gallery_save($gaGallery);
-        portail_flash($ok ? ($action === 'stop_trial' ? 'Essai arrêté.' : 'Option résiliée : elle n\'est plus disponible.') : "Impossible d'enregistrer l'option.", $ok ? 'ok' : 'error');
+        portail_flash($ok ? ($action === 'stop_trial' ? 'Essai arrêté.' : '{Ext} résilié{e} : plus disponible.') : "Impossible d'enregistrer {le ext}.", $ok ? 'ok' : 'error');
     } elseif (in_array($action, ['grant', 'revoke'], true) && !$limited) {
         if ($action === 'grant') gm_activate($gaGallery, $key, 'complimentary');
         else gm_deactivate($gaGallery, $key, 'canceled');
         $ok = gallery_save($gaGallery);
-        portail_flash($ok ? ($action === 'grant' ? 'Option offerte : elle est active.' : 'Option retirée.') : "Impossible d'enregistrer l'option.", $ok ? 'ok' : 'error');
+        portail_flash($ok ? ($action === 'grant' ? '{Ext} offert{e} : disponible.' : '{Ext} retiré{e}.') : "Impossible d'enregistrer {le ext}.", $ok ? 'ok' : 'error');
     } else {
         portail_flash('Action non autorisée.', 'error');
     }
@@ -57,26 +58,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $type = gt_of($gaGallery);
 $stripeOn = saas_stripe_configured();
-$openUrl = static fn (string $key): string => '/portail/' . ($key === 'carte' ? 'galerie-plan.php' : ($key === 'attente' ? 'galerie-attente.php' : 'galerie-evenement.php'))
+$openUrl = static fn (string $key): string => '/portail/' . ($key === 'carte' ? 'galerie-plan.php' : ($key === 'attente' ? 'galerie-attente.php' : ($key === 'buvette' ? 'galerie-buvette.php' : ($key === 'invendus' ? 'galerie-invendus.php' : ($key === 'comptage' ? 'galerie-comptage.php' : 'galerie-evenement.php')))))
     . ($limited ? '' : '?g=' . urlencode($gaSlug));
-ga_head('Options');
+ga_head('{Exts}');
 ?>
     <section class="gcard">
-      <h2>Modules de « <?= e($gaGallery['name']) ?> »</h2>
-      <p class="meta" style="margin:0;">Type : <strong><?= e($type['emoji']) ?> <?= e($type['name']) ?></strong>. Les modules sont partagés entre les galeries d'un même type : l'exploitant règle pour chaque type s'ils sont inclus, payants ou absents. Une option payante peut être essayée gratuitement, puis souscrite par carte bancaire.</p>
+      <h2>{Exts} de « <?= e($gaGallery['name']) ?> »</h2>
+      <p class="meta" style="margin:0;">Type : <strong><?= e($type['emoji']) ?> <?= e($type['name']) ?></strong>. {Les exts} sont partagé{es} entre les galeries d'un même type : l'exploitant règle pour chaque type {?s’ils|si elles} sont {?inclus|incluses}, payant{es} ou absent{es}. {Un ext} payant{e} peut être essayé{e} gratuitement, puis souscrit{e} par carte bancaire.</p>
       <p class="meta" style="margin:0;"><?= $stripeOn ? 'Paiement Stripe disponible.' : 'Paiement en ligne non configuré : seul l\'essai gratuit ou un accès accordé par l\'exploitant est possible.' ?></p>
     </section>
 
     <?php foreach (gm_modules() as $key => $m): $st = gm_state($gaGallery, $key); $status = $st['status']; ?>
     <section class="gcard" id="m-<?= e($key) ?>">
       <div class="row" style="justify-content:space-between;align-items:flex-start;">
-        <div><h2 style="margin:0;"><?= e($m['emoji']) ?> <?= e($m['name']) ?></h2><p class="meta" style="margin:4px 0 0;"><?= e($m['description']) ?></p></div>
+        <div><h2 style="margin:0;"><?= e($m['emoji']) ?> <?= e($m['name']) ?><?= ext_scope_badge(ext_scope($key, 'gallery')) ?></h2><p class="meta" style="margin:4px 0 0;"><?= e($m['description']) ?></p></div>
         <span class="pill <?= $st['enabled'] ? 'done' : '' ?>"><?= e($st['status_label']) ?></span>
       </div>
-      <p class="meta" style="margin:0;"><?= e(GM_MODE_LABELS[$st['mode']] ?? $st['mode']) ?><?php if ($st['mode'] === 'option' && $m['month_cents'] > 0): ?> · <?= e(gm_price_text($m['month_cents'])) ?><?= $m['year_cents'] > 0 ? ' ou ' . e(gm_price_text($m['year_cents'], 'year')) : '' ?><?php endif; ?><?= $st['mode'] === 'option' && $m['trial_days'] > 0 ? ' · essai de ' . (int) $m['trial_days'] . ' jours' : '' ?></p>
+      <p class="meta" style="margin:0;"><?= e(gm_mode_labels()[$st['mode']] ?? $st['mode']) ?><?php if ($st['mode'] === 'option' && $m['month_cents'] > 0): ?> · <?= e(gm_price_text($m['month_cents'])) ?><?= $m['year_cents'] > 0 ? ' ou ' . e(gm_price_text($m['year_cents'], 'year')) : '' ?><?php endif; ?><?= $st['mode'] === 'option' && $m['trial_days'] > 0 ? ' · essai de ' . (int) $m['trial_days'] . ' jours' : '' ?></p>
 
       <?php if ($st['mode'] === 'off'): ?>
-        <p class="meta" style="margin:0;">Ce module n'est pas proposé pour le type « <?= e($type['name']) ?> ». L'exploitant peut le proposer depuis <a href="/portail/offres-galerie.php#t-<?= e($type['key']) ?>">Types de galerie</a>.</p>
+        <p class="meta" style="margin:0;">{Ce ext} n'est pas {?proposé|proposée} pour le type « <?= e($type['name']) ?> ». L'exploitant peut {?le|la} proposer depuis <a href="/portail/offres-galerie.php#t-<?= e($type['key']) ?>">Types de galerie</a>.</p>
       <?php elseif ($st['mode'] === 'included'): ?>
         <p class="meta" style="margin:0;">Inclus dans l'offre de ce type de galerie : aucune démarche n'est nécessaire.</p>
         <div class="row"><a class="btn" href="<?= e($openUrl($key)) ?>">Ouvrir <?= e($m['name']) ?></a></div>
@@ -88,13 +89,13 @@ ga_head('Options');
           <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="stop_trial"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn" type="submit">Arrêter l'essai</button></form>
         </div>
       <?php elseif ($status === 'active' && $st['enabled']): ?>
-        <p class="meta" style="margin:0;">Abonnement actif<?= $st['until'] > 0 ? ' jusqu\'au ' . e(date('d/m/Y', $st['until'])) : '' ?>. Résilier arrête le renouvellement ; l'option reste disponible jusqu'à la fin de la période payée.</p>
-        <div class="row"><form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="cancel"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn" type="submit" onclick="return confirm('Résilier cette option ?');">Résilier</button></form></div>
+        <p class="meta" style="margin:0;">Abonnement actif<?= $st['until'] > 0 ? ' jusqu\'au ' . e(date('d/m/Y', $st['until'])) : '' ?>. Résilier arrête le renouvellement ; {le ext} reste disponible jusqu'à la fin de la période payée.</p>
+        <div class="row"><form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="cancel"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn" type="submit" onclick="return confirm('Résilier {ce ext} ?');">Résilier</button></form></div>
       <?php elseif ($status === 'complimentary' && $st['enabled']): ?>
         <p class="meta" style="margin:0;">Accès offert par l'exploitant de la plateforme.</p>
         <div class="row"><a class="btn" href="<?= e($openUrl($key)) ?>">Ouvrir <?= e($m['name']) ?></a></div>
       <?php else: ?>
-        <p class="meta" style="margin:0;"><?= $status === 'expired' ? "L'essai est terminé." : ($status === 'canceled' ? 'Option résiliée.' : 'Option non activée.') ?></p>
+        <p class="meta" style="margin:0;"><?= $status === 'expired' ? "L'essai est terminé." : ($status === 'canceled' ? '{Ext} résilié{e}.' : '{Ext} non activé{e}.') ?></p>
         <div class="row">
           <?php if ($m['trial_days'] > 0 && !$st['trial_used']): ?><form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="trial"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn btn-primary" type="submit">Essayer <?= (int) $m['trial_days'] ?> jours</button></form><?php elseif ($m['trial_days'] > 0): ?><span class="meta">Essai déjà utilisé.</span><?php endif; ?>
           <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="subscribe"><input type="hidden" name="module" value="<?= e($key) ?>"><input type="hidden" name="billing" value="month"><button class="btn" type="submit"<?= $stripeOn && $m['month_cents'] > 0 ? '' : ' disabled' ?>>S'abonner — <?= e(gm_price_text($m['month_cents'])) ?></button></form>
@@ -106,7 +107,7 @@ ga_head('Options');
       <?php if (!$limited && $st['mode'] === 'option'): ?>
       <div class="row" style="border-top:1px solid var(--line);padding-top:8px;">
         <span class="meta" style="margin:0;">Exploitant :</span>
-        <?php if (!$st['enabled']): ?><form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="grant"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn small" type="submit">Offrir l'option</button></form><?php else: ?><form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="revoke"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn small" type="submit">Retirer l'option</button></form><?php endif; ?>
+        <?php if (!$st['enabled']): ?><form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="grant"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn small" type="submit">Offrir {le ext}</button></form><?php else: ?><form method="post"><input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="revoke"><input type="hidden" name="module" value="<?= e($key) ?>"><button class="btn small" type="submit">Retirer {le ext}</button></form><?php endif; ?>
       </div>
       <?php endif; ?>
     </section>

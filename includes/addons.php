@@ -6,6 +6,8 @@
 //   { "global": { "recus-compta": { "name": "…", "monthly_cents": 1490, "trial_days": 14 } } }
 // Utilisable hors PLUGIN_RUNTIME (webhook Stripe) : la base de la boutique est alors imposée via addon_with_shop().
 
+require_once __DIR__ . '/vocabulary.php';   // mot unique pour les « extensions » : ext_t()
+
 const ADDON_STATUS_LABELS = [
     'inactive' => 'Non souscrit', 'active' => 'Abonné', 'complimentary' => 'Accès offert',
     'trial' => 'Essai gratuit', 'canceled' => 'Résilié', 'expired' => 'Essai terminé',
@@ -44,17 +46,17 @@ function addon_settings_load(): array
     $json = file_get_contents($file);
     if ($json === false) {
         error_log('Unable to read add-on settings file: ' . $file);
-        throw new RuntimeException('Impossible de lire la configuration des plugins.');
+        throw new RuntimeException(ext_t('Impossible de lire la configuration {des exts}.'));
     }
     try {
         $saved = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     } catch (JsonException $e) {
         error_log('Invalid add-on settings JSON: ' . $e->getMessage());
-        throw new RuntimeException('La configuration des plugins est invalide ; elle n’a pas été modifiée.', 0, $e);
+        throw new RuntimeException(ext_t('La configuration {des exts} est invalide ; elle n’a pas été modifiée.'), 0, $e);
     }
     if (!is_array($saved)) {
         error_log('Add-on settings JSON must contain an object: ' . $file);
-        throw new RuntimeException('La configuration des plugins doit être un objet JSON.');
+        throw new RuntimeException(ext_t('La configuration {des exts} doit être un objet JSON.'));
     }
     if (isset($saved['global']) || isset($saved['galleries']) || isset($saved['shops']) || isset($saved['gallery_shops'])) {
         return [
@@ -392,7 +394,7 @@ function addon_entitlement(string $module): array
         'name' => $info['name'],
         'description' => $info['description'],
         'status' => $status,
-        'label' => ['beta' => 'Test gratuit — retours attendus', 'beta_locked' => 'Test suspendu — retour attendu', 'included' => 'Inclus par votre galerie', 'unavailable' => 'Indisponible'][$status] ?? (ADDON_STATUS_LABELS[$status] ?? $status),
+        'label' => ['beta' => 'Test gratuit — retours attendus', 'beta_locked' => 'Test suspendu — retour attendu', 'included' => ext_t('{?Inclus|Incluse} par votre galerie'), 'unavailable' => 'Indisponible'][$status] ?? (ADDON_STATUS_LABELS[$status] ?? $status),
         'entitled' => addon_is_entitled($module),
         'trial_until' => $status === 'trial' ? gmdate('d/m/Y', (int) $r['trial_until']) : null,
         'trial_used' => (int) $r['trial_used'] === 1,
@@ -419,12 +421,12 @@ function addon_entitlement(string $module): array
 function addon_start_trial(string $module): ?string
 {
     $info = addon_info($module);
-    if (!$info) return 'Module inconnu.';
-    if ($info['access'] === 'unavailable' || $info['trial_days'] < 1) return "L'essai n'est pas disponible pour ce module.";
-    if (!array_intersect(['monthly', 'yearly', 'once'], $info['payment_modes'])) return "Aucune offre d'essai n'est disponible pour ce module.";
-    if ($info['access'] === 'included') return 'Ce module est déjà inclus dans votre galerie.';
-    if (!empty($info['beta_tester'])) return 'Module en test : accès gratuit jusqu’à sa mise en production.';
-    if (addon_is_entitled($module)) return 'Le module est déjà actif.';
+    if (!$info) return ext_t('{Ext} inconnu{e}.');
+    if ($info['access'] === 'unavailable' || $info['trial_days'] < 1) return ext_t("L'essai n'est pas disponible pour {ce ext}.");
+    if (!array_intersect(['monthly', 'yearly', 'once'], $info['payment_modes'])) return ext_t("Aucune offre d'essai n'est disponible pour {ce ext}.");
+    if ($info['access'] === 'included') return ext_t('{Ce ext} est déjà {?inclus|incluse} dans votre galerie.');
+    if (!empty($info['beta_tester'])) return ext_t('{Ext} en test : accès gratuit jusqu’à sa mise en production.');
+    if (addon_is_entitled($module)) return ext_t('{Le ext} est déjà {?actif|active}.');
     $r = addon_row($module);
     if ((int) $r['trial_used'] === 1) return "L'essai gratuit a déjà été utilisé : souscrivez pour continuer.";
     addon_save($module, ['status' => 'trial', 'trial_until' => time() + $info['trial_days'] * 86400, 'trial_used' => 1]);
@@ -438,14 +440,14 @@ function addon_checkout(string $module, string $successUrl, string $cancelUrl, s
 {
     require_once __DIR__ . '/saas.php';
     $info = addon_info($module);
-    if (!$info) return [null, 'Module inconnu.'];
-    if ($info['access'] === 'unavailable') return [null, 'Ce module n’est pas proposé pour votre boutique.'];
-    if ($info['access'] === 'included') return [null, 'Ce module est déjà inclus dans votre galerie.'];
-    if (!empty($info['beta_tester'])) return [null, 'Module en test : accès gratuit jusqu’à sa mise en production.'];
+    if (!$info) return [null, ext_t('{Ext} inconnu{e}.')];
+    if ($info['access'] === 'unavailable') return [null, ext_t('{Ce ext} n’est pas {?proposé|proposée} pour votre boutique.')];
+    if ($info['access'] === 'included') return [null, ext_t('{Ce ext} est déjà {?inclus|incluse} dans votre galerie.')];
+    if (!empty($info['beta_tester'])) return [null, ext_t('{Ext} en test : accès gratuit jusqu’à sa mise en production.')];
     if (!in_array($billing, ['monthly', 'yearly', 'once'], true) || !in_array($billing, $info['payment_modes'], true)) return [null, 'Cette modalité de paiement n’est pas disponible.'];
     if ($billing === 'yearly' && $info['yearly_cents'] === null) return [null, 'Le tarif annuel n’est pas renseigné.'];
     if ($billing === 'once' && $info['once_cents'] === null) return [null, 'Le tarif unique n’est pas renseigné.'];
-    if (addon_row($module)['status'] === 'active') return [null, 'Ce module est déjà souscrit.'];
+    if (addon_row($module)['status'] === 'active') return [null, ext_t('{Ce ext} est déjà {?souscrit|souscrite}.')];
     if (!saas_stripe_configured()) return [null, "Le paiement n'est pas encore configuré sur la plateforme. Démarrez l'essai gratuit ou contactez l'exploitant."];
     $slug = tenant_slug();
     $shop = (string) (get_content()['site_name'] ?? tenant('name'));
@@ -596,9 +598,10 @@ function addon_beta_send_reminders(bool $dry = false): int
             $key = $module . '|' . $shop;
             if (time() - (int) ($sent[$key] ?? 0) < $info['feedback_days'] * 86400) continue;
             $url = rtrim((string) ($cfg['site_url'] ?? ''), '/') . '/admin/plugin.php?p=' . rawurlencode($module) . '&v=index';
-            $body = "Bonjour,\n\nvous testez gratuitement le module « {$info['name']} » sur « " . ($cfg['name'] ?? $shop) . " ».\n"
+            $body = "Bonjour,\n\nvous testez gratuitement {le ext} « {$info['name']} » sur « " . ($cfg['name'] ?? $shop) . " ».\n"
                 . "En échange, nous attendons votre retour (note et commentaire) : " . $url . "\n\n"
-                . ($info['feedback_required'] ? "Sans retour, l'accès au module est suspendu jusqu'à ce que vous en envoyiez un.\n\n" : '') . "Merci !";
+                . ($info['feedback_required'] ? "Sans retour, l'accès {au ext} est suspendu jusqu'à ce que vous en envoyiez un.\n\n" : '') . "Merci !";
+            $body = ext_t($body);
             if (!$dry && !saas_mail($to, 'Votre retour sur « ' . $info['name'] . ' »', $body)) continue;
             $sent[$key] = time();
             $n++;
@@ -656,7 +659,7 @@ function addon_api_access(string $module): never
     }
     if ($action === 'feedback') {
         $info = addon_info($module);
-        if (!$info || empty($info['beta_tester'])) plugin_json(['error' => 'Les retours ne concernent que les modules en test.'], 409);
+        if (!$info || empty($info['beta_tester'])) plugin_json(['error' => ext_t('Les retours ne concernent que {les exts} en test.')], 409);
         $err = addon_feedback_add($module, tenant_slug(), (int) ($input['rating'] ?? 0), (string) ($input['text'] ?? ''));
         if ($err) plugin_json(['error' => $err], 422);
         plugin_json(['ok' => true, 'message' => 'Merci pour votre retour !']);
@@ -666,9 +669,9 @@ function addon_api_access(string $module): never
         if (!$info || $info['access'] === 'unavailable' || !in_array('free', $info['payment_modes'], true)) {
             plugin_json(['error' => 'Cette offre gratuite n’est pas disponible.'], 409);
         }
-        if (addon_is_entitled($module)) plugin_json(['error' => 'Ce module est déjà actif ou inclus.'], 409);
+        if (addon_is_entitled($module)) plugin_json(['error' => ext_t('{Ce ext} est déjà {?actif|active} ou {?inclus|incluse}.')], 409);
         addon_save($module, ['status' => 'complimentary', 'billing_mode' => 'free', 'subscribed_at' => gmdate('c'), 'canceled_at' => '']);
-        plugin_json(['ok' => true, 'message' => 'Le module gratuit est activé.', 'entitlement' => addon_entitlement($module)]);
+        plugin_json(['ok' => true, 'message' => ext_t('{Le ext} {?gratuit|gratuite} est {?activé|activée}.'), 'entitlement' => addon_entitlement($module)]);
     }
     plugin_json(['error' => 'Action invalide.'], 422);
 }
@@ -681,11 +684,11 @@ function addon_confirm_return(string $module): string
     require_once __DIR__ . '/saas.php';
     try {
         $s = saas_stripe_request('GET', '/checkout/sessions/' . rawurlencode($id));
-        if (($s['metadata']['shop'] ?? '') !== tenant_slug() || ($s['metadata']['plugin'] ?? '') !== $module) return 'Cette session de paiement ne correspond pas à ce module.';
+        if (($s['metadata']['shop'] ?? '') !== tenant_slug() || ($s['metadata']['plugin'] ?? '') !== $module) return ext_t('Cette session de paiement ne correspond pas à {ce ext}.');
         $r = addon_apply_checkout_session($s);
         return match ($r['state']) {
-            'added', 'already' => 'Merci ! Le module est actif.',
-            'unpaid' => "Le paiement n'est pas encore confirmé par Stripe : le module s'activera dès sa confirmation.",
+            'added', 'already' => ext_t('Merci ! {Le ext} est {?actif|active}.'),
+            'unpaid' => "Le paiement n'est pas encore confirmé par Stripe : {le ext} s'activera dès sa confirmation.",
             default => 'Paiement non reconnu.',
         };
     } catch (Throwable $e) {
@@ -716,10 +719,10 @@ function addon_panel_html(string $module, string $api, string $csrf): string
   <?php if ($e['status'] === 'trial'): ?><p class="hint" style="margin:0;">Essai gratuit jusqu'au <strong><?= $h($e['trial_until']) ?></strong>.</p><?php endif; ?>
   <?php if ($e['status'] === 'active'): ?><p class="hint" style="margin:0;">Accès actif<?= !empty($e['billing_mode']) ? ' (' . $h($billingLabels[$e['billing_mode']] ?? $e['billing_mode']) . ')' : '' ?>.</p><?php endif; ?>
   <?php if ($e['status'] === 'complimentary'): ?><p class="hint" style="margin:0;"><?= $e['billing_mode'] === 'free' ? 'Accès gratuit.' : 'Accès offert par la plateforme.' ?></p><?php endif; ?>
-  <?php if ($e['status'] === 'included'): ?><p class="hint" style="margin:0;">Ce module est inclus par votre galerie.</p><?php endif; ?>
+  <?php if ($e['status'] === 'included'): ?><p class="hint" style="margin:0;">{Ce ext} est {?inclus|incluse} par votre galerie.</p><?php endif; ?>
   <?php if (in_array($e['status'], ['beta', 'beta_locked'], true)): ?>
     <?php if ($e['beta_locked']): ?><p class="hint" style="margin:0;font-weight:600;color:#b3261e;">Accès suspendu : aucun retour depuis plus de <?= (int) $e['feedback_days'] ?> jours. Envoyez votre retour pour le réactiver.</p><?php endif; ?>
-    <p class="hint" style="margin:0;">Ce module est en <strong>phase de test</strong> : il est gratuit jusqu’à sa mise en production, en échange de vos retours.</p>
+    <p class="hint" style="margin:0;">{Ce ext} est en <strong>phase de test</strong> : {?il est gratuit|elle est gratuite} jusqu’à sa mise en production, en échange de vos retours.</p>
     <?php $mine = addon_feedback_list($module, function_exists('tenant_slug') ? tenant_slug() : ''); ?>
     <p class="hint" style="margin:0;"><?= $mine ? count($mine) . ' retour(s) envoyé(s) — merci !' : 'Aucun retour envoyé pour l’instant.' ?></p>
     <div style="display:grid;gap:6px;max-width:520px;">
@@ -728,7 +731,7 @@ function addon_panel_html(string $module, string $api, string $csrf): string
       <div><button type="button" class="btn-small" data-addon-act="feedback">Envoyer mon retour</button> <span class="hint" data-addon-msg role="status"></span></div>
     </div>
   <?php endif; ?>
-  <?php if ($e['status'] === 'unavailable'): ?><p class="hint" style="margin:0;">Ce module n’est pas proposé par votre plateforme ou votre galerie.</p><?php endif; ?>
+  <?php if ($e['status'] === 'unavailable'): ?><p class="hint" style="margin:0;">{Ce ext} n’est pas {?proposé|proposée} par votre plateforme ou votre galerie.</p><?php endif; ?>
   <?php if (!$e['entitled'] && $e['access'] !== 'unavailable'): ?>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <?php if (!$e['trial_used'] && $e['trial_days'] > 0 && in_array('monthly', $e['payment_modes'], true)): ?><button type="button" class="btn-small" data-addon-act="trial">Essayer gratuitement <?= (int) $e['trial_days'] ?> jours</button><?php endif; ?>
@@ -739,7 +742,7 @@ function addon_panel_html(string $module, string $api, string $csrf): string
       <?php endif; endforeach; ?>
       <?php if (in_array('free', $e['payment_modes'], true)): ?><button type="button" class="btn-small" data-addon-act="free">Activer gratuitement</button><?php endif; ?>
       <?php if (in_array('manual', $e['payment_modes'], true)): ?>
-      <?php if ($contact !== ''): ?><a class="btn-small" href="mailto:<?= $h($contact) ?>?subject=<?= rawurlencode('Souscription au module ' . $e['name']) ?>">Demander une souscription manuelle<?= $e['monthly_label'] !== '' ? ' — ' . $h($e['monthly_label']) : '' ?></a>
+      <?php if ($contact !== ''): ?><a class="btn-small" href="mailto:<?= $h($contact) ?>?subject=<?= rawurlencode(ext_t('Souscription {au ext} ') . $e['name']) ?>">Demander une souscription manuelle<?= $e['monthly_label'] !== '' ? ' — ' . $h($e['monthly_label']) : '' ?></a>
         <?php else: ?><span class="hint">Souscription manuelle : contactez l’exploitant.</span><?php endif; ?>
       <?php endif; ?>
       <span class="hint" data-addon-msg role="status"></span>
@@ -753,7 +756,7 @@ fetch(c.dataset.addonApi,{method:'POST',credentials:'same-origin',headers:{Accep
 .then(function(r){return r.json()}).then(function(d){if(d.error){m.textContent=d.error;return}if(d.url){location.href=d.url;return}m.textContent=d.message||'OK';if(b.dataset.addonAct==='feedback'){var t=c.querySelector('[data-fb-text]');if(t)t.value=''}setTimeout(function(){location.reload()},700)})
 .catch(function(){m.textContent='Erreur réseau.'})});})();
 </script>
-<?php return (string) ob_get_clean();
+<?php return ext_t((string) ob_get_clean());
 }
 
 /** Garde de page ou d'API : le module est-il utilisable ? Sinon, message prêt à afficher. */
@@ -761,7 +764,7 @@ function addon_locked_html(string $module): string
 {
     $e = addon_entitlement($module);
     $message = $e['access'] === 'unavailable'
-        ? 'Ce module n’est pas proposé pour cette boutique.'
-        : 'Démarrez l’essai gratuit ou souscrivez ci-dessus pour utiliser ce module.';
+        ? ext_t('{Ce ext} n’est pas {?proposé|proposée} pour cette boutique.')
+        : ext_t('Démarrez l’essai gratuit ou souscrivez ci-dessus pour utiliser {ce ext}.');
     return '<p class="hint" style="max-width:62ch;">' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p>';
 }

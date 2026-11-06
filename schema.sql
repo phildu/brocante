@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS products (
   pickup_delay_minutes INTEGER NOT NULL DEFAULT 0, -- délai de récupération estimé, en minutes (0 = non précisé)
   keep_when_sold INTEGER NOT NULL DEFAULT 0, -- 1 : la pièce reste au catalogue (badge « Vendue ») une fois vendue
   lot_qty INTEGER NOT NULL DEFAULT 1, -- vente en lot : nombre de pièces vendues ensemble au prix affiché (1 = pièce seule)
+  cost_cents INTEGER, -- prix d'achat de la pièce (NULL = non renseigné), sert au calcul de marge du tableau de bord
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -190,8 +191,74 @@ CREATE TABLE IF NOT EXISTS orders (
   gift_wrap INTEGER NOT NULL DEFAULT 0,        -- 1 : emballage cadeau demandé
   gift_wrap_cents INTEGER NOT NULL DEFAULT 0,  -- montant facturé pour l'emballage
   gift_message TEXT,                           -- petit mot du client pour le destinataire
+  source_channel TEXT, -- provenance du client (direct, search, social...) relevée à la commande
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- ---------------------------------------------------------------------------
+-- Tableau de bord (admin/dashboard.php). Ces tables sont aussi créées à la
+-- volée par analytics_ensure_schema() (includes/analytics.php) : une base
+-- existante n'a donc aucune migration à lancer à la main.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS visits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL,                       -- UTC
+  vid TEXT NOT NULL,                      -- empreinte salée (IP+navigateur+jour), jamais l'IP elle-même
+  event TEXT NOT NULL DEFAULT 'pageview', -- pageview | add_to_cart | checkout
+  path TEXT NOT NULL DEFAULT '',
+  product_ref TEXT,
+  channel TEXT NOT NULL DEFAULT 'direct',
+  ref_host TEXT,
+  utm_source TEXT,
+  utm_campaign TEXT,
+  device TEXT NOT NULL DEFAULT 'ordinateur',
+  country TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_visits_ts ON visits(ts);
+CREATE INDEX IF NOT EXISTS idx_visits_vid ON visits(vid, ts);
+
+CREATE TABLE IF NOT EXISTS physical_visits (
+  day TEXT PRIMARY KEY,                   -- AAAA-MM-JJ (heure locale)
+  visitors INTEGER NOT NULL DEFAULT 0,
+  sales_count INTEGER NOT NULL DEFAULT 0,
+  sales_cents INTEGER NOT NULL DEFAULT 0,
+  cogs_cents INTEGER,                     -- prix d'achat des pièces vendues, si connu
+  note TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS shop_costs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  label TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'autre',
+  kind TEXT NOT NULL DEFAULT 'fixed',     -- fixed | per_order | per_order_pct | per_unit
+  amount REAL NOT NULL DEFAULT 0,         -- euros (ou % pour per_order_pct)
+  period TEXT NOT NULL DEFAULT 'monthly', -- fixed : monthly | yearly | once
+  unit TEXT,                              -- per_unit : gemini_image | gemini_text | fal_cutout
+  status TEXT NOT NULL DEFAULT 'actif',   -- actif = réellement payé | test = gratuit/essai aujourd'hui, simulé payant
+  start_date TEXT,
+  end_date TEXT,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS api_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  provider TEXT NOT NULL,
+  kind TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_api_usage_ts ON api_usage(ts);
+
+CREATE TABLE IF NOT EXISTS dash_settings (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL DEFAULT ''
+);
+
+-- Module Buvette (gestion de la buvette d'un vide-grenier) : ses tables
+-- (préfixe bv_) sont créées automatiquement au premier accès par
+-- includes/buvette.php (bv_boot, constante BV_SCHEMA) — rien à lancer ici,
+-- ni côté serveur ni après un déploiement.
+
 
 -- Habitudes anonymes des visiteurs pour les suggestions de produits (voir
 -- includes/recommendations.php) : vues, recherches, filtres, panier, commandes.

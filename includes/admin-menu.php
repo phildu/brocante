@@ -8,6 +8,8 @@
  * rejoint sa catégorie de départ.
  */
 
+require_once __DIR__ . '/vocabulary.php';   // mot unique pour les « extensions » : ext_t()
+
 function admin_menu_ensure_schema(PDO $pdo): void
 {
     $pdo->exec(<<<'SQL'
@@ -42,7 +44,7 @@ function admin_menu_default_groups(): array
         'contenus' => 'Contenus',
         'boutique' => 'Boutique',
         'reglages' => 'Réglages',
-        'extensions' => 'Extensions',
+        'extensions' => ext_t('{Exts}'),
     ];
 }
 
@@ -50,7 +52,7 @@ function admin_menu_default_groups(): array
 function admin_menu_default_order(): array
 {
     return [
-        'pilotage' => ['assistant', 'dashboard', 'emails'],
+        'pilotage' => ['assistant', 'dashboard', 'rentabilite', 'emails'],
         'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'batch'],
         'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
         'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal'],
@@ -158,6 +160,9 @@ function admin_menu_core_items(): array
         'presence' => ['/admin/presence.php', 'Boutique physique / en ligne', 'grid'],
         'galeries' => ['/admin/ma-galerie.php', 'Mes galeries', 'users'],
         'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
+        // Page économique de la boutique (chiffre d'affaires, marge, frais, fréquentation), ligne « main » : voir admin/rentabilite.php.
+        // Buvette, Invendus & dons et Comptage de foule ne sont pas des plugins de boutique : ce sont des extensions de galerie (includes/gallery-modules.php).
+        'rentabilite' => ['/admin/rentabilite.php', 'Rentabilité', 'gauge'],
         'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
         'social' => ['/admin/social.php', 'API & réseaux', 'user'],
         'ia' => ['/admin/ai-usage.php', 'Consommation IA', 'receipt'],
@@ -171,7 +176,7 @@ function admin_menu_core_items(): array
         'legal' => ['/admin/legal.php', 'Pages légales (CGV…)', 'receipt'],
         'apparence' => ['/admin/appearance.php', 'Apparence', 'palette'],
         'domaine' => ['/admin/domaine.php', 'Nom de domaine', 'cloud'],
-        'plugins' => ['/admin/plugins.php', 'Plugins', 'puzzle'],
+        'plugins' => ['/admin/plugins.php', ext_t('{Exts}'), 'puzzle'],
         'menu' => ['/admin/menu.php', 'Menu latéral', 'grid'],
         'sync' => ['/admin/sync.php', 'Envoyer en préprod', 'cloud'],
         'reglages-general' => ['/admin/index.php?s=general', 'Réglages · Général', 'gear'],

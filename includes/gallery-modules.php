@@ -13,10 +13,16 @@
 // un essai gratuit ou un abonnement Stripe (metadata type=gallery_module). Les prix et durées d'essai par défaut sont dans
 // data/saas/galeries-modules.json, surchargeables depuis le portail, et retombent sur les valeurs ci-dessous.
 //
-// Ce fichier ne dépend d'aucun autre include à son chargement : il est appelé par gallery_normalize() (includes/galleries.php),
+// Ce fichier ne dépend d'aucun autre include à son chargement (hors vocabulary.php, lui-même autonome) : il est appelé par gallery_normalize() (includes/galleries.php),
 // gallery-types.php et les pages du portail.
 
-const GM_MODE_LABELS = ['included' => 'Inclus dans l\'offre', 'option' => 'Option payante', 'off' => 'Non proposé'];
+/** Libellés des trois modes d'un module (selon le vocabulaire des extensions : « Option payante », « Plugin payant »…). */
+function gm_mode_labels(): array
+{
+    return ['included' => ext_t("{?Inclus|Incluse} dans l'offre"), 'option' => ext_t('{Ext} payant{e}'), 'off' => ext_t('{?Non proposé|Non proposée}')];
+}
+require_once __DIR__ . '/vocabulary.php';
+
 const GM_STATUS_LABELS = [
     'included' => 'Inclus', 'trial' => 'Essai en cours', 'active' => 'Abonné', 'complimentary' => 'Accès offert',
     'canceled' => 'Résilié', 'expired' => 'Essai terminé', 'off' => 'Non proposé',
@@ -49,12 +55,34 @@ function gm_defaults(): array
             'default_mode' => 'included',
             'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 0,
         ],
+        'buvette' => [
+            'name' => 'Buvette', 'emoji' => '☕', 'active' => true, 'order' => 4,
+            'description' => "La buvette du vide-grenier : la carte et ses prix, les recettes et leur coût de revient, les fournitures et la liste de courses, le planning des bénévoles (avec un lien d'accès pour eux), la check-list du jour, le prévisionnel et le bilan.",
+            'types' => ['vide-grenier'],         // proposée d'office aux vide-greniers ; les autres types la règlent dans « Types de galerie »
+            'default_mode' => 'option',          // option payante : essai gratuit puis abonnement
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,   // aucun prix imposé : à fixer dans le portail (Tarifs des extensions de galerie)
+        ],
+        'invendus' => [
+            'name' => 'Invendus & dons', 'emoji' => '🎁', 'active' => true, 'order' => 5,
+            'description' => "Zéro gaspillage : les exposants proposent ce qu'ils ne veulent pas remporter, un point de collecte (et des tournées à vélo cargo) réunit les objets, les visiteurs se servent gratuitement, puis le reliquat part vers une donnerie avec un bordereau de remise.",
+            'types' => ['vide-grenier'],
+            'default_mode' => 'option',
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
+        ],
+        'comptage' => [
+            'name' => 'Comptage de foule', 'emoji' => '👥', 'active' => true, 'order' => 6,
+            'description' => "Comptez les visiteurs aux entrées avec un téléphone (appuis ou détection par caméra), même hors ligne : un poste par entrée, la fréquentation en direct, le pic de présence, la jauge de capacité, la courbe de la journée et l'export CSV. Les bénévoles n'ont besoin que d'un lien et d'un code.",
+            'types' => ['vide-grenier'],
+            'default_mode' => 'option',
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
+        ],
     ];
 }
 
 function gm_file(): string
 {
-    return dirname(__DIR__) . '/data/saas/galeries-modules.json';
+    // BROCANTE_GM_FILE : fichier de réglages jetable pour les tests (scripts/test-buvette-galerie.php).
+    return getenv('BROCANTE_GM_FILE') ?: dirname(__DIR__) . '/data/saas/galeries-modules.json';
 }
 
 /** Tous les modules, réglages du portail par-dessus les valeurs d'origine. cle => module. */
@@ -91,6 +119,45 @@ function gm_modules(): array
 function gm_module(string $key): ?array
 {
     return gm_modules()[$key] ?? null;
+}
+
+/** Prix saisi en euros (« 9,90 », « 9.9 », vide = 0) -> centimes, ou null si invalide. */
+function gm_cents_from_input(mixed $value): ?int
+{
+    $v = str_replace([' ', "\u{00a0}", '€'], '', trim((string) $value));
+    $v = str_replace(',', '.', $v);
+    if ($v === '') return 0;
+    return is_numeric($v) && (float) $v >= 0 && (float) $v <= 10000 ? (int) round((float) $v * 100) : null;
+}
+
+/**
+ * Enregistre les réglages d'un module depuis le portail (data/saas/galeries-modules.json) : proposé ou non, mode d'origine, prix mensuel et
+ * annuel (en euros), jours d'essai, types de galerie concernés (aucun = tous). Chaque type peut ensuite régler le mode de son côté
+ * (Types de galerie). -> message d'erreur ou null.
+ */
+function gm_save_settings(string $key, array $in): ?string
+{
+    if (!isset(gm_defaults()[$key])) return ext_t('{Ext} inconnu{e}.');
+    $month = gm_cents_from_input($in['month'] ?? '');
+    $year = gm_cents_from_input($in['year'] ?? '');
+    if ($month === null || $year === null) return 'Prix invalide : saisissez un montant en euros (ex. 9,90), de 0 à 10 000.';
+    $trial = filter_var($in['trial_days'] ?? '0', FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 365]]);
+    if ($trial === false) return "Durée d'essai invalide (0 à 365 jours).";
+    $mode = in_array($in['default_mode'] ?? '', GM_MODES, true) ? (string) $in['default_mode'] : 'option';
+    $types = array_values(array_unique(array_filter(array_map('strval', (array) ($in['types'] ?? [])), static fn ($t) => preg_match('/^[a-z0-9][a-z0-9-]{1,23}$/', $t) === 1)));
+    $file = gm_file();
+    $all = is_file($file) ? (json_decode((string) file_get_contents($file), true) ?: []) : [];
+    $all[$key] = array_merge(is_array($all[$key] ?? null) ? $all[$key] : [], [
+        'active' => !empty($in['active']), 'default_mode' => $mode, 'month_cents' => $month, 'year_cents' => $year, 'trial_days' => $trial, 'types' => $types,
+    ]);
+    $dir = dirname($file);
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) return "Impossible de créer le dossier $dir.";
+    $tmp = $file . '.tmp';
+    if (@file_put_contents($tmp, json_encode($all, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX) === false || !@rename($tmp, $file)) {
+        @unlink($tmp);
+        return "Impossible d'écrire " . basename($file) . ' (droits du dossier data/saas).';
+    }
+    return null;
 }
 
 /** Mode d'un module pour un type, quand le type ne le règle pas encore. */
@@ -192,10 +259,10 @@ function gallery_modules_normalize(array $m): array
 function gm_start_trial(array &$gallery, string $key): ?string
 {
     $st = gm_state($gallery, $key);
-    if (!$st['module']) return 'Module inconnu.';
-    if ($st['mode'] !== 'option') return $st['mode'] === 'included' ? 'Ce module est déjà inclus dans votre offre.' : "Ce module n'est pas proposé pour ce type de galerie.";
-    if ($st['enabled']) return 'Ce module est déjà actif.';
-    if ($st['module']['trial_days'] < 1) return "L'essai n'est pas disponible pour ce module.";
+    if (!$st['module']) return ext_t('{Ext} inconnu{e}.');
+    if ($st['mode'] !== 'option') return $st['mode'] === 'included' ? ext_t('{Ce ext} est déjà {?inclus|incluse} dans votre offre.') : ext_t("{Ce ext} n'est pas {?proposé|proposée} pour ce type de galerie.");
+    if ($st['enabled']) return ext_t('{Ce ext} est déjà {?actif|active}.');
+    if ($st['module']['trial_days'] < 1) return ext_t("L'essai n'est pas disponible pour {ce ext}.");
     if ($st['trial_used']) return "L'essai gratuit a déjà été utilisé : souscrivez pour continuer.";
     $gallery['modules'][$key] = [
         'enabled' => true, 'status' => 'trial', 'since' => time(), 'until' => time() + $st['module']['trial_days'] * 86400,
@@ -260,13 +327,13 @@ function gm_request_load(string $id): ?array
 function gm_checkout(array $gallery, string $key, string $successPath, string $cancelUrl, string $billing = 'month'): array
 {
     $st = gm_state($gallery, $key);
-    if (!$st['module']) return [null, 'Module inconnu.'];
-    if ($st['mode'] === 'included') return [null, 'Ce module est déjà inclus dans votre offre.'];
-    if ($st['mode'] !== 'option') return [null, "Ce module n'est pas proposé pour ce type de galerie."];
-    if ($st['enabled'] && $st['status'] === 'active') return [null, 'Ce module est déjà souscrit.'];
+    if (!$st['module']) return [null, ext_t('{Ext} inconnu{e}.')];
+    if ($st['mode'] === 'included') return [null, ext_t('{Ce ext} est déjà {?inclus|incluse} dans votre offre.')];
+    if ($st['mode'] !== 'option') return [null, ext_t("{Ce ext} n'est pas {?proposé|proposée} pour ce type de galerie.")];
+    if ($st['enabled'] && $st['status'] === 'active') return [null, ext_t('{Ce ext} est déjà {?souscrit|souscrite}.')];
     $billing = $billing === 'year' ? 'year' : 'month';
     $cents = $billing === 'year' ? (int) $st['module']['year_cents'] : (int) $st['module']['month_cents'];
-    if ($cents <= 0) return [null, 'Cette option est gratuite : activez-la depuis la page Options.'];
+    if ($cents <= 0) return [null, ext_t('{Ce ext} est {?gratuit|gratuite} : activez-{?le|la} depuis la page {Exts}.')];
     require_once __DIR__ . '/saas.php';
     if (!saas_stripe_configured()) return [null, "Le paiement en ligne n'est pas encore disponible : démarrez l'essai gratuit ou contactez l'exploitant."];
     $req = ['id' => bin2hex(random_bytes(8)), 'created' => time(), 'module' => $key, 'slug' => $gallery['slug'], 'billing' => $billing,

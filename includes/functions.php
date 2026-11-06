@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/vocabulary.php';   // mot unique pour les « extensions » (plugins, options, modules) : ext_t()
 require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/connect.php';
 require_once __DIR__ . '/capture.php';
@@ -25,6 +26,8 @@ require_once __DIR__ . '/order-flow.php';
 require_once __DIR__ . '/locate.php';
 require_once __DIR__ . '/payments.php';
 require_once __DIR__ . '/order-availability.php';
+require_once __DIR__ . '/analytics.php';
+require_once __DIR__ . '/csrf.php';
 
 function h($s): string
 {
@@ -4010,3 +4013,4 @@ function fulfillment_label(string $status): string
         'retiree' => 'Retirée',
     ][$status] ?? $status;
 }
+

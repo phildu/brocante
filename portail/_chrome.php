@@ -142,7 +142,8 @@ function portail_nav_groups(): array
             ['href' => '/portail/vente/', 'label' => 'Forces de vente', 'icon' => 'compass', 'match' => ['vente/*']],
         ]],
         ['label' => 'Boutiques', 'items' => [
-            ['href' => '/portail/plugins.php', 'label' => 'Plugins', 'icon' => 'puzzle'],
+            ['href' => '/portail/plugins.php', 'label' => ext_t('{Exts} des boutiques'), 'icon' => 'puzzle'],
+            ['href' => '/portail/vocabulaire.php', 'label' => ext_t('{Exts} · nom et portée'), 'icon' => 'puzzle'],
             ['href' => '/portail/menu.php', 'label' => 'Menu latéral', 'icon' => 'menu'],
             ['href' => '/portail/galeries.php', 'label' => 'Galeries', 'icon' => 'gallery', 'match' => ['galeries.php', 'galerie-*.php']],
             ['href' => '/portail/stripe.php', 'label' => 'Stripe (test / réel)', 'icon' => 'key'],
@@ -160,7 +161,8 @@ function portail_nav_groups(): array
             ['href' => '/portail/commissions.php', 'label' => 'Commissions', 'icon' => 'percent'],
             ['href' => '/portail/ia.php', 'label' => 'Coûts IA', 'icon' => 'sparkles'],
             ['href' => '/portail/ia-fournisseurs.php', 'label' => 'Fournisseurs IA', 'icon' => 'plug'],
-            ['href' => '/portail/addons.php', 'label' => 'Tarifs des plugins', 'icon' => 'receipt'],
+            ['href' => '/portail/addons.php', 'label' => ext_t('Tarifs des {exts}'), 'icon' => 'receipt'],
+            ['href' => '/portail/extensions-galerie.php', 'label' => ext_t('Tarifs des {exts} de galerie'), 'icon' => 'receipt'],
         ]],
         ['label' => 'Plateforme', 'items' => array_merge([
             ['href' => '/portail/api.php', 'label' => 'API & réseaux', 'icon' => 'key'],
@@ -304,7 +306,7 @@ function portail_page_start(array $opts = []): void
 </style>
 <?php endif; ?>
 <aside class="pnav" id="pnav" aria-label="Navigation de l'administration">
-  <a class="pnav-brand" href="<?= $limited ? '/portail/galerie-tableau.php' : '/portail/' ?>">
+  <a class="pnav-brand" href="<?= $limited ? '/portail/galerie-tableau.php' : '/portail/' ?>"<?= $brand ? ' title="' . e($brand['name']) . '"' : '' ?>>
     <span class="pnav-mark<?= $brand ? ' is-gallery' : '' ?>"><?php if ($brand && $brand['logo'] !== ''): ?><img src="/<?= e($brand['logo']) ?>" alt=""><?php else: ?><?= portail_icon($limited ? 'gallery' : 'store', 20) ?><?php endif; ?></span>
     <span class="pnav-brand-text"><b><?= e($brand['name'] ?? 'brocs') ?></b><small><?= $limited ? 'Espace galerie' : 'Administration' ?></small></span>
   </a>

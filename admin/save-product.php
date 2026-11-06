@@ -45,8 +45,12 @@ if ($promoPrice !== '' && (price_to_cents($promoPrice) ?? 0) >= (price_to_cents(
     $promoPrice = '';
 }
 
-$set = 'name = :name, cat = :cat, description = :description, materials = :materials, colors = :colors, brand = :brand, distributor = :distributor, etat = :etat, nature = :nature, sous_categorie = :sous_categorie, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock, lot_qty = :lot_qty, channels = :channels';
+analytics_ensure_schema();
+$costInput = parse_euros($_POST['cost_price'] ?? null);
+
+$set = 'cost_cents = :cost_cents, name = :name, cat = :cat, description = :description, materials = :materials, colors = :colors, brand = :brand, distributor = :distributor, etat = :etat, nature = :nature, sous_categorie = :sous_categorie, price = :price, promo_price = :promo_price, badge = :badge, size_text = :size_text, weight_text = :weight_text, weight_grams = :weight_grams, featured = :featured, is_hidden = :is_hidden, stock = :stock, lot_qty = :lot_qty, channels = :channels';
 $params = [
+    'cost_cents' => $costInput === null ? null : (int) round($costInput * 100),
     'name' => trim((string) ($_POST['name'] ?? $product['name'])),
     'cat' => $cat,
     'description' => trim((string) ($_POST['description'] ?? $product['description'])),

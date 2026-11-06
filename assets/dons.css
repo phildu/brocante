@@ -1,0 +1,173 @@
+/* Module « Invendus & dons » — s'appuie sur les variables de style.css
+   (couleurs, polices), donc suit automatiquement le thème clair/sombre. */
+
+.don-wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+.don-narrow { max-width: 720px; }
+.don-muted { color: var(--ink-soft); }
+.don-small { font-size: 0.85rem; }
+.don-mono { font-family: var(--font-mono); }
+.don-stack > * + * { margin-top: 16px; }
+.don-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.don-right { margin-left: auto; }
+.don-sr { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* ---------- badges ---------- */
+.don-badge {
+  display: inline-block; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.04em;
+  padding: 3px 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+  white-space: nowrap; border-radius: 2px;
+}
+.don-badge--proposed { color: var(--ink-soft); }
+.don-badge--picked { color: var(--accent-2); border-color: var(--accent-2); }
+.don-badge--at_point { color: var(--sage); border-color: var(--sage); font-weight: 700; }
+.don-badge--taken { color: var(--ink-soft); background: transparent; }
+.don-badge--donated { color: var(--accent); border-color: var(--accent); }
+.don-badge--withdrawn { color: var(--ink-soft); background: transparent; text-decoration: line-through; }
+.don-phase--proposals { color: var(--accent-2); border-color: var(--accent-2); }
+.don-phase--collecting { color: var(--accent-ink); background: var(--sage); border-color: var(--sage); font-weight: 700; }
+.don-phase--ended, .don-phase--closed, .don-phase--draft { color: var(--ink-soft); }
+
+/* ---------- les 4 étapes ---------- */
+.don-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 28px 0 0; padding: 0; list-style: none; }
+.don-step { background: var(--surface); border: 1px solid var(--line); padding: 18px; }
+.don-step-n { font-family: var(--font-display); font-size: 1.8rem; color: var(--accent); line-height: 1; }
+.don-step h3 { font-size: 1.02rem; margin: 8px 0 4px; }
+.don-step p { margin: 0; font-size: 0.88rem; color: var(--ink-soft); }
+@media (max-width: 880px) { .don-steps { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .don-steps { grid-template-columns: 1fr; } }
+
+/* ---------- carte d'édition ---------- */
+.don-event { background: var(--surface); border: 1px solid var(--line); padding: 22px 24px; display: grid; gap: 10px; }
+.don-event h2 { font-size: 1.4rem; }
+.don-event dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; font-size: 0.92rem; }
+.don-event dt { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; padding-top: 2px; }
+.don-event dd { margin: 0; }
+.don-alert { border-left: 4px solid var(--sage); background: var(--surface); padding: 14px 18px; }
+.don-alert--warn { border-left-color: var(--accent); }
+
+/* ---------- catalogue ---------- */
+.don-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 18px 0; }
+.don-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.don-card { background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; }
+.don-card-img { aspect-ratio: 4 / 3; background: var(--bg); display: flex; align-items: center; justify-content: center; color: var(--line); }
+.don-card-img img { width: 100%; height: 100%; object-fit: cover; }
+.don-card-img svg { width: 56px; height: 56px; }
+.don-card-body { padding: 12px 14px 14px; display: grid; gap: 4px; }
+.don-card-body h3 { font-size: 1rem; }
+.don-card-body p { margin: 0; font-size: 0.84rem; color: var(--ink-soft); }
+.don-qty { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent); }
+
+/* ---------- formulaires (champs non couverts par .field) ---------- */
+.don-form .field input[type="email"],
+.don-form .field input[type="tel"],
+.don-form .field input[type="number"],
+.don-form .field input[type="date"],
+.don-form .field input[type="time"],
+.don-form .field input[type="file"],
+.don-form .field input[type="search"],
+.don-form .field input[type="text"],
+.don-form .field select,
+.don-form .field textarea,
+.don-inline input[type="text"], .don-inline input[type="search"], .don-inline input[type="number"],
+.don-inline input[type="date"], .don-inline input[type="time"], .don-inline select {
+  background: var(--bg); border: 1px solid var(--line); color: var(--ink);
+  padding: 10px 12px; font-family: var(--font-body); font-size: 0.94rem; width: 100%; box-sizing: border-box;
+}
+.don-inline input, .don-inline select { width: auto; min-width: 0; }
+.don-form .field small { color: var(--ink-soft); font-size: 0.8rem; }
+.don-form fieldset { border: 1px solid var(--line); padding: 14px 16px 6px; margin: 0 0 18px; }
+.don-form legend { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); padding: 0 6px; }
+.don-choices { display: grid; gap: 8px; margin-bottom: 12px; }
+.don-choice { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); background: var(--bg); padding: 10px 12px; cursor: pointer; }
+.don-choice input { margin-top: 4px; accent-color: var(--accent); }
+.don-choice:has(input:checked) { border-color: var(--accent); background: var(--surface); }
+.don-choice b { display: block; font-size: 0.94rem; }
+.don-choice span { font-size: 0.82rem; color: var(--ink-soft); }
+.don-check { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 18px; font-size: 0.9rem; }
+.don-check input { margin-top: 4px; accent-color: var(--accent); }
+.don-errors { border-left: 4px solid var(--accent); background: var(--surface); padding: 12px 18px; margin-bottom: 20px; }
+.don-errors ul { margin: 6px 0 0; padding-left: 18px; }
+.don-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+@media (max-width: 640px) { .don-form .field-row-2 { grid-template-columns: 1fr; } }
+
+/* ---------- liens secrets ---------- */
+.don-link {
+  display: flex; gap: 8px; align-items: stretch;
+}
+.don-link input {
+  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 0.78rem; background: var(--bg);
+  border: 1px solid var(--line); color: var(--ink); padding: 8px 10px;
+}
+
+/* ---------- admin : onglets, tableaux, stats ---------- */
+.don-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 22px 0 26px; }
+.don-tabs a {
+  padding: 10px 16px; text-decoration: none; color: var(--ink-soft); font-weight: 600; font-size: 0.9rem;
+  border: 1px solid transparent; border-bottom: none; margin-bottom: -1px;
+}
+.don-tabs a[aria-current="page"] { color: var(--ink); background: var(--bg); border-color: var(--line); }
+.don-tabs a:hover { color: var(--ink); }
+.don-tabs .don-count { font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent); margin-left: 4px; }
+
+.don-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 26px; }
+.don-stat { background: var(--surface); border: 1px solid var(--line); padding: 14px 16px; }
+.don-stat b { display: block; font-family: var(--font-display); font-size: 1.9rem; line-height: 1.1; color: var(--ink); }
+.don-stat span { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); }
+.don-stat--hl b { color: var(--sage); }
+
+.don-table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+table.don-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.don-table th, .don-table td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.don-table th { color: var(--ink-soft); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.don-table tr:last-child td { border-bottom: none; }
+.don-table td.don-num { white-space: nowrap; font-family: var(--font-mono); }
+.don-thumb { width: 52px; height: 52px; object-fit: cover; border: 1px solid var(--line); background: var(--bg); }
+.don-bulk { background: var(--bg); border: 1px solid var(--line); padding: 12px 14px; margin-top: 14px; }
+.don-bulk--sticky { position: sticky; bottom: 0; z-index: 5; } /* longues listes seulement */
+
+.don-meter { height: 10px; background: var(--bg); border: 1px solid var(--line); position: relative; overflow: hidden; }
+.don-meter > i { position: absolute; inset: 0 auto 0 0; background: var(--accent-2); opacity: 0.35; }
+.don-meter > b { position: absolute; inset: 0 auto 0 0; background: var(--sage); }
+.don-meter--over > i { background: var(--accent); opacity: 0.6; }
+
+.don-tour { background: var(--surface); border: 1px solid var(--line); padding: 18px 20px; margin-top: 18px; }
+.don-tour h3 { font-size: 1.1rem; }
+
+.btn-small.don-ok { border-color: var(--sage); color: var(--sage); }
+.btn-small.don-ok:hover { background: var(--sage); color: var(--accent-ink); }
+.btn-small.don-danger { border-color: var(--accent); color: var(--accent); }
+.btn-small.don-danger:hover { background: var(--accent); color: var(--accent-ink); }
+.don-link-btn { background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: inherit; }
+
+/* ---------- pages bénévoles (mobile d'abord) ---------- */
+body.don-field { background: var(--bg); }
+.don-field-bar { background: var(--surface); border-bottom: 1px solid var(--line); padding: 12px 0; position: sticky; top: 0; z-index: 10; }
+.don-field-bar h1 { font-size: 1.15rem; }
+.don-stop { background: var(--surface); border: 1px solid var(--line); margin-top: 14px; padding: 0; } /* padding:0 : neutralise « section { padding } » du thème */
+.don-stop-head { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.don-stop-head .don-stand { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; color: var(--accent); }
+.don-stop-head a { color: var(--ink); font-weight: 600; }
+.don-item { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+.don-item:last-child { border-bottom: none; }
+.don-item[data-done="1"] { opacity: 0.55; }
+.don-item h3 { font-size: 1rem; font-family: var(--font-body); font-weight: 600; }
+.don-item-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.don-big {
+  min-height: 48px; padding: 10px 18px; font-size: 1rem; font-weight: 700; cursor: pointer;
+  border: 2px solid var(--ink); background: transparent; color: var(--ink); border-radius: 2px; font-family: var(--font-body);
+}
+.don-big--ok { background: var(--sage); border-color: var(--sage); color: var(--accent-ink); }
+.don-big--no { border-color: var(--line); color: var(--ink-soft); }
+.don-big--wide { width: 100%; }
+.don-desk-nav { display: flex; gap: 6px; margin: 16px 0 6px; }
+.don-desk-nav a { flex: 1; text-align: center; padding: 12px 6px; border: 1px solid var(--line); text-decoration: none; font-weight: 600; font-size: 0.9rem; background: var(--surface); }
+.don-desk-nav a[aria-current="page"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+@media (max-width: 640px) {
+  .don-wrap { padding: 0 16px; }
+  .don-event dl { grid-template-columns: 1fr; }
+  .don-event dt { padding-top: 8px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .don-meter > b, .don-meter > i { transition: width 0.3s; }
+}

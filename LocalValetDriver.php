@@ -62,6 +62,10 @@ class LocalValetDriver extends BasicValetDriver
         if ($this->isSensitive($uri)) {
             return false; // traité (403) par frontControllerPath
         }
+        // Comptage de foule d'une galerie : service worker et manifeste, fichiers statiques du dossier comptage/.
+        if (preg_match('#^/galerie/[A-Za-z0-9][A-Za-z0-9-]*/comptage/(sw\.js|manifest\.json)$#', $uri, $m) && is_file($sitePath . '/comptage/' . $m[1])) {
+            return $sitePath . '/comptage/' . $m[1];
+        }
         // /<commerce>/assets/x.css → fichier partagé à la racine (assets/, uploads/ ne sont pas préfixés par commerce).
         $tenant = $this->tenantInPath($sitePath, $uri);
         if ($tenant !== '') {
@@ -92,6 +96,27 @@ class LocalValetDriver extends BasicValetDriver
         if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/admin/?$#', $uri, $m)) {
             $_GET['g'] = strtolower($m[1]);
             return $this->run($sitePath, '/galerie/admin.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
+        }
+
+        // Espace des bénévoles de la buvette d'une galerie : /galerie/<identifiant>/buvette/[<page>.php]
+        if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/buvette(?:/(?:([a-z]+)\.php)?)?$#', $uri, $m)) {
+            $page = ($m[2] ?? '') === '' ? 'index' : $m[2];
+            if (is_file($sitePath . '/buvette/' . $page . '.php')) {
+                $_GET['g'] = strtolower($m[1]);
+                return $this->run($sitePath, '/buvette/' . $page . '.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
+            }
+        }
+
+        // Comptage de foule d'une galerie : /galerie/<identifiant>/comptage/[<page>.php]
+        if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/comptage(?:/|/(index|login|logout|api)\.php)?$#', $uri, $m)) {
+            $_GET['g'] = strtolower($m[1]);
+            return $this->run($sitePath, '/comptage/' . (($m[2] ?? '') === '' ? 'index' : $m[2]) . '.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
+        }
+
+        // Dons et invendus d'une galerie : /galerie/<identifiant>/dons/[<page>.php]
+        if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/dons(?:/|/(point|proposer|suivi|tournee)\.php)?$#', $uri, $m)) {
+            $_GET['g'] = strtolower($m[1]);
+            return $this->run($sitePath, '/' . (($m[2] ?? '') === '' ? 'dons' : 'dons-' . $m[2]) . '.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
         }
 
         // Galeries commerciales : /galerie/ et /galerie/<identifiant>/
