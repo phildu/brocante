@@ -140,6 +140,7 @@ PHP 8.0+, SQLite, cURL (déjà requis par le site), mbstring.
 
 ```
 includes/notifications.php          logique métier, schéma, pilotes de canaux
+includes/closure-text.php           clé, période et message d'une fermeture (commun aux boutiques et aux galeries)
 includes/closure-alerts.php         alerte de fermeture aux clients (message, public, envoi, journal)
 admin/closure-alert.php             page de confirmation et d'envoi de l'alerte de fermeture
 includes/notifications-layout.php   gabarits admin et page publique

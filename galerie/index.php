@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/gallery-admin.php';
 require_once __DIR__ . '/../includes/gallery-offers.php';
 require_once __DIR__ . '/../includes/gallery-loyalty.php';
 require_once __DIR__ . '/../includes/gallery-booking.php';
+require_once __DIR__ . '/../includes/gallery-hours.php';
 require_once __DIR__ . '/../includes/gallery-bourse.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/promo.php';
@@ -386,6 +387,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
   </div></header>
 
   <main id="contenu" class="wrap">
+    <?= gh_public_html($gallery) /* horaires et annonce de fermeture (includes/gallery-hours.php) */ ?>
     <?php if ($testRequest): ?><p class="note" role="status">Aperçu privé : la boutique « <?= e($testRequest['shop_name']) ?> » est affichée temporairement. Cet aperçu ne l’ajoute pas à la galerie.</p><?php endif; ?>
     <?php if ($data['skipped']): ?>
       <p class="note">Certains <?= e($vocab['members'] ?? 'commerces') ?> ne répondent pas pour le moment (<?= e(implode(', ', $data['skipped'])) ?>) : leurs pièces reviendront dès que possible.</p>
