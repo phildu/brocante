@@ -1004,7 +1004,7 @@ public (visiteurs, exposants, bénévoles du point et des tournées) passe par `
 `/galerie/<galerie>/comptage/` (code partagé propre à la galerie). Le service worker et le manifeste de l'application sont relatifs à leur
 dossier : ils servent aussi bien `/comptage/` qu'une galerie, avec un cache par galerie.
 
-**Annulation & remboursements** (`annulation`, voir `ANNULATION.md`) : annuler le vide-grenier et rembourser les exposants en totalité ou en partie.
+**Annulation & remboursements** (`annulation`, voir `ANNULATION.md`, proposée aux vide-greniers, marchés aux puces et marchés de Noël) : annuler l'événement et rembourser les exposants en totalité ou en partie.
 Pas de base SQL : elle s'appuie sur l'événement et le registre des demandes de la galerie (`includes/gallery-cancellation.php`,
 `portail/galerie-annulation.php`). L'annulation passe par l'extension ; le suivi d'un événement déjà annulé reste ouvert si elle s'arrête.
 
