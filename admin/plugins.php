@@ -1,7 +1,7 @@
 <?php
 // Plugins de CETTE boutique (administrateur), pour un déploiement sans portail — c'est le cas du Petit Chalet
 // (brocante.arrimage.com), dont la base n'est pas celle du portail : activer, mettre à jour ou désactiver un plugin
-// (includes/plugins.php) s'y fait ici. Sur un déploiement avec portail (brocs.arrimage.com), tout passe par portail → Plugins.
+// (includes/plugins.php) s'y fait ici. Sur un déploiement avec portail (bricbrok.com), tout passe par portail → Plugins.
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/plugins.php';

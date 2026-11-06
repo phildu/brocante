@@ -66,7 +66,7 @@ function gaiz_orthophoto(array $pts, int $size = GAIZ_IMAGE_SIZE): ?array
     ]);
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 6,
-        CURLOPT_USERAGENT => 'Brocs-galerie/1.0 (+https://brocs.arrimage.com)', CURLOPT_FOLLOWLOCATION => true]);
+        CURLOPT_USERAGENT => 'Bricbrok-galerie/1.0 (+https://bricbrok.com)', CURLOPT_FOLLOWLOCATION => true]);
     $body = curl_exec($ch);
     $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $type = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);

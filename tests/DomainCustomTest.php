@@ -46,7 +46,7 @@ final class DomainCustomTest extends TestCase
 
     private function attached(string $slug = 'boutique-a', string $domain = 'mon-domaine.fr'): array
     {
-        return domain_custom_attach($slug, $domain, 'brocs.arrimage.com');
+        return domain_custom_attach($slug, $domain, 'bricbrok.com');
     }
 
     private function dnsOk(string $slug = 'boutique-a', string $domain = 'mon-domaine.fr'): array
@@ -91,7 +91,7 @@ final class DomainCustomTest extends TestCase
     {
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('domaine de la plateforme');
-        $this->attached('boutique-a', 'admin.brocs.arrimage.com');
+        $this->attached('boutique-a', 'admin.bricbrok.com');
     }
 
     public function testAttachRefusesDomainOfAnotherShop(): void
@@ -209,6 +209,167 @@ final class DomainCustomTest extends TestCase
         $this->assertSame([], domain_custom_load('boutique-a'));
         $this->assertSame([], domain_custom_hosts());
         $this->assertFileDoesNotExist(DOMAIN_CUSTOM_DATA_DIR . '/boutique-a.json');
+    }
+
+    private const HOSTING = ['service' => 'arrimage.com', 'path' => 'www/brocs', 'max' => 0];
+
+    /** Fausse API OVH : mémorise les appels, renvoie la liste d'alias demandée et un numéro de tâche. */
+    private function fakeApi(array &$calls, array $existing = [], ?string $failOn = null): callable
+    {
+        return static function (string $method, string $path, array $params = []) use (&$calls, $existing, $failOn) {
+            $calls[] = [$method, $path, $params];
+            if ($failOn !== null && ($params['domain'] ?? '') === $failOn) {
+                throw new RuntimeException('OVH refuse ' . $failOn);
+            }
+            if ($method === 'GET') return $existing;
+            if ($method === 'POST') return ['id' => 100 + count($calls), 'function' => 'attachedDomain/create', 'status' => 'todo'];
+            return null;
+        };
+    }
+
+    public function testHostingAttachDeclaresDomainAndWwwWithSsl(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        $record = domain_custom_hosting_attach('boutique-a', $this->fakeApi($calls), self::HOSTING);
+
+        $this->assertSame('GET', $calls[0][0]);
+        $this->assertSame('/hosting/web/arrimage.com/attachedDomain', $calls[0][1]);
+        $posts = array_values(array_filter($calls, static fn (array $c): bool => $c[0] === 'POST'));
+        $this->assertSame(['mon-domaine.fr', 'www.mon-domaine.fr'], array_column(array_column($posts, 2), 'domain'));
+        $this->assertSame('www/brocs', $posts[0][2]['path']);
+        $this->assertTrue($posts[0][2]['ssl'], 'Le certificat Let’s Encrypt est demandé avec l’alias.');
+        $this->assertTrue($posts[0][2]['bypassDNSConfiguration'], 'Le DNS du client n’est jamais modifié par OVH.');
+        $this->assertSame(['mon-domaine.fr', 'www.mon-domaine.fr'], $record['hosting']['domains']);
+        $this->assertSame('', $record['hosting']['error']);
+        $this->assertSame('dns_ok', $record['state'], 'Le rattachement ne change pas l’état : l’activation reste manuelle.');
+    }
+
+    public function testHostingAttachSkipsAliasesAlreadyInPlace(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        $record = domain_custom_hosting_attach('boutique-a', $this->fakeApi($calls, ['Mon-Domaine.fr']), self::HOSTING);
+        $posts = array_values(array_filter($calls, static fn (array $c): bool => $c[0] === 'POST'));
+        $this->assertSame(['www.mon-domaine.fr'], array_column(array_column($posts, 2), 'domain'));
+        $this->assertSame(['mon-domaine.fr', 'www.mon-domaine.fr'], $record['hosting']['domains']);
+    }
+
+    public function testHostingAttachRespectsTheConfiguredCeiling(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        try {
+            domain_custom_hosting_attach('boutique-a', $this->fakeApi($calls, ['a.fr', 'b.fr', 'c.fr']), ['max' => 4] + self::HOSTING);
+            $this->fail('Le plafond aurait dû refuser le rattachement.');
+        } catch (RuntimeException $ex) {
+            $this->assertStringContainsString('Plafond de 4 domaines', $ex->getMessage());
+        }
+        $this->assertSame([], array_filter($calls, static fn (array $c): bool => $c[0] === 'POST'), 'Aucun alias n’est créé au-delà du plafond.');
+    }
+
+    public function testHostingAttachKeepsApexWhenOnlyWwwFails(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        $record = domain_custom_hosting_attach('boutique-a', $this->fakeApi($calls, [], 'www.mon-domaine.fr'), self::HOSTING);
+        $this->assertSame(['mon-domaine.fr'], $record['hosting']['domains']);
+        $this->assertStringContainsString('www.mon-domaine.fr', $record['hosting']['www_error']);
+    }
+
+    public function testHostingAttachFailsWhenApexIsRefused(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('OVH refuse mon-domaine.fr');
+        domain_custom_hosting_attach('boutique-a', $this->fakeApi($calls, [], 'mon-domaine.fr'), self::HOSTING);
+    }
+
+    public function testHostingAttachRequiresProvenDomainAndSettings(): void
+    {
+        $this->attached();
+        $calls = [];
+        try {
+            domain_custom_hosting_attach('boutique-a', $this->fakeApi($calls), self::HOSTING);
+            $this->fail('Un domaine non prouvé ne doit pas être rattaché.');
+        } catch (RuntimeException $ex) {
+            $this->assertStringContainsString('propriété', $ex->getMessage());
+        }
+        $this->assertSame([], $calls);
+
+        $this->dnsOk();
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('pas réglé');
+        domain_custom_hosting_attach('boutique-a', $this->fakeApi($calls), []);
+    }
+
+    public function testRequestActivationAttachesHostingWhenConfigured(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        $ready = domain_custom_request_activation('boutique-a', $this->fakeApi($calls), self::HOSTING);
+        $this->assertSame('ready', $ready['state']);
+        $this->assertSame(['mon-domaine.fr', 'www.mon-domaine.fr'], $ready['hosting']['domains']);
+        $this->assertSame([], domain_custom_hosts(), 'Les alias créés ne mettent pas la boutique en service.');
+    }
+
+    public function testRequestActivationSurvivesAHostingFailure(): void
+    {
+        $this->dnsOk();
+        $previous = ini_set('error_log', sys_get_temp_dir() . '/brocs-domaines-custom-test.log');
+        try {
+            $calls = [];
+            $ready = domain_custom_request_activation('boutique-a', $this->fakeApi($calls, [], 'mon-domaine.fr'), self::HOSTING);
+        } finally {
+            ini_set('error_log', (string) $previous);
+        }
+        $this->assertSame('ready', $ready['state'], 'La demande reste enregistrée même si OVH refuse.');
+        $this->assertStringContainsString('OVH refuse', (string) $ready['hosting']['error']);
+        $this->assertArrayNotHasKey('domains', $ready['hosting']);
+    }
+
+    public function testRemoveDetachesHostingAliases(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        domain_custom_request_activation('boutique-a', $this->fakeApi($calls), self::HOSTING);
+        $calls = [];
+        $warning = domain_custom_remove('boutique-a', $this->fakeApi($calls));
+        $this->assertSame('', $warning);
+        $this->assertSame(
+            [
+                ['DELETE', '/hosting/web/arrimage.com/attachedDomain/mon-domaine.fr?bypassDNSConfiguration=true', []],
+                ['DELETE', '/hosting/web/arrimage.com/attachedDomain/www.mon-domaine.fr?bypassDNSConfiguration=true', []],
+            ],
+            $calls
+        );
+        $this->assertSame([], domain_custom_load('boutique-a'));
+    }
+
+    public function testRemoveWithoutHostingAliasesNeverCallsOvh(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        $this->assertSame('', domain_custom_remove('boutique-a', $this->fakeApi($calls)));
+        $this->assertSame([], $calls);
+    }
+
+    public function testRemoveStillDetachesWhenOvhRefusesAliasRemoval(): void
+    {
+        $this->dnsOk();
+        $calls = [];
+        domain_custom_request_activation('boutique-a', $this->fakeApi($calls), self::HOSTING);
+        $previous = ini_set('error_log', sys_get_temp_dir() . '/brocs-domaines-custom-test.log');
+        try {
+            $warning = domain_custom_remove('boutique-a', static function (): never {
+                throw new RuntimeException('HTTP 403');
+            });
+        } finally {
+            ini_set('error_log', (string) $previous);
+        }
+        $this->assertStringContainsString('retirez-les à la main', $warning);
+        $this->assertSame([], domain_custom_load('boutique-a'), 'Le domaine est détaché même si les alias restent.');
     }
 
     public function testCheckRefusesWithoutAttachedDomain(): void

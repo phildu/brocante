@@ -33,7 +33,7 @@ function gd_wfs_fetch(array $spec, array $bbox): array
         ]);
         $ch = curl_init(GD_WFS_URL . '?' . $query);
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_USERAGENT => 'Brocs-galerie/1.0 (+https://brocs.arrimage.com)', CURLOPT_FOLLOWLOCATION => true]);
+            CURLOPT_USERAGENT => 'Bricbrok-galerie/1.0 (+https://bricbrok.com)', CURLOPT_FOLLOWLOCATION => true]);
         curl_multi_add_handle($mh, $ch);
         $handles[$layer] = $ch;
     }

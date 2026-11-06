@@ -1,11 +1,13 @@
 <?php
 // Actions de la page « Nom de domaine » de la boutique : rechercher, préparer
-// un devis, ouvrir le paiement Stripe, annuler un devis en attente.
+// un devis, ouvrir le paiement Stripe, annuler un devis en attente, et choisir
+// une adresse en sous-domaine (nom.domaine) à prix fixe.
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/saas.php';
 require_once __DIR__ . '/../includes/domain-shop.php';
+require_once __DIR__ . '/../includes/domain-sub.php';
 require_admin();
 
 function domain_back(string $message, string $kind = 'error', ?string $url = null): never
@@ -63,6 +65,38 @@ try {
     if ($action === 'cancel') {
         domain_shop_cancel($slug);
         domain_back('Devis ou paiement en attente annulé. Vous pouvez choisir un autre domaine.', 'ok');
+    }
+
+    if ($action === 'sub_pay') {
+        $email = (string) tenant('admin_email', '');
+        $result = domain_sub_checkout($slug, (string) ($_POST['label'] ?? ''), $email, shop_abs_url('/admin/domaine.php'));
+        if (!empty($result['free'])) {
+            domain_back('Votre boutique répond maintenant à ' . domain_sub_url((string) $result['label']) . '/.', 'ok');
+        }
+        $url = (string) ($result['url'] ?? '');
+        if (!preg_match('#^https?://#', $url)) domain_back('Stripe n’a pas renvoyé d’adresse de paiement exploitable.');
+        header('Location: ' . $url, true, 303);
+        exit;
+    }
+
+    if ($action === 'sub_rename') {
+        $email = (string) tenant('admin_email', '');
+        $result = domain_sub_rename($slug, (string) ($_POST['label'] ?? ''), $email, shop_abs_url('/admin/domaine.php'));
+        if (!empty($result['free'])) {
+            domain_back('Votre boutique répond maintenant à ' . domain_sub_url((string) $result['label']) . '/.', 'ok');
+        }
+        $url = (string) ($result['url'] ?? '');
+        if (!preg_match('#^https?://#', $url)) domain_back('Stripe n’a pas renvoyé d’adresse de paiement exploitable.');
+        header('Location: ' . $url, true, 303);
+        exit;
+    }
+
+    if ($action === 'sub_cancel') {
+        $wasRename = domain_sub_active_label($slug) !== '';
+        domain_sub_cancel($slug);
+        domain_back($wasRename
+            ? 'Changement de nom annulé : votre adresse actuelle reste en service.'
+            : 'Paiement de l’adresse annulé. Vous pouvez choisir un autre nom.', 'ok');
     }
 
     if ($action === 'custom_attach') {

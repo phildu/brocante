@@ -2,7 +2,7 @@
   var root = document.getElementById('aco-page');
   if (!root || root.dataset.entitled !== '1') return;
   var api = root.dataset.api, csrf = root.dataset.csrf;
-  var labelsBase = root.dataset.labels, reportBase = root.dataset.report, exportApi = root.dataset.export;
+  var campaignsBase = root.dataset.campaigns, labelsBase = root.dataset.labels, reportBase = root.dataset.report, exportApi = root.dataset.export;
   var contactsApi = root.dataset.contacts;
   var msg = document.getElementById('aco-msg');
   var contactsMsg = document.getElementById('aco-contacts-msg');
@@ -277,6 +277,7 @@
             actions.appendChild(notifyButton(o));
             actions.appendChild(actionButton('Arrêter', 'stop', o.id, load));
           }
+          actions.appendChild(el('a', 'Campagne', { href: campaignsBase + o.id, 'class': 'hint', style: 'margin-left:8px;' }));
           if (o.count) {
             actions.appendChild(el('a', 'Étiquettes', { href: labelsBase + o.id, 'class': 'hint', style: 'margin-left:8px;' }));
             actions.appendChild(el('a', 'Bilan', { href: reportBase + o.id, 'class': 'hint', style: 'margin-left:8px;' }));
