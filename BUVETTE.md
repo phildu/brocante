@@ -32,8 +32,8 @@ bénévoles et check-list du jour J.
 | **Fournitures** | Ingrédients, consommables (gobelets…) et matériel. On saisit un **lot** (« paquet de 1 kg à 10,90 € ») ; le prix à l'unité s'en déduit. Suivi du stock. |
 | **Prévisionnel & bilan** | Portions prévues par article → CA et marge prévus. Après l'événement, saisir les quantités **vendues** → bilan réel. |
 | **Courses** | Besoins = recettes × prévisions (+ marge de sécurité) + besoins manuels (tables, glacières…) − stock, arrondis au **lot entier**. Imprimable. |
-| **Bénévoles & planning** | Annuaire (coordonnées visibles du responsable seul), créneaux (poste, horaires, effectif), affectations. Signale les trous et les doubles réservations. |
-| **Check-list** | Liste type (autorisation en mairie, assurance, hygiène, allergènes, installation, rangement, bilan), personnalisable, avec progression. |
+| **Bénévoles & planning** | Annuaire (coordonnées visibles du responsable seul), créneaux (poste, horaires, effectif), affectations. Signale les trous et les doubles réservations. Lien vers la **charte du bénévole occasionnel** (`charte.php`, fiche A4 à imprimer et faire signer aux non-adhérents, préremplie avec l'association et l'événement). |
+| **Check-list** | Liste type, personnalisable, avec progression : **démarches officielles** (déclaration de vente au déballage Cerfa 13939*01, occupation du domaine public, assurance, sécurité, règlement intérieur, registre des exposants coté et paraphé, dépôt du registre sous 8 jours), puis autorisation de buvette, hygiène, allergènes, installation, rangement, bilan. Ce sont des rappels : les règles exactes dépendent de la commune. |
 
 Un seul événement est « en cours » à la fois : les onglets Prévisionnel, Courses, Bénévoles et Check-list travaillent sur lui. La carte, les recettes et les fournitures sont communes à tous les événements.
 

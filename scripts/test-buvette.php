@@ -161,6 +161,8 @@ db()->prepare('DELETE FROM bv_tasks WHERE event_id = ? AND id = (SELECT MIN(id) 
 check('rechargement : ne rajoute que la tâche supprimée', bv_load_default_checklist($eid), 1);
 $grouped = bv_tasks_by_phase($eid);
 check('phases dans l\'ordre chronologique', array_keys($grouped), array_keys(bv_task_phases()));
+check('démarches officielles : première phase', array_key_first(bv_task_phases()), 'demarches');
+check('registre des exposants dans la check-list type', count(array_filter(bv_default_checklist()['demarches'], fn($l) => str_contains($l, 'registre'))), 1);
 
 echo "\nDuplication d'événement\n";
 db()->prepare('UPDATE bv_tasks SET done = 1 WHERE event_id = ?')->execute([$eid]);

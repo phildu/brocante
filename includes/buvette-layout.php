@@ -34,6 +34,7 @@ function bv_admin_sections(): array
         'caisse' => ['/admin/buvette/caisse.php', 'Caisse'],
         'benevoles' => ['/admin/buvette/benevoles.php', 'Bénévoles & planning'],
         'checklist' => ['/admin/buvette/checklist.php', 'Check-list'],
+        'charte' => ['/admin/buvette/charte.php', 'Charte bénévole', false],   // 3e valeur false : page sans onglet (lien depuis « Bénévoles & planning »)
     ];
 }
 
@@ -60,7 +61,7 @@ function bv_admin_header(string $title, string $section): void
     ?>
     <div class="bv-admin">
     <nav class="bv-subnav bv-noprint" aria-label="Sections de la buvette">
-      <?php foreach (bv_admin_sections() as $key => [$href, $label]): ?>
+      <?php foreach (bv_admin_sections() as $key => $sec): if (($sec[2] ?? true) === false) continue; [$href, $label] = $sec; ?>
         <a href="<?= h($href) ?>"<?= $section === $key ? ' aria-current="page"' : '' ?>><?= h($label) ?></a>
       <?php endforeach; ?>
     </nav>
