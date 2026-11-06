@@ -14,6 +14,7 @@
 //   6. petit-chalet (comportement historique).
 
 const TENANT_DEFAULT = 'petit-chalet';
+require_once __DIR__ . '/edge-proxy.php'; // hôte et IP réels derrière Cloudflare, avant toute lecture de HTTP_HOST
 require_once __DIR__ . '/business-presence.php';
 require_once __DIR__ . '/domain-custom.php';
 require_once __DIR__ . '/domain-sub.php';
