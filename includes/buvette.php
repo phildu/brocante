@@ -123,6 +123,51 @@ CREATE TABLE IF NOT EXISTS bv_tasks (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+-- Caisse : une vente = un encaissement (espèces ou carte), ses lignes gardent le nom et le prix du jour.
+CREATE TABLE IF NOT EXISTS bv_sales (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES bv_events(id) ON DELETE CASCADE,
+  method TEXT NOT NULL DEFAULT 'cash',          -- cash | card (terminal externe) | stripe (QR de paiement)
+  status TEXT NOT NULL DEFAULT 'paid',          -- paid | pending (QR en attente de paiement) | canceled (QR expiré ou annulé)
+  stripe_session_id TEXT NOT NULL DEFAULT '',
+  client_uid TEXT NOT NULL DEFAULT '',          -- identifiant posé par le téléphone : un envoi répété (synchro hors ligne) ne crée pas deux ventes
+  note TEXT NOT NULL DEFAULT '',                -- ex. « saisi hors ligne »
+  total_cents INTEGER NOT NULL DEFAULT 0,
+  given_cents INTEGER,                          -- espèces remises par le client (pour le rendu de monnaie)
+  by_name TEXT NOT NULL DEFAULT '',
+  voided_at TEXT,                               -- NULL = vente valable
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bv_sale_lines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id INTEGER NOT NULL REFERENCES bv_sales(id) ON DELETE CASCADE,
+  item_id INTEGER REFERENCES bv_items(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  qty INTEGER NOT NULL,
+  unit_cents INTEGER NOT NULL
+);
+
+-- Gratuités des bénévoles (bar, restauration) : une ligne par article offert, scanné sur le badge QR du bénévole.
+CREATE TABLE IF NOT EXISTS bv_gifts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES bv_events(id) ON DELETE CASCADE,
+  volunteer_id INTEGER NOT NULL REFERENCES bv_volunteers(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,                           -- bar | food
+  item_id INTEGER REFERENCES bv_items(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  unit_cents INTEGER NOT NULL DEFAULT 0,        -- valeur offerte (prix de la carte ce jour-là)
+  by_name TEXT NOT NULL DEFAULT '',             -- qui a servi
+  client_uid TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  voided_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_bv_gifts_event ON bv_gifts(event_id, volunteer_id);
+
+CREATE INDEX IF NOT EXISTS idx_bv_sales_event ON bv_sales(event_id);
+CREATE INDEX IF NOT EXISTS idx_bv_sale_lines_sale ON bv_sale_lines(sale_id);
+
 CREATE TABLE IF NOT EXISTS bv_settings (
   k TEXT PRIMARY KEY,
   v TEXT NOT NULL DEFAULT ''
@@ -148,6 +193,15 @@ function bv_boot(): void
         date_default_timezone_set('Europe/Paris');
     }
     db()->exec(BV_SCHEMA);
+    // Bases créées avant le paiement par QR : on ajoute les colonnes manquantes de la caisse.
+    foreach (['bv_sales' => ['status' => "'paid'", 'stripe_session_id' => "''", 'client_uid' => "''", 'note' => "''"], 'bv_gifts' => ['client_uid' => "''", 'note' => "''"]] as $table => $wanted) {
+        $cols = array_column(db()->query("PRAGMA table_info($table)")->fetchAll(), 'name');
+        foreach ($wanted as $col => $default) {
+            if ($cols && !in_array($col, $cols, true)) db()->exec("ALTER TABLE $table ADD COLUMN $col TEXT NOT NULL DEFAULT $default");
+        }
+    }
+    db()->exec('CREATE INDEX IF NOT EXISTS idx_bv_sales_uid ON bv_sales(client_uid)');
+    db()->exec('CREATE INDEX IF NOT EXISTS idx_bv_gifts_uid ON bv_gifts(client_uid)');
 }
 
 /* ====================================================================== */
@@ -282,6 +336,7 @@ function bv_supply_kinds(): array
 function bv_task_phases(): array
 {
     return [
+        'demarches' => 'Démarches officielles (3 mois à 15 jours avant)',
         'avant' => 'Avant l\'événement (J-30 à J-7)',
         'veille' => 'La veille',
         'installation' => 'Installation (matin du jour J)',
@@ -828,12 +883,24 @@ function bv_load_default_shifts(int $eventId): int
 function bv_default_checklist(): array
 {
     return [
+        // Obligations de l'organisateur d'une vente au déballage (code de commerce, art. L310-2 et R321-9) : à confirmer auprès de la mairie.
+        'demarches' => [
+            'Déclarer la vente au déballage au maire (Cerfa n° 13939*01), par lettre recommandée ou dépôt contre décharge, au moins 15 jours avant',
+            'Demander l\'autorisation d\'occuper le domaine public si l\'événement a lieu sur la voie publique, une place ou un parking municipal (s\'y prendre jusqu\'à 3 mois avant)',
+            'Déclarer l\'événement à l\'assureur : date, lieu, nombre estimé d\'exposants et de bénévoles',
+            'Confirmer par écrit que l\'assurance couvre la responsabilité civile des bénévoles non adhérents ou occasionnels',
+            'Informer la gendarmerie ou la police municipale de la date de l\'événement',
+            'Prévoir l\'accès des secours (voies d\'engins dégagées) et des extincteurs près de la buvette',
+            'Rédiger le règlement intérieur : particuliers limités à 2 ventes au déballage par an, objets personnels et usagés uniquement',
+            'Faire coter et parapher le registre des exposants par le maire ou le commissaire de police, avant l\'événement',
+        ],
         'avant' => [
             'Fixer la date et le lieu avec la mairie ou le propriétaire du terrain',
             'Demander l\'autorisation de buvette temporaire en mairie (se renseigner sur le délai et les boissons autorisées)',
             'Vérifier que l\'assurance de l\'association couvre la buvette et la vente de nourriture',
             'Définir la carte et les prix (onglet « Carte & prix »)',
             'Recruter les bénévoles et construire le planning',
+            'Faire signer la charte du bénévole occasionnel à chaque bénévole non adhérent (onglet « Bénévoles & planning »)',
             'Réserver ou emprunter le matériel : barnum, tables, glacières, bouilloire ou percolateur, plancha',
             'Vérifier l\'accès à l\'électricité (puissance, rallonges) et à un point d\'eau potable',
             'Estimer les quantités et établir la liste de courses (onglets « Prévisionnel » et « Courses »)',
@@ -854,6 +921,8 @@ function bv_default_checklist(): array
             'Installer les glacières et contrôler la température des produits frais',
             'Compter le fond de caisse et le noter',
             'Briefing des bénévoles : rôles, prix, hygiène, qui prévenir en cas de problème',
+            'Inscrire chaque exposant au registre à son arrivée : nom, prénom, adresse, type et numéro de pièce d\'identité',
+            'Particuliers : recueillir l\'attestation sur l\'honneur (pas plus de 2 ventes au déballage par an)',
             'Prévoir les poubelles et le tri des déchets',
         ],
         'service' => [
@@ -878,6 +947,7 @@ function bv_default_checklist(): array
             'Remercier les bénévoles',
             'Noter ce qui a manqué ou ce qui est resté invendu pour la prochaine édition',
             'Classer les tickets de courses et le décompte de caisse',
+            'Déposer le registre des exposants (original) à la préfecture ou sous-préfecture, au plus tard 8 jours après l\'événement',
         ],
     ];
 }

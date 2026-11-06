@@ -95,6 +95,7 @@ function gallery_normalize(string $slug, array $data): array
         'created' => (int) ($data['created'] ?? time()),
         'style' => gallery_style_normalize((array) ($data['style'] ?? [])),
         'apps' => gallery_apps_normalize((array) ($data['apps'] ?? [])),
+        'app_icons' => gallery_app_icons_normalize((array) ($data['app_icons'] ?? [])),
         'members' => $members,
         'admins' => gallery_admins_normalize((array) ($data['admins'] ?? [])),
         'plan' => gallery_plan_normalize((array) ($data['plan'] ?? [])),

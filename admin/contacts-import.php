@@ -49,8 +49,6 @@ $body = ci_page([
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Importer des contacts — <?= h($content['site_name']) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 </head>

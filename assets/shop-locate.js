@@ -3,8 +3,8 @@
 (function () {
   'use strict';
 
-  var LEAFLET_CSS = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
-  var LEAFLET_JS = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+  var LEAFLET_CSS = '/assets/lib/leaflet/leaflet.min.css';
+  var LEAFLET_JS = '/assets/lib/leaflet/leaflet.min.js';
   var leafletPromise = null;
 
   function data(el, name) {

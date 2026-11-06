@@ -9,7 +9,8 @@ switch (nt_post_action()) {
         if ($name === '') nt_redirect($self . '#nouvel-utilisateur', 'Le nom est obligatoire.', 'error');
         $id = nt_user_create($name, (string) ($_POST['notes'] ?? ''));
         $errors = [];
-        foreach (array_keys(nt_channels()) as $ch) {
+        foreach (nt_channels() as $ch => $def) {
+            if (!empty($def['self_service'])) continue; // abonnement navigateur : la personne seule l'active
             $addr = trim((string) ($_POST['new_' . $ch] ?? ''));
             if ($addr === '') continue;
             if ($err = nt_user_set_channel($id, $ch, $addr, true, count(nt_user_get($id)['channels']))) $errors[] = $err;
@@ -27,8 +28,16 @@ switch (nt_post_action()) {
         nt_user_update($id, $name, (string) ($_POST['notes'] ?? ''), !empty($_POST['is_active']));
 
         $errors = [];
-        foreach (array_keys(nt_channels()) as $ch) {
+        foreach (nt_channels() as $ch => $def) {
             $in = $_POST['ch'][$ch] ?? [];
+            if (!empty($def['self_service'])) {
+                // Abonnement navigateur : l'administration peut seulement le suspendre/réordonner, jamais le créer ni changer l'adresse.
+                if (isset($user['channels'][$ch])) {
+                    $order = max(1, min(99, (int) ($in['order'] ?? 1))) - 1;
+                    nt_user_set_channel($id, $ch, $user['channels'][$ch]['address'], !empty($in['enabled']), $order);
+                }
+                continue;
+            }
             $addr = trim((string) ($in['address'] ?? ''));
             if ($addr === '') {
                 if (isset($user['channels'][$ch])) nt_user_remove_channel($id, $ch);
@@ -142,10 +151,17 @@ nt_admin_header('Utilisateurs', 'utilisateurs');
           <thead><tr><th>Canal</th><th>Adresse (laisser vide pour retirer)</th><th class="c">Actif</th><th class="c" title="1 = canal préféré ; sert à l'ordre et au repli">Ordre</th></tr></thead>
           <tbody>
           <?php foreach ($channels as $ch => $def): $row = $u['channels'][$ch] ?? null; ?>
+            <?php if (!empty($def['self_service']) && !$row): ?>
+            <tr><td><strong><?= h($def['label']) ?></strong></td><td colspan="3" class="nt-muted">Non activé : la personne l'active elle-même depuis sa page de préférences.</td></tr>
+            <?php continue; endif; ?>
             <tr>
               <td><strong><?= h($def['label']) ?></strong><?php if (!$status[$ch]['ready'] && !($ch === 'discord' && $row && str_starts_with($row['address'], 'https://'))): ?><br><span class="nt-muted" style="font-size:.78rem;">non configuré</span><?php endif; ?></td>
               <td>
+                <?php if (!empty($def['self_service'])): ?>
+                  <span class="nt-muted">Abonnement du navigateur de la personne (non modifiable ici)</span>
+                <?php else: ?>
                 <input class="nt-input" name="ch[<?= h($ch) ?>][address]" value="<?= h($row['address'] ?? '') ?>" placeholder="<?= h($def['placeholder']) ?>" aria-label="<?= h($def['address_label']) ?>" maxlength="300" autocomplete="off">
+                <?php endif; ?>
                 <?php if ($row && $row['disabled_reason'] !== ''): ?><span class="nt-muted" style="font-size:.78rem;">Désactivé : <?= h($row['disabled_reason']) ?></span><?php endif; ?>
               </td>
               <td class="c"><input type="checkbox" name="ch[<?= h($ch) ?>][enabled]" value="1"<?= !$row || $row['enabled'] ? ' checked' : '' ?> aria-label="Actif"></td>
@@ -205,7 +221,7 @@ nt_admin_header('Utilisateurs', 'utilisateurs');
     <div class="nt-form-grid" style="margin-top:10px;">
       <div class="field"><label for="nn">Nom</label><input class="nt-input" id="nn" name="name" maxlength="120" required placeholder="Prénom Nom"></div>
       <div class="field span-2"><label for="nnotes">Notes (internes)</label><input class="nt-input" id="nnotes" name="notes" maxlength="500"></div>
-      <?php foreach ($channels as $ch => $def): ?>
+      <?php foreach ($channels as $ch => $def): if (!empty($def['self_service'])) continue; ?>
         <div class="field"><label for="new_<?= h($ch) ?>"><?= h($def['address_label']) ?></label><input class="nt-input" id="new_<?= h($ch) ?>" name="new_<?= h($ch) ?>" placeholder="<?= h($def['placeholder']) ?>" maxlength="300" autocomplete="off"></div>
       <?php endforeach; ?>
     </div>

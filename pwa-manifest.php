@@ -30,7 +30,7 @@ echo json_encode([
     'background_color' => $theme['bg'],
     'theme_color' => $theme['bg'],
     'icons' => [
-        ['src' => $base . '/pwa-icon.php?s=192', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
-        ['src' => $base . '/pwa-icon.php?s=512', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
+        ['src' => shop_app_icon_url('shop', 192, $base), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
+        ['src' => shop_app_icon_url('shop', 512, $base), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
     ],
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);

@@ -139,7 +139,7 @@ function gallery_locate_data(array $gallery, ?array $shops = null, string $origi
         if (!$shop) continue;
         $place = is_array($map['places'][$key] ?? null) ? $map['places'][$key] : null;
         $mine = array_values(array_filter($items, static fn (array $it): bool => $it['shopKey'] === $key));
-        $rank = static fn (array $it): int => ($it['kind'] ?? '') === 'marker' ? 0 : (['slot' => 1, 'zone' => 2, 'territoire' => 2, 'line' => 3][$it['role'] ?? ''] ?? 4);
+        $rank = static fn (array $it): int => ($it['kind'] ?? '') === 'marker' ? 0 : (['slot' => 1, 'zone' => 2, 'territoire' => 2, 'secteur' => 2, 'line' => 3][$it['role'] ?? ''] ?? 4);
         usort($mine, static fn (array $a, array $b): int => $rank($a) <=> $rank($b));
         $item = $mine[0] ?? null;
         $slot = null;

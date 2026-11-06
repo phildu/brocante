@@ -22,3 +22,7 @@ tenants/*/*.sqlite
 tenants/*/secrets/
 .phpunit.result.cache
 backups/
+# Marqueur d'environnement déposé par le déploiement sur le serveur (preprod|prod).
+.app-env
+# Sauvegardes automatiques avant édition (fichier.bak-AAAAMMJJ-HHMMSS) : archives locales.
+*.bak-*

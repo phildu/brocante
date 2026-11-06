@@ -647,6 +647,7 @@ function saas_generate_shop(array $req, string $origin, string $galleryOverride 
         'legal_email' => (string) $req['email'],
         'legal_director' => trim((string) ($req['first_name'] ?? '') . ' ' . (string) ($req['last_name'] ?? '')),
     ];
+    $ownerLegal['legal_kind'] = ($req['owner_kind'] ?? 'particulier') === 'professionnel' ? 'entreprise' : 'particulier';
     if (($req['owner_kind'] ?? 'particulier') === 'professionnel') {
         $ownerLegal['legal_company'] = (string) ($req['company_name'] ?? '');
         $ownerLegal['legal_siret'] = (string) ($req['siret'] ?? '');
@@ -1179,9 +1180,7 @@ function saas_page_start(string $title, string $description, string $active = ''
 <meta name="description" content="<?= saas_e($description) ?>">
 <meta property="og:title" content="<?= saas_e($title) ?>">
 <meta property="og:description" content="<?= saas_e($description) ?>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/assets/saas.css">
 <link rel="stylesheet" href="/assets/oauth.css">
 <link rel="stylesheet" href="/assets/pricing.css">

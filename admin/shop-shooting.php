@@ -78,8 +78,6 @@ $requestStatus = static function (string $status): string {
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#f4eee1">
 <title>Reportage boutique — <?= h($siteName) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="icon" type="image/png" sizes="32x32" href="/pwa-icon.php?s=32">
 <link rel="icon" type="image/png" sizes="16x16" href="/pwa-icon.php?s=16">

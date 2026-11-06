@@ -75,7 +75,7 @@ $social = oauth_buttons_html('gadmin', ['csrf' => $_SESSION['ga_csrf']]);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title><?= $target ? ga_e('Administration — ' . $target['name']) : 'Administration de galerie — Connexion' ?></title>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/assets/oauth.css">
 <link rel="stylesheet" href="/assets/login.css">
 <link rel="stylesheet" href="/portail/portail.css">

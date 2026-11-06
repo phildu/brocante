@@ -21,8 +21,6 @@ $smsFrom = sms_provider_label() !== '' ? (sms_provider_name() === 'ovh' ? sms_ov
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Crédits SMS — <?= h($content['site_name']) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>

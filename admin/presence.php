@@ -25,8 +25,6 @@ $mode = shop_presence_mode();
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mode d’activité — <?= h($content['site_name']) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 </head>

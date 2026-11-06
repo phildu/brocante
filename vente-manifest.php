@@ -18,7 +18,7 @@ echo json_encode([
     'description' => 'Encaisser une vente, retirer un achat en ligne et valider les commandes.',
     'lang' => 'fr',
     'dir' => 'ltr',
-    'start_url' => $base . '/studio.php?tab=pos&source=webapp',
+    'start_url' => $base . '/caisse.php?source=webapp',
     'scope' => $base . '/',
     'display' => 'standalone',
     'display_override' => ['standalone', 'minimal-ui'],
@@ -29,10 +29,10 @@ echo json_encode([
     'background_color' => $theme['bg'],
     'theme_color' => $theme['bg'],
     'icons' => [
-        ['src' => $base . '/vente-icon.php?s=192', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
-        ['src' => $base . '/vente-icon.php?s=512', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
+        ['src' => shop_app_icon_url('vente', 192, $base), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
+        ['src' => shop_app_icon_url('vente', 512, $base), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
     ],
     'shortcuts' => [
-        ['name' => 'Mes pièces', 'short_name' => 'Pièces', 'url' => $base . '/studio.php#pieces', 'icons' => [['src' => $base . '/studio-icon.php?s=192', 'sizes' => '192x192']]],
+        ['name' => 'Studio', 'short_name' => 'Studio', 'url' => $base . '/studio.php', 'icons' => [['src' => shop_app_icon_url('article', 192, $base), 'sizes' => '192x192']]],
     ],
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);

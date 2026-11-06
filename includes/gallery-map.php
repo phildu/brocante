@@ -63,7 +63,7 @@ function gallery_map_normalize(array $m, ?array $allowedShops = null, ?array $lo
         $items[] = ['id' => $id, 'kind' => $kind, 'pts' => $pts, 'shop' => $shop,
             'num' => preg_match('/^[\p{L}\p{N} ._\/#-]*$/u', $numero) ? $numero : '',
             'surface' => preg_match('/^[a-z0-9]{3,16}$/', (string) ($it['surface'] ?? '')) ? (string) $it['surface'] : '',
-            'role' => $kind === 'polygon' && in_array((string) ($it['role'] ?? ''), ['zone', 'territoire'], true) ? (string) $it['role'] : ($kind === 'polygon' ? 'slot' : ''),
+            'role' => $kind === 'polygon' && in_array((string) ($it['role'] ?? ''), ['zone', 'territoire', 'secteur'], true) ? (string) $it['role'] : ($kind === 'polygon' ? 'slot' : ''),
             'ztype' => isset($locationKeys[(string) ($it['ztype'] ?? '')]) || isset(GALLERY_ZONE_TYPES[(string) ($it['ztype'] ?? '')]) ? (string) $it['ztype'] : 'autre',
             'unit' => isset(GALLERY_PRICE_UNITS[(string) ($it['unit'] ?? '')]) ? (string) $it['unit'] : 'slot',
             'price_cents' => max(0, min(1000000, (int) ($it['price_cents'] ?? 0))),
@@ -247,4 +247,47 @@ function gallery_zone_name(array $zone, ?array $locations = null): string
     $l = trim((string) ($zone['label'] ?? ''));
     if ($l === '') return $t;
     return ($t !== '' && ($zone['ztype'] ?? 'autre') !== 'autre' && mb_stripos($l, $t) !== 0) ? $t . ' ' . $l : $l;
+}
+
+/**
+ * Secteurs (sous-zones) du plan : un bâtiment, un hall, une cour du territoire qui a sa propre page publique (?secteur=<identifiant>).
+ * Un commerce appartient au plus petit secteur qui contient l'un de ses éléments du plan (emplacement, repère) ; un commerce posé hors de tout
+ * secteur n'apparaît que sur la page d'ensemble. L'identifiant vient du nom (« Halle A » → halle-a) et reste unique dans le plan.
+ * -> liste de ['id','slug','name','note','color','pts','area','shops' => [clés de commerce],'slots' => nombre d'emplacements]
+ */
+function gallery_map_sectors(?array $map): array
+{
+    $items = (array) ($map['items'] ?? []);
+    $sectors = [];
+    $used = [];
+    foreach ($items as $it) {
+        if (($it['role'] ?? '') !== 'secteur') continue;
+        $name = trim((string) ($it['label'] ?? '')) ?: 'Secteur ' . (count($sectors) + 1);
+        $base = function_exists('gallery_slugify') ? gallery_slugify($name) : trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower($name)), '-');
+        $base = substr($base !== '' ? $base : 'secteur', 0, 34);
+        $slug = $base;
+        for ($n = 2; isset($used[$slug]); $n++) $slug = $base . '-' . $n;
+        $used[$slug] = true;
+        $sectors[] = ['id' => (string) $it['id'], 'slug' => $slug, 'name' => $name, 'note' => (string) ($it['note'] ?? ''), 'color' => (string) ($it['color'] ?? '#b5502e'),
+            'pts' => $it['pts'], 'area' => gallery_map_area_m2($it['pts']), 'shops' => [], 'slots' => 0];
+    }
+    if (!$sectors) return [];
+    foreach ($items as $it) {
+        if (in_array($it['role'] ?? '', ['zone', 'territoire', 'secteur'], true)) continue;
+        [$la, $ln] = gallery_map_centroid($it['pts']);
+        $best = null;
+        foreach ($sectors as $i => $sec) if (gallery_map_contains($sec['pts'], $la, $ln) && ($best === null || $sec['area'] < $sectors[$best]['area'])) $best = $i;
+        if ($best === null) continue;
+        if (($it['role'] ?? '') === 'slot') $sectors[$best]['slots']++;
+        $shop = (string) ($it['shop'] ?? '');
+        if ($shop !== '' && !in_array($shop, $sectors[$best]['shops'], true)) $sectors[$best]['shops'][] = $shop;
+    }
+    return $sectors;
+}
+
+/** Le secteur d'identifiant $slug dans le plan, ou null. */
+function gallery_map_sector(?array $map, string $slug): ?array
+{
+    foreach (gallery_map_sectors($map) as $sec) if ($sec['slug'] === $slug) return $sec;
+    return null;
 }

@@ -229,6 +229,7 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
     }
     $address = legal_clean_field('address', (string) ($f['address'] ?? ''));
     if ($address !== '') $legal['address'] = $address;
+    if (!empty($f['legal_kind'])) $legal['kind'] = legal_kind_normalize((string) $f['legal_kind']);   // statut choisi à l'inscription (particulier ou entreprise)
 
     $dir = PORTAIL_ROOT . "/tenants/$slug";
     mkdir($dir, 0775, true);

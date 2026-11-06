@@ -103,7 +103,7 @@ body.studio { --tabbar-h: 62px; margin: 0; background: var(--bg); color: var(--i
 .st-hint button { background: none; border: 0; color: var(--ink); text-decoration: underline; font-family: var(--font-body); font-size: 0.82rem; padding: 6px; cursor: pointer; }
 
 /* Barre d'onglets */
-.st-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--bg); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.st-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(3, 1fr); background: var(--bg); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .st-tabs button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: var(--tabbar-h); background: none; border: 0; border-top: 3px solid transparent; color: var(--ink-soft); font-family: var(--font-body); font-size: 0.72rem; cursor: pointer; }
 .st-tabs button svg { width: 24px; height: 24px; }
 .st-tabs button[aria-current="page"] { color: var(--ink); border-top-color: var(--accent); font-weight: 600; }

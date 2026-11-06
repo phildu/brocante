@@ -31,8 +31,10 @@ function bv_admin_sections(): array
         'fournitures' => ['/admin/buvette/fournitures.php', 'Fournitures'],
         'previsionnel' => ['/admin/buvette/previsionnel.php', 'Prévisionnel & bilan'],
         'courses' => ['/admin/buvette/courses.php', 'Courses'],
+        'caisse' => ['/admin/buvette/caisse.php', 'Caisse'],
         'benevoles' => ['/admin/buvette/benevoles.php', 'Bénévoles & planning'],
         'checklist' => ['/admin/buvette/checklist.php', 'Check-list'],
+        'charte' => ['/admin/buvette/charte.php', 'Charte bénévole', false],   // 3e valeur false : page sans onglet (lien depuis « Bénévoles & planning »)
     ];
 }
 
@@ -59,7 +61,7 @@ function bv_admin_header(string $title, string $section): void
     ?>
     <div class="bv-admin">
     <nav class="bv-subnav bv-noprint" aria-label="Sections de la buvette">
-      <?php foreach (bv_admin_sections() as $key => [$href, $label]): ?>
+      <?php foreach (bv_admin_sections() as $key => $sec): if (($sec[2] ?? true) === false) continue; [$href, $label] = $sec; ?>
         <a href="<?= h($href) ?>"<?= $section === $key ? ' aria-current="page"' : '' ?>><?= h($label) ?></a>
       <?php endforeach; ?>
     </nav>
@@ -165,9 +167,7 @@ function bv_vol_header(string $title, string $section, bool $withNav = true): vo
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#b5502e">
 <title><?= h($title) ?> — Buvette — <?= h($siteName) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="<?= h(bv_asset_url('/assets/buvette.css')) ?>">
 </head>

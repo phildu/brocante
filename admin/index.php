@@ -29,8 +29,6 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Réglages du site — <?= h($content['site_name']) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>
@@ -647,22 +645,22 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
         <h2>Boutique installable (web app)</h2>
         <p class="hint">Les visiteurs sur téléphone se voient proposer, au bon moment (à partir de leur 2<sup>e</sup> page, jamais pendant le paiement), d'<strong>ajouter la boutique à leur écran d'accueil</strong> : un geste, plein écran, avec l'icône et le nom de votre boutique (le logo carré de « Apparence »). Un lien « Installer l'appli » reste en pied de page. Sans boutique d'applications ni téléchargement.</p>
         <label class="featured-check"><input type="checkbox" name="pwa_prompt" value="1"<?= shop_setting('pwa_prompt', '1') !== '0' ? ' checked' : '' ?>> Proposer d'installer la boutique comme web app</label>
-        <h3 style="margin-top:18px;">Noms des applications</h3>
-        <p class="hint">Le nom affiché sous l'icône de chaque application installée. Laissez vide pour garder le nom par défaut : renommer ne casse jamais une installation, le lien et l'icône restent les mêmes.</p>
-        <div class="field-row-2">
-          <div class="field">
-            <label>Boutique — pour les clients</label>
-            <input type="text" name="app_name_shop" maxlength="40" value="<?= h(shop_setting('app_name_shop', '')) ?>" placeholder="<?= h(app_default_name('shop', (string) $content['site_name'])) ?>">
-          </div>
-          <div class="field">
-            <label>Article — fiches produit</label>
-            <input type="text" name="app_name_article" maxlength="40" value="<?= h(shop_setting('app_name_article', '')) ?>" placeholder="<?= h(app_default_name('article', (string) $content['site_name'])) ?>">
-          </div>
-        </div>
-        <div class="field">
-          <label>Vente — encaissement et validation des commandes</label>
-          <input type="text" name="app_name_vente" maxlength="40" value="<?= h(shop_setting('app_name_vente', '')) ?>" placeholder="<?= h(app_default_name('vente', (string) $content['site_name'])) ?>">
-        </div>
+        <h3 style="margin-top:18px;">Noms et icônes des applications</h3>
+        <p class="hint">Le nom affiché sous l'icône de chaque application installée, et son icône : une <strong>icône de base</strong> (un pictogramme sur la couleur d'accent de la boutique) ou le <strong>logo de la boutique</strong> (le logo carré, réglé dans Apparence ; sans logo, l'initiale du nom). Laissez un nom vide pour garder le nom par défaut. Renommer ou changer l'icône ne casse jamais une installation : le lien reste le même ; l'icône déjà posée sur un téléphone se met à jour selon le téléphone.</p>
+        <?php
+        foreach ([
+            'shop' => ['Boutique — pour les clients', 'Le logo est celui de la boutique.'],
+            'article' => ['Article — fiches produit (Studio)', ''],
+            'vente' => ['Vente — encaissement et validation des commandes', ''],
+        ] as $appKey => [$appLabel, $appHint]) {
+            echo app_icon_picker_html([
+                'label' => $appLabel, 'name_field' => 'app_name_' . $appKey, 'name_value' => shop_setting('app_name_' . $appKey, ''),
+                'name_placeholder' => app_default_name($appKey, (string) $content['site_name']), 'icon_field' => 'app_icon_' . $appKey,
+                'mode' => shop_app_icon_mode($appKey), 'hint' => $appHint,
+                'preview' => static fn (string $m): string => shop_app_icon_url($appKey, 120, '', $m),
+            ]);
+        }
+        ?>
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Enregistrer</button>
       </form>
 

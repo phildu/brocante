@@ -22,7 +22,7 @@ if (!$gallery) {
 
 $name = gallery_app_name($gallery, 'gallery_admin');
 $accent = preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($gallery['accent'] ?? '')) ? $gallery['accent'] : '#b5502e';
-$icon = '/galerie/icon.php?g=' . rawurlencode($slug);
+$icon = gallery_app_icon_base($gallery, 'gallery_admin');
 echo json_encode([
     'id' => app_manifest_id('gallery_admin', '', $slug),
     'name' => $name,

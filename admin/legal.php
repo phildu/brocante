@@ -10,6 +10,7 @@ $content = get_content();
 $flash = flash_get();
 $csrf = admin_csrf_token();
 $id = legal_identity();
+$kind = $id['kind'];
 $status = legal_status();
 $missing = legal_missing_fields();
 $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
@@ -19,14 +20,18 @@ $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pages légales — <?= h($content['site_name']) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>
   .lg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
   .lg-grid label { display: block; font-size: .8rem; color: var(--ink-soft); }
   .lg-grid input { width: 100%; margin-top: 4px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 10px; font: inherit; }
+  .lg-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 14px 0 20px; }
+  .lg-kind { display: block; border: 1px solid var(--line); padding: 12px 14px; cursor: pointer; }
+  .lg-kind input { width: auto; margin: 0 8px 0 0; }
+  .lg-kind strong { font-size: .95rem; } .lg-kind small { display: block; margin-top: 4px; }
+  .lg-kind:has(input:checked) { border-color: var(--accent, #b5502e); background: var(--surface-2, #f4efe6); }
+  .lg-grid [hidden], .lg-point[hidden] { display: none !important; }
   .lg-grid small { display: block; margin-top: 3px; opacity: .8; }
   .lg-text { width: 100%; min-height: 340px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 12px; font: .92rem/1.55 var(--font-mono, monospace); resize: vertical; }
   .lg-state { padding: 14px 16px; border: 1px solid var(--line); margin: 14px 0 22px; }
@@ -79,11 +84,17 @@ $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
       <input type="hidden" name="csrf" value="<?= h($csrf) ?>"><input type="hidden" name="action" value="identity">
       <h2>Identité du vendeur</h2>
       <p class="hint">Ces informations remplissent les modèles (et les mentions légales). Elles sont publiques. Elles se règlent aussi depuis l'administration du portail (Pages légales du commerce). L'hébergeur par défaut (OVH) est commun aux commerces et se règle dans le portail.</p>
+      <fieldset class="lg-kinds" style="border:0;padding:0;margin:14px 0 20px;" aria-label="Statut du vendeur">
+        <?php foreach (LEGAL_KINDS as $k => [$kLabel, $kHelp]): ?>
+          <label class="lg-kind"><input type="radio" name="kind" value="<?= h($k) ?>" data-legal-kind<?= $kind === $k ? ' checked' : '' ?>><strong><?= h($kLabel) ?></strong><small><?= h($kHelp) ?></small></label>
+        <?php endforeach; ?>
+      </fieldset>
       <div class="lg-grid">
         <?php foreach (LEGAL_FIELDS as $key => [$label, $help]): $value = legal_get($key) !== '' ? legal_get($key) : ($key === 'withdrawal' ? '' : ($id[$key] ?? '')); ?>
-          <label<?= in_array($key, ['company', 'address', 'address_extra', 'access', 'host', 'mediator'], true) ? ' class="full"' : '' ?>><?= h($label) ?>
-            <input type="<?= $key === 'withdrawal' ? 'number' : ($key === 'email' ? 'email' : 'text') ?>" name="<?= h($key) ?>" value="<?= h($value) ?>"<?= $key === 'address' ? ' data-address-autocomplete autocomplete="street-address"' : '' ?><?= $key === 'email' ? ' autocomplete="email" spellcheck="false"' : '' ?><?= $key === 'phone' ? ' inputmode="tel" autocomplete="tel"' : '' ?><?= $key === 'withdrawal' ? ' min="0" max="60" placeholder="14"' : '' ?> maxlength="300">
-            <small><?= h($help) ?></small>
+          <?php $kinds = array_keys(array_filter(LEGAL_KIND_FIELDS, static fn (array $f): bool => in_array($key, $f, true))); $shown = in_array($key, LEGAL_KIND_FIELDS[$kind], true); ?>
+          <label data-kinds="<?= h(implode(' ', $kinds)) ?>"<?= $key === 'company' ? ' data-company' : '' ?><?= $shown ? '' : ' hidden' ?><?= in_array($key, ['company', 'address', 'address_extra', 'access', 'host', 'mediator'], true) ? ' class="full"' : '' ?>><span data-label><?= h($label) ?></span>
+            <input<?= $shown ? '' : ' disabled' ?> type="<?= $key === 'withdrawal' ? 'number' : ($key === 'email' ? 'email' : 'text') ?>" name="<?= h($key) ?>" value="<?= h($value) ?>"<?= $key === 'address' ? ' data-address-autocomplete autocomplete="street-address"' : '' ?><?= $key === 'email' ? ' autocomplete="email" spellcheck="false"' : '' ?><?= $key === 'phone' ? ' inputmode="tel" autocomplete="tel"' : '' ?><?= $key === 'withdrawal' ? ' min="0" max="60" placeholder="14"' : '' ?> maxlength="300">
+            <small data-help><?= h($help) ?></small>
             <?php if ($key === 'mediator'): ?>
               <small class="lg-links">Souscrire : <?php foreach (LEGAL_MEDIATOR_LINKS as $i => $link): ?><?= $i ? ' · ' : '' ?><a href="<?= h($link['url']) ?>" target="_blank" rel="noopener"><?= h($link['label']) ?></a><?php endforeach; ?></small>
             <?php endif; ?>
@@ -91,7 +102,7 @@ $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
         <?php endforeach; ?>
       </div>
       <?php $point = legal_point(); ?>
-      <div class="lg-point" data-locate-picker data-tiles="<?= h(SHOP_LOCATE_TILE_PLAN) ?>" data-geocode-url="<?= h(SHOP_LOCATE_GEOCODE_URL) ?>">
+      <div class="lg-point" data-kinds="association entreprise"<?= $kind === 'particulier' ? ' hidden' : '' ?> data-locate-picker data-tiles="<?= h(SHOP_LOCATE_TILE_PLAN) ?>" data-geocode-url="<?= h(SHOP_LOCATE_GEOCODE_URL) ?>">
         <h3>Point exact sur la carte <span class="hint" style="font-weight:400;">— facultatif</span></h3>
         <p class="hint">Utile quand plusieurs commerces partagent la même adresse (galerie, marché couvert, brocante village). Cliquez sur votre porte ou votre local : l'épingle, l'itinéraire, les liens Google Maps et Plans et la fiche <code>.vcf</code> viseront ce point et non l'entrée du site.</p>
         <div class="lg-point-map" data-picker-map aria-label="Carte IGN pour placer le point exact du commerce"></div>
@@ -130,6 +141,31 @@ $labels = array_map(static fn ($f) => LEGAL_FIELDS[$f][0], $missing);
   </div>
 </section>
 </main>
+<script>
+(function () {
+  var form = document.getElementById('legal-identity');
+  if (!form) return;
+  var companyLabels = <?= json_encode(array_map(static fn (array $l): array => ['label' => $l[0], 'help' => $l[1]], LEGAL_COMPANY_LABELS), JSON_UNESCAPED_UNICODE) ?>;
+  var defaults = <?= json_encode(['label' => LEGAL_FIELDS['company'][0], 'help' => LEGAL_FIELDS['company'][1]], JSON_UNESCAPED_UNICODE) ?>;
+  function apply() {
+    var checked = form.querySelector('input[name="kind"]:checked');
+    var kind = checked ? checked.value : 'entreprise';
+    form.querySelectorAll('[data-kinds]').forEach(function (el) {
+      var on = el.getAttribute('data-kinds').split(' ').indexOf(kind) !== -1;
+      el.hidden = !on;
+      el.querySelectorAll('input').forEach(function (i) { if (i.name !== 'point_lat' && i.name !== 'point_lng') i.disabled = !on; });
+    });
+    var company = form.querySelector('[data-company]');
+    if (company) {
+      var t = companyLabels[kind] || defaults;
+      company.querySelector('[data-label]').textContent = t.label;
+      company.querySelector('[data-help]').textContent = t.help;
+    }
+  }
+  form.querySelectorAll('[data-legal-kind]').forEach(function (r) { r.addEventListener('change', apply); });
+  apply();
+})();
+</script>
 <script src="/assets/address-autocomplete.js?v=1" defer></script>
 <script src="/assets/locate-picker.js?v=1" defer></script>
 </body>

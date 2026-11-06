@@ -53,6 +53,8 @@ switch (bv_post_action()) {
 
 $costs = bv_item_costs();
 $poster = !empty($_GET['affiche']);
+$posterQr = $poster && !empty($_GET['qr']);      // version « barman » : un QR par article, que la caisse scanne pour l'ajouter au panier
+if ($posterQr) require_once __DIR__ . '/../../includes/buvette-caisse.php';
 
 if ($poster):
     bv_admin_header('Affiche de la carte', 'carte');
@@ -60,8 +62,17 @@ if ($poster):
     ?>
   <div class="bv-actions bv-noprint" style="margin:0 0 16px;">
     <button class="btn btn-primary" type="button" onclick="window.print()">Imprimer l'affiche</button>
+    <?php if ($posterQr): ?>
+      <a class="btn btn-ghost" href="/admin/buvette/carte.php?affiche=1">Affiche pour les clients (sans QR)</a>
+    <?php else: ?>
+      <a class="btn btn-ghost" href="/admin/buvette/carte.php?affiche=1&amp;qr=1">Version barman, avec un QR par article</a>
+    <?php endif; ?>
     <a class="btn btn-ghost" href="/admin/buvette/carte.php">← Retour à la carte</a>
   </div>
+  <?php if ($posterQr): ?>
+    <p class="bv-hint bv-noprint">À afficher côté barman : dans la caisse, touchez « 📷 Scanner » puis visez le QR d'un article pour l'ajouter au panier (ou scannez-le avec l'appareil photo du téléphone). Les prix et les articles viennent toujours de la carte : si vous les changez, les QR restent valables.</p>
+    <style>.bv-poster .row { align-items: center; } .bv-poster .qr { width: 18mm; height: 18mm; margin-left: 8px; flex: none; line-height: 0; } .bv-poster .qr svg { width: 100%; height: 100%; }</style>
+  <?php endif; ?>
   <div class="bv-poster">
     <h1>La Buvette</h1>
     <p class="sub"><?= h(bv_site_name()) ?></p>
@@ -69,12 +80,16 @@ if ($poster):
     <?php foreach ($groups as $cat => $items): ?>
       <h2><?= h(bv_item_categories()[$cat]) ?></h2>
       <?php foreach ($items as $it): ?>
-        <div class="row"><span class="name"><?= h($it['name']) ?></span><span class="dots"></span><span class="price"><?= h(bv_money($it['price_cents'])) ?></span></div>
+        <div class="row"><span class="name"><?= h($it['name']) ?></span><span class="dots"></span><span class="price"><?= h(bv_money($it['price_cents'])) ?></span><?php if ($posterQr): ?><span class="qr" data-url="<?= h(bv_item_scan_url((int) $it['id'])) ?>" role="img" aria-label="QR : <?= h($it['name']) ?>"></span><?php endif; ?></div>
         <?php $al = bv_allergen_labels($it); if ($al): ?><p class="allergens">Contient : <?= h(implode(', ', $al)) ?></p><?php endif; ?>
       <?php endforeach; ?>
     <?php endforeach; ?>
     <p class="legal">Les allergènes présents dans chaque préparation sont indiqués sous l'article. Une question ? Demandez à l'équipe de la buvette.</p>
   </div>
+<?php if ($posterQr): ?>
+  <script src="/assets/vendor/qrcode-generator.js"></script>
+  <script>document.querySelectorAll('.bv-poster .qr').forEach(function (b) { var q = qrcode(0, 'M'); q.addData(b.dataset.url); q.make(); b.innerHTML = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); });</script>
+<?php endif; ?>
 <?php
     bv_admin_footer();
     exit;

@@ -15,7 +15,10 @@ $action = (string) ($_POST['action'] ?? '');
 $page = (string) ($_POST['page'] ?? '');
 
 if ($action === 'identity') {
-    foreach (array_keys(LEGAL_FIELDS) as $f) {
+    // Statut du vendeur : seuls les champs demandés pour ce statut sont enregistrés ; les autres gardent leur valeur (on peut revenir en arrière).
+    $kind = legal_kind_normalize((string) ($_POST['kind'] ?? ''));
+    shop_setting_set('legal_kind', $kind);
+    foreach (LEGAL_KIND_FIELDS[$kind] as $f) {
         $v = legal_clean_field($f, (string) ($_POST[$f] ?? ''));
         if ($f === 'email' && $v !== '' && !filter_var($v, FILTER_VALIDATE_EMAIL)) { flash_set("Adresse e-mail de contact invalide.", 'error'); header('Location: /admin/legal.php#legal-identity'); exit; }
         // Hébergeur identique au défaut du portail : rien n'est enregistré, pour suivre ce défaut s'il change.

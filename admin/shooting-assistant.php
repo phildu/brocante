@@ -26,8 +26,6 @@ $dataJson = json_encode([
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#f4eee1">
 <title>Studio photo/vidéo — <?= h($siteName) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="/assets/shooting-tabs.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/shooting-tabs.css') ?>">

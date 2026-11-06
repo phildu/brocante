@@ -120,7 +120,7 @@ if (function_exists('saas_config')) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Retours testeurs — Portail des commerces</title>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>

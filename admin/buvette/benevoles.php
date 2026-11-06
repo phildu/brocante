@@ -106,6 +106,7 @@ $load = [];
 foreach ($shifts as $s) foreach ($s['volunteers'] as $vid => $_) $load[$vid] = ($load[$vid] ?? 0) + 1;
 ?>
 <p class="bv-hint">Construisez le planning de l'événement en cours : définissez les créneaux (poste, horaires, nombre de personnes), puis placez les bénévoles. Les trous et les doubles réservations sont signalés.</p>
+<p class="bv-hint bv-noprint">Bénévole non adhérent ? Faites-lui signer la <a href="/admin/buvette/charte.php">charte du bénévole occasionnel</a> (fiche A4 à imprimer) : elle atteste de sa présence et de sa couverture par l'assurance de l'association.</p>
 
 <?php if (!$event): ?>
   <p class="bv-callout">Créez d'abord un événement depuis le <a href="/admin/buvette/index.php#nouvel-evenement">tableau de bord</a>.</p>

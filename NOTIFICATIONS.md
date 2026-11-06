@@ -1,7 +1,7 @@
 # Module Notifications
 
 Envoi de messages aux utilisateurs sur leurs canaux préférés : **e-mail, SMS,
-WhatsApp, Discord, Telegram**. Chaque utilisateur choisit où et sur quels
+WhatsApp, Discord, Telegram, navigateur (Web Push)**. Chaque utilisateur choisit où et sur quels
 sujets on peut lui écrire.
 
 - **Responsable** : *Administration → Notifications* (`/admin/notifications/`), selon les droits de son rôle (voir « Droits d'accès »).
@@ -23,6 +23,18 @@ sujets on peut lui écrire.
 | WhatsApp | Twilio | numéro approuvé par Meta (ou bac à sable Twilio) |
 | Discord | webhook (aucun réglage) ou message privé via un bot | jeton du bot pour les MP |
 | Telegram | bot Telegram (@BotFather) | jeton ; la personne doit d'abord écrire `/start` au bot |
+| Navigateur | Web Push (RFC 8030/8291/8292), sans bibliothèque ni compte tiers | rien : les clés VAPID se créent seules ; HTTPS obligatoire en ligne |
+
+### Navigateur (Web Push)
+
+- **Opt-in par la personne seule** : sur sa page de préférences, le bouton « Activer sur cet appareil » demande l'autorisation du navigateur (jamais avant un clic). L'administration ne peut ni créer ni modifier cet abonnement ; elle peut seulement le suspendre.
+- **Un navigateur par utilisateur** : réactiver depuis un autre appareil remplace l'abonnement précédent.
+- Clés VAPID dans `.secrets/webpush.json` (0600, hors Git et hors déploiement), créées au premier besoin. **Les supprimer ou les changer invalide tous les abonnements** (à refaire par chaque personne). Préproduction et production ont chacune leur paire.
+- L'adresse d'un abonnement est refusée si son hôte n'est pas un service de push connu (Google, Mozilla, Apple, Microsoft) : le serveur n'appelle jamais une URL quelconque.
+- Abonnement retiré par le navigateur (HTTP 404/410) : le canal est coupé automatiquement.
+- Le message tient en ~240 caractères (titre = objet, texte = version courte ou corps). Le clic ouvre la page d'accueil du site.
+- iPhone/iPad : Web Push uniquement si le site est ajouté à l'écran d'accueil ; la page l'explique.
+- Le service worker (`pwa-sw.php`) porte les écouteurs `push` et `notificationclick`.
 
 Les identifiants sont dans `.secrets/notifications.json` (droits 0600, jamais
 dans la base ni dans Git, exclus du déploiement comme les clés Stripe/Gemini).
@@ -140,6 +152,7 @@ PHP 8.0+, SQLite, cURL (déjà requis par le site), mbstring.
 
 ```
 includes/notifications.php          logique métier, schéma, pilotes de canaux
+includes/webpush.php                Web Push : chiffrement RFC 8291, clés VAPID, validation des abonnements
 includes/closure-text.php           clé, période et message d'une fermeture (commun aux boutiques et aux galeries)
 includes/closure-alerts.php         alerte de fermeture aux clients (message, public, envoi, journal)
 admin/closure-alert.php             page de confirmation et d'envoi de l'alerte de fermeture
@@ -169,3 +182,4 @@ reprises, canal de repli, désinscription pendant la file, import, effacement.
 - Pas d'accusé de livraison final : « envoyé » signifie accepté par le fournisseur.
 - STARTTLS/SSL du client SMTP non testé automatiquement (seul le dialogue en clair l'est) : tester avec le *Test rapide*.
 - Le lien personnel de préférences est un secret porté par l'URL ; il est envoyé en clair dans les messages marketing.
+- Qui détient le lien personnel peut abonner *son* navigateur et recevoir les notifications de cette personne (au même titre qu'il peut déjà la désinscrire). Même risque que pour le reste du lien ; ne le transférez pas.

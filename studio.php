@@ -12,6 +12,11 @@ require_once __DIR__ . '/includes/apps.php';
 require_once __DIR__ . '/includes/login-ui.php';
 
 header('Cache-Control: no-store');
+// La caisse a sa propre application (caisse.php) : l'ancienne adresse ?tab=pos, encore ouverte par les téléphones où « Vente » est installée, y renvoie.
+if (($_GET['tab'] ?? '') === 'pos') {
+    header('Location: ' . tenant_base_path() . '/caisse.php' . (isset($_GET['source']) ? '?source=webapp' : ''));
+    exit;
+}
 $content = get_content();
 $error = null;
 $notice = null;
@@ -49,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'samesite' => 'Lax',
                 ]);
             }
-            header('Location: /studio.php' . (($_GET['tab'] ?? '') === 'pos' ? '?tab=pos' : ''));
+            header('Location: /studio.php');
             exit;
         }
         sleep(1); // freine les essais en série
@@ -64,16 +69,15 @@ $angles = studio_object_angles();
 $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/studio.php', 'list' => '/studio.php#pieces', 'list_label' => 'Voir mes pièces', 'title' => false, 'later' => true];
 $ico = static fn (string $d): string => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
 $siteName = trim((string) $content['site_name']) ?: (string) tenant('name');
-// L'onglet Caisse a sa propre application installable (« Vente »), le reste est l'application « Article ».
-$studioApp = ($_GET['tab'] ?? '') === 'pos' ? 'vente' : 'article';
-$studioLabel = $studioApp === 'vente' ? 'Vente' : 'Article';
+$studioApp = 'article';
+$studioLabel = 'Article';
 $studioAppName = shop_app_name($studioApp);
-$venteAppName = $studioApp === 'vente' ? $studioAppName : shop_app_name('vente');
 $studioBase = tenant_base_path();
-$studioManifest = $studioBase . ($studioApp === 'vente' ? '/vente-manifest.php' : '/studio-manifest.php');
-$studioIcon = $studioBase . ($studioApp === 'vente' ? '/vente-icon.php' : '/studio-icon.php');
-$studioSw = $studioBase . ($studioApp === 'vente' ? '/pwa-sw.php' : '/studio-sw.php');
-$studioLoginNext = '/studio.php' . ($studioApp === 'vente' ? '?tab=pos' : '');
+$studioManifest = $studioBase . '/studio-manifest.php';
+$studioIcon = shop_app_icon_url('article', 192, $studioBase);
+$studioIcon180 = shop_app_icon_url('article', 180, $studioBase);
+$studioSw = $studioBase . '/studio-sw.php';
+$studioLoginNext = '/studio.php';
 // Adresse de l'application et texte partagé (réseaux, WhatsApp, SMS, e-mail, code QR) : le menu et la page de connexion les proposent.
 [$studioUrl, $studioReachable] = studio_public_url();
 $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($studioAppName) . '" data-share-text="' . h("$studioAppName : photographiez vos pièces avec votre téléphone, l'application prépare les fiches de la boutique. Ouvrez le lien, connectez-vous, puis « Ajouter à l'écran d'accueil ».") . '" data-share-dialog="1"';
@@ -89,8 +93,8 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
 <meta name="apple-mobile-web-app-title" content="<?= h($studioAppName) ?>">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="<?= h($studioManifest) ?>">
-<link rel="apple-touch-icon" href="<?= h($studioIcon) ?>?s=180">
-<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pwa-save.js') ?>" data-auto data-delay="2000" data-key="studio-<?= h($studioApp) ?>" data-name="<?= h($studioAppName) ?>" data-icon="<?= h($studioIcon) ?>?s=192" data-manifest="<?= h($studioManifest) ?>" data-sw="<?= h($studioSw) ?>" data-scope="<?= h($studioBase . '/') ?>"></script>
+<link rel="apple-touch-icon" href="<?= h($studioIcon180) ?>">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pwa-save.js') ?>" data-auto data-delay="2000" data-key="studio-<?= h($studioApp) ?>" data-name="<?= h($studioAppName) ?>" data-icon="<?= h($studioIcon) ?>" data-manifest="<?= h($studioManifest) ?>" data-sw="<?= h($studioSw) ?>" data-scope="<?= h($studioBase . '/') ?>"></script>
 <title><?= h($studioAppName) ?></title>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
@@ -145,6 +149,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
         <button type="button" class="btn btn-ghost" data-share-open="share"<?= $shareAttrs ?>>Partager l'application</button>
         <button type="button" class="btn btn-ghost" data-share-open="qr"<?= $shareAttrs ?>>Code QR de l'application</button>
         <?php if (!$studioReachable): ?><p class="qa-note">Adresse locale : un téléphone ne peut pas l'ouvrir. En ligne, le lien fonctionne.</p><?php endif; ?>
+        <a class="btn btn-ghost" href="<?= h($studioBase) ?>/caisse.php">Caisse (Vente)</a>
         <a class="btn btn-ghost" href="/admin/dashboard.php">Administration</a>
         <form method="post"><input type="hidden" name="action" value="logout"><button class="btn btn-ghost" type="submit">Se déconnecter</button></form>
       </div>
@@ -242,15 +247,6 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
       </div>
     </section>
 
-    <!-- Caisse : lecture de QR code, retrait d'un achat en ligne, vente directe en boutique -->
-    <section class="st-tab" id="tab-pos" data-tab="pos" hidden>
-      <p class="qa-note" style="margin:0 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <span>Caisse installable sur le téléphone sous le nom « <?= h($venteAppName) ?> ».</span>
-        <a class="btn btn-ghost" href="<?= h($studioBase) ?>/vente.php">Installer l'application Vente</a>
-      </p>
-      <div class="pos" id="pos"></div>
-    </section>
-
     <!-- Mes pièces -->
     <section class="st-tab" id="tab-list" data-tab="pieces" hidden>
       <div class="sl">
@@ -314,7 +310,6 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
   <nav class="st-tabs" aria-label="Sections">
     <button type="button" data-go="single" aria-current="page"><?= $ico('<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>') ?><span>Une pièce</span></button>
     <button type="button" data-go="batch"><?= $ico('<rect x="3" y="7" width="13" height="13" rx="1"/><path d="M8 7V4h13v13h-3"/>') ?><span>En lot</span></button>
-    <button type="button" data-go="pos"><?= $ico('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M7 15h3"/>') ?><span>Caisse</span></button>
     <button type="button" data-go="pieces"><?= $ico('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>') ?><span>Mes pièces</span><i class="st-count" id="st-count" hidden></i></button>
   </nav>
 
@@ -329,8 +324,6 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
   <script src="/assets/measure-tool.js?v=<?= (int) @filemtime(__DIR__ . '/assets/measure-tool.js') ?>"></script>
   <script src="/assets/object-picker.js?v=<?= (int) @filemtime(__DIR__ . '/assets/object-picker.js') ?>"></script>
   <script src="/assets/quick-add.js?v=<?= (int) @filemtime(__DIR__ . '/assets/quick-add.js') ?>"></script>
-  <script src="/assets/vendor/qrcode-generator.js"></script>
-  <script src="/assets/pos.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pos.js') ?>" data-action="/admin/pos-action.php"></script>
   <script src="/assets/studio.js?v=<?= (int) @filemtime(__DIR__ . '/assets/studio.js') ?>" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
 <?php endif; ?>
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/assets/share.js') ?>" defer></script>

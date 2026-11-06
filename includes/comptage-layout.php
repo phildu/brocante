@@ -7,7 +7,7 @@
 
 require_once __DIR__ . '/comptage.php';
 
-const CP_FONTS = 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap';
+const CP_FONTS = '/assets/fonts.css';
 
 /**
  * Droits + schéma : à appeler en tête de chaque page admin/comptage/. Ces pages ne sont jamais servies seules : c'est
