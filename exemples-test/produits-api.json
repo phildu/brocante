@@ -1,0 +1,119 @@
+{
+  "products": [
+    {
+      "external_id": "VASE-001",
+      "name": "Vase en grès des années 60",
+      "description": "<p>Beau vase en grès émaillé, <strong>signé</strong> sous la base.</p><ul><li>Hauteur 30 cm</li><li>Aucun éclat</li></ul>",
+      "price": "34,00",
+      "weight_grams": 850,
+      "category": "Céramique",
+      "images": [
+        "https://placehold.co/900x700.jpg?text=Vase+1",
+        "https://placehold.co/900x700.jpg?text=Vase+2"
+      ],
+      "url": "https://exemple.test/p/vase-001",
+      "compare_at_price": "45,00",
+      "stock": 3
+    },
+    {
+      "external_id": "TASSE-002",
+      "name": "Tasse en faïence de Gien",
+      "description": "<p>Tasse ancienne, motif floral. <em>Déjà vendue sur place.</em></p>",
+      "price": "12,00",
+      "weight_grams": 250,
+      "category": "Céramique",
+      "images": [
+        "https://placehold.co/900x700.jpg?text=Tasse"
+      ],
+      "url": "https://exemple.test/p/tasse-002",
+      "stock": 0
+    },
+    {
+      "external_id": "LAMPE-003",
+      "name": "Lampe à pétrole ancienne",
+      "description": "<p>Lampe de table en laiton, <b>électrifiée</b>.<br>Abat-jour d'origine.</p>",
+      "price": "1250,50",
+      "weight_grams": 2000,
+      "category": "Luminaires",
+      "images": [
+        "https://placehold.co/900x700.jpg?text=Lampe"
+      ],
+      "url": "https://exemple.test/p/lampe-003",
+      "stock": 1
+    },
+    {
+      "external_id": "CHAISE-004",
+      "name": "Chaise bistrot en bois courbé",
+      "description": "<p>Assise cannée à refaire.</p>",
+      "price": "60,00",
+      "weight_grams": 4000,
+      "category": "Mobilier",
+      "images": [
+        "https://placehold.co/900x700.jpg?text=Chaise"
+      ],
+      "url": "https://exemple.test/p/chaise-004",
+      "stock": 1
+    },
+    {
+      "external_id": "POT-005",
+      "name": "Pot de jardin en terre cuite",
+      "description": "<p>Stock non suivi dans la boutique d'origine.</p>",
+      "price": "18,90",
+      "weight_grams": 3500,
+      "category": "Jardin",
+      "images": [
+        "https://placehold.co/900x700.jpg?text=Pot"
+      ],
+      "url": "https://exemple.test/p/pot-005"
+    },
+    {
+      "external_id": "HORLOGE-006",
+      "name": "L'horloge « Comtoise » 1890 — mécanisme révisé",
+      "description": "<p>Caractères spéciaux : é è à ç œ &amp; « guillemets » &nbsp;— tiret long.</p><script>alert('xss')</script>",
+      "price": "320,00",
+      "weight_grams": 18000,
+      "category": "Curiosités",
+      "images": [],
+      "url": "https://exemple.test/p/horloge-006",
+      "stock": 1
+    },
+    {
+      "external_id": "BROUILLON-007",
+      "name": "Brouillon — ne doit PAS être importé",
+      "description": "<p>Produit non publié.</p>",
+      "price": "5,00",
+      "weight_grams": 100,
+      "category": "Curiosités",
+      "images": [
+        "https://placehold.co/900x700.jpg?text=Brouillon"
+      ],
+      "url": "https://exemple.test/p/brouillon-007",
+      "stock": 1,
+      "active": false
+    },
+    {
+      "external_id": "PLAID-008-ROU",
+      "name": "Plaid en laine tissée — Rouge",
+      "description": "<p>Plaid épais, deux coloris.</p>",
+      "price": "20,00",
+      "stock": 2,
+      "weight_grams": 300,
+      "category": "Textile",
+      "images": [
+        "https://placehold.co/900x700.jpg?text=Plaid+rouge"
+      ]
+    },
+    {
+      "external_id": "PLAID-008-BLE",
+      "name": "Plaid en laine tissée — Bleu",
+      "description": "<p>Plaid épais, deux coloris.</p>",
+      "price": "20,00",
+      "stock": 0,
+      "weight_grams": 300,
+      "category": "Textile",
+      "images": [
+        "https://placehold.co/900x700.jpg?text=Plaid+bleu"
+      ]
+    }
+  ]
+}

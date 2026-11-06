@@ -1,0 +1,13 @@
+# Types MIME nécessaires au compteur par caméra (certains Apache ne les connaissent pas).
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+  AddType application/octet-stream .tflite
+  AddType text/javascript .js
+</IfModule>
+# Fichiers volumineux et immuables : le service worker les garde, le navigateur aussi.
+<IfModule mod_headers.c>
+  Header set Cache-Control "public, max-age=2592000"
+</IfModule>
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE application/wasm
+</IfModule>

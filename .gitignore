@@ -3,6 +3,7 @@
 var/log/
 var/tmp/
 uploads/import/
+uploads/impression/
 .DS_Store
 config.local.php
 .env.deploy
