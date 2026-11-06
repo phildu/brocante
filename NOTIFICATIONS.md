@@ -92,6 +92,26 @@ commande, ses articles et le numéro de suivi s'il est saisi.
 - Un échec d'envoi (e-mail non configuré, panne du serveur de messagerie…) **ne bloque jamais** la mise à jour de la commande : le résultat s'affiche dans le message de confirmation, et les envois non partis sont repris par le cron.
 - Le texte du message est dans `nt_notify_order_shipped()` (`includes/notifications.php`).
 
+### Déjà branché : fermetures exceptionnelles
+
+Les horaires d'ouverture, jours fériés, congés et fermetures exceptionnelles se saisissent dans *Administration → Contenu des pages →
+Horaires & fermetures* ; le site les annonce déjà en bandeau (avertissement pendant la fermeture, information dans les 7 jours qui la
+précèdent). Chaque période enregistrée propose en plus **« Prévenir les clients… »** (`admin/closure-alert.php`, `includes/closure-alerts.php`) :
+
+- **Jamais automatique** : à l'enregistrement d'une nouvelle fermeture à venir, un lien propose de prévenir les clients ; rien ne part sans
+  relecture du message et confirmation. Une fermeture terminée ne peut plus être annoncée.
+- **Message prérempli** (objet, texte, version courte pour SMS/WhatsApp) avec la période en toutes lettres, le motif et la date de réouverture,
+  modifiable avant l'envoi ; variables `{prenom}` `{site}` `{lien_preferences}`.
+- **Public** au choix : clients ayant commandé, inscrits à la lettre d'information, contacts ajoutés à la main. Les bénévoles de la buvette n'en
+  font jamais partie. Les contacts manquants sont créés dans le module à l'envoi (`nt_import_customers()`, `nt_import_newsletter()`), **sans abonnement
+  marketing** ; le nombre de contacts concernés est affiché avant l'envoi.
+- **Rubrique « Fermetures exceptionnelles »** (`fermeture`, créée au premier envoi, non marketing) : chaque personne la reçoit par défaut mais peut
+  s'en retirer depuis sa page de préférences ; ce choix est respecté.
+- **Un seul message par personne**, sur son canal préféré (stratégie « canal préféré puis secours »).
+- **Pas de double envoi** : une période déjà annoncée affiche « Clients prévenus le … » et n'est renvoyée que sur demande explicite (« Renvoyer quand même »).
+- **Droit exigé** : Notifications · Envoyer (la page liste des personnes et leurs coordonnées) ; sans canal configuré, le bouton d'envoi reste inactif.
+- Journal des alertes : réglage `opening_closure_alerts` (une entrée par période Du/Au). Test : `php scripts/test-closure-alerts.php`.
+
 ## Droits d'accès
 
 Le module s'appuie sur les rôles et droits fins du back-office (`includes/auth.php`) : ressource **Notifications** (niveau Portail), avec les droits Consulter, Créer, Modifier, Supprimer et **Envoyer**. Le propriétaire a tous les droits.
@@ -120,11 +140,14 @@ PHP 8.0+, SQLite, cURL (déjà requis par le site), mbstring.
 
 ```
 includes/notifications.php          logique métier, schéma, pilotes de canaux
+includes/closure-alerts.php         alerte de fermeture aux clients (message, public, envoi, journal)
+admin/closure-alert.php             page de confirmation et d'envoi de l'alerte de fermeture
 includes/notifications-layout.php   gabarits admin et page publique
 admin/notifications/*.php           pages du responsable
 notifications/preferences.php       page publique de préférences
 scripts/notifications-worker.php    cron : file d'envoi + purge
 scripts/test-notifications.php      tests
+scripts/test-closure-alerts.php     tests de l'alerte de fermeture
 assets/notifications.css            styles
 ```
 
