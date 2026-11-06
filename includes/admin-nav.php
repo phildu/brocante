@@ -10,6 +10,7 @@ $adminNavItems = [
     'dashboard' => ['/admin/dashboard.php', 'Tableau de bord'],
     'catalogue' => ['/admin/catalog.php', 'Catalogue'],
     'batch' => ['/admin/batch-import.php', 'Import par lot'],
+    'connecteurs' => ['/admin/connectors.php', 'Boutiques connectées'],
     'commandes' => ['/admin/orders.php', 'Commandes'],
     'buvette' => ['/admin/buvette/index.php', 'Buvette'],
     'invendus' => ['/admin/invendus.php', 'Invendus & dons'],

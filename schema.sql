@@ -315,6 +315,30 @@ CREATE TABLE IF NOT EXISTS dash_settings (
 -- includes/buvette.php (bv_boot, constante BV_SCHEMA) — rien à lancer ici,
 -- ni côté serveur ni après un déploiement.
 
+-- ---------------------------------------------------------------------------
+-- Boutiques connectées (admin/connectors.php, api/catalog-push.php). Tables et
+-- colonnes créées à la volée par connectors_ensure_schema()
+-- (includes/connectors.php) : rien à lancer à la main. Garder synchronisé.
+-- Les identifiants (clés API) ne sont PAS en base : .secrets/connector-<id>.json.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS import_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  platform TEXT NOT NULL,                 -- shopify | woocommerce | prestashop | api
+  base_url TEXT NOT NULL DEFAULT '',
+  settings TEXT NOT NULL DEFAULT '{}',    -- JSON : univers par défaut, publication, stock, TVA…
+  is_active INTEGER NOT NULL DEFAULT 1,
+  last_sync_at TEXT,                      -- UTC
+  last_sync_status TEXT,                  -- ok | partial | error
+  last_sync_summary TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+-- Colonnes ajoutées à products : source_id INTEGER, external_id TEXT,
+-- external_url TEXT, synced_at TEXT, plus l'index unique (source_id, external_id)
+-- idx_products_source_ext. Elles sont absentes du CREATE TABLE products plus haut :
+-- connectors_ensure_schema() les ajoute par ALTER TABLE (base neuve comme existante).
+
 -- Module Impression (commande d'affiches, cartes de visite, flyers, plans et
 -- goodies auprès de fournisseurs, par API) : ses tables (préfixe pr_) sont
 -- créées automatiquement au premier accès par includes/impression.php

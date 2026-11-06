@@ -1,7 +1,8 @@
 <?php
 session_start();
-require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/connectors.php';
 require_admin();
+connectors_ensure_schema(); // colonnes d'import (source_id…) créées à la volée sur une base existante
 
 $content = get_content();
 $flash = flash_get();
@@ -12,25 +13,32 @@ $dir = ($_GET['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
 $columns = ['name' => 'name', 'price' => 'price', 'date' => 'created_at'];
 $orderCol = $columns[$sortKey] ?? 'created_at';
 
-$where = '';
+// ?source=ID : ne montre que les produits importés d'une boutique connectée.
+$sourceId = (int) ($_GET['source'] ?? 0);
+$conds = [];
 $params = [];
 if ($q !== '') {
-    $where = 'WHERE name LIKE ? OR ref LIKE ?';
-    $params = ["%$q%", "%$q%"];
+    $conds[] = '(name LIKE ? OR ref LIKE ?)';
+    array_push($params, "%$q%", "%$q%");
 }
+if ($sourceId > 0) {
+    $conds[] = 'source_id = ?';
+    $params[] = $sourceId;
+}
+$where = $conds ? 'WHERE ' . implode(' AND ', $conds) : '';
 
 $stmt = db()->prepare("SELECT * FROM products $where ORDER BY $orderCol $dir, ref");
 $stmt->execute($params);
 $products = $stmt->fetchAll();
 
-$currentUrl = '/admin/catalog.php?' . http_build_query(array_filter(['sort' => $sortKey, 'dir' => $dir, 'q' => $q]));
+$currentUrl = '/admin/catalog.php?' . http_build_query(array_filter(['sort' => $sortKey, 'dir' => $dir, 'q' => $q, 'source' => $sourceId ?: null]));
 $badgeOptions = ['Chiné', 'Fait main', 'Pièce unique', 'Promo'];
 
-function catalog_sort_link(string $key, string $label, string $sortKey, string $dir, string $q): string
+function catalog_sort_link(string $key, string $label, string $sortKey, string $dir, string $q, int $sourceId = 0): string
 {
     $nextDir = ($sortKey === $key && $dir === 'asc') ? 'desc' : 'asc';
     $arrow = $sortKey === $key ? ($dir === 'asc' ? ' ↑' : ' ↓') : '';
-    $url = '/admin/catalog.php?sort=' . urlencode($key) . '&dir=' . urlencode($nextDir) . ($q !== '' ? '&q=' . urlencode($q) : '');
+    $url = '/admin/catalog.php?sort=' . urlencode($key) . '&dir=' . urlencode($nextDir) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($sourceId > 0 ? '&source=' . $sourceId : '');
     return '<a href="' . h($url) . '" style="color:inherit;text-decoration:none;">' . h($label . $arrow) . '</a>';
 }
 ?><!DOCTYPE html>
@@ -79,9 +87,10 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
     <form method="get" action="/admin/catalog.php" class="catalog-filters">
       <input type="hidden" name="sort" value="<?= h($sortKey) ?>">
       <input type="hidden" name="dir" value="<?= h($dir) ?>">
+      <?php if ($sourceId > 0): ?><input type="hidden" name="source" value="<?= $sourceId ?>"><?php endif; ?>
       <input type="search" name="q" value="<?= h($q) ?>" placeholder="Rechercher (nom, réf.)...">
       <button type="submit" class="btn-small">Rechercher</button>
-      <?php if ($q !== ''): ?><a class="btn-small" href="/admin/catalog.php">Réinitialiser</a><?php endif; ?>
+      <?php if ($q !== '' || $sourceId > 0): ?><a class="btn-small" href="/admin/catalog.php">Réinitialiser</a><?php endif; ?>
     </form>
 
     <?php if (!$products): ?>
@@ -106,9 +115,9 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
             <tr>
               <th></th>
               <th></th>
-              <th><?= catalog_sort_link('name', 'Nom', $sortKey, $dir, $q) ?></th>
-              <th><?= catalog_sort_link('price', 'Prix', $sortKey, $dir, $q) ?></th>
-              <th><?= catalog_sort_link('date', 'Mise en ligne', $sortKey, $dir, $q) ?></th>
+              <th><?= catalog_sort_link('name', 'Nom', $sortKey, $dir, $q, $sourceId) ?></th>
+              <th><?= catalog_sort_link('price', 'Prix', $sortKey, $dir, $q, $sourceId) ?></th>
+              <th><?= catalog_sort_link('date', 'Mise en ligne', $sortKey, $dir, $q, $sourceId) ?></th>
             </tr>
           </thead>
           <tbody>
@@ -146,6 +155,10 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                           </div>
                           <div class="field"><label>Prix</label><input type="text" name="price" value="<?= h($p['price']) ?>"></div>
                         </div>
+                        <?php if (!empty($p['source_id'])): ?>
+                          <p class="hint" style="margin:0 0 8px;">Produit importé d'une boutique connectée<?php if (!empty($p['external_url'])): ?> (<a href="<?= h($p['external_url']) ?>" target="_blank" rel="noopener noreferrer">voir l'original</a>)<?php endif; ?> :
+                            prix, promo, stock et poids sont remis à jour à chaque synchronisation — modifiez-les plutôt dans la boutique d'origine.</p>
+                        <?php endif; ?>
                         <div class="field"><label>Description</label><textarea name="description"><?= h($p['description']) ?></textarea></div>
                         <div class="field-row-3">
                           <div class="field"><label>Taille</label><input type="text" name="size_text" value="<?= h($p['size_text']) ?>" placeholder="ex : 20 × 15 × 30 cm"></div>
