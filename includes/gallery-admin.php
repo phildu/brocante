@@ -507,10 +507,22 @@ function ga_sub_confirm(string $slug, string $id, string $token): bool
     return false;
 }
 
-/** Désinscription : abonné (kind = sub) ou prospect (kind = prospect). */
+/**
+ * Désinscription : abonné (kind = sub), prospect (kind = prospect) ou membre du programme de fidélité (kind = member : plus d'alerte de
+ * fermeture ni de message de la galerie, mais le compte et les points restent ; $id = jeton du membre).
+ */
 function ga_stop(string $slug, string $kind, string $id, string $token): bool
 {
-    if (!in_array($kind, ['sub', 'prospect'], true) || !hash_equals(ga_token($slug, $kind, $id), $token)) return false;
+    if (!in_array($kind, ['sub', 'prospect', 'member'], true) || !hash_equals(ga_token($slug, $kind, $id), $token)) return false;
+    if ($kind === 'member') {
+        require_once __DIR__ . '/gallery-loyalty.php';
+        return (bool) gl_update($slug, static function (array &$d) use ($id) {
+            $email = gl_member_by_token($d, $id);
+            if ($email === null) return false;
+            $d['members'][$email]['alerts_off'] = time();
+            return true;
+        });
+    }
     if ($kind === 'sub') {
         $subs = array_values(array_filter(ga_subs($slug), static fn ($s) => $s['id'] !== $id));
         return ga_write($slug, 'subs', $subs);

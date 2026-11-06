@@ -1008,6 +1008,25 @@ dossier : ils servent aussi bien `/comptage/` qu'une galerie, avec un cache par 
 Pas de base SQL : elle s'appuie sur l'événement et le registre des demandes de la galerie (`includes/gallery-cancellation.php`,
 `portail/galerie-annulation.php`). L'annulation passe par l'extension ; le suivi d'un événement déjà annulé reste ouvert si elle s'arrête.
 
+## Horaires et alerte de fermeture d'une galerie
+
+Fonctionnalité « Horaires d'ouverture, fermetures exceptionnelles et alerte aux visiteurs » des types de galerie (`GT_FEATURES['horaires']`, activée par
+défaut ; à couper par type dans le portail → *Types de galerie*). Bouton **Horaires** dans l'espace de la galerie (`portail/galerie-horaires.php`,
+accès : exploitant ou administrateur de CETTE galerie).
+
+- **Formulaire** : grille hebdomadaire (plusieurs créneaux par jour, jours fermés), fermetures exceptionnelles / jours fériés / congés (Du, Au, type,
+  motif) et message libre. Le calcul est celui des boutiques (`includes/shop-hours.php`) : `shop_hours_source()` y substitue les données de la galerie le
+  temps d'un calcul (`gh_with()` dans `includes/gallery-hours.php`) ; les boutiques ne changent pas.
+- **Sur le site** : la page publique de la galerie affiche les horaires et un bandeau (avertissement pendant une fermeture, information dans les 7 jours
+  qui la précèdent) ; le message libre remplace le bandeau automatique. Rien d'affiché tant qu'aucun horaire n'est enregistré.
+- **Alerte aux visiteurs** : chaque fermeture à venir propose « Prévenir les visiteurs… ». L'organisateur choisit le public — abonnés confirmés aux
+  nouveautés, membres du programme de fidélité, exposants ayant une place attribuée —, relit le message prérempli et confirme ; jamais automatique.
+  Un e-mail par adresse (dédoublonnée), 500 destinataires au plus par envoi. Abonnés et membres reçoivent un lien de désinscription signé
+  (`ga_stop()`, nouveau type « member » : plus d'alerte, le compte et les points restent) ; les exposants, le lien de leur espace.
+- **Pas de double envoi** : une période déjà annoncée affiche « Visiteurs prévenus le … » et n'est renvoyée que sur demande (« Renvoyer quand même »).
+  Le journal des alertes est dans `data/galeries/<id>.hours.json` (jamais déployé), avec les horaires ; chaque envoi est aussi tracé dans le journal d'audit.
+- **Tests** : `php scripts/test-gallery-hours.php`.
+
 ## Retours testeurs : widget « Un retour ? », triage et relances
 
 Un dispositif distinct des retours par module (`includes/addons.php`) : il recueille **tous** les bugs, idées et gênes des

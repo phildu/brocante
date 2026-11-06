@@ -82,6 +82,19 @@ function shop_hours_date_label(DateTimeImmutable $date, bool $withWeekday = true
     return $out;
 }
 
+/**
+ * Source des horaires : par défaut les réglages de la boutique (table settings). Une galerie y substitue les siens le temps d'un calcul
+ * (includes/gallery-hours.php) : ['schedule' => grille|null, 'closures' => [...], 'notice' => message libre]. Tout le reste (état, résumé,
+ * prochaine ouverture, bandeau) fonctionne alors sans changement. $clear = true rend la main aux réglages de la boutique.
+ */
+function shop_hours_source(?array $set = null, bool $clear = false): ?array
+{
+    static $source = null;
+    if ($clear) $source = null;
+    elseif ($set !== null) $source = $set;
+    return $source;
+}
+
 /** Normalise une grille hebdomadaire reçue du formulaire ou du JSON. */
 function shop_hours_normalize_schedule(array $raw): array
 {
@@ -118,6 +131,10 @@ function shop_hours_normalize_schedule(array $raw): array
 /** Grille hebdomadaire enregistrée, ou null tant qu'aucun horaire structuré n'existe. */
 function shop_hours_schedule(): ?array
 {
+    if (($source = shop_hours_source()) !== null) {   // galerie : pas de cache, la source change d'une galerie à l'autre
+        $raw = $source['schedule'] ?? null;
+        return is_array($raw) && $raw ? shop_hours_normalize_schedule($raw) : null;
+    }
     static $loaded = false, $schedule = null;
     if ($loaded) return $schedule;
     $loaded = true;
@@ -149,11 +166,17 @@ function shop_hours_editor_schedule(): array
 /** Fermetures et congés enregistrés (triés par date de début). */
 function shop_hours_closures(): array
 {
+    if (($source = shop_hours_source()) !== null) return shop_hours_normalize_closures((array) ($source['closures'] ?? []));
     $raw = shop_setting('opening_closures', '');
     $decoded = trim($raw) === '' ? [] : json_decode($raw, true);
-    if (!is_array($decoded)) return [];
+    return is_array($decoded) ? shop_hours_normalize_closures($decoded) : [];
+}
+
+/** Normalise des fermetures reçues du formulaire ou du JSON : dates valides, type connu, motif court, triées par début (50 au plus). */
+function shop_hours_normalize_closures(array $rows): array
+{
     $out = [];
-    foreach ($decoded as $row) {
+    foreach (array_slice($rows, 0, 50) as $row) {
         if (!is_array($row)) continue;
         $from = trim((string) ($row['from'] ?? ''));
         $to = trim((string) ($row['to'] ?? '')) ?: $from;
@@ -173,23 +196,7 @@ function shop_hours_closures(): array
 
 function shop_hours_save_closures(array $closures): void
 {
-    $clean = [];
-    foreach (array_slice($closures, 0, 50) as $row) {
-        if (!is_array($row)) continue;
-        $from = trim((string) ($row['from'] ?? ''));
-        $to = trim((string) ($row['to'] ?? '')) ?: $from;
-        if (!shop_hours_valid_date($from) || !shop_hours_valid_date($to) || $to < $from) continue;
-        $type = (string) ($row['type'] ?? 'closure');
-        if (!isset(SHOP_HOURS_CLOSURE_TYPES[$type])) $type = 'closure';
-        $clean[] = [
-            'from' => $from,
-            'to' => $to,
-            'type' => $type,
-            'label' => mb_substr(trim((string) ($row['label'] ?? '')), 0, 120),
-        ];
-    }
-    usort($clean, static fn ($a, $b) => strcmp($a['from'], $b['from']));
-    shop_setting_set('opening_closures', json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    shop_setting_set('opening_closures', json_encode(shop_hours_normalize_closures($closures), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
 function shop_hours_valid_date(string $date): bool
@@ -354,7 +361,8 @@ function shop_hours_announcement(?DateTimeImmutable $now = null): ?array
     $now ??= shop_hours_now();
     $status = shop_hours_status($now);
 
-    $custom = trim(shop_setting('opening_notice', ''));
+    $source = shop_hours_source();
+    $custom = trim($source !== null ? (string) ($source['notice'] ?? '') : shop_setting('opening_notice', ''));
     if ($custom !== '') return ['kind' => 'info', 'text' => $custom];
 
     if (!$status['configured']) return null;

@@ -31,6 +31,7 @@ const GB_AUDIT_LABELS = [
     'event_cancel' => 'Événement annulé', 'event_reopen' => 'Événement réactivé', 'event_notice' => 'Avis d’annulation envoyé',
     'refund_due' => 'Remboursement à effectuer', 'refund_paid' => 'Remboursement effectué', 'refund_waived' => 'Remboursement renoncé',
     'refund_adjust' => 'Montant du remboursement ajusté',
+    'closure_alert' => 'Alerte de fermeture envoyée aux visiteurs',
 ];
 
 function gb_file(string $slug): string
