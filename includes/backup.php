@@ -1,138 +1,64 @@
 <?php
-/**
- * Sauvegarde de la base de données SQLite
- * Stocke les sauvegardes dans un dossier hors de la racine web
- */
 
-require_once __DIR__ . '/../config.php';
+// Sauvegarde quotidienne de la base du commerce, sans tâche planifiée : la
+// première ouverture de la base dans la journée en fait une copie dans
+// data/backups/<base>-AAAA-MM-JJ.db (data/ n'est jamais servi en HTTP, jamais
+// envoyé par deploy-brocante.sh ni suivi par git). Les DB_BACKUP_KEEP plus
+// récentes sont gardées. Pour restaurer : remplacer data/<base>.db (ou
+// brocante.db pour le Petit Chalet) par la sauvegarde voulue, site au repos.
 
-/**
- * Répertoire de sauvegarde (hors de la racine web)
- * Doit être configurable ou définir manuellement
- */
-define('BACKUP_DIR', __DIR__ . '/../../backups/');
+const DB_BACKUP_KEEP = 14;
 
-/**
- * Crée une sauvegarde de la base de données
- * @param string $suffix Suffixe optionnel pour le nom de fichier
- * @return string Chemin vers le fichier de sauvegarde, ou null en cas d'échec
- */
-function create_database_backup(string $suffix = ''): ?string
+function db_backup_dir(): string
 {
-    $dbPath = DB_PATH;
-    
-    if (!is_file($dbPath)) {
-        error_log("Base de données introuvable : $dbPath");
-        return null;
-    }
-    
-    // Créer le répertoire de sauvegarde si nécessaire
-    if (!is_dir(BACKUP_DIR)) {
-        if (!mkdir(BACKUP_DIR, 0755, true)) {
-            error_log("Impossible de créer le répertoire de sauvegarde : " . BACKUP_DIR);
-            return null;
+    return dirname(__DIR__) . '/data/backups';
+}
+
+/** Préfixe des sauvegardes d'une base : son nom de fichier sans .db (« la-fripe-a-naty », « brocante »…). */
+function db_backup_prefix(): string
+{
+    return basename(DB_PATH, '.db');
+}
+
+/** Sauvegardes de la base du commerce, de la plus récente à la plus ancienne. */
+function db_backup_list(): array
+{
+    $files = glob(db_backup_dir() . '/' . db_backup_prefix() . '-????-??-??.db') ?: [];
+    rsort($files);
+    return $files;
+}
+
+/**
+ * Fait la sauvegarde du jour si elle manque. Ne bloque jamais le site : une
+ * erreur (disque plein, droits) est seulement journalisée.
+ */
+function db_backup_daily(PDO $pdo): void
+{
+    $dir = db_backup_dir();
+    $target = $dir . '/' . db_backup_prefix() . '-' . date('Y-m-d') . '.db';
+    if (is_file($target)) return;
+    try {
+        if (!is_dir($dir) && !@mkdir($dir, 0700, true) && !is_dir($dir)) return;
+        // Une seule requête fait la copie, les autres passent leur chemin.
+        $lock = @fopen($dir . '/.lock', 'c');
+        if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) return;
+        try {
+            if (is_file($target)) return;
+            $tmp = $target . '.tmp';
+            @unlink($tmp);
+            // VACUUM INTO : copie cohérente même pendant une écriture (SQLite ≥ 3.27).
+            $pdo->exec('VACUUM INTO ' . $pdo->quote($tmp));
+            rename($tmp, $target);
+            @chmod($target, 0600);
+            foreach (array_slice(db_backup_list(), DB_BACKUP_KEEP) as $old) {
+                @unlink($old);
+            }
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
         }
+    } catch (Throwable $e) {
+        error_log('Sauvegarde de la base impossible : ' . $e->getMessage());
+        if (isset($tmp)) @unlink($tmp);
     }
-    
-    // Générer un nom de fichier unique
-    $timestamp = date('Ymd-His');
-    $filename = 'brocante-db-' . $timestamp . ($suffix ? '-' . $suffix : '') . '.bak';
-    $backupPath = BACKUP_DIR . '/' . $filename;
-    
-    // Copier la base de données
-    if (!copy($dbPath, $backupPath)) {
-        error_log("Impossible de copier la base de données vers : $backupPath");
-        return null;
-    }
-    
-    // Nettoyer les anciennes sauvegardes (garder les 10 dernières)
-    cleanup_old_backups();
-    
-    return $backupPath;
-}
-
-/**
- * Nettoie les anciennes sauvegardes (garde seulement les 10 dernières)
- */
-function cleanup_old_backups(int $maxBackups = 10): void
-{
-    if (!is_dir(BACKUP_DIR)) {
-        return;
-    }
-    
-    $backups = glob(BACKUP_DIR . '/brocante-db-*.bak');
-    if (!$backups) {
-        return;
-    }
-    
-    // Trier par date de modification (plus récent en premier)
-    usort($backups, function($a, $b) {
-        return filemtime($b) <=> filemtime($a);
-    });
-    
-    // Supprimer les sauvegardes excédentaires
-    $toDelete = array_slice($backups, $maxBackups);
-    foreach ($toDelete as $backup) {
-        if (is_file($backup)) {
-            unlink($backup);
-        }
-    }
-}
-
-/**
- * Restaure une sauvegarde de la base de données
- * @param string $backupPath Chemin vers le fichier de sauvegarde
- * @return bool True en cas de succès, false sinon
- */
-function restore_database_backup(string $backupPath): bool
-{
-    if (!is_file($backupPath)) {
-        return false;
-    }
-    
-    $dbPath = DB_PATH;
-    
-    // Créer une sauvegarde avant de restaurer
-    create_database_backup('pre-restore');
-    
-    // Copier la sauvegarde par-dessus la base actuelle
-    if (!copy($backupPath, $dbPath)) {
-        error_log("Impossible de restaurer la sauvegarde : $backupPath");
-        return false;
-    }
-    
-    return true;
-}
-
-/**
- * Liste toutes les sauvegardes disponibles
- * @return array Liste des sauvegardes avec leurs infos
- */
-function list_backups(): array
-{
-    if (!is_dir(BACKUP_DIR)) {
-        return [];
-    }
-    
-    $backups = glob(BACKUP_DIR . '/brocante-db-*.bak');
-    if (!$backups) {
-        return [];
-    }
-    
-    $result = [];
-    foreach ($backups as $backup) {
-        $result[] = [
-            'path' => $backup,
-            'filename' => basename($backup),
-            'size' => filesize($backup),
-            'created_at' => date('Y-m-d H:i:s', filemtime($backup)),
-        ];
-    }
-    
-    // Trier par date de création (plus récent en premier)
-    usort($result, function($a, $b) {
-        return strtotime($b['created_at']) <=> strtotime($a['created_at']);
-    });
-    
-    return $result;
 }

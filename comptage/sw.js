@@ -2,8 +2,11 @@
  * réseau (champ, parking, 4G capricieuse). Les appuis, eux, sont mis en file
  * d'attente par comptage.js (localStorage) ; ce fichier ne s'occupe que de
  * l'application elle-même. Jamais d'API en cache. */
-var CACHE = 'comptage-v2';
-var PAGE = '/comptage/index.php';
+// Le comptage peut vivre à /comptage/ ou, pour une galerie, à /galerie/<galerie>/comptage/ : tout part de la portée (scope) du service worker,
+// et chaque galerie a son propre cache.
+var BASE = new URL(self.registration.scope).pathname;
+var CACHE = 'comptage-v3|' + BASE;
+var PAGE = BASE + 'index.php';
 var ASSETS = ['/assets/style.css', '/assets/comptage.css', '/assets/comptage.js', '/assets/comptage-vision.js', '/assets/logo-macaron.png'];
 
 // Ne garde que la vraie page du compteur (marquée par l'en-tête X-Cp-App), pas
@@ -25,7 +28,7 @@ self.addEventListener('install', function (e) {
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
+    return Promise.all(keys.filter(function (k) { return k !== CACHE && (k === 'comptage-v2' || k.split('|')[1] === BASE); }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 
@@ -33,10 +36,10 @@ self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
-  if (url.origin !== location.origin || url.pathname.indexOf('/comptage/api.php') === 0) return;
+  if (url.origin !== location.origin || url.pathname.indexOf(BASE + 'api.php') === 0) return;
 
   // Page du compteur : le réseau d'abord (toujours à jour), le cache en secours.
-  if (req.mode === 'navigate' && url.pathname.indexOf('/comptage/') === 0) {
+  if (req.mode === 'navigate' && url.pathname.indexOf(BASE) === 0) {
     e.respondWith(fetch(req).then(function (res) {
       var copy = res.clone();
       caches.open(CACHE).then(function (c) { keepPage(c, copy); });

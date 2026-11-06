@@ -1,0 +1,14 @@
+{
+  "id": "rendez-vous",
+  "name": "Rendez-vous (Doodle / Framadate)",
+  "version": "1.0.0",
+  "description": "Organisez un rendez-vous à plusieurs : proposez des dates et des horaires, partagez un lien public, chacun indique ses disponibilités, puis vous confirmez le créneau retenu et prévenez les participants par e-mail. Aucune inscription n'est demandée aux visiteurs. Chaque boutique garde ses consultations dans sa base.",
+  "table_prefix": "rdv_",
+  "pages": [
+    { "id": "index", "label": "Rendez-vous", "icon": "users", "file": "pages/index.php", "roles": ["admin", "community_manager"] },
+    { "id": "gerer", "label": "Gérer un rendez-vous", "icon": "users", "file": "pages/gerer.php", "roles": ["admin", "community_manager"], "menu": false }
+  ],
+  "api": [
+    { "id": "admin", "file": "api/admin.php", "methods": ["POST"], "roles": ["admin", "community_manager"] }
+  ]
+}

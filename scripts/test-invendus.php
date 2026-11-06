@@ -16,8 +16,11 @@ $tmpDb = sys_get_temp_dir() . '/brocante-test-invendus-' . getmypid() . '.db';
 define('DB_PATH', $tmpDb);
 define('UNSOLD_TESTING', true);
 register_shutdown_function(function () use ($tmpDb) { @unlink($tmpDb); });
+// Base jetable créée à partir de schema.sql : db() (config.php) attend les tables de base d'un commerce (settings, content…).
+(new PDO('sqlite:' . $tmpDb))->exec(file_get_contents(__DIR__ . '/../schema.sql'));
 
 require_once __DIR__ . '/../includes/invendus.php';
+unsold_ensure_schema();   // le schéma n'est plus créé au chargement du fichier (galerie : voir unsold_enter_gallery())
 
 $pass = 0;
 $fail = 0;

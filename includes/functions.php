@@ -1,6 +1,31 @@
 <?php
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/vocabulary.php';   // mot unique pour les « extensions » (plugins, options, modules) : ext_t()
+require_once __DIR__ . '/accounts.php';
+require_once __DIR__ . '/connect.php';
+require_once __DIR__ . '/capture.php';
+require_once __DIR__ . '/studio.php';
+require_once __DIR__ . '/prompts.php';
+require_once __DIR__ . '/universes.php';
+require_once __DIR__ . '/comparables.php';
+require_once __DIR__ . '/ai-usage.php';
+require_once __DIR__ . '/omniroute.php';
+require_once __DIR__ . '/ai-rating.php';
+require_once __DIR__ . '/price-research.php';
+require_once __DIR__ . '/pricing-extras.php';
+require_once __DIR__ . '/condition-pricing.php';
+require_once __DIR__ . '/business-presence.php';
+require_once __DIR__ . '/ai-usage.php';
+require_once __DIR__ . '/password-reset.php';
+require_once __DIR__ . '/veo.php';
+require_once __DIR__ . '/siliconflow-video.php';
+require_once __DIR__ . '/modal-video.php';
+require_once __DIR__ . '/shop-hours.php';
+require_once __DIR__ . '/order-flow.php';
+require_once __DIR__ . '/locate.php';
+require_once __DIR__ . '/payments.php';
+require_once __DIR__ . '/order-availability.php';
 require_once __DIR__ . '/analytics.php';
 require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/auth.php';
@@ -10,16 +35,18 @@ function h($s): string
     return htmlspecialchars((string) ($s ?? ''), ENT_QUOTES, 'UTF-8');
 }
 
+/** Catégories du commerce actif (tenants/<slug>/tenant.php → categories). */
 function category_list(): array
 {
-    return [
-        ['key' => 'ceramique', 'label' => 'Céramique', 'icon' => 'ic-vase'],
-        ['key' => 'bois', 'label' => 'Bois & mobilier', 'icon' => 'ic-stool'],
-        ['key' => 'textile', 'label' => 'Textile', 'icon' => 'ic-plaid'],
-        ['key' => 'lumiere', 'label' => 'Lumière', 'icon' => 'ic-candle'],
-        ['key' => 'jardin', 'label' => 'Jardin', 'icon' => 'ic-pot'],
-        ['key' => 'curiosites', 'label' => 'Curiosités', 'icon' => 'ic-mirror'],
-    ];
+    // Univers adaptés depuis l'administration (page Univers) ; sinon ceux du fichier du commerce.
+    return universes_saved() ?? tenant('categories');
+}
+
+/** Catégorie par défaut du commerce (« curiosites » pour la brocante, sinon la première). */
+function default_category_key(): string
+{
+    $keys = array_column(category_list(), 'key');
+    return in_array('curiosites', $keys, true) ? 'curiosites' : ($keys[0] ?? 'divers');
 }
 
 function category_label(string $key): string
@@ -41,7 +68,17 @@ function category_icon(string $key): string
 function get_content(): array
 {
     $row = db()->query('SELECT * FROM content WHERE id = 1')->fetch();
-    return $row ?: [];
+    if (!$row) return [];
+    // L'adresse et les horaires viennent de la définition globale (identité du
+    // vendeur) et de la grille d'horaires ; tant qu'aucune grille n'est
+    // enregistrée, le texte libre existant reste affiché tel quel.
+    if (function_exists('shop_public_address')) {
+        $address = shop_public_address($row);
+        if ($address !== '') $row['contact_address'] = $address;
+        $hours = shop_hours_summary_text();
+        if ($hours !== '') $row['contact_hours'] = $hours;
+    }
+    return $row;
 }
 
 /**
@@ -55,12 +92,11 @@ function get_products(?string $cat = null, bool $includeHidden = false, string $
     $where = [];
     $params = [];
     if ($cat && $cat !== 'tous') { $where[] = 'cat = ?'; $params[] = $cat; }
-    if (!$includeHidden) { $where[] = 'is_hidden = 0'; $where[] = 'stock > 0'; }
+    if (!$includeHidden) { $where[] = 'is_hidden = 0'; $where[] = '(stock > 0 OR keep_when_sold = 1)'; }
     if ($search !== '') {
-        $where[] = '(name LIKE ? OR description LIKE ?)';
+        $where[] = '(name LIKE ? OR description LIKE ? OR brand LIKE ? OR distributor LIKE ? OR colors LIKE ?)';
         $like = '%' . $search . '%';
-        $params[] = $like;
-        $params[] = $like;
+        $params = array_merge($params, [$like, $like, $like, $like, $like]);
     }
     $sql = 'SELECT * FROM products' . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . ' ORDER BY sort_order, ref';
     $stmt = db()->prepare($sql);
@@ -80,17 +116,236 @@ function in_stock(array $p): bool
     return (int) ($p['stock'] ?? 0) > 0;
 }
 
+/** Canaux de vente d'une pièce (clé => libellé). */
+function product_channels(): array
+{
+    return [
+        'boutique' => 'Boutique physique', 'ecommerce' => 'Site e-commerce', 'leboncoin' => 'Leboncoin', 'vinted' => 'Vinted',
+        'facebook' => 'Facebook Marketplace', 'marche' => 'Marché / brocante', 'autre' => 'Autre',
+    ];
+}
+
+/** Clés de canaux valides d'une liste « a,b,c ». */
+function product_channel_keys(?string $csv): array
+{
+    $valid = array_keys(product_channels());
+    return array_values(array_unique(array_filter(array_map('trim', explode(',', (string) $csv)), static fn ($k) => in_array($k, $valid, true))));
+}
+
+/** Canaux d'une pièce : « Boutique physique » par défaut tant que rien n'a été enregistré (NULL) ; '' = tout décoché volontairement. */
+function product_channels_of(array $p): array
+{
+    return ($p['channels'] ?? null) === null ? ['boutique'] : product_channel_keys($p['channels']);
+}
+
+/** Libellés lisibles des canaux d'une pièce (« Boutique physique, Leboncoin »), ou '' si aucun. */
+function product_channel_labels(?string $csv): string
+{
+    $all = product_channels();
+    return implode(', ', array_map(static fn ($k) => $all[$k], product_channel_keys($csv)));
+}
+
+/** La pièce reste au catalogue public une fois vendue (badge « Vendue »). */
+function product_keeps_when_sold(array $p): bool
+{
+    return !empty($p['keep_when_sold']);
+}
+
+/** Vente en lot : nombre de pièces vendues ensemble au prix affiché (1 = pièce seule). */
+function product_lot_qty(array $p): int
+{
+    return max(1, (int) ($p['lot_qty'] ?? 1));
+}
+
+/** Pastille « Lot de N pièces » à côté du prix ('' pour une pièce seule). */
+function lot_tag_html(array $p): string
+{
+    $n = product_lot_qty($p);
+    return $n > 1 ? ' <span class="lot-tag">Lot de ' . $n . ' pièces</span>' : '';
+}
+
 /**
  * Décrémente le stock des pièces d'une commande une fois le paiement
- * confirmé — appelé une seule fois par commande (checkout-success.php et
- * la vérification manuelle admin ne l'exécutent que lors du passage
- * pending → paid, jamais si la commande est déjà payée).
+ * confirmé — appelé une seule fois par commande, par order_mark_paid() lors
+ * du passage pending → paid, jamais si la commande est déjà payée.
  */
 function decrement_stock_for_order(array $items): void
 {
     $stmt = db()->prepare('UPDATE products SET stock = MAX(stock - ?, 0) WHERE ref = ?');
     foreach ($items as $item) {
         $stmt->execute([(int) $item['qty'], $item['ref']]);
+    }
+}
+
+/**
+ * Passe une commande en « payée » d'après sa session Stripe (e-mail, montant,
+ * livraison, adresse), décrémente le stock et ajoute le client aux comptes.
+ * Le passage se fait en une seule requête (… AND status <> 'paid') : si la page
+ * de confirmation et une vérification arrivent en même temps, une seule des deux
+ * décrémente le stock. Retourne vrai si c'est cet appel qui a fait le passage.
+ */
+function order_mark_paid(array $order, array $session): bool
+{
+    $shippingAddr = $session['shipping_details']['address'] ?? $session['customer_details']['address'] ?? null;
+    $addressText = $shippingAddr ? implode(', ', array_filter([
+        $session['shipping_details']['name'] ?? null,
+        $shippingAddr['line1'] ?? null,
+        $shippingAddr['line2'] ?? null,
+        trim(($shippingAddr['postal_code'] ?? '') . ' ' . ($shippingAddr['city'] ?? '')),
+        $shippingAddr['country'] ?? null,
+    ])) : null;
+    if ($addressText === null || $addressText === '') $addressText = ($order['declared_address'] ?? '') !== '' ? (string) $order['declared_address'] : null;   // adresse saisie au panier, si Stripe n'en renvoie pas
+    $upd = db()->prepare("UPDATE orders SET status = 'paid', email = ?, amount_total = ?, shipping_cents = ?, shipping_address = ? WHERE id = ? AND status <> 'paid'");
+    $upd->execute([
+        $session['customer_details']['email'] ?? null,
+        (int) ($session['amount_total'] ?? $order['amount_total']),
+        (int) ($session['shipping_cost']['amount_total'] ?? 0),
+        $addressText,
+        (int) $order['id'],
+    ]);
+    if ($upd->rowCount() === 0) return false;
+    decrement_stock_for_order(json_decode((string) $order['items'], true) ?: []);
+    // Mode de livraison définitif, code de retrait et étape de préparation.
+    order_prepare_after_payment($order, $session);
+    order_mark_shop_qr_sold($order);
+    order_event((int) $order['id'], 'paiement', 'Paiement confirmé (' . format_cents((int) ($session['amount_total'] ?? $order['amount_total'])) . ')', 'stripe', 'paid');
+    // Le client rejoint la liste des comptes (Administration → Comptes) ; un prospect inscrit à la newsletter passe en client.
+    account_upsert_contact(
+        (string) ($session['customer_details']['email'] ?? ''),
+        (string) ($session['customer_details']['name'] ?? $session['shipping_details']['name'] ?? ''),
+        'client',
+        'commande',
+        (string) ($order['phone'] ?? $session['customer_details']['phone'] ?? '')    // téléphone saisi au panier (sinon celui de Stripe)
+    );
+    // Récapitulatif envoyé une seule fois (page de retour ou webhook, le premier arrivé gagne).
+    try {
+        order_send_confirmation((int) $order['id']);
+    } catch (Throwable $e) {
+        error_log('confirmation commande : ' . $e->getMessage());
+    }
+    // Les plugins actifs réagissent au paiement (ex. reçu d'achat) sans jamais bloquer la commande.
+    try {
+        require_once __DIR__ . '/plugins.php';
+        plugin_fire('order_paid', ['order_id' => (int) $order['id']]);
+    } catch (Throwable $e) {
+        error_log('order_paid : ' . $e->getMessage());
+    }
+    return true;
+}
+
+/**
+ * Durée de vie d'une page de paiement Stripe (minimum accepté par Stripe : 30 min) : tant qu'elle est ouverte, les pièces de
+ * la commande sont réservées à ce visiteur. Passé ce délai, Stripe la ferme et la pièce redevient disponible.
+ */
+const CHECKOUT_HOLD_MINUTES = 31;
+
+/** Commandes en attente de ce visiteur (ses propres passages à la caisse ne le bloquent jamais). */
+function checkout_own_orders(): array
+{
+    return array_map('intval', (array) ($_SESSION['checkout_orders'] ?? []));
+}
+
+function checkout_remember_order(int $id): void
+{
+    $_SESSION['checkout_orders'] = array_slice(array_merge(checkout_own_orders(), [$id]), -5);
+}
+
+/** Quantités réservées par les paiements en cours des AUTRES visiteurs : [ref => quantité]. */
+function cart_held_by_others(): array
+{
+    $own = checkout_own_orders();
+    $held = [];
+    // Les commandes ayant déjà déduit le stock (virement SEPA) ne sont pas une
+    // réservation temporaire de plus.
+    $rows = db()->query("SELECT id, items FROM orders WHERE status = 'pending' AND stock_reserved_at IS NULL AND created_at >= datetime('now', '-" . CHECKOUT_HOLD_MINUTES . " minutes')")->fetchAll();
+    foreach ($rows as $row) {
+        if (in_array((int) $row['id'], $own, true)) continue;
+        foreach (json_decode((string) $row['items'], true) ?: [] as $item) {
+            $ref = (string) ($item['ref'] ?? '');
+            $held[$ref] = ($held[$ref] ?? 0) + (int) ($item['qty'] ?? 0);
+        }
+    }
+    // Pièces dont la disponibilité a été validée mais pas encore payées : mises de côté
+    // jusqu'à la fin du délai de paiement, pour ne pas les vendre deux fois.
+    try {
+        $rows = db()->query("SELECT id, items, availability_deadline FROM orders WHERE status = 'awaiting' AND availability_status = 'available'")->fetchAll();
+        $now = time();
+        foreach ($rows as $row) {
+            if (in_array((int) $row['id'], $own, true)) continue;
+            $deadline = (int) strtotime((string) $row['availability_deadline']);
+            if ($deadline <= 0 || $deadline <= $now) continue;
+            foreach (json_decode((string) $row['items'], true) ?: [] as $item) {
+                $ref = (string) ($item['ref'] ?? '');
+                $held[$ref] = ($held[$ref] ?? 0) + (int) ($item['qty'] ?? 0);
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('réservations de disponibilité : ' . $e->getMessage());
+    }
+    // Pièces retenues par les plugins (ex. réservations avec arrhes).
+    try {
+        require_once __DIR__ . '/plugins.php';
+        foreach (plugin_collect('held_refs') as $ref => $qty) $held[(string) $ref] = ($held[(string) $ref] ?? 0) + (int) $qty;
+    } catch (Throwable $e) {
+        error_log('held_refs : ' . $e->getMessage());
+    }
+    return $held;
+}
+
+/** Quantité d'une pièce encore libre une fois retirées les réservations des autres visiteurs. */
+function product_free_qty(array $p, ?array $held = null): int
+{
+    $held ??= cart_held_by_others();
+    return max(0, (int) $p['stock'] - ($held[(string) $p['ref']] ?? 0));
+}
+
+/** Message affiché quand une pièce est en cours de paiement par un autre client. */
+function product_held_message(string $name): string
+{
+    return '« ' . $name . " » est réservée ou en cours de paiement par un autre client. Si cela n'aboutit pas, la pièce sera de nouveau disponible.";
+}
+
+/**
+ * Nouveau passage à la caisse de ce visiteur : ses pages de paiement précédentes encore ouvertes sont fermées chez Stripe,
+ * pour qu'il ne puisse pas payer deux fois. Une page déjà payée ne peut pas être fermée : orders_settle_pending_for() la rattrape.
+ */
+function checkout_expire_own_sessions(): void
+{
+    $own = checkout_own_orders();
+    if (!$own) return;
+    $stmt = db()->prepare("SELECT stripe_session_id, payment_via FROM orders WHERE id IN (" . implode(',', array_fill(0, count($own), '?')) . ") AND status = 'pending' AND (payment_provider IS NULL OR payment_provider = 'stripe')");
+    $stmt->execute($own);
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $o) {
+        $sessionId = $o['stripe_session_id'];
+        try {
+            stripe_request('POST', '/checkout/sessions/' . urlencode($sessionId) . '/expire', [], ($o['payment_via'] ?? '') === 'connect');
+        } catch (Throwable $e) {
+            // Déjà payée ou déjà expirée : rien à faire.
+        }
+    }
+}
+
+/**
+ * Avant un passage à la caisse : une commande en attente de moins de 24 h (durée
+ * de vie d'une session Stripe) qui contient une pièce du panier a peut-être été
+ * payée par un client qui a fermé l'onglet avant de revenir sur le site. On le
+ * vérifie auprès de Stripe : la pièce vendue sort alors du stock au lieu d'être
+ * vendue une deuxième fois. Une erreur Stripe n'empêche pas la commande en cours.
+ */
+function orders_settle_pending_for(array $refs): void
+{
+    $refs = array_map('strval', $refs);
+    if (!$refs) return;
+    $pending = db()->query("SELECT * FROM orders WHERE status = 'pending' AND created_at >= datetime('now', '-1 day') AND (payment_provider IS NULL OR payment_provider = 'stripe') ORDER BY id DESC LIMIT 20")->fetchAll();
+    foreach ($pending as $order) {
+        $items = json_decode((string) $order['items'], true) ?: [];
+        if (!array_intersect($refs, array_map('strval', array_column($items, 'ref')))) continue;
+        try {
+            $session = stripe_request('GET', '/checkout/sessions/' . urlencode($order['stripe_session_id']), [], ($order['payment_via'] ?? '') === 'connect');
+            if (($session['payment_status'] ?? '') === 'paid') order_mark_paid($order, $session);
+        } catch (Throwable $e) {
+            error_log('Vérification Stripe de la commande ' . $order['id'] . ' impossible : ' . $e->getMessage());
+        }
     }
 }
 
@@ -170,6 +425,56 @@ function slideshow_render_data(array $slide): ?array
     return ['slide' => $slide, 'product' => null];
 }
 
+/** Articles en promotion affichables en boutique : visibles, en stock, avec un prix promo fixe. */
+function slideshow_promo_products(int $limit = 20): array
+{
+    $limit = max(1, min(50, $limit));
+    $rows = db()->query("SELECT * FROM products
+        WHERE badge = 'Promo' AND is_hidden = 0 AND stock > 0 AND TRIM(COALESCE(promo_price, '')) <> ''
+        ORDER BY sort_order, ref LIMIT " . $limit)->fetchAll();
+    return array_values(array_filter($rows, static fn (array $p): bool => has_promo_price($p)));
+}
+
+/** Remise en pourcentage entre le prix normal et le prix promo (0 si incalculable). */
+function slideshow_promo_discount(array $product): int
+{
+    $old = price_to_cents($product['price'] ?? '');
+    $new = price_to_cents($product['promo_price'] ?? '');
+    if ($old === null || $new === null || $old <= 0 || $new >= $old) return 0;
+    return (int) round(($old - $new) / $old * 100);
+}
+
+/**
+ * Diapositives réellement diffusées : les promos en cours d'abord (automatiques),
+ * puis la sélection manuelle, sans répéter une pièce déjà montrée en promo.
+ */
+function slideshow_public_slides(): array
+{
+    db(); // charge aussi shop_setting()
+    $out = [];
+    $shownRefs = [];
+    if (shop_sales_enabled() && shop_setting('slideshow_auto_promos', '1') !== '0') {
+        foreach (slideshow_promo_products() as $p) {
+            $out[] = [
+                'slide' => ['kind' => 'product', 'path' => null, 'product_ref' => $p['ref'], 'caption' => '', 'duration_seconds' => 8, 'sort_order' => 0],
+                'product' => $p,
+                'promo' => true,
+                'discount' => slideshow_promo_discount($p),
+            ];
+            $shownRefs[(string) $p['ref']] = true;
+        }
+    }
+    foreach (slideshow_slides_list() as $s) {
+        $data = slideshow_render_data($s);
+        if (!$data) continue;
+        if ($s['kind'] === 'product' && isset($shownRefs[(string) $s['product_ref']])) continue;
+        $data['promo'] = false;
+        $data['discount'] = 0;
+        $out[] = $data;
+    }
+    return $out;
+}
+
 /* ---------- Bandeaux photo/vidéo en haut de page ---------- */
 
 /** Clés de page disponibles pour un bandeau, avec leur libellé admin. */
@@ -247,6 +552,94 @@ function render_page_banner(string $pageKey): void
     echo '</div>';
 }
 
+/** Code-barres / ISBN saisi : chiffres (et X final des ISBN-10) uniquement, 8 à 14 caractères ; '' sinon. */
+/** Lien « Panier » de la barre du haut : icône de caddie, libellé et pastille du nombre d'articles. */
+function cart_nav_link(int $count, string $class = ''): string
+{
+    if (!shop_sales_enabled()) return '';
+    $svg = '<svg class="cart-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.2a1.6 1.6 0 0 0 1.6 1.3h8.4a1.6 1.6 0 0 0 1.6-1.2L21 8H6"/></svg>';
+    return '<a href="/cart.php" class="nav-cart' . ($class !== '' ? ' ' . h($class) : '') . '"' . ($count > 0 ? ' aria-label="Panier, ' . $count . ' article' . ($count > 1 ? 's' : '') . '"' : '') . '>'
+        . $svg . '<span class="cart-label">Panier</span>' . ($count > 0 ? '<b class="cart-count">' . $count . '</b>' : '') . '</a>';
+}
+
+/** Couleurs saisies ou lues par l'IA → « bleu marine, blanc » : minuscules, séparées par des virgules, 6 au plus, 40 caractères chacune. */
+function product_colors_clean(string $value): string
+{
+    $parts = [];
+    foreach (preg_split('/\s*[,;\/]\s*|\s+et\s+/u', mb_strtolower(trim($value))) as $c) {
+        $c = trim(preg_replace('/\s+/u', ' ', (string) $c));
+        if ($c !== '' && mb_strlen($c) <= 40 && !in_array($c, $parts, true)) $parts[] = $c;
+    }
+    return implode(', ', array_slice($parts, 0, 6));
+}
+
+/** Pastilles de couleur d'une fiche (« Couleurs : ● bleu marine ● blanc ») : une pastille quand le nom est connu, le texte seul sinon. Chaîne vide sans couleur. */
+function product_colors_html(?string $colors): string
+{
+    $colors = product_colors_clean((string) $colors);
+    if ($colors === '') return '';
+    static $hex = [
+        'noir' => '#1b1b1b', 'blanc' => '#ffffff', 'blanc cassé' => '#f3efe6', 'écru' => '#efe6d2', 'ivoire' => '#f5f0e1', 'crème' => '#f3ead2', 'beige' => '#d8c3a0', 'gris' => '#8a8a8a', 'gris clair' => '#c9c9c9', 'gris foncé' => '#555555', 'anthracite' => '#383e42', 'argent' => '#c0c0c0', 'argenté' => '#c0c0c0',
+        'rouge' => '#c0392b', 'bordeaux' => '#6d1a2b', 'rose' => '#e88fb0', 'fuchsia' => '#d02090', 'corail' => '#f0735a', 'orange' => '#e8801c', 'rouille' => '#a8481f', 'jaune' => '#f1c40f', 'moutarde' => '#c9a227', 'doré' => '#c9a227', 'or' => '#c9a227',
+        'vert' => '#3b8f4a', 'vert foncé' => '#1f5a32', 'vert clair' => '#9bd18a', 'kaki' => '#7b7b3a', 'olive' => '#6b6b2a', 'menthe' => '#a4dcc0', 'turquoise' => '#2bb5b0', 'bleu' => '#2a6fc4', 'bleu marine' => '#14284b', 'marine' => '#14284b', 'bleu ciel' => '#8ec5ee', 'bleu clair' => '#8ec5ee', 'bleu foncé' => '#14284b', 'denim' => '#3a5a85',
+        'violet' => '#7b3fa0', 'mauve' => '#b392d0', 'lilas' => '#c9b1e0', 'marron' => '#6f4a2e', 'chocolat' => '#4a2c1a', 'camel' => '#c19a6b', 'cuivre' => '#b8693a', 'bronze' => '#8c6a2f', 'taupe' => '#8b7b6b', 'terracotta' => '#c4623a', 'multicolore' => 'conic-gradient(#d33,#e9a,#fc3,#3b4,#27c,#73a,#d33)', 'bois' => '#a8794a', 'naturel' => '#d9c29a',
+    ];
+    $out = '';
+    foreach (explode(', ', $colors) as $c) {
+        $bg = $hex[$c] ?? null;
+        $dot = $bg ? '<span class="color-dot" style="background:' . htmlspecialchars($bg, ENT_QUOTES, 'UTF-8') . '" aria-hidden="true"></span>' : '';
+        $out .= '<span class="color-chip">' . $dot . htmlspecialchars($c, ENT_QUOTES, 'UTF-8') . '</span> ';
+    }
+    return trim($out);
+}
+
+function product_barcode_clean($value): string
+{
+    $v = strtoupper(preg_replace('/[^0-9Xx]/', '', (string) $value));
+    return preg_match('/^\d{8,14}$|^\d{9}X$/', $v) ? $v : '';
+}
+
+/** « ISBN » pour un code de livre (978 / 979), « Code-barres » sinon. */
+function product_barcode_label(string $code): string
+{
+    return preg_match('/^97[89]\d{10}$/', $code) ? 'ISBN' : 'Code-barres';
+}
+
+/** Récupère la pochette ou la couverture trouvée par le scanner (adresse publique seulement) et l'enregistre comme photo de la pièce ; null si impossible. */
+function product_photo_from_cover_url(string $url, string $baseName): ?string
+{
+    require_once __DIR__ . '/barcode.php';
+    if (!preg_match('#^https://#i', $url) || !($tmp = barcode_download_image($url))) return null;
+    $path = copy_photo_into_uploads($tmp, $baseName);
+    @unlink($tmp);
+    return $path;
+}
+
+/** Limite d'articles de l'offre de la boutique (tenants/<slug>/tenant.php → item_limit) ; 0 = sans limite. */
+function shop_item_limit(): int
+{
+    return max(0, (int) tenant('item_limit', 0));
+}
+
+/** Articles du catalogue (en vente ou masqués ; les pièces vendues ne comptent plus). */
+function shop_item_count(): int
+{
+    return (int) db()->query('SELECT COUNT(*) FROM products WHERE stock > 0')->fetchColumn();
+}
+
+/** La boutique peut-elle encore ajouter $n article(s) sans dépasser la limite de son offre ? */
+function shop_can_add_items(int $n = 1): bool
+{
+    $limit = shop_item_limit();
+    return $limit === 0 || shop_item_count() + $n <= $limit;
+}
+
+function shop_limit_message(): string
+{
+    return 'Votre offre permet ' . shop_item_limit() . ' articles et votre catalogue en compte ' . shop_item_count()
+        . ' : pour en ajouter, passez à une tranche supérieure (écrivez-nous) ou retirez des articles.';
+}
+
 function next_ref(): string
 {
     $max = (int) db()->query('SELECT MAX(CAST(ref AS INTEGER)) FROM products')->fetchColumn();
@@ -263,6 +656,12 @@ function next_ref(): string
 function product_media_html(array $p, ?array $gallery = null): string
 {
     $gallery ??= product_gallery($p);
+    // Vignettes au format ordinateur : sans les visuels réservés au smartphone.
+    $cardGallery = array_values(array_filter($gallery, fn($g) => $g['only'] !== 'mobile')) ?: $gallery;
+    if (count($cardGallery) === 1 && $cardGallery[0]['type'] !== 'video') {
+        return '<img src="/' . h($cardGallery[0]['src']) . '" alt="' . h($p['name']) . '">';
+    }
+    $gallery = $cardGallery;
     if (count($gallery) > 1) {
         $slides = '';
         foreach ($gallery as $i => $g) {
@@ -307,7 +706,9 @@ function sync_cover_photo(string $ref): void
     // cards, even if an AI-generated illustration was reordered or added ahead
     // of it — the catalogue thumbnail should never default to a staged shot,
     // nor to a photo the shop owner has chosen to hide.
-    $stmt = db()->prepare("SELECT path FROM product_photos WHERE product_ref = ? AND is_hidden = 0 AND type = 'photo' ORDER BY is_illustration ASC, sort_order ASC, id ASC LIMIT 1");
+    // Jamais un gros plan (étiquette, texture, détail, mesure) comme couverture tant qu'une autre image existe.
+    $stmt = db()->prepare("SELECT path FROM product_photos WHERE product_ref = ? AND is_hidden = 0 AND type = 'photo'
+        ORDER BY (label LIKE 'Étiquette%' OR label LIKE 'Etiquette%' OR label LIKE 'Texture%' OR label LIKE 'Détail%' OR label LIKE 'Detail%' OR label LIKE 'Mesure%') ASC, is_illustration ASC, sort_order ASC, id ASC LIMIT 1");
     $stmt->execute([$ref]);
     $cover = $stmt->fetchColumn();
     $upd = db()->prepare('UPDATE products SET photo = ? WHERE ref = ?');
@@ -323,13 +724,38 @@ function sync_cover_photo(string $ref): void
 function product_gallery(array $p): array
 {
     $rows = array_values(array_filter(product_photos_list($p['ref']), fn($r) => !$r['is_hidden']));
-    return array_map(fn($r) => [
-        'id' => (int) $r['id'],
-        'src' => $r['path'],
-        'label' => $r['label'],
-        'illustration' => (bool) $r['is_illustration'],
-        'type' => $r['type'] ?? 'photo',
-    ], $rows);
+    $gallery = array_map(function ($r) {
+        $isVideo = ($r['type'] ?? 'photo') === 'video';
+        $kind = $isVideo ? null : image_format_kind(__DIR__ . '/../' . $r['path']);
+        // Règle d'affichage : 3:2 sur ordinateur, 9:16 sur smartphone.
+        // Un visuel qui n'existe qu'en 3:2 n'est montré que sur ordinateur,
+        // qu'en 9:16 que sur smartphone ; les autres formats (photos réelles
+        // 4:3, carrées…) restent visibles partout, en entier.
+        $mobile = $r['path_mobile'] ?: ($kind === 'mobile' ? $r['path'] : null);
+        $only = match (true) {
+            $kind === 'mobile' && !$r['path_mobile'] => 'mobile',
+            $kind === 'desktop' && !$r['path_mobile'] => 'desktop',
+            default => null,
+        };
+        return [
+            'id' => (int) $r['id'],
+            'src' => $r['path'],
+            'src_mobile' => $mobile !== $r['path'] ? $mobile : null,
+            'only' => $only,
+            'label' => $r['label'],
+            'illustration' => (bool) $r['is_illustration'],
+            'type' => $r['type'] ?? 'photo',
+        ];
+    }, $rows);
+    // Jamais d'écran sans image : si un type d'écran n'a aucun visuel à son
+    // format, on y montre quand même les autres (en entier).
+    foreach (['desktop' => 'mobile', 'mobile' => 'desktop'] as $screen => $other) {
+        if ($gallery && !array_filter($gallery, fn($g) => $g['only'] !== $other)) {
+            foreach ($gallery as &$g) $g['only'] = null;
+            unset($g);
+        }
+    }
+    return $gallery;
 }
 
 function product_card_html(array $p, int $i = 0): string
@@ -337,13 +763,16 @@ function product_card_html(array $p, int $i = 0): string
     $tones = ['accent', 'sage', 'blue', ''];
     $tone = $tones[$i % 4];
 
-    if (is_fixed_price(effective_price($p))) {
+    if (!shop_sales_enabled()) {
+        $action = '<a class="card-cta" href="/index.php#contact">Nous contacter</a>';
+    } elseif (is_fixed_price(effective_price($p))) {
         $action = '
           <form method="post" action="/cart-add.php" style="display:contents;">
-            ' . csrf_input() . '
+            ' . cart_csrf_field() . '
             <input type="hidden" name="ref" value="' . h($p['ref']) . '">
             <input type="hidden" name="redirect" value="' . h($_SERVER['REQUEST_URI'] ?? '/boutique.php') . '">
             <button class="card-cta" type="submit">Ajouter</button>
+            <button class="card-cta card-cta-buy" type="submit" name="redirect" value="/cart.php">Commander</button>
           </form>';
     } else {
         $action = '<a class="card-cta" href="/index.php#contact">Nous contacter</a>';
@@ -352,12 +781,21 @@ function product_card_html(array $p, int $i = 0): string
     $href = '/produit.php?ref=' . urlencode($p['ref']);
     $gallery = product_gallery($p);
     $preview = $gallery
-        ? ' data-quick-gallery="' . h(json_encode(array_map(fn($g) => ['src' => $g['src'], 'type' => $g['type']], $gallery))) . '" data-quick-name="' . h($p['name']) . '"'
+        // Aperçu au survol (ordinateur) : sans les visuels réservés au smartphone.
+        ? ' data-quick-gallery="' . h(json_encode(array_map(fn($g) => ['src' => $g['src'], 'type' => $g['type']], array_values(array_filter($gallery, fn($g) => $g['only'] !== 'mobile')) ?: $gallery))) . '" data-quick-name="' . h($p['name']) . '"'
         : '';
 
-    $priceHtml = has_promo_price($p)
+    $priceHtml = !shop_sales_enabled() ? '' : (has_promo_price($p)
         ? '<span class="price-old">' . h($p['price']) . '</span> <span class="price price-promo">' . h($p['promo_price']) . '</span>'
-        : '<span class="price">' . h($p['price']) . '</span>';
+        : '<span class="price">' . h($p['price']) . '</span>');
+    if (shop_sales_enabled()) $priceHtml .= lot_tag_html($p);
+
+    // Modèle à mise en page propre : sa vue « card » produit la carte (variables : $p, $i, $href, $gallery, $priceHtml, $action).
+    if ($view = shop_view('card')) {
+        ob_start();
+        include $view;
+        return (string) ob_get_clean();
+    }
 
     return '
       <article class="card ' . $tone . '" data-cat="' . h($p['cat']) . '">
@@ -530,64 +968,54 @@ function rotate_photo_clockwise(string $absPath): bool
     return true;
 }
 
-/**
- * Recadrage centré vers un ratio cible (largeur/hauteur), en conservant le
- * maximum de la photo d'origine plutôt qu'en l'étirant. Retourne les octets
- * JPEG du recadrage, ou null en cas d'échec.
- */
-function center_crop_bytes(string $srcAbsPath, float $ratio, int $maxDim = 1400, int $quality = 85): ?string
-{
-    $info = @getimagesize($srcAbsPath);
-    if (!$info) return null;
-    $src = match ($info[2]) {
-        IMAGETYPE_JPEG => @imagecreatefromjpeg($srcAbsPath),
-        IMAGETYPE_PNG => @imagecreatefrompng($srcAbsPath),
-        IMAGETYPE_WEBP => @imagecreatefromwebp($srcAbsPath),
-        default => null,
-    };
-    if (!$src) return null;
+/** Part maximale du cadre occupée par la photo dans les exports multi-formats (le reste = fond ajouté). */
+const EXPORT_SUBJECT_FILL = 0.9;
 
+/**
+ * Photo mise au ratio cible (largeur/hauteur) SANS recadrage, enregistrée
+ * dans uploads/ : elle est gardée en entier, centrée, et du fond est ajouté
+ * autour (voir pad_image_to_ratio). Une photo détourée reste un PNG à fond
+ * transparent (marge transparente). Retourne le chemin relatif, ou null.
+ */
+function fit_ratio_file(string $srcAbsPath, float $ratio, string $baseName, int $maxDim = 1800, int $quality = 88, float $fill = EXPORT_SUBJECT_FILL, bool $shadow = false): ?string
+{
+    $src = @imagecreatefromstring((string) @file_get_contents($srcAbsPath));
+    if (!$src) return null;
     $w = imagesx($src);
     $h = imagesy($src);
-    if (($w / $h) > $ratio) {
-        $cropH = $h;
-        $cropW = (int) round($h * $ratio);
-    } else {
-        $cropW = $w;
-        $cropH = (int) round($w / $ratio);
+    // Taille de toile nécessaire pour garder la photo à sa résolution, plafonnée à $maxDim.
+    [$cw, $ch] = ($w / $h > $ratio) ? [$w / $fill, $w / $fill / $ratio] : [$h / $fill * $ratio, $h / $fill];
+    $transparent = image_has_transparent_edge($src);
+    // Photo déjà au bon format : gardée telle quelle, sans marge ajoutée.
+    if (!$transparent && abs(($w / $h) / $ratio - 1) <= 0.015) {
+        $fill = 1.0;
+        [$cw, $ch] = [$w, $h];
     }
-    $srcX = (int) round(($w - $cropW) / 2);
-    $srcY = (int) round(($h - $cropH) / 2);
-
-    $scale = min(1, $maxDim / max($cropW, $cropH));
-    $outW = max(1, (int) round($cropW * $scale));
-    $outH = max(1, (int) round($cropH * $scale));
-
-    $dst = imagecreatetruecolor($outW, $outH);
-    imagecopyresampled($dst, $src, 0, 0, $srcX, $srcY, $outW, $outH, $cropW, $cropH);
+    $canvas = pad_image_to_ratio($src, $ratio, $fill, (int) min($maxDim, round(max($cw, $ch))), $transparent);
+    if ($shadow && $transparent) {
+        $canvas = add_drop_shadow($canvas);
+    } elseif ($shadow && ($bg = image_uniform_edge_color($src))) {
+        $canvas = add_drop_shadow_on_color($canvas, $bg);
+    }
     ob_start();
-    imagejpeg($dst, null, $quality);
-    return ob_get_clean() ?: null;
+    $transparent ? imagepng($canvas, null, 6) : imagejpeg($canvas, null, $quality);
+    $bytes = (string) ob_get_clean();
+    return $bytes !== '' ? save_binary_photo($bytes, $baseName, $transparent ? 'png' : 'jpg', $maxDim, $quality) : null;
 }
 
-/**
- * Génère les 3 formats standards (carré, horizontal 4:3, vertical 3:4) d'une
- * photo, centrés automatiquement, et les dépose dans la médiathèque — prêts à
- * réutiliser (réseaux sociaux, bannières...) sans surcharger le diaporama de
- * la fiche produit avec des quasi-doublons de la même photo.
- */
 /**
  * Formats d'export proposés par pièce, chacun lié à un usage concret :
  * catalogue, fiche produit, diaporama en boutique, archive non recadrée,
  * et les deux formats standard des réseaux sociaux (dimensions réelles
  * Instagram/Facebook : post carré 1080×1080, story verticale 1080×1920).
- * ratio = null → pas de recadrage, juste un export à bonne résolution.
+ * Aucun format ne recadre : la photo est gardée en entière et du fond est
+ * ajouté autour. ratio = null → export au format d'origine, à bonne résolution.
  */
 function media_export_variants(): array
 {
     return [
-        'vignette_catalogue' => ['label' => 'Vignette catalogue', 'ratio' => 4 / 3, 'maxDim' => 480],
-        'produit_horizontal' => ['label' => 'Fiche produit (horizontal)', 'ratio' => 4 / 3, 'maxDim' => 1600],
+        'vignette_catalogue' => ['label' => 'Vignette catalogue (3:2)', 'ratio' => 3 / 2, 'maxDim' => 480],
+        'produit_horizontal' => ['label' => 'Fiche produit (horizontal 3:2)', 'ratio' => 3 / 2, 'maxDim' => 1800],
         'diaporama_vente' => ['label' => 'Diaporama plein écran (point de vente)', 'ratio' => 16 / 9, 'maxDim' => 2400],
         'format_reel' => ['label' => 'Format réel (non recadré)', 'ratio' => null, 'maxDim' => 2000],
         'reseaux_post' => ['label' => 'Réseaux sociaux — post (1080×1080)', 'ratio' => 1.0, 'maxDim' => 1080],
@@ -604,11 +1032,13 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
 {
     $count = 0;
     foreach (media_export_variants() as $key => $v) {
-        $bytes = $v['ratio'] === null
-            ? @file_get_contents($srcAbsPath)
-            : center_crop_bytes($srcAbsPath, $v['ratio'], $v['maxDim']);
-        if (!$bytes) continue;
-        $path = save_binary_photo($bytes, 'export-' . $key, 'jpg', $v['maxDim'], 88);
+        if ($v['ratio'] === null) {
+            $bytes = @file_get_contents($srcAbsPath);
+            $isPng = strtolower(pathinfo($srcAbsPath, PATHINFO_EXTENSION)) === 'png';
+            $path = $bytes ? save_binary_photo($bytes, 'export-' . $key, $isPng ? 'png' : 'jpg', $v['maxDim'], 88) : null;
+        } else {
+            $path = fit_ratio_file($srcAbsPath, $v['ratio'], 'export-' . $key, $v['maxDim']);
+        }
         if (!$path) continue;
         add_media_item('photo', $path, "$baseLabel — {$v['label']}", 'Export multi-formats', 'export,' . $key, $originRef, $originName);
         $count++;
@@ -622,9 +1052,23 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
  * with a short backoff since rate limiting (429) and empty responses from
  * this API are common and usually transient.
  */
-function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3): ?string
+/**
+ * @param string|null $aspectRatio Format de l'image produite (« 3:2 », « 9:16 »…),
+ *  demandé au modèle : l'image est composée pour ce cadre, sans recadrage après coup.
+ * @param string[] $extraAbsPaths Autres photos du même objet, envoyées après la principale (voir multi_photo_prompt()).
+ */
+function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3, ?string $aspectRatio = null, array $extraAbsPaths = []): ?string
 {
-    if (!GEMINI_API_KEY) return null;
+    if (ai_gate() !== null) return null;   // IA désactivée pour la boutique, ou quota épuisé : voir ai_gate()
+    // Fournisseur d'image choisi dans le portail : un service compatible OpenAI prend le relais du modèle Gemini.
+    $provider = ai_provider_active('image');
+    if ($provider && ($provider['driver'] ?? 'gemini') !== 'gemini') {
+        return ai_provider_image($provider, $srcAbsPath, $prompt, $aspectRatio, $extraAbsPaths);
+    }
+    // Sans clé Gemini, la passerelle locale peut retoucher l'image (si une route image y est réglée).
+    if (!GEMINI_API_KEY) return omniroute_image($srcAbsPath, $prompt, $aspectRatio);
+    $imageModel = $provider && trim((string) ($provider['model'] ?? '')) !== '' ? (string) $provider['model'] : 'gemini-2.5-flash-image';
+    $geminiBase = $provider && trim((string) ($provider['base_url'] ?? '')) !== '' ? rtrim((string) $provider['base_url'], '/') : 'https://generativelanguage.googleapis.com/v1beta';
 
     $imgData = @file_get_contents($srcAbsPath);
     if ($imgData === false) return null;
@@ -638,8 +1082,16 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
             ],
         ]],
     ];
+    foreach ($extraAbsPaths as $extra) {
+        $extraData = @file_get_contents($extra);
+        if ($extraData === false) continue;
+        $payload['contents'][0]['parts'][] = ['inlineData' => ['mimeType' => @getimagesize($extra)['mime'] ?? 'image/jpeg', 'data' => base64_encode($extraData)]];
+    }
+    if ($aspectRatio !== null) {
+        $payload['generationConfig'] = ['imageConfig' => ['aspectRatio' => $aspectRatio]];
+    }
 
-    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=' . GEMINI_API_KEY;
+    $url = $geminiBase . '/models/' . $imageModel . ':generateContent?key=' . GEMINI_API_KEY;
 
     for ($attempt = 0; $attempt <= $retries; $attempt++) {
         $ch = curl_init($url);
@@ -648,16 +1100,28 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
             CURLOPT_POSTFIELDS => json_encode($payload),
-            CURLOPT_TIMEOUT => 90,
+            // Sous le délai habituel des serveurs web (60 s), pour ne pas finir en 504.
+            CURLOPT_TIMEOUT => 55,
         ]);
         $body = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
+        if ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))) {
+            error_log("gemini_generate_image: HTTP 402 prepayment depleted");
+            if (function_exists('ai_trigger_depleted_alert')) ai_trigger_depleted_alert('gemini', 'HTTP 402 Prepayment depleted');
+            return omniroute_image($srcAbsPath, $prompt, $aspectRatio);
+        }
+
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
-            $b64 = $data['candidates'][0]['content']['parts'][0]['inlineData']['data'] ?? null;
+            // L'image n'est pas toujours la première partie (le modèle peut
+            // la faire précéder d'un court texte).
+            $b64 = null;
+            foreach ($data['candidates'][0]['content']['parts'] ?? [] as $part) {
+                if (!empty($part['inlineData']['data'])) { $b64 = $part['inlineData']['data']; break; }
+            }
             if ($b64) {
-                log_api_usage('gemini', 'gemini_image');
+                ai_usage_log_image($data['usageMetadata'] ?? []);
                 return base64_decode($b64);
             }
             $reason = $data['candidates'][0]['finishReason'] ?? $data['promptFeedback']['blockReason'] ?? 'no image in response';
@@ -669,7 +1133,557 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
         if ($attempt < $retries) sleep(4 + $attempt * 4);
     }
 
-    return null;
+    return omniroute_image($srcAbsPath, $prompt, $aspectRatio);
+}
+
+/** Formats des visuels générés : ordinateur (3:2) et smartphone (9:16). */
+const GENERATED_IMAGE_FORMATS = ['desktop' => '3:2', 'mobile' => '9:16'];
+
+/** Part maximale du cadre occupée par la photo source posée sur la toile (le reste = marge). */
+const GENERATED_IMAGE_SUBJECT_FILL = 0.82;
+
+/**
+ * Consigne de cadrage ajoutée aux prompts de génération : l'objet reste
+ * entier, le fond est prolongé pour remplir le format — jamais de recadrage.
+ */
+function generated_framing_prompt(string $aspectRatio, bool $directed = false): string
+{
+    $orientation = $aspectRatio === '9:16' ? 'tall vertical (portrait)' : 'wide horizontal (landscape)';
+    // Scène imposée par le vendeur : on ne parle plus de mur ni de pièce, ce serait la contredire.
+    $fill = $directed
+        ? "Fill all the remaining space by extending the scene naturally, coherently with the setting requested in the owner's "
+            . "direction — any flat or blurred area around the photo is empty canvas to replace."
+        : "Fill all the remaining space by extending the background / scene naturally (wall, floor, surface, room) — "
+            . "any flat or blurred area around the photo is empty canvas to replace with a coherent background.";
+    // Cadrage demandé par le vendeur (gros plan, plan large, angle…) : il prime sur « objet entier avec marge ».
+    $unless = $directed
+        ? "Unless the owner's direction explicitly asks for a different framing (e.g. close-up, wide shot, low or high angle, "
+            . "off-center composition), in which case follow it, keep this framing: "
+        : "Keep this framing: ";
+    return " FRAMING (mandatory): the output is a $aspectRatio $orientation image. The input image has "
+        . "already been placed on a canvas of that exact format, with the object fully visible and margin "
+        . "around it. " . $unless . "the ENTIRE object must stay visible, never cut by any edge of the "
+        . "frame, with clear empty space on every side (at least 8% of the frame). Do not zoom in, do not crop, "
+        . "do not enlarge the object to fill the frame. " . $fill;
+}
+
+/** Ratio « 3:2 » → largeur / hauteur. */
+function aspect_ratio_value(string $aspectRatio): float
+{
+    [$w, $h] = array_map('floatval', explode(':', $aspectRatio)) + [1, 1];
+    return $h > 0 ? $w / $h : 1.0;
+}
+
+/**
+ * Pose une image, en entier et centrée, sur une toile au ratio demandé
+ * ($fill = part maximale du cadre qu'elle occupe) — jamais de recadrage.
+ * Fond : gris clair neutre si l'image est détourée (transparence), la couleur
+ * du pourtour s'il est uni (fond studio), sinon la photo agrandie et très floutée.
+ */
+function pad_image_to_ratio(GdImage $src, float $ratio, float $fill = 1.0, int $longSide = 1536, bool $keepTransparency = false): GdImage
+{
+    if (!imageistruecolor($src)) imagepalettetotruecolor($src);
+    $w = imagesx($src);
+    $h = imagesy($src);
+    [$cw, $ch] = $ratio >= 1 ? [$longSide, (int) round($longSide / $ratio)] : [(int) round($longSide * $ratio), $longSide];
+    $canvas = imagecreatetruecolor($cw, $ch);
+
+    $transparent = image_has_transparent_edge($src);
+    if ($transparent && $keepTransparency) {
+        // Détourage : marge transparente, l'objet garde son fond transparent.
+        imagealphablending($canvas, false);
+        imagesavealpha($canvas, true);
+        imagefill($canvas, 0, 0, imagecolorallocatealpha($canvas, 0, 0, 0, 127));
+        $scale = min($cw * $fill / $w, $ch * $fill / $h);
+        $nw = max(1, (int) round($w * $scale));
+        $nh = max(1, (int) round($h * $scale));
+        imagecopyresampled($canvas, $src, intdiv($cw - $nw, 2), intdiv($ch - $nh, 2), 0, 0, $nw, $nh, $w, $h);
+        return $canvas;
+    }
+    $edge = $transparent ? null : image_uniform_edge_color($src);
+    if ($transparent) {
+        imagefill($canvas, 0, 0, imagecolorallocate($canvas, 236, 234, 230));
+    } elseif ($edge) {
+        // Fond uni (studio, mur) : prolongé à l'identique, sans raccord visible.
+        imagefill($canvas, 0, 0, imagecolorallocate($canvas, ...$edge));
+    } else {
+        // Flou : réduction à quelques pixels puis agrandissement (lissage bilinéaire).
+        $tiny = imagecreatetruecolor(16, max(1, (int) round(16 * $ch / $cw)));
+        $cover = max($cw / $w, $ch / $h);
+        $sw = $cw / $cover; $sh = $ch / $cover;
+        imagecopyresampled($tiny, $src, 0, 0, (int) (($w - $sw) / 2), (int) (($h - $sh) / 2), imagesx($tiny), imagesy($tiny), (int) $sw, (int) $sh);
+        // Palier intermédiaire flouté, sinon l'agrandissement laisse des pavés.
+        $mid = imagecreatetruecolor(max(1, intdiv($cw, 8)), max(1, intdiv($ch, 8)));
+        imagecopyresampled($mid, $tiny, 0, 0, 0, 0, imagesx($mid), imagesy($mid), imagesx($tiny), imagesy($tiny));
+        for ($i = 0; $i < 6; $i++) imagefilter($mid, IMG_FILTER_GAUSSIAN_BLUR);
+        imagecopyresampled($canvas, $mid, 0, 0, 0, 0, $cw, $ch, imagesx($mid), imagesy($mid));
+        imagefilter($canvas, IMG_FILTER_GAUSSIAN_BLUR);
+        imagedestroy($tiny);
+        imagedestroy($mid);
+    }
+
+    $scale = min($cw * $fill / $w, $ch * $fill / $h);
+    $nw = max(1, (int) round($w * $scale));
+    $nh = max(1, (int) round($h * $scale));
+    imagealphablending($canvas, true);
+    imagecopyresampled($canvas, $src, intdiv($cw - $nw, 2), intdiv($ch - $nh, 2), 0, 0, $nw, $nh, $w, $h);
+    return $canvas;
+}
+
+/**
+ * Ombre portée sous un objet détouré (toile transparente, voir
+ * pad_image_to_ratio) : silhouette décalée vers le bas et floutée, plus une
+ * ombre de contact elliptique au pied de l'objet. Calculée à ¼ de la
+ * résolution (rapide), puis agrandie : une ombre floue n'a pas besoin de détail.
+ * Le résultat reste transparent autour (ombre semi-transparente).
+ */
+function add_drop_shadow(GdImage $canvas, float $opacity = 0.38, float $contact = 0.5): GdImage
+{
+    $w = imagesx($canvas);
+    $h = imagesy($canvas);
+    $sw = max(8, intdiv($w, 4));
+    $sh = max(8, intdiv($h, 4));
+
+    $small = imagecreatetruecolor($sw, $sh);
+    imagealphablending($small, false);
+    imagesavealpha($small, true);
+    imagefill($small, 0, 0, imagecolorallocatealpha($small, 0, 0, 0, 127));
+    imagecopyresampled($small, $canvas, 0, 0, 0, 0, $sw, $sh, $w, $h);
+
+    // Couverture de l'objet (0 = vide, 1 = plein) et son cadre.
+    $cover = [];
+    $minX = $sw; $maxX = -1; $maxY = -1; $minY = $sh;
+    for ($y = 0; $y < $sh; $y++) {
+        for ($x = 0; $x < $sw; $x++) {
+            $c = 1 - ((imagecolorat($small, $x, $y) >> 24) & 0x7F) / 127;
+            $cover[$y * $sw + $x] = $c;
+            if ($c > 0.5) {
+                $minX = min($minX, $x); $maxX = max($maxX, $x);
+                $minY = min($minY, $y); $maxY = max($maxY, $y);
+            }
+        }
+    }
+    if ($maxX < 0) return $canvas; // rien de visible
+
+    // Ombre en niveaux de gris (blanc = pas d'ombre) : silhouette décalée…
+    $gray = imagecreatetruecolor($sw, $sh);
+    imagefill($gray, 0, 0, imagecolorallocate($gray, 255, 255, 255));
+    $dy = max(1, (int) round(($maxY - $minY) * 0.03));
+    for ($y = $dy; $y < $sh; $y++) {
+        for ($x = 0; $x < $sw; $x++) {
+            $c = $cover[($y - $dy) * $sw + $x];
+            if ($c > 0) {
+                $v = (int) round(255 * (1 - $c * $opacity));
+                imagesetpixel($gray, $x, $y, imagecolorallocate($gray, $v, $v, $v));
+            }
+        }
+    }
+    // … et ombre de contact au pied de l'objet.
+    $v = (int) round(255 * (1 - $contact));
+    imagefilledellipse($gray, intdiv($minX + $maxX, 2), $maxY, (int) round(($maxX - $minX) * 0.8), max(2, (int) round(($maxY - $minY) * 0.06)), imagecolorallocate($gray, $v, $v, $v));
+    for ($i = 0; $i < 10; $i++) imagefilter($gray, IMG_FILTER_GAUSSIAN_BLUR);
+
+    // Niveaux de gris → calque brun très sombre semi-transparent.
+    $shadowSmall = imagecreatetruecolor($sw, $sh);
+    imagealphablending($shadowSmall, false);
+    imagesavealpha($shadowSmall, true);
+    for ($y = 0; $y < $sh; $y++) {
+        for ($x = 0; $x < $sw; $x++) {
+            $darkness = (255 - (imagecolorat($gray, $x, $y) & 0xFF)) / 255;
+            imagesetpixel($shadowSmall, $x, $y, imagecolorallocatealpha($shadowSmall, 30, 24, 18, 127 - (int) round($darkness * 127)));
+        }
+    }
+
+    // Ombre agrandie, puis l'objet par-dessus.
+    $out = imagecreatetruecolor($w, $h);
+    imagealphablending($out, false);
+    imagesavealpha($out, true);
+    imagefill($out, 0, 0, imagecolorallocatealpha($out, 0, 0, 0, 127));
+    imagecopyresampled($out, $shadowSmall, 0, 0, 0, 0, $w, $h, $sw, $sh);
+    imagealphablending($out, true);
+    imagecopy($out, $canvas, 0, 0, 0, 0, $w, $h);
+    imagesavealpha($out, true);
+    foreach ([$small, $gray, $shadowSmall, $canvas] as $im) imagedestroy($im);
+    return $out;
+}
+
+/**
+ * Ombre portée pour un objet détouré sur fond uni (repli IA « fond blanc ») :
+ * l'objet est isolé par écart de couleur avec le fond, l'ombre calculée comme
+ * pour un PNG transparent (add_drop_shadow), puis le tout reposé sur le fond.
+ */
+function add_drop_shadow_on_color(GdImage $canvas, array $bg): GdImage
+{
+    $w = imagesx($canvas);
+    $h = imagesy($canvas);
+    $cut = imagecreatetruecolor($w, $h);
+    imagealphablending($cut, false);
+    imagesavealpha($cut, true);
+    for ($y = 0; $y < $h; $y++) {
+        for ($x = 0; $x < $w; $x++) {
+            $c = imagecolorat($canvas, $x, $y);
+            $r = ($c >> 16) & 0xFF; $g = ($c >> 8) & 0xFF; $b = $c & 0xFF;
+            $dist = abs($r - $bg[0]) + abs($g - $bg[1]) + abs($b - $bg[2]);
+            // 0 → fond (transparent), ≥ 36 → objet (opaque), fondu entre les deux.
+            $alpha = 127 - (int) round(min(1, max(0, ($dist - 12) / 24)) * 127);
+            imagesetpixel($cut, $x, $y, imagecolorallocatealpha($cut, $r, $g, $b, $alpha));
+        }
+    }
+    imagedestroy($canvas);
+    $shadowed = add_drop_shadow($cut);
+    $out = imagecreatetruecolor($w, $h);
+    imagefill($out, 0, 0, imagecolorallocate($out, ...$bg));
+    imagealphablending($out, true);
+    imagecopy($out, $shadowed, 0, 0, 0, 0, $w, $h);
+    imagedestroy($shadowed);
+    return $out;
+}
+
+/** Image détourée : quelques points du bord totalement transparents suffisent à le savoir. */
+function image_has_transparent_edge(GdImage $img): bool
+{
+    if (!imageistruecolor($img)) imagepalettetotruecolor($img);
+    $w = imagesx($img);
+    $h = imagesy($img);
+    foreach ([[0, 0], [$w - 1, 0], [0, $h - 1], [$w - 1, $h - 1], [intdiv($w, 2), 0], [0, intdiv($h, 2)], [intdiv($w, 2), $h - 1], [$w - 1, intdiv($h, 2)]] as [$x, $y]) {
+        if (((imagecolorat($img, $x, $y) >> 24) & 0x7F) > 100) return true;
+    }
+    return false;
+}
+
+/**
+ * Couleur de fond du pourtour de l'image [r, g, b] quand ce pourtour est
+ * quasi uni (fond studio blanc, mur…) — même si l'objet touche un bord par
+ * endroits (70 % des points proches de la couleur médiane) —, sinon null.
+ */
+function image_uniform_edge_color(GdImage $img): ?array
+{
+    $w = imagesx($img);
+    $h = imagesy($img);
+    $samples = [];
+    for ($i = 0; $i < 60; $i++) {
+        $t = $i / 59;
+        foreach ([[(int) ($t * ($w - 1)), 1], [(int) ($t * ($w - 1)), $h - 2], [1, (int) ($t * ($h - 1))], [$w - 2, (int) ($t * ($h - 1))]] as [$x, $y]) {
+            $c = imagecolorat($img, max(0, min($w - 1, $x)), max(0, min($h - 1, $y)));
+            $samples[] = [($c >> 16) & 0xFF, ($c >> 8) & 0xFF, $c & 0xFF];
+        }
+    }
+    $median = [];
+    for ($k = 0; $k < 3; $k++) {
+        $channel = array_column($samples, $k);
+        sort($channel);
+        $median[$k] = $channel[intdiv(count($channel), 2)];
+    }
+    // Couleur retenue : moyenne des points proches de la médiane (le fond).
+    $close = array_filter($samples, static fn ($px) => abs($px[0] - $median[0]) + abs($px[1] - $median[1]) + abs($px[2] - $median[2]) <= 36);
+    if (count($close) < 0.7 * count($samples)) return null;
+    $mean = [0, 0, 0];
+    foreach ($close as $px) for ($k = 0; $k < 3; $k++) $mean[$k] += $px[$k] / count($close);
+    return array_map(static fn ($v) => (int) round($v), $mean);
+}
+
+/**
+ * Source d'une génération : copie temporaire de la photo posée sur une toile
+ * au format visé, objet entier avec marge. Chemin temporaire à supprimer, ou null.
+ */
+function prepare_generation_source(string $srcAbsPath, string $aspectRatio, float $fill = GENERATED_IMAGE_SUBJECT_FILL): ?string
+{
+    $src = @imagecreatefromstring((string) @file_get_contents($srcAbsPath));
+    if (!$src) return null;
+    $canvas = pad_image_to_ratio($src, aspect_ratio_value($aspectRatio), $fill);
+    $tmp = tempnam(sys_get_temp_dir(), 'gen') . '.jpg';
+    imagejpeg($canvas, $tmp, 90);
+    imagedestroy($src);
+    imagedestroy($canvas);
+    return $tmp;
+}
+
+/**
+ * Visuel renvoyé par Gemini ramené au ratio visé. Écart de moins de 1,5 % :
+ * tel quel. Jusqu'à 8 % (le modèle rend p. ex. 768×1344 pour du 9:16) : léger
+ * recadrage centré, qui ne touche pas à l'objet. Au-delà : du fond flouté est
+ * ajouté sur les côtés — ou null si $allowPad est faux (on préfère alors
+ * refuser l'image plutôt que de livrer des bandes floutées).
+ */
+function fit_generated_to_ratio(string $binary, string $aspectRatio, bool $allowPad = true): ?string
+{
+    $img = @imagecreatefromstring($binary);
+    if (!$img) return $allowPad ? $binary : null;
+    $target = aspect_ratio_value($aspectRatio);
+    $w = imagesx($img);
+    $h = imagesy($img);
+    $gap = abs(($w / $h) / $target - 1);
+    if ($gap <= 0.015) return $binary;
+    if ($gap <= 0.08) {
+        [$cw, $ch] = ($w / $h > $target) ? [(int) round($h * $target), $h] : [$w, (int) round($w / $target)];
+        $cropped = imagecrop($img, ['x' => intdiv($w - $cw, 2), 'y' => intdiv($h - $ch, 2), 'width' => $cw, 'height' => $ch]);
+        if ($cropped) {
+            ob_start();
+            imagejpeg($cropped, null, 92);
+            return (string) ob_get_clean();
+        }
+    }
+    if (!$allowPad) return null;
+    $canvas = pad_image_to_ratio($img, $target, 1.0, max($w, $h));
+    ob_start();
+    imagejpeg($canvas, null, 92);
+    return (string) ob_get_clean();
+}
+
+/**
+ * Un visuel au format donné : source préparée (photo posée entière avec marge
+ * sur une toile à ce format), consigne de cadrage, format vérifié.
+ */
+function generate_image_for_ratio(string $srcAbsPath, string $prompt, string $aspectRatio, int $retries, bool $directed = false, array $extraAbsPaths = [], ?float $fill = null): ?string
+{
+    $prepared = prepare_generation_source($srcAbsPath, $aspectRatio, $fill ?? GENERATED_IMAGE_SUBJECT_FILL);
+    $bytes = gemini_generate_image($prepared ?? $srcAbsPath, $prompt . generated_framing_prompt($aspectRatio, $directed), $retries, $aspectRatio, $extraAbsPaths);
+    if ($prepared) @unlink($prepared);
+    return $bytes ? fit_generated_to_ratio($bytes, $aspectRatio) : null;
+}
+
+/** Visuel au format ordinateur (3:2), enregistré dans uploads/ : chemin, ou null. */
+function generate_desktop_image(string $srcAbsPath, string $prompt, string $baseName, int $retries = 1, bool $directed = false, array $extraAbsPaths = [], ?float $fill = null): ?string
+{
+    $bytes = generate_image_for_ratio($srcAbsPath, $prompt, GENERATED_IMAGE_FORMATS['desktop'], $retries, $directed, $extraAbsPaths, $fill);
+    return $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
+}
+
+/**
+ * Photo détourée (vrai PNG transparent, ou repli IA sur fond blanc) : ses
+ * formats se font SANS IA (objet posé entier, marge, ombre portée) —
+ * jamais par prolongement du décor, qui inventerait une mise en situation.
+ */
+function is_cutout_photo(array $row): bool
+{
+    return str_starts_with((string) $row['label'], 'Détourée')
+        || (str_ends_with(strtolower((string) $row['path']), '.png')
+            && ($img = @imagecreatefrompng(__DIR__ . '/../' . $row['path'])) && image_has_transparent_edge($img));
+}
+
+/**
+ * Format d'une image existante : 'desktop' (≈ 3:2), 'mobile' (≈ 9:16) ou
+ * 'other' (carré, 4:3…), à 3 % près. null si illisible.
+ */
+function image_format_kind(string $absPath): ?string
+{
+    $size = @getimagesize($absPath);
+    if (!$size || !$size[1]) return null;
+    $r = $size[0] / $size[1];
+    foreach (GENERATED_IMAGE_FORMATS as $kind => $ratio) {
+        if (abs($r / aspect_ratio_value($ratio) - 1) <= 0.03) return $kind;
+    }
+    return 'other';
+}
+
+/**
+ * Consigne pour refaire un visuel fini dans un autre format : même scène, même
+ * objet, même décor, simplement recadré (portrait ou paysage) — une vraie photo
+ * à ce format, jamais l'ancienne image posée sur des bandes floutées.
+ */
+function build_recompose_prompt(string $aspectRatio): string
+{
+    [$shape, $more, $less] = aspect_ratio_value($aspectRatio) < 1
+        ? ['vertical 9:16 portrait photo for a smartphone screen', 'above and below (wall, ceiling, shelf above; floor, table, surface below)', 'on the left and right']
+        : ['horizontal 3:2 landscape photo for a computer screen', 'on the left and right (more of the room, wall, furniture, surface)', 'above and below'];
+    return "This is a finished lifestyle product photo for an online antiques shop. Re-shoot the SAME scene as a $shape: "
+        . "the same object (identical shape, colors, materials, details), the same room, decor, style, lighting and color grading. "
+        . "Only the camera framing changes: show more of the scene $more and less $less if needed. "
+        . "The object must stay entirely visible and well placed, never cut by an edge of the frame. "
+        . "The whole image must be a single sharp, photorealistic photograph — no blurred bands, no borders, no letterboxing, "
+        . "no text, no watermark, and do not add any person or object that is not in the original. "
+        . "Respond with the generated image only, no text in your reply.";
+}
+
+/**
+ * Programme l'autre format d'un visuel, produit ensuite par une requête à
+ * part (admin/mobile-variants.php, lancée par toutes les pages de l'admin)
+ * pour qu'aucune requête n'enchaîne deux générations et ne dépasse le délai
+ * du serveur (erreur 504). Le visuel est refait dans le nouveau format (build_recompose_prompt).
+ * $target : 'mobile' (fabriquer la 9:16 depuis la 3:2) ou 'desktop'
+ * (fabriquer la 3:2 depuis une image 9:16 ou d'un autre format) ; $then :
+ * format à fabriquer ensuite, depuis le résultat.
+ */
+function queue_format_job(int $photoId, string $srcRelPath, string $target, ?string $then = null, ?string $mode = null, ?array $regen = null): void
+{
+    db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')
+        ->execute([json_encode(['src' => $srcRelPath, 'target' => $target, 'then' => $then, 'mode' => $mode, 'regen' => $regen, 'attempts' => 0], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $photoId]);
+}
+
+/**
+ * Consigne d'ombre portée (IA) pour un objet détouré posé sur fond blanc :
+ * l'objet reste identique, seule une ombre réaliste de studio est ajoutée.
+ */
+function build_shadow_prompt(string $aspectRatio): string
+{
+    return "This is a cut-out photo of a real secondhand/vintage object for an online antiques shop, placed on a plain "
+        . "white $aspectRatio canvas. Add a realistic, soft, natural drop shadow and contact shadow beneath and slightly "
+        . "behind the object, exactly like a professional e-commerce studio photo lit from above and slightly in front, "
+        . "so the object looks naturally resting on a white seamless surface. Keep the object EXACTLY identical — shape, "
+        . "colors, materials, details, size and position in the frame: do not redraw, restyle, move, crop or resize it. "
+        . "Keep the background plain pure white, seamless, with no other objects, no texture, no visible floor line or "
+        . "horizon. The whole object must stay entirely visible with its margins. No text, no watermark. "
+        . "Respond with the generated image only, no text in your reply.";
+}
+
+/**
+ * Version avec ombre portée générée par l'IA d'une photo détourée, au format
+ * donné : l'objet est posé entier (avec marge) sur une toile blanche au bon
+ * format, puis Gemini ajoute l'ombre. Chemin du JPEG enregistré, ou null.
+ */
+function generate_shadow_image(string $cutoutAbsPath, string $aspectRatio, string $baseName, int $retries = 1): ?string
+{
+    if (!GEMINI_API_KEY) return null;
+    $src = @imagecreatefromstring((string) @file_get_contents($cutoutAbsPath));
+    if (!$src) return null;
+    $ratio = aspect_ratio_value($aspectRatio);
+    $padded = pad_image_to_ratio($src, $ratio, GENERATED_IMAGE_SUBJECT_FILL, 1536, image_has_transparent_edge($src));
+    // Toile blanche (un détourage PNG est transparent autour de l'objet).
+    $canvas = imagecreatetruecolor(imagesx($padded), imagesy($padded));
+    imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
+    imagealphablending($canvas, true);
+    imagecopy($canvas, $padded, 0, 0, 0, 0, imagesx($padded), imagesy($padded));
+    $tmp = tempnam(sys_get_temp_dir(), 'shd') . '.jpg';
+    imagejpeg($canvas, $tmp, 92);
+    foreach ([$src, $padded, $canvas] as $im) imagedestroy($im);
+
+    $bytes = gemini_generate_image($tmp, build_shadow_prompt($aspectRatio), $retries, $aspectRatio);
+    @unlink($tmp);
+    return $bytes ? save_binary_photo(fit_generated_to_ratio($bytes, $aspectRatio), $baseName, 'jpg', 1800) : null;
+}
+
+/**
+ * Version smartphone (9:16) d'un visuel 3:2 tout juste généré. $regenSrc / $keywords : photo de départ et
+ * consigne du vendeur de la mise en situation, pour la regénérer directement en 9:16 quand le modèle refuse de
+ * recadrer l'image finie (il le fait pour une photo réaliste de personne).
+ */
+function queue_mobile_variant(int $photoId, string $desktopRelPath, ?string $regenSrc = null, string $keywords = '', ?array $scene = null, string $sizePreset = 'auto'): void
+{
+    queue_format_job($photoId, $desktopRelPath, 'mobile', null, null, $regenSrc ? ['src' => $regenSrc, 'keywords' => $keywords, 'scene' => $scene, 'size' => $sizePreset] : null);
+}
+
+/**
+ * Complète les formats d'un visuel existant selon SON format réel :
+ * 3:2 → on fabrique la 9:16 ; 9:16 → on fabrique la 3:2 (l'image actuelle
+ * devient la version smartphone) ; autre format → la 3:2, puis la 9:16.
+ * Renvoie le format détecté, ou null si rien à faire / image illisible.
+ */
+function queue_format_completion(array $row): ?string
+{
+    if (!empty($row['path_mobile'])) return null;
+    $kind = image_format_kind(__DIR__ . '/../' . $row['path']);
+    match ($kind) {
+        'desktop' => queue_format_job((int) $row['id'], $row['path'], 'mobile'),
+        'mobile' => queue_format_job((int) $row['id'], $row['path'], 'desktop'),
+        'other' => queue_format_job((int) $row['id'], $row['path'], 'desktop', 'mobile'),
+        default => null,
+    };
+    return $kind;
+}
+
+/** Visuels dont un format reste à générer. */
+function pending_mobile_variant_ids(): array
+{
+    return array_map('intval', db()->query('SELECT id FROM product_photos WHERE mobile_pending IS NOT NULL ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Exécute UNE tâche de format en attente : ['ok' => bool, 'path' => …,
+ * 'next' => true si une autre étape suit pour ce visuel, 'error' => …].
+ */
+function run_mobile_variant(int $photoId): array
+{
+    $stmt = db()->prepare('SELECT * FROM product_photos WHERE id = ?');
+    $stmt->execute([$photoId]);
+    $row = $stmt->fetch();
+    if (!$row || $row['mobile_pending'] === null) return ['ok' => true, 'done' => true];
+    ai_usage_context($row['product_ref']);
+    $job = json_decode((string) $row['mobile_pending'], true) ?: [];
+    $target = ($job['target'] ?? 'mobile') === 'desktop' ? 'desktop' : 'mobile';
+    $aspect = GENERATED_IMAGE_FORMATS[$target];
+    // Toujours le visuel lui-même (jamais la photo d'origine) : les deux
+    // formats montrent ainsi la même image — sauf l'ombre portée IA, qui
+    // repart du détourage d'origine.
+    $isShadow = ($job['mode'] ?? null) === 'shadow' && !empty($job['src']);
+    $srcRel = $isShadow ? (string) $job['src'] : (string) $row['path'];
+    $srcAbs = realpath(__DIR__ . '/../' . $srcRel);
+    $baseName = preg_replace('/-(mobile|desktop)(-[0-9a-f]{8})?$/', '', pathinfo($srcRel, PATHINFO_FILENAME)) . '-' . $target;
+
+    // Résultat enregistré : la 9:16 va dans path_mobile ; la 3:2 devient
+    // l'image principale (l'ancienne, si elle était en 9:16, passe en
+    // version smartphone), puis l'étape suivante éventuelle est programmée.
+    $store = static function (?string $path) use ($row, $photoId, $target, $srcRel, $job): array {
+        if (!$path) {
+            db()->prepare('UPDATE product_photos SET mobile_pending = NULL WHERE id = ?')->execute([$photoId]);
+            return ['ok' => false, 'error' => 'Format impossible à produire.'];
+        }
+        if ($target === 'mobile') {
+            db()->prepare('UPDATE product_photos SET path_mobile = ?, mobile_pending = NULL WHERE id = ?')->execute([$path, $photoId]);
+            return ['ok' => true, 'path' => $path];
+        }
+        $srcWasMobile = image_format_kind(__DIR__ . '/../' . $srcRel) === 'mobile';
+        db()->prepare('UPDATE product_photos SET path = ?, path_mobile = ?, mobile_pending = NULL WHERE id = ?')
+            ->execute([$path, $srcWasMobile ? $srcRel : null, $photoId]);
+        sync_cover_photo($row['product_ref']);
+        if (!$srcWasMobile && ($job['then'] ?? null) === 'mobile') {
+            queue_format_job($photoId, $path, 'mobile');
+            return ['ok' => true, 'path' => $path, 'next' => true];
+        }
+        return ['ok' => true, 'path' => $path];
+    };
+    // Repli sans IA, seulement pour l'ombre portée (fond uni, objet détouré) : jamais pour une scène,
+    // dont les bandes floutées ne ressemblent pas à une vraie photo au bon format.
+    $fallback = static fn (): array => $store($srcAbs && $isShadow
+        ? fit_ratio_file($srcAbs, aspect_ratio_value($aspect), $baseName, shadow: true)
+        : null) + ['fallback' => true];
+    if (!$srcAbs || !is_file($srcAbs) || !GEMINI_API_KEY) return $isShadow ? $fallback() : $store(null);
+
+    if ($isShadow) {
+        $path = generate_shadow_image($srcAbs, $aspect, $baseName, 0);
+    } else {
+        // Le visuel fini, tel quel (sans bandes ajoutées), est refait dans l'autre format.
+        $small = downscale_for_ai($srcAbs, 1280, 85) ?? $srcAbs;
+        $bytes = gemini_generate_image($small, build_recompose_prompt($aspect), 0, $aspect);
+        if ($small !== $srcAbs) @unlink($small);
+        $bytes = $bytes ? fit_generated_to_ratio($bytes, $aspect, false) : null;
+        // Refus de recadrer l'image finie (photo réaliste de personne) : la même mise en situation est regénérée
+        // directement en 9:16 depuis la photo de départ, avec la même consigne — scène semblable, pas identique.
+        $regenAbs = $target === 'mobile' && !empty($job['regen']['src']) ? realpath(__DIR__ . '/../' . $job['regen']['src']) : false;
+        if (!$bytes && $regenAbs && is_file($regenAbs)) {
+            $keywords = (string) ($job['regen']['keywords'] ?? '');
+            $smallSrc = downscale_for_ai($regenAbs, 1280, 85) ?? $regenAbs;
+            $regenScene = is_array($job['regen']['scene'] ?? null) ? $job['regen']['scene'] : null;
+            $bytes = generate_image_for_ratio($smallSrc, build_ambiance_prompt($keywords, $regenScene), $aspect, 0, ambiance_is_directed($keywords, $regenScene), [], ambiance_subject_fill($regenScene, (string) ($job['regen']['size'] ?? 'auto'), $aspect));
+            if ($smallSrc !== $regenAbs) @unlink($smallSrc);
+        }
+        $path = $bytes ? save_binary_photo($bytes, $baseName, 'jpg', 1800) : null;
+    }
+
+    if (!$path) {
+        // Trois essais au plus, répartis sur les visites suivantes de l'admin.
+        $job['attempts'] = (int) ($job['attempts'] ?? 0) + 1;
+        if ($job['attempts'] >= 3) return $isShadow ? $fallback() : $store(null);
+        db()->prepare('UPDATE product_photos SET mobile_pending = ? WHERE id = ?')->execute([json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $photoId]);
+        return ['ok' => false, 'error' => 'Génération échouée, nouvel essai plus tard.'];
+    }
+    return $store($path);
+}
+
+/**
+ * <img>, ou <picture> servant la version smartphone (9:16) aux écrans étroits
+ * quand elle existe. Chemins relatifs à la racine web.
+ */
+function responsive_image_html(string $src, ?string $srcMobile, string $alt, string $class = ''): string
+{
+    $img = '<img src="/' . h($src) . '" alt="' . h($alt) . '"' . ($class !== '' ? ' class="' . h($class) . '"' : '') . '>';
+    if (!$srcMobile) return $img;
+    return '<picture><source media="(max-width: 780px)" srcset="/' . h($srcMobile) . '">' . $img . '</picture>';
+}
+
+/** Modèle Gemini texte/vision : les clés récentes n'ont plus accès à gemini-2.5-flash. */
+function gemini_text_model(): string
+{
+    return defined('GEMINI_TEXT_MODEL') && GEMINI_TEXT_MODEL !== '' ? GEMINI_TEXT_MODEL : 'gemini-3.8-flash';
 }
 
 /**
@@ -677,25 +1691,43 @@ function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries 
  * brut de la réponse, ou null en cas d'échec. Même style de retry que
  * gemini_generate_image() mais sur le modèle texte (bien plus rapide, une
  * requête synchrone reste raisonnable côté admin).
+ *
+ * @param string[] $extraAbsPaths Autres photos du même objet (autres angles),
+ *  envoyées à la suite de la première dans la même requête.
  */
-function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1): ?string
+function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries = 1, array $extraAbsPaths = []): ?string
 {
-    if (!GEMINI_API_KEY) return null;
+    if (ai_gate() !== null) return null;
+    $paths = array_merge($srcAbsPath !== '' ? [$srcAbsPath] : [], $extraAbsPaths);
+    // Fournisseur de texte choisi dans le portail : un service compatible OpenAI ou Claude prend le relais de Gemini.
+    $provider = ai_provider_active('text');
+    if ($provider && in_array($provider['driver'], ['openai', 'anthropic'], true)) {
+        return ai_provider_text($provider, $prompt, $paths, 90);
+    }
+    // Sans clé Gemini (ou clé épuisée), la passerelle locale relit l'image à sa place.
+    if (!GEMINI_API_KEY) return omniroute_text($prompt, $paths, 90);
+    $textModel = $provider && trim((string) ($provider['model'] ?? '')) !== '' ? (string) $provider['model'] : gemini_text_model();
+    $geminiBase = $provider && trim((string) ($provider['base_url'] ?? '')) !== '' ? rtrim((string) $provider['base_url'], '/') : 'https://generativelanguage.googleapis.com/v1beta';
 
-    $imgData = @file_get_contents($srcAbsPath);
-    if ($imgData === false) return null;
-    $mime = @getimagesize($srcAbsPath)['mime'] ?? 'image/jpeg';
+    $parts = [['text' => $prompt]];
+    // $srcAbsPath vide : consigne en texte seul (pas d'image).
+    foreach (array_merge($srcAbsPath !== '' ? [$srcAbsPath] : [], $extraAbsPaths) as $i => $path) {
+        $imgData = @file_get_contents($path);
+        if ($imgData === false) {
+            if ($i === 0 && $srcAbsPath !== '') return null;
+            continue;
+        }
+        $mime = @getimagesize($path)['mime'] ?? 'image/jpeg';
+        $parts[] = ['inlineData' => ['mimeType' => $mime, 'data' => base64_encode($imgData)]];
+    }
 
     $payload = [
         'contents' => [[
-            'parts' => [
-                ['text' => $prompt],
-                ['inlineData' => ['mimeType' => $mime, 'data' => base64_encode($imgData)]],
-            ],
+            'parts' => $parts,
         ]],
     ];
 
-    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . GEMINI_API_KEY;
+    $url = $geminiBase . '/models/' . $textModel . ':generateContent?key=' . GEMINI_API_KEY;
 
     for ($attempt = 0; $attempt <= $retries; $attempt++) {
         $ch = curl_init($url);
@@ -709,11 +1741,17 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
         $body = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
+        if ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))) {
+            error_log("gemini_generate_image: HTTP 402 prepayment depleted");
+            if (function_exists('ai_trigger_depleted_alert')) ai_trigger_depleted_alert('gemini', 'HTTP 402 Prepayment depleted');
+            return omniroute_text($prompt, $paths, 90);
+        }
+
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
             $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
             if ($text) {
-                log_api_usage('gemini', 'gemini_text');
+                ai_usage_log_text($data['usageMetadata'] ?? []);
                 return $text;
             }
             error_log('gemini_describe_image attempt ' . $attempt . ': HTTP ' . $status . ' but no text in response');
@@ -724,13 +1762,13 @@ function gemini_describe_image(string $srcAbsPath, string $prompt, int $retries 
         if ($attempt < $retries) sleep(2);
     }
 
-    return null;
+    return omniroute_text($prompt, $paths, 90);
 }
 
 /** Prompt demandant un JSON strict {label, tags} décrivant honnêtement l'image. */
 function build_media_describe_prompt(): string
 {
-    return "Tu regardes la photo d'un objet ou d'une scène pour la médiathèque d'une brocante en ligne. "
+    return "Tu regardes la photo d'un objet ou d'une scène pour la médiathèque d'" . tenant('ai.shop') . ". "
         . "Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, de cette forme exacte : "
         . '{"label": "titre court et factuel en français (5-8 mots)", "tags": "4 à 6 mots-clés en français séparés par des virgules"}. '
         . "Décris uniquement ce que tu vois réellement (matière, forme, couleur, type d'objet ou de scène) — "
@@ -904,11 +1942,11 @@ const BATCH_IMPORT_AI_CHUNK_SIZE = 10;
  */
 function gemini_group_photos_chunk(array $absPaths): ?array
 {
-    if (!GEMINI_API_KEY || !$absPaths) return [];
+    if (ai_gate() !== null || !GEMINI_API_KEY || !$absPaths) return [];
 
     $parts = [
         ['text' => "Voici " . count($absPaths) . " photos numérotées de 1 à " . count($absPaths) . ", dans l'ordre où elles apparaissent ci-dessous. "
-            . "Certaines montrent le MÊME objet sous des angles ou un cadrage différents (photos d'une seule pièce pour une brocante en ligne) ; "
+            . "Certaines montrent le MÊME objet sous des angles ou un cadrage différents (photos d'une seule pièce pour " . tenant('ai.shop') . ") ; "
             . "d'autres montrent des objets différents. Regroupe les numéros de photos qui montrent le même objet. "
             . "Sois prudent : en cas de doute, considère que ce sont des objets différents plutôt que de les regrouper à tort. "
             . "Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, de cette forme exacte : "
@@ -927,7 +1965,7 @@ function gemini_group_photos_chunk(array $absPaths): ?array
     }
 
     $payload = ['contents' => [['parts' => $parts]]];
-    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . GEMINI_API_KEY;
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . gemini_text_model() . ':generateContent?key=' . GEMINI_API_KEY;
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -952,7 +1990,7 @@ function gemini_group_photos_chunk(array $absPaths): ?array
     $data = json_decode($body, true);
     $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
     if (!$text) return null;
-    log_api_usage('gemini', 'gemini_text');
+    ai_usage_log_text($data['usageMetadata'] ?? []);
 
     $text = trim($text);
     $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', $text);
@@ -1036,13 +2074,19 @@ function gemini_score_cutout_simplicity(string $srcAbsPath): ?int
 }
 
 /** Prompt demandant un JSON strict {name, description, category, price_hint} pour une fiche produit. */
-function build_product_sheet_prompt(): string
+function build_product_sheet_prompt(int $photoCount = 1, string $notes = ''): string
 {
-    $cats = implode(', ', array_column(category_list(), 'key'));
-    return "Tu regardes la photo d'un objet chiné pour une brocante en ligne (meubles, céramique, "
-        . "luminaires, textile, jardin, curiosités...). Réponds UNIQUEMENT avec un objet JSON strict, "
+    $cats = universes_prompt_list();
+    $examples = ai_shop_examples() ? ' (' . ai_shop_examples() . ')' : '';
+    $seen = $photoCount > 1
+        ? "Tu regardes " . $photoCount . " photos du MÊME objet, sous différents angles : " . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". Sers-toi de tous les angles (marques, signatures, état, dessous). "
+        : "Tu regardes la photo d'" . tenant('ai.item') . " pour " . tenant('ai.shop') . $examples . ". ";
+    $notes = trim($notes);
+    return $seen
+        . ($notes !== '' ? "Indications du vendeur, à prendre en compte : « " . $notes . " ». " : '')
+        . "Réponds UNIQUEMENT avec un objet JSON strict, "
         . "sans texte autour, sans markdown, de cette forme exacte : "
-        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "une valeur parmi : ' . $cats . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
+        . '{"name": "nom court et vendeur (4-8 mots)", "description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible", "category": "la clé exacte (avant le signe =) de l\'UNIVERS du produit, son grand domaine, parmi : ' . $cats . '", "materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne), vide si invisibles", "brand": "marque lisible sur l\'objet ou son étiquette (logo, signature, poinçon), vide si aucune n\'est lisible — n\'en invente jamais", "colors": "couleurs dominantes de l\'objet, 1 à 4 noms français simples séparés par des virgules (ex : bleu marine, blanc cassé)", "etat": "' . product_condition_prompt_list() . '", "size_text": "vêtement ou chaussure : taille de l\'étiquette, sinon taille probable écrite « M (probable) » ; objet : dimensions estimées ; très courte", "weight_grams": "poids estimé en grammes (entier), 0 si impossible", "nature": "clé de la nature de l\'objet (ce qu\'il EST) parmi : ' . implode(', ', array_keys(product_nature_options())) . '", "sous_categorie": "clé de sa sous-catégorie, appartenant à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '", "price_hint": "fourchette de prix indicative en euros, ex : 25-35 €"}. '
         . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que "
         . "tu ne peux pas déterminer visuellement. Le prix est une simple estimation grossière à titre "
         . "indicatif, le vendeur l'ajustera.";
@@ -1055,14 +2099,426 @@ function parse_product_sheet_response(string $text): ?array
     $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', $text);
     $data = json_decode($text, true);
     if (!is_array($data) || empty($data['name'])) return null;
-    $validCats = array_column(category_list(), 'key');
-    $cat = in_array($data['category'] ?? '', $validCats, true) ? $data['category'] : 'curiosites';
+    $natureKey = product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['nature'];
+    // Univers : celui que l'IA donne (clé ou libellé) ; sinon celui qui correspond à la nature détectée (vêtements → Mode) ; sinon le défaut.
+    $cat = universe_key_resolve((string) ($data['category'] ?? '')) ?: (universe_key_for_nature($natureKey) ?: default_category_key());
     return [
         'name' => trim((string) $data['name']),
         'description' => trim((string) ($data['description'] ?? '')),
         'category' => $cat,
-        'price_hint' => trim((string) ($data['price_hint'] ?? '')),
+        'brand' => mb_substr(trim((string) ($data['brand'] ?? '')), 0, 80),
+        'colors' => product_colors_clean(is_array($data['colors'] ?? null) ? implode(', ', $data['colors']) : (string) ($data['colors'] ?? '')),
+        'materials' => mb_substr(trim((string) (is_array($data['materials'] ?? null) ? implode(', ', $data['materials']) : ($data['materials'] ?? ''))), 0, 200),
+        'etat' => product_condition_key((string) ($data['etat'] ?? '')),
+        'size_text' => mb_substr(trim((string) ($data['size_text'] ?? '')), 0, 60),
+        'weight_grams' => max(0, min(300000, (int) preg_replace('/\D/', '', (string) ($data['weight_grams'] ?? '')))),
+        'nature' => product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['nature'],
+        'sous_categorie' => product_nature_resolve((string) ($data['nature'] ?? ''), (string) ($data['sous_categorie'] ?? ''))['sous_categorie'],
+        'price_hint' => price_single(trim((string) ($data['price_hint'] ?? ''))),
     ];
+}
+
+/**
+ * Barème de l'« État » d'une pièce, du neuf à restaurer, par nuances : [groupe => [clé => [libellé, précision]]].
+ * La clé est ce qui est enregistré (products.etat) ; libellé et précision s'affichent sur la fiche.
+ */
+function product_condition_options(): array
+{
+    return [
+        'Neuf' => [
+            'neuf_etiquette' => ['Neuf avec étiquette', "Jamais porté ni utilisé, étiquette d'origine encore attachée."],
+            'neuf_emballe' => ['Neuf, emballé', "Dans son emballage d'origine fermé (blister, boîte scellée, sachet)."],
+            'neuf_boite' => ['Neuf, avec sa boîte', "Jamais utilisé, avec sa boîte d'origine (ouverte)."],
+            'neuf' => ['Neuf sans étiquette', 'Jamais porté ni utilisé, étiquette ou emballage absents.'],
+        ],
+        'Comme neuf' => [
+            'comme_neuf' => ['Comme neuf', 'Porté ou utilisé une ou deux fois, aucune trace visible.'],
+            'presque_neuf' => ['Presque neuf', "Très légères traces d'utilisation, à peine visibles."],
+            'excellent' => ['Excellent état', 'Aucun défaut notable, entretenu avec soin.'],
+        ],
+        'Bon état' => [
+            'tres_bon' => ['Très bon état', "Quelques légères traces de l'usage, rien de gênant."],
+            'bon' => ['Bon état', "Signes d'usage normaux, pleinement fonctionnel."],
+            'bon_age' => ['Bon état pour son âge', 'Pièce ancienne bien conservée, avec la patine du temps.'],
+            'patine' => ['Belle patine', "Patine d'ancienneté recherchée (cuivre, bois, cuir…)."],
+        ],
+        'État correct' => [
+            'correct' => ['État correct', "Traces d'usage visibles, sans incidence sur l'utilisation."],
+            'usage' => ["Traces d'usage marquées", 'Usure, rayures ou décolorations visibles, montrées en photo.'],
+            'defauts' => ['Petits défauts signalés', 'Éclat, tache, accroc ou léger manque (voir la description).'],
+        ],
+        'À remettre en état' => [
+            'use' => ['Usé', 'Très marqué par l\'usage, encore utilisable.'],
+            'restaurer' => ['À restaurer', 'Demande un nettoyage, une réparation ou une restauration.'],
+            'pieces' => ['Pour pièces ou décoration', 'Ne fonctionne pas ou incomplet : à réparer, ou pour décorer.'],
+        ],
+    ];
+}
+
+/** [libellé, précision] d'une clé d'état, ou null si elle est inconnue / vide. */
+function product_condition(?string $key): ?array
+{
+    foreach (product_condition_options() as $group) {
+        if (isset($group[(string) $key])) return $group[(string) $key];
+    }
+    return null;
+}
+
+/** Clé d'état valide (la clé elle-même ou son libellé, sans tenir compte de la casse), sinon chaîne vide. */
+function product_condition_key(?string $value): string
+{
+    $wanted = mb_strtolower(trim((string) $value));
+    if ($wanted === '') return '';
+    foreach (product_condition_options() as $group) {
+        foreach ($group as $key => [$label]) {
+            if ($wanted === $key || $wanted === mb_strtolower($label)) return $key;
+        }
+    }
+    return '';
+}
+
+/** <option> de tous les états, regroupés par nuance, avec $selected présélectionné ; première option : « Non précisé ». */
+function product_condition_select_html(?string $selected): string
+{
+    $html = '<option value="">Non précisé</option>';
+    foreach (product_condition_options() as $group => $items) {
+        $html .= '<optgroup label="' . h($group) . '">';
+        foreach ($items as $key => [$label]) {
+            $html .= '<option value="' . h($key) . '"' . ($key === $selected ? ' selected' : '') . '>' . h($label) . '</option>';
+        }
+        $html .= '</optgroup>';
+    }
+    return $html;
+}
+
+/**
+ * Nature d'une pièce et sous-catégories : [clé de nature => ['label' => …, 'subs' => [clé => libellé]]]. Indépendant de
+ * l'« univers » du commerce (rayons de la boutique) : c'est ce que l'objet EST, détecté par l'IA d'après les photos.
+ * Les clés sont enregistrées (products.nature, products.sous_categorie) ; une sous-catégorie appartient à une seule nature.
+ */
+function product_nature_options(): array
+{
+    return [
+        'vetements' => ['label' => 'Vêtements', 'subs' => [
+            'hauts' => 'Hauts, t-shirts et chemises', 'pulls' => 'Pulls, gilets et sweats', 'vestes' => 'Vestes et manteaux',
+            'robes' => 'Robes et jupes', 'pantalons' => 'Pantalons, jeans et shorts', 'costumes' => 'Costumes et tailleurs',
+            'combinaisons' => 'Combinaisons et ensembles', 'lingerie' => 'Lingerie et pyjamas', 'maillots' => 'Maillots de bain',
+            'sport' => 'Vêtements de sport', 'enfant' => 'Vêtements enfant et bébé', 'travail' => 'Vêtements de travail et uniformes',
+            'traditionnels' => 'Costumes traditionnels et déguisements', 'autres_vetements' => 'Autres vêtements',
+        ]],
+        'chaussures' => ['label' => 'Chaussures', 'subs' => [
+            'baskets' => 'Baskets', 'bottes' => 'Bottes et bottines', 'escarpins' => 'Escarpins et talons', 'sandales' => 'Sandales et tongs',
+            'mocassins' => 'Mocassins et derbies', 'ballerines' => 'Ballerines', 'chaussons' => 'Chaussons et sabots', 'chaussures_enfant' => 'Chaussures enfant',
+        ]],
+        'accessoires' => ['label' => 'Accessoires de mode', 'subs' => [
+            'sacs' => 'Sacs et sacoches', 'maroquinerie' => 'Maroquinerie et portefeuilles', 'ceintures' => 'Ceintures et bretelles',
+            'foulards' => 'Écharpes, foulards et cravates', 'chapeaux' => 'Chapeaux, casquettes et bonnets', 'gants' => 'Gants et moufles',
+            'lunettes' => 'Lunettes', 'parapluies' => 'Parapluies et éventails', 'autres_accessoires' => 'Autres accessoires',
+        ]],
+        'bijoux' => ['label' => 'Bijoux et montres', 'subs' => [
+            'colliers' => 'Colliers et pendentifs', 'bracelets' => 'Bracelets', 'bagues' => 'Bagues', 'boucles' => "Boucles d'oreilles",
+            'broches' => 'Broches et pins', 'montres' => 'Montres', 'parures' => 'Parures et coffrets', 'bijoux_fantaisie' => 'Bijoux fantaisie',
+        ]],
+        'linge' => ['label' => 'Linge de maison et textiles', 'subs' => [
+            'draps' => 'Draps et housses', 'nappes' => 'Nappes et chemins de table', 'torchons' => 'Torchons et serviettes', 'rideaux' => 'Rideaux et voilages',
+            'plaids' => 'Plaids, couvertures et couvre-lits', 'coussins' => 'Coussins et housses', 'broderies' => 'Broderies, dentelles et napperons',
+            'tapis' => 'Tapis et tentures', 'tissus' => 'Tissus au mètre et passementerie',
+        ]],
+        'decoration' => ['label' => 'Décoration', 'subs' => [
+            'vases' => 'Vases et cache-pots', 'cadres' => 'Cadres et miroirs', 'tableaux' => 'Tableaux, gravures et affiches', 'statuettes' => 'Statuettes et objets décoratifs',
+            'bougeoirs' => 'Bougeoirs et photophores', 'horloges' => 'Horloges, pendules et réveils', 'boites' => 'Boîtes, coffrets et paniers',
+            'globes' => 'Globes, cartes et objets scientifiques', 'religieux' => 'Objets religieux et ex-voto', 'plantes' => 'Pots, jardinières et décors de jardin',
+            'autres_deco' => 'Autres objets de décoration',
+        ]],
+        'arts_table' => ['label' => 'Arts de la table et cuisine', 'subs' => [
+            'assiettes' => 'Assiettes et plats', 'verres' => 'Verres, carafes et service à boire', 'tasses' => 'Tasses, bols et théières', 'pichets' => 'Pichets et soupières',
+            'couverts' => 'Couverts et ménagères', 'casseroles' => 'Casseroles, cocottes et poêles', 'ustensiles' => 'Ustensiles et moules', 'plateaux' => 'Plateaux et dessous de plat',
+            'boites_cuisine' => 'Boîtes, bocaux et pots à épices', 'electromenager' => 'Petit électroménager ancien',
+        ]],
+        'mobilier' => ['label' => 'Mobilier', 'subs' => [
+            'chaises' => 'Chaises, fauteuils et tabourets', 'tables' => 'Tables et bureaux', 'rangements' => 'Buffets, commodes et armoires', 'etageres' => 'Étagères et bibliothèques',
+            'canapes' => 'Canapés et banquettes', 'lits' => 'Lits et chevets', 'consoles' => 'Consoles, sellettes et guéridons', 'meubles_toilette' => 'Meubles de toilette et coiffeuses',
+            'mobilier_exterieur' => 'Mobilier de jardin', 'mobilier_enfant' => 'Mobilier enfant',
+        ]],
+        'luminaires' => ['label' => 'Luminaires', 'subs' => [
+            'lampes' => 'Lampes à poser', 'suspensions' => 'Suspensions et lustres', 'appliques' => 'Appliques', 'lampadaires' => 'Lampadaires', 'lampes_petrole' => 'Lampes à huile et à pétrole',
+        ]],
+        'livres_medias' => ['label' => 'Livres, disques et papeterie', 'subs' => [
+            'livres' => 'Livres et romans', 'bd' => 'BD et mangas', 'livres_enfants' => 'Livres pour enfants', 'livres_cuisine' => 'Livres de cuisine et de loisirs', 'vinyles' => 'Vinyles et disques',
+            'cassettes' => 'Cassettes, CD et DVD', 'cartes_postales' => 'Cartes postales et photos anciennes', 'papeterie' => 'Papeterie, plumes et carnets', 'affiches' => 'Affiches et publicités anciennes',
+        ]],
+        'jeux' => ['label' => 'Jeux et jouets', 'subs' => [
+            'jouets' => 'Jouets anciens', 'poupees' => 'Poupées et peluches', 'jeux_societe' => 'Jeux de société et puzzles', 'jeux_video' => 'Jeux vidéo et consoles',
+            'maquettes' => 'Maquettes et modèles réduits', 'jeux_plein_air' => 'Jeux de plein air',
+        ]],
+        'collection' => ['label' => 'Objets de collection et curiosités', 'subs' => [
+            'monnaies' => 'Monnaies, médailles et timbres', 'militaria' => 'Militaria et souvenirs', 'publicitaire' => 'Objets publicitaires', 'sciences' => 'Instruments scientifiques et de mesure',
+            'photographie' => 'Appareils photo et optique', 'curiosites' => 'Curiosités et objets insolites', 'orfevrerie' => 'Orfèvrerie et argenterie',
+        ]],
+        'musique_electro' => ['label' => 'Musique et électronique vintage', 'subs' => [
+            'instruments' => 'Instruments de musique', 'radios' => 'Radios et tourne-disques', 'audio' => 'Hi-fi et enceintes', 'telephonie' => 'Téléphones et machines à écrire', 'tv_video' => 'Télévisions et caméras',
+        ]],
+        'outils_jardin' => ['label' => 'Outils, jardin et brocante utile', 'subs' => [
+            'outils' => 'Outils à main', 'quincaillerie' => 'Quincaillerie et serrurerie', 'jardinage' => 'Jardinage', 'cuisine_campagne' => 'Objets de campagne et de ferme', 'velos' => 'Vélos et accessoires',
+            'valises' => 'Valises et malles',
+        ]],
+        'sport' => ['label' => 'Sport et loisirs', 'subs' => [
+            'velos_sport' => 'Vélos, trottinettes et accessoires', 'fitness' => 'Fitness et musculation', 'sports_balle' => 'Sports de balle et de ballon', 'raquettes' => 'Tennis, badminton et raquettes',
+            'plein_air' => 'Randonnée, camping et plein air', 'glisse' => 'Ski, snowboard et glisse', 'nautique' => 'Sports nautiques, plongée et pêche', 'combat' => 'Sports de combat',
+            'equitation' => 'Équitation', 'supporters' => 'Maillots, écharpes et objets de supporters', 'course' => 'Course, athlétisme et cyclisme (équipement)',
+        ]],
+        'alimentaire' => ['label' => 'Alimentaire', 'subs' => [
+            'epicerie_salee' => 'Épicerie salée', 'epicerie_sucree' => 'Épicerie sucrée et confiseries', 'boissons' => 'Boissons, vins et spiritueux', 'boulangerie' => 'Pains, viennoiseries et pâtisseries',
+            'frais' => 'Produits frais et charcuterie', 'terroir' => 'Produits du terroir et conserves', 'coffrets' => 'Coffrets et paniers garnis', 'bio' => 'Bio et diététique',
+        ]],
+        'tv_hifi' => ['label' => 'TV, hifi et audiovisuel', 'subs' => [
+            'televisions' => 'Télévisions et écrans de salon', 'enceintes' => 'Enceintes et barres de son', 'casques' => 'Casques et écouteurs', 'amplis' => 'Amplificateurs et tuners',
+            'platines' => 'Platines vinyles et lecteurs', 'videoprojecteurs' => 'Vidéoprojecteurs et home cinéma', 'cameras' => 'Caméras et appareils photo numériques', 'accessoires_av' => 'Câbles, télécommandes et accessoires audio-vidéo',
+        ]],
+        'informatique' => ['label' => 'Informatique', 'subs' => [
+            'portables' => 'Ordinateurs portables', 'fixes' => 'Ordinateurs fixes et mini-PC', 'ecrans' => 'Écrans et moniteurs', 'composants' => 'Composants (processeurs, cartes, mémoire)',
+            'peripheriques' => 'Claviers, souris et périphériques', 'reseau' => 'Réseau, box et routeurs', 'stockage' => 'Stockage (disques, clés, cartes)', 'imprimantes' => 'Imprimantes et scanners',
+            'tablettes' => 'Tablettes et liseuses', 'cables_info' => 'Câbles, chargeurs et accessoires', 'logiciels_jeux' => 'Logiciels et accessoires gaming',
+        ]],
+        'telephonie' => ['label' => 'Téléphonie et objets connectés', 'subs' => [
+            'smartphones' => 'Smartphones', 'telephones_fixes' => 'Téléphones fixes et sans fil', 'coques' => 'Coques, protections et supports', 'montres_connectees' => 'Montres et bracelets connectés',
+            'chargeurs' => 'Chargeurs, batteries et câbles', 'domotique' => 'Domotique et objets connectés',
+        ]],
+        'electromenager' => ['label' => 'Électroménager', 'subs' => [
+            'gros_electro' => 'Gros électroménager', 'cuisine_electro' => 'Petit électroménager de cuisine', 'entretien' => 'Aspirateurs et entretien', 'soin_electrique' => 'Soin et beauté électrique',
+            'chauffage' => 'Chauffage, ventilation et climatisation',
+        ]],
+        'beaute' => ['label' => 'Beauté et bien-être', 'subs' => [
+            'parfums' => 'Parfums', 'maquillage' => 'Maquillage', 'soins' => 'Soins du visage et du corps', 'cheveux' => 'Cheveux et coiffure', 'accessoires_beaute' => 'Trousses, miroirs et accessoires',
+        ]],
+        'bebe' => ['label' => 'Bébé et puériculture', 'subs' => [
+            'poussettes' => 'Poussettes et porte-bébés', 'sieges' => 'Sièges auto et chaises hautes', 'puericulture' => 'Biberons, repas et soins', 'eveil' => 'Jouets d\'éveil et peluches', 'chambre_bebe' => 'Mobilier et déco de chambre',
+        ]],
+        'animaux' => ['label' => 'Animaux', 'subs' => [
+            'chiens' => 'Accessoires pour chiens', 'chats' => 'Accessoires pour chats', 'aquariophilie' => 'Aquariophilie', 'rongeurs_oiseaux' => 'Rongeurs, oiseaux et autres animaux',
+        ]],
+        'auto_moto' => ['label' => 'Auto et moto', 'subs' => [
+            'pieces_auto' => 'Pièces et entretien auto', 'accessoires_auto' => 'Accessoires et équipement auto', 'moto' => 'Moto, scooter et équipement du motard', 'outillage_auto' => 'Outillage et garage',
+        ]],
+        'autre' => ['label' => 'Autre', 'subs' => [
+            'divers' => 'Divers', 'lots' => 'Lots et assortiments',
+        ]],
+    ];
+}
+
+/** [libellé de nature, libellé de sous-catégorie|null] ou null si la nature est inconnue. */
+function product_nature_labels(?string $nature, ?string $sub = null): ?array
+{
+    $n = product_nature_options()[(string) $nature] ?? null;
+    if (!$n) return null;
+    return [$n['label'], $n['subs'][(string) $sub] ?? null];
+}
+
+/** « Vêtements › Pulls, gilets et sweats », ou chaîne vide. */
+function product_nature_text(?string $nature, ?string $sub = null): string
+{
+    $l = product_nature_labels($nature, $sub);
+    return $l ? $l[0] . ($l[1] ? ' › ' . $l[1] : '') : '';
+}
+
+/**
+ * Nature et sous-catégorie valides à partir de clés ou de libellés (insensible à la casse) :
+ * ['nature' => clé|'', 'sous_categorie' => clé|'']. Une sous-catégorie n'est gardée que si elle appartient à la
+ * nature ; sans nature, elle sert à la retrouver.
+ */
+function product_nature_resolve(?string $nature, ?string $sub = null): array
+{
+    $norm = static fn (?string $v): string => mb_strtolower(trim((string) $v));
+    $wantedN = $norm($nature);
+    $wantedS = $norm($sub);
+    $natureKey = '';
+    foreach (product_nature_options() as $key => $n) {
+        if ($wantedN !== '' && ($wantedN === $key || $wantedN === $norm($n['label']))) { $natureKey = $key; break; }
+    }
+    $subKey = '';
+    foreach (product_nature_options() as $key => $n) {
+        if ($natureKey !== '' && $key !== $natureKey) continue;
+        foreach ($n['subs'] as $sk => $label) {
+            if ($wantedS !== '' && ($wantedS === $sk || $wantedS === $norm($label))) { $subKey = $sk; $natureKey = $natureKey ?: $key; break 2; }
+        }
+    }
+    return ['nature' => $natureKey, 'sous_categorie' => $subKey];
+}
+
+/** <option> des natures, $selected présélectionnée. */
+function product_nature_select_html(?string $selected): string
+{
+    $html = '<option value="">Non précisée</option>';
+    foreach (product_nature_options() as $key => $n) {
+        $html .= '<option value="' . h($key) . '"' . ($key === $selected ? ' selected' : '') . '>' . h($n['label']) . '</option>';
+    }
+    return $html;
+}
+
+/**
+ * <option> des sous-catégories, chacune avec data-nature (assets/nature-select.js ne montre que celles de la nature
+ * choisie).
+ */
+function product_subcategory_select_html(?string $selected): string
+{
+    $html = '<option value="">Non précisée</option>';
+    foreach (product_nature_options() as $nKey => $n) {
+        foreach ($n['subs'] as $key => $label) {
+            $html .= '<option value="' . h($key) . '" data-nature="' . h($nKey) . '"' . ($key === $selected ? ' selected' : '') . '>' . h($label) . '</option>';
+        }
+    }
+    return $html;
+}
+
+/** Liste des natures et sous-catégories (clés) donnée à l'IA pour qu'elle réponde avec des clés valides. */
+function product_nature_prompt_list(): string
+{
+    $items = [];
+    foreach (product_nature_options() as $key => $n) {
+        $items[] = $key . ' = ' . $n['label'] . ' [' . implode(' ; ', array_map(static fn ($k, $l) => $k . ' = ' . $l, array_keys($n['subs']), $n['subs'])) . ']';
+    }
+    return implode(' | ', $items);
+}
+
+/** Champs d'une fiche que l'IA sait (re)générer, dans l'ordre du formulaire. */
+const PRODUCT_AI_FIELDS = ['name', 'description', 'category', 'nature', 'materials', 'colors', 'brand', 'etat', 'size', 'weight', 'price'];
+
+/**
+ * Photos d'origine d'une pièce (hors détourage et illustrations IA), principale
+ * en premier : ce que l'IA doit regarder pour décrire la pièce.
+ */
+function product_source_photos(string $ref): array
+{
+    $photos = array_values(array_filter(product_photos_list($ref), static fn ($p) => $p['type'] === 'photo' && !$p['is_illustration'] && !str_starts_with($p['label'], 'Détourée')));
+    $isMain = static fn (array $p): bool => $p['label'] === 'Photo principale' || str_starts_with($p['label'], '★');
+    usort($photos, static fn ($a, $b) => $isMain($b) <=> $isMain($a));
+    return $photos;
+}
+
+/**
+ * Consigne pour (re)générer certains champs d'une fiche. $fields : clés de
+ * PRODUCT_AI_FIELDS à produire ; $current : valeurs actuelles du formulaire
+ * (name, description, category, materials, price, size_text) — celles qu'on ne
+ * régénère pas servent de contexte cohérent, celles qu'on régénère sont à varier.
+ */
+function build_product_fields_prompt(array $fields, array $current, int $photoCount, string $notes = '', array $comparables = []): string
+{
+    $cats = universes_prompt_list();
+    $examples = ai_shop_examples() ? ' (' . ai_shop_examples() . ')' : '';
+    $seen = match (true) {
+        $photoCount > 1 => 'Tu regardes ' . $photoCount . ' photos du MÊME objet, sous différents angles : ' . tenant('ai.item') . ' pour ' . tenant('ai.shop') . $examples . '. ',
+        $photoCount === 1 => "Tu regardes la photo d'" . tenant('ai.item') . ' pour ' . tenant('ai.shop') . $examples . '. ',
+        default => "Tu n'as pas de photo : tu travailles d'après le texte déjà saisi, pour " . tenant('ai.shop') . $examples . '. ',
+    };
+    $spec = [
+        'name' => '"name": "nom court et vendeur (4-8 mots)"',
+        'description' => '"description": "description chaleureuse en 2-3 phrases, honnête sur l\'état visible"',
+        'category' => '"category": "la clé exacte (avant le signe =) parmi : ' . $cats . ' ; si aucune ne convient vraiment à cet objet, laisse une chaîne vide"',
+        'materials' => '"materials": "matières visibles, séparées par des virgules (ex : grès émaillé, bois de chêne) ; chaîne vide si elles ne se voient pas"',
+        'colors' => '"colors": "les COULEURS dominantes de l\'objet (1 à 4), en noms français simples séparés par des virgules (ex : bleu marine, blanc cassé) ; chaîne vide s\'il est incolore ou transparent"',
+        'brand' => '"brand": "la MARQUE lisible sur l\'objet ou son étiquette (logo, signature, poinçon, étiquette cousue, fond de pièce) ; chaîne vide si aucune marque n\'est lisible — n\'en devine jamais une d\'après le style seul"',
+        'nature' => '"nature": "la clé de la NATURE de l\'objet (ce qu\'il EST) et, dans le même objet JSON, "sous_categorie": "la clé de sa sous-catégorie, qui doit appartenir à cette nature. Natures [sous-catégories] : ' . product_nature_prompt_list() . '"',
+        'etat' => '"etat": "' . product_condition_prompt_list() . '"',
+        'size' => '"size_text": "taille ou dimensions, COURTES. VÊTEMENT, chaussure ou accessoire porté : donne TOUJOURS une taille — celle de l\'étiquette si elle est lisible (« M », « 38 », « 42 FR »), sinon la taille la plus probable d\'après la coupe et les proportions, écrite avec « (probable) » (ex : « M (probable) », « 40 (probable) »), plus la longueur ou la largeur approximatives si elles se devinent. OBJET : ses dimensions estimées (ex : « env. 20 × 15 × 30 cm », hauteur ou diamètre selon la forme). Chaîne vide seulement si la photo ne permet vraiment aucune estimation"',
+        'weight' => '"weight_grams": "nombre entier : poids estimé en grammes de l\'objet seul, sans emballage, d\'après sa nature, ses matières et sa taille apparente (ordres de grandeur : sweat 600, robe 450, pichet en grès 900, chaise en bois 4500) ; 0 si impossible à estimer"',
+        'price' => '"price": "prix de vente indicatif : UN SEUL montant en euros, ex : 30 €"',
+    ];
+    $labels = ['name' => 'Nom', 'description' => 'Description', 'category' => 'Catégorie', 'nature' => 'Nature', 'materials' => 'Matières', 'colors' => 'Couleurs', 'brand' => 'Marque', 'distributor' => 'Distributeur', 'etat' => 'État', 'price' => 'Prix', 'size_text' => 'Taille', 'weight_text' => 'Poids'];
+    $known = [];
+    $vary = [];
+    // Taille et poids se régénèrent par les champs « size » et « weight ».
+    $fieldOf = ['size_text' => 'size', 'weight_text' => 'weight'];
+    foreach ($labels as $field => $label) {
+        $value = trim((string) ($current[$field] ?? ''));
+        if ($value === '') continue;
+        if (in_array($fieldOf[$field] ?? $field, $fields, true)) {
+            if ($field !== 'category') $vary[] = $label . ' actuel(le) : « ' . $value . ' »';
+        } else {
+            $known[] = $label . ' : ' . $value;
+        }
+    }
+    $notes = trim($notes);
+    return $seen
+        . ($notes !== '' ? 'Indications du vendeur, à prendre en compte : « ' . $notes . ' ». ' : '')
+        . comparables_prompt_text($comparables)
+        . ($known ? 'Informations déjà saisies, à respecter et rester cohérent avec : ' . implode(' ; ', $known) . '. ' : '')
+        . ($vary ? 'Propose une version DIFFÉRENTE de ce qui existe déjà (' . implode(' ; ', $vary) . '). ' : '')
+        . 'Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, avec exactement ces clés : '
+        . '{' . implode(', ', array_map(static fn ($f) => $spec[$f], $fields)) . '}. '
+        . "Décris uniquement ce que tu vois réellement — n'invente ni marque, ni époque, ni origine que tu ne peux pas déterminer visuellement. "
+        . 'Le prix est une simple estimation à titre indicatif, le vendeur l\'ajustera.';
+}
+
+/** « env. 600 g » / « env. 1,2 kg » : poids estimé en grammes, écrit pour la fiche. */
+function product_weight_text(int $grams): string
+{
+    if ($grams <= 0) return '';
+    if ($grams < 1000) return 'env. ' . (int) (round($grams / 10) * 10 ?: $grams) . ' g';
+    return 'env. ' . str_replace('.', ',', rtrim(rtrim(number_format($grams / 1000, 1, '.', ''), '0'), '.')) . ' kg';
+}
+
+/** Consigne donnée à l'IA pour choisir un état : la liste des clés avec leur sens, et la prudence attendue. */
+function product_condition_prompt_list(): string
+{
+    $items = [];
+    foreach (product_condition_options() as $group) {
+        foreach ($group as $key => [$label, $hint]) $items[] = $key . ' = ' . $label . ' (' . $hint . ')';
+    }
+    return "la clé exacte (avant le signe =) de l'état, d'après ce qui est VISIBLE, parmi : " . implode(' ; ', $items)
+        . ". Sois prudent : n'indique un état « neuf », « emballé » ou « avec étiquette » que si l'emballage ou l'étiquette est visible ; "
+        . "si l'état ne peut pas être jugé, laisse une chaîne vide";
+}
+
+/** Réponse JSON de build_product_fields_prompt() : uniquement les champs demandés et exploitables. */
+function parse_product_fields_response(string $text, array $fields): array
+{
+    $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text));
+    $data = json_decode($text, true);
+    if (!is_array($data)) return [];
+    $str = static fn ($v): string => trim((string) (is_array($v) ? implode(', ', $v) : $v));
+    $out = [];
+    foreach ($fields as $field) {
+        $value = $str($data[$field] ?? '');
+        switch ($field) {
+            case 'name': $value = mb_substr($value, 0, 120); break;
+            case 'description': $value = mb_substr($value, 0, 1200); break;
+            case 'materials': $value = mb_substr($value, 0, 200); break;
+            case 'brand': $value = mb_substr($value, 0, 80); break;
+            case 'colors': $value = product_colors_clean($value); break;
+            case 'etat': $value = product_condition_key($value); break;
+            case 'size':
+                $size = mb_substr($str($data['size_text'] ?? ''), 0, 60);
+                if ($size !== '') $out['size_text'] = $size;
+                continue 2;
+            case 'weight':
+                // Poids estimé en grammes (jamais au-delà de 300 kg) ; weight_text en est la version écrite pour la fiche.
+                $grams = (int) preg_replace('/\D/', '', $str($data['weight_grams'] ?? ''));
+                if ($grams > 0 && $grams <= 300000) { $out['weight_grams'] = $grams; $out['weight_text'] = product_weight_text($grams); }
+                continue 2;
+            case 'nature':
+                // Deux clés d'un coup : la nature, et sa sous-catégorie (gardée seulement si elle lui appartient).
+                $pair = product_nature_resolve($value, $str($data['sous_categorie'] ?? ''));
+                if ($pair['nature'] !== '') $out['nature'] = $pair['nature'];
+                if ($pair['sous_categorie'] !== '') $out['sous_categorie'] = $pair['sous_categorie'];
+                continue 2;
+            case 'category':
+                // Le modèle répond parfois par le libellé (« Épicerie fine ») plutôt que par la clé : les deux sont acceptés.
+                $wanted = mb_strtolower($value);
+                $value = '';
+                foreach (category_list() as $c) {
+                    if ($wanted === mb_strtolower($c['key']) || $wanted === mb_strtolower($c['label'])) { $value = $c['key']; break; }
+                }
+                break;
+            case 'price':
+                // « 30 € », « 25-35 € » : on garde ce qui ressemble à un prix, sans phrase autour.
+                $value = preg_match('/\d[\d\s.,]*(?:\s*[-–]\s*\d[\d\s.,]*)?\s*€?/u', $value, $m) ? trim($m[0]) : '';
+                if ($value !== '' && !str_contains($value, '€')) $value .= ' €';
+                $value = mb_substr($value, 0, 30);
+                break;
+        }
+        if ($value !== '') $out[$field] = $value;
+    }
+    return $out;
 }
 
 /**
@@ -1120,25 +2576,115 @@ function angle_presets(): array
     ];
 }
 
+/**
+ * Nom d'une photo générée d'après la consigne du vendeur : « Ambiance — portée par une femme en mouvement ».
+ * La consigne est raccourcie à un mot entier ; sans consigne, le nom de base seul.
+ */
+function generated_photo_label(string $baseLabel, string $keywords, int $maxKeywords = 50): string
+{
+    $kw = trim(preg_replace('/\s+/u', ' ', $keywords), " \t,;.:-");
+    if ($kw === '') return $baseLabel;
+    if (mb_strlen($kw) > $maxKeywords) {
+        $cut = mb_substr($kw, 0, $maxKeywords);
+        $space = mb_strrpos($cut, ' ');
+        $kw = rtrim($space !== false && $space > 15 ? mb_substr($cut, 0, $space) : $cut, " ,;.:-") . '…';
+    }
+    return $baseLabel . ' — ' . $kw;
+}
+
+/** Radical du nom de fichier d'une photo générée : « product-001-ambiance » + la consigne en minuscules sans accents. */
+function generated_photo_basename(string $prefix, string $keywords): string
+{
+    if (trim($keywords) === '') return $prefix; // slugify('') rendrait « media »
+    $slug = trim(slugify(mb_substr($keywords, 0, 60), 40), '-');
+    // Coupé à un mot entier, sans fragment au bout.
+    if (mb_strlen($slug) >= 40 && ($cut = strrpos($slug, '-')) !== false && $cut > 15) $slug = substr($slug, 0, $cut);
+    return $slug !== '' ? $prefix . '-' . $slug : $prefix;
+}
+
+/**
+ * Consigne du vendeur (« Mots-clés / précisions »), ajoutée à un prompt de génération : elle PRIME sur les
+ * réglages par défaut du prompt (décor, absence de personnes…) quand ils se contredisent — sans quoi le
+ * modèle garde son décor habituel et ignore, par exemple, « femme dans la rue en mouvement ».
+ */
+function owner_direction_prompt(string $keywords): string
+{
+    return $keywords === '' ? '' : " OWNER'S DIRECTION (mandatory, it takes priority over any default above that contradicts it): « "
+        . $keywords . " ». Follow it faithfully — setting, light, framing (close-up, wide shot, angle), action, and any person it mentions — while keeping the object itself identical.";
+}
+
+/**
+ * Ajout au prompt quand plusieurs photos de la même pièce servent de départ : la première est la photo principale (celle
+ * posée sur la toile du format voulu), les autres montrent d'autres côtés ou détails du MÊME objet.
+ */
+function multi_photo_prompt(int $count): string
+{
+    if ($count < 2) return '';
+    return " REFERENCE PHOTOS: $count images of the SAME real object are provided. The first image is the main photo; the others "
+        . "show other sides, angles or details of the same object. Use ALL of them to understand its true shape, colours, "
+        . "patterns, materials and details (back, sides, labels, small features), and never invent details that contradict any of them. "
+        . "Produce one single image.";
+}
+
 function build_angle_prompt(string $anglePreset, string $keywords): string
 {
     $angleText = angle_presets()[$anglePreset] ?? angle_presets()['auto'];
-    $prompt = "This is a real secondhand/vintage product photo for an online antiques shop. "
+    return "This is a real secondhand/vintage product photo for an online antiques shop. "
         . "Generate a photo of the SAME exact object(s), photographed $angleText, "
         . "on a clean simple neutral light-grey studio background, soft natural lighting, "
         . "photorealistic, no text, no watermark, no people. "
-        . "Respond with the generated image only, no text in your reply.";
-    return $keywords !== '' ? $prompt . ' Additional direction from the shop owner: ' . $keywords . '.' : $prompt;
+        . "Respond with the generated image only, no text in your reply."
+        . owner_direction_prompt($keywords);
 }
 
-function build_ambiance_prompt(string $keywords): string
+function build_ambiance_prompt(string $keywords, ?array $scene = null): string
 {
-    $prompt = "This is a real secondhand/vintage product photo for an online antiques shop. "
-        . "Generate a styled photo showing the SAME exact object placed naturally in a cozy "
-        . "French home interior (a living room or kitchen with warm wood tones), as if staged "
-        . "for a lifestyle product photo, photorealistic, natural daylight, no text, no watermark, no people. "
-        . "Respond with the generated image only, no text in your reply.";
-    return $keywords !== '' ? $prompt . ' Additional direction from the shop owner: ' . $keywords . '.' : $prompt;
+    // Décor automatique selon la nature de la pièce (includes/ambiance-scenes.php) : il remplace l'intérieur par défaut.
+    if ($scene !== null) {
+        $person = !empty($scene['person']);
+        $rule = $person
+            ? "The person must wear or carry exactly this item. REAL-LIFE SCALE (mandatory): the item must fit the person naturally, sized to their body "
+                . "— never oversized, never bigger than their torso or frame; ignore how large the item appears in the input image. Faithful, natural look, no text, no watermark."
+            : "Photorealistic, natural light, no text, no watermark.";
+        if ($keywords === '') {
+            return "This is a real secondhand/vintage product photo for an online shop. "
+                . "Generate a styled, photorealistic lifestyle photo showing the SAME exact object (identical shape, colors, "
+                . "materials, patterns and details — never redesign it), as if staged for a lifestyle product photo. "
+                . "SCENE: " . $scene['en'] . ". " . $rule . " "
+                . "Respond with the generated image only, no text in your reply.";
+        }
+        return "This is a real secondhand/vintage product photo for an online shop. "
+            . "Generate a styled, photorealistic lifestyle photo showing the SAME exact object (identical shape, colors, "
+            . "materials, patterns and details — never redesign it), as if staged for a lifestyle product photo, natural light, "
+            . "no text, no watermark. Default scene, to use ONLY if the owner's direction below does not describe a setting, "
+            . "an action or a person: " . $scene['en'] . ". " . $rule
+            . owner_direction_prompt($keywords)
+            . " Respond with the generated image only, no text in your reply.";
+    }
+    if ($keywords === '') {
+        return "This is a real secondhand/vintage product photo for an online antiques shop. "
+            . "Generate a styled photo showing the SAME exact object placed naturally in a cozy "
+            . "French home interior (a living room or kitchen with warm wood tones), as if staged "
+            . "for a lifestyle product photo, photorealistic, natural daylight, no text, no watermark, no people. "
+            . "Respond with the generated image only, no text in your reply.";
+    }
+    // Avec une consigne : une scène, une action ou une personne qu'elle décrit remplace le décor par défaut ;
+    // une simple précision (époque, défaut, matière…) laisse le décor par défaut en place.
+    return "This is a real secondhand/vintage product photo for an online antiques shop. "
+        . "Generate a styled, photorealistic lifestyle photo showing the SAME exact object (identical shape, colors, "
+        . "materials, patterns and details — never redesign it), as if staged for a lifestyle product photo, natural light, "
+        . "no text, no watermark. Default setting, to use ONLY if the owner's direction below does not describe a setting, "
+        . "an action or a person: a cozy French home interior (living room or kitchen with warm wood tones), no people. "
+        . "If the direction does describe a scene, an action or a person, that scene replaces the default — for a garment or "
+        . "accessory the item may then be worn or carried, wearing exactly this item."
+        . owner_direction_prompt($keywords)
+        . " Respond with the generated image only, no text in your reply.";
+}
+
+/** Faut-il traiter la génération d'ambiance comme « dirigée » (décor non standard : le cadrage prolonge la scène demandée) ? */
+function ambiance_is_directed(string $keywords, ?array $scene): bool
+{
+    return $keywords !== '' || $scene !== null;
 }
 
 /**
@@ -1173,7 +2719,7 @@ function build_complete_prompt(string $keywords): string
         . "construction, on a clean simple neutral light-grey studio background, soft natural lighting, "
         . "photorealistic, no text, no watermark, no people. "
         . "Respond with the generated image only, no text in your reply.";
-    return $keywords !== '' ? $prompt . ' Additional direction from the shop owner: ' . $keywords . '.' : $prompt;
+    return $prompt . owner_direction_prompt($keywords);
 }
 
 /**
@@ -1231,7 +2777,7 @@ function detoure_photo_synchronous(string $srcAbsPath): ?array
  */
 function fal_remove_background(string $srcAbsPath, int $retries = 1): ?string
 {
-    if (!FAL_API_KEY) return null;
+    if (!FAL_API_KEY || ai_gate() !== null) return null;
 
     $imgData = @file_get_contents($srcAbsPath);
     if ($imgData === false) return null;
@@ -1252,6 +2798,12 @@ function fal_remove_background(string $srcAbsPath, int $retries = 1): ?string
         $body = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
+        if ($status === 402 || ($body !== false && str_contains($body, 'prepayment'))) {
+            error_log("gemini_generate_image: HTTP 402 prepayment depleted");
+            if (function_exists('ai_trigger_depleted_alert')) ai_trigger_depleted_alert('gemini', 'HTTP 402 Prepayment depleted');
+            return null;
+        }
+
         if ($body !== false && $status < 400) {
             $data = json_decode($body, true);
             $imageUrl = $data['image']['url'] ?? null;
@@ -1260,7 +2812,7 @@ function fal_remove_background(string $srcAbsPath, int $retries = 1): ?string
                 curl_setopt_array($resultCh, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30]);
                 $resultBytes = curl_exec($resultCh);
                 if ($resultBytes !== false) {
-                    log_api_usage('fal', 'fal_cutout');
+                    ai_usage_log_cutout();
                     return $resultBytes;
                 }
                 error_log('fal_remove_background attempt ' . $attempt . ': failed to download result image');
@@ -1432,35 +2984,13 @@ function next_photo_sort_order(string $ref): int
     return (int) $stmt->fetchColumn();
 }
 
-function add_product_photo(string $ref, string $path, string $label, bool $illustration = false, string $type = 'photo'): int
+function add_product_photo(string $ref, string $path, string $label, bool $illustration = false, string $type = 'photo', ?string $pathMobile = null): int
 {
-    $stmt = db()->prepare('INSERT INTO product_photos (product_ref, path, label, is_illustration, type, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$ref, $path, $label, $illustration ? 1 : 0, $type, next_photo_sort_order($ref)]);
+    $stmt = db()->prepare('INSERT INTO product_photos (product_ref, path, path_mobile, label, is_illustration, type, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$ref, $path, $pathMobile, $label, $illustration ? 1 : 0, $type, next_photo_sort_order($ref)]);
     $id = (int) db()->lastInsertId();
     sync_cover_photo($ref);
     return $id;
-}
-
-/**
- * Dimensions réelles (largeur × hauteur) d'une ressource média, affichées au
- * survol de sa vignette dans la médiathèque — pour les vidéos, passe par
- * ffprobe puisque getimagesize() ne lit pas ce format.
- */
-function media_item_dimensions(array $m): ?string
-{
-    $abs = __DIR__ . '/../' . $m['path'];
-    if (!is_file($abs)) return null;
-
-    if ($m['type'] === 'video') {
-        if (!FFPROBE_BIN || !shell_exec_available()) return null;
-        $cmd = escapeshellarg(FFPROBE_BIN) . ' -v error -select_streams v:0'
-            . ' -show_entries stream=width,height -of csv=s=x:p=0 ' . escapeshellarg($abs);
-        $out = trim((string) shell_exec($cmd));
-        return $out !== '' ? str_replace('x', ' × ', $out) . ' px' : null;
-    }
-
-    $size = @getimagesize($abs);
-    return $size ? "{$size[0]} × {$size[1]} px" : null;
 }
 
 /**
@@ -1484,6 +3014,108 @@ function get_media_items(?string $type = null, ?string $q = null): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Vue d'ensemble de la médiathèque : les ressources propres (media_library) ET les photos des fiches produit
+ * (product_photos, plus la photo de couverture des fiches qui n'en ont pas dans la galerie), lues en place — rien
+ * n'est dupliqué. Chaque élément : kind (« media » : modifiable ici ; « fiche » : se gère dans la galerie du produit),
+ * type, path, label, source, tags, origin_ref, origin_name, created_at, live (la fiche existe encore), badges.
+ * $product : '' (tous), '-' (sans produit) ou la référence d'un produit.
+ */
+function get_media_overview(?string $type = null, ?string $q = null, string $product = ''): array
+{
+    $items = [];
+    foreach (get_media_items($type, $q) as $m) {
+        $m['kind'] = 'media';
+        $m['live'] = $m['origin_ref'] && get_product($m['origin_ref']);
+        $m['badges'] = [];
+        $items[] = $m;
+    }
+
+    $products = [];
+    foreach (db()->query('SELECT ref, name, photo, is_hidden FROM products')->fetchAll() as $p) $products[$p['ref']] = $p;
+    $fiche = static function (array $row, string $path, string $label, array $badges, string $createdAt) use ($products): array {
+        $p = $products[$row['product_ref'] ?? $row['ref']];
+        return [
+            'kind' => 'fiche', 'id' => (int) ($row['id'] ?? 0), 'type' => $row['type'] ?? 'photo', 'path' => $path, 'label' => $label,
+            'source' => 'Fiche produit', 'tags' => '', 'origin_ref' => $p['ref'], 'origin_name' => $p['name'], 'created_at' => $createdAt,
+            'live' => true, 'badges' => array_values(array_filter(array_merge($badges, [$p['is_hidden'] ? 'Fiche masquée' : '']))),
+        ];
+    };
+    $known = [];
+    foreach (db()->query('SELECT * FROM product_photos ORDER BY id')->fetchAll() as $row) {
+        if (!isset($products[$row['product_ref']])) continue;
+        $known[$row['path']] = true;
+        $badges = [];
+        if (str_starts_with((string) $row['label'], 'Détourée')) $badges[] = 'Détourage';
+        elseif ($row['is_illustration']) $badges[] = 'Visuel IA';
+        if ($row['is_hidden']) $badges[] = 'Photo masquée';
+        $items[] = $fiche($row, $row['path'], (string) $row['label'], $badges, (string) $row['created_at']);
+        if (!empty($row['path_mobile'])) {
+            $known[$row['path_mobile']] = true;
+            $items[] = $fiche($row, $row['path_mobile'], $row['label'] . ' (9:16 smartphone)', array_merge($badges, ['9:16']), (string) $row['created_at']);
+        }
+    }
+    foreach ($products as $p) {
+        // Photo de couverture d'une fiche créée à la main : elle n'a pas de ligne dans la galerie.
+        if ($p['photo'] && !isset($known[$p['photo']])) {
+            $items[] = $fiche($p, $p['photo'], 'Photo de la fiche', [], date('Y-m-d H:i:s', @filemtime(__DIR__ . '/../' . $p['photo']) ?: time()));
+        }
+    }
+
+    return array_values(array_filter($items, static function (array $m) use ($type, $q, $product): bool {
+        if ($m['kind'] === 'fiche') {
+            if ($type && $m['type'] !== $type) return false;
+            if ($q) {
+                $hay = mb_strtolower($m['label'] . ' ' . $m['source'] . ' ' . $m['origin_name'] . ' ' . $m['origin_ref'] . ' ' . implode(' ', $m['badges']));
+                if (!str_contains($hay, mb_strtolower($q))) return false;
+            }
+        }
+        if ($product === '-') return !$m['origin_ref'] && !$m['origin_name'];
+        return $product === '' || $m['origin_ref'] === $product;
+    }));
+}
+
+/**
+ * Regroupe les éléments de get_media_overview() : par produit (une rubrique par fiche, puis « Anciens articles » et
+ * « Sans produit »), par source, par type, ou par mois. Rend [[titre, lien galerie|null, éléments], …].
+ */
+function group_media_overview(array $items, string $by): array
+{
+    $dateOf = static fn (array $m): int => strtotime((string) $m['created_at']) ?: 0;
+    usort($items, static fn ($a, $b) => $dateOf($b) <=> $dateOf($a));
+    $groups = [];
+    foreach ($items as $m) {
+        switch ($by) {
+            case 'produit':
+                if ($m['live'] && $m['origin_ref']) { $key = 'p:' . $m['origin_ref']; $title = 'Réf. N°' . $m['origin_ref'] . ' — ' . $m['origin_name']; $link = $m['origin_ref']; $order = 0; }
+                elseif ($m['origin_name']) { $key = 'x:' . $m['origin_name']; $title = 'Ancien article : ' . $m['origin_name']; $link = null; $order = 1; }
+                else { $key = 'z'; $title = 'Sans produit'; $link = null; $order = 2; }
+                break;
+            case 'source':
+                $src = trim((string) $m['source']) ?: 'Sans source'; $key = 's:' . $src; $title = $src; $link = null; $order = $m['kind'] === 'fiche' ? 0 : 1;
+                break;
+            case 'type':
+                $key = 't:' . $m['type']; $title = $m['type'] === 'video' ? 'Vidéos' : 'Photos'; $link = null; $order = $m['type'] === 'video' ? 1 : 0;
+                break;
+            default:
+                $month = $dateOf($m) ? strftime_fr($dateOf($m)) : 'Sans date'; $key = 'd:' . $month; $title = $month; $link = null; $order = 0;
+        }
+        $groups[$key] ??= ['title' => $title, 'link' => $link, 'items' => [], 'order' => $order];
+        $groups[$key]['items'][] = $m;
+    }
+    if ($by === 'produit' || $by === 'source' || $by === 'type') {
+        uasort($groups, static fn ($a, $b) => $a['order'] <=> $b['order'] ?: 0);
+    }
+    return array_values(array_map(static fn ($g) => [$g['title'], $g['link'], $g['items']], $groups));
+}
+
+/** « octobre 2026 » pour un horodatage (sans dépendre des locales du serveur). */
+function strftime_fr(int $timestamp): string
+{
+    static $months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    return $months[(int) date('n', $timestamp) - 1] . ' ' . date('Y', $timestamp);
+}
+
 function get_media_item(int $id): ?array
 {
     $stmt = db()->prepare('SELECT * FROM media_library WHERE id = ?');
@@ -1496,6 +3128,71 @@ function add_media_item(string $type, string $path, string $label, string $sourc
     $stmt = db()->prepare('INSERT INTO media_library (type, path, label, source, tags, origin_ref, origin_name) VALUES (?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([$type, $path, $label, $source, $tags, $originRef, $originName]);
     return (int) db()->lastInsertId();
+}
+
+/** Ajoute un visuel à la médiathèque s'il n'y figure pas déjà (même chemin). -> true si ajouté. */
+function media_library_register(string $path, string $label, string $source = '', string $tags = '', string $type = 'photo'): bool
+{
+    if ($path === '') return false;
+    $stmt = db()->prepare('SELECT 1 FROM media_library WHERE path = ? LIMIT 1');
+    $stmt->execute([$path]);
+    if ($stmt->fetchColumn()) return false;
+    add_media_item($type, $path, $label, $source, $tags);
+    return true;
+}
+
+/**
+ * Range les visuels déjà en place (logos, bandeaux, slides du hero) dans la
+ * médiathèque. Les visuels générés ensuite s'y ajoutent directement ; cette
+ * reprise ne tourne qu'une fois par boutique pour qu'une ressource retirée à
+ * la main ne réapparaisse pas au chargement suivant.
+ */
+function media_library_sync_visuals(): int
+{
+    $added = 0;
+    $siteName = trim((string) (get_content()['site_name'] ?? ''));
+
+    if (function_exists('logos_saved')) {
+        foreach (logos_saved() as $variant => $path) {
+            $path = (string) $path;
+            if (!str_starts_with($path, 'uploads/')) continue;
+            $title = defined('LOGO_VARIANTS') ? (string) (LOGO_VARIANTS[$variant][0] ?? $variant) : $variant;
+            $label = 'Logo ' . mb_strtolower($title) . ($siteName !== '' ? ' — ' . $siteName : '');
+            if (media_library_register($path, $label, 'Logo', 'logo')) $added++;
+        }
+    }
+
+    foreach (hero_slides_list() as $slide) {
+        $caption = trim((string) ($slide['caption'] ?? ''));
+        $label = $caption !== '' ? $caption : "Slide page d'accueil";
+        if (media_library_register((string) $slide['path'], $label, 'Diaporama accueil', 'diaporama, accueil')) $added++;
+    }
+
+    $targets = page_banner_targets();
+    foreach (get_page_banners() as $pageKey => $banner) {
+        $path = (string) ($banner['path'] ?? '');
+        if ($path === '') continue;
+        $type = preg_match('/\.(mp4|mov|webm|m4v)$/i', $path) ? 'video' : 'photo';
+        $label = 'Bandeau — ' . ($targets[$pageKey] ?? $pageKey);
+        if (media_library_register($path, $label, 'Bandeau', 'bandeau', $type)) $added++;
+    }
+
+    return $added;
+}
+
+/** Lance la reprise media_library_sync_visuals() une seule fois par boutique. */
+function media_library_sync_visuals_once(): void
+{
+    try {
+        $stmt = db()->prepare("SELECT 1 FROM settings WHERE name = 'media_visuals_synced'");
+        $stmt->execute();
+        if ($stmt->fetchColumn()) return;
+        media_library_sync_visuals();
+        db()->prepare("INSERT OR REPLACE INTO settings (name, value) VALUES ('media_visuals_synced', ?)")
+            ->execute([gmdate('c')]);
+    } catch (Throwable $e) {
+        // La médiathèque reste utilisable même si la reprise échoue.
+    }
 }
 
 /**
@@ -1546,9 +3243,10 @@ function store_uploaded_media(string $fieldName, string $baseName): ?array
     return ['path' => 'uploads/' . $filename, 'type' => 'video'];
 }
 
-function flash_set(string $message, string $kind = 'ok'): void
+/** $link : bouton d'action ajouté au message, ['label' => 'Commander', 'url' => '/cart.php'] (affiché par le haut de page du site). */
+function flash_set(string $message, string $kind = 'ok', ?array $link = null): void
 {
-    $_SESSION['flash'] = ['message' => $message, 'kind' => $kind];
+    $_SESSION['flash'] = ['message' => $message, 'kind' => $kind, 'link' => $link];
 }
 
 function flash_get(): ?array
@@ -1560,14 +3258,179 @@ function flash_get(): ?array
 }
 
 /**
- * Historique : « être admin » = tout pouvoir. Depuis les rôles et droits fins
- * (includes/auth.php), seul le PROPRIÉTAIRE passe ici. Les pages utilisent
- * require_permission('niveau.ressource.action') ; require_admin() n'est gardé
- * que comme refus par défaut pour une page qu'on aurait oublié de classer.
+ * Comptes admin acceptés, sous forme [identifiant, mot de passe] :
+ *  - celui du commerce (tenant.php → admin_user / admin_password) ;
+ *  - celui de la configuration (ADMIN_USER / ADMIN_PASSWORD : variables
+ *    d'environnement, ou config.local.php en local, valable alors pour tous
+ *    les commerces ; identifiant « admin » s'il n'est pas précisé).
  */
+function admin_accounts(): array
+{
+    $configUser = defined('ADMIN_USER') ? ADMIN_USER : (getenv('ADMIN_USER') ?: 'admin');
+    $mainPassword = (string) tenant('admin_password');
+    try {
+        $mainPassword = password_reset_override() ?? $mainPassword; // choisi par « mot de passe oublié »
+    } catch (Throwable $e) {
+    }
+    return [
+        [(string) tenant('admin_user'), $mainPassword],
+        [(string) $configUser, ADMIN_PASSWORD],
+    ];
+}
+
+/**
+ * Vérifie un couple identifiant / mot de passe. L'identifiant du compte
+ * principal peut être son identifiant (admin_user) ou son adresse de contact
+ * (admin_email), pour que le champ « identifiant, nom ou e-mail » accepte les
+ * deux. Le mot de passe peut être stocké en clair ou haché (password_hash,
+ * comme le fait le portail local).
+ */
+function admin_login_matches(string $user, string $password): bool
+{
+    $user = mb_strtolower(trim($user));
+    if ($user === '') {
+        return false;
+    }
+    $mainUser = mb_strtolower(trim((string) tenant('admin_user')));
+    $mainEmail = mb_strtolower(trim((string) tenant('admin_email', '')));
+    foreach (admin_accounts() as [$expectedUser, $expected]) {
+        $expectedUser = mb_strtolower(trim($expectedUser));
+        if ($expectedUser === '' || $expected === '') {
+            continue;
+        }
+        $matches = hash_equals($expectedUser, $user)
+            || ($mainUser !== '' && $expectedUser === $mainUser && $mainEmail !== '' && hash_equals($mainEmail, $user));
+        if (!$matches) {
+            continue;
+        }
+        $ok = password_get_info($expected)['algo'] !== null
+            ? password_verify($password, $expected)
+            : hash_equals($expected, $password);
+        if ($ok) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function admin_password_configured(): bool
+{
+    foreach (admin_accounts() as [$user, $password]) {
+        if ($user !== '' && $password !== '') {
+            return true;
+        }
+    }
+    try {
+        return (bool) db()->query("SELECT 1 FROM accounts WHERE role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND password_hash IS NOT NULL")->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/** Connecté à l'administration de ce commerce ? (une connexion ne vaut que pour un commerce) */
+/**
+ * Compte connecté à l'administration de ce commerce : ['role' => …, 'id' => id du
+ * compte ou null pour le compte principal, 'name' => …], ou null. Pour un compte
+ * de l'équipe, le rôle est relu en base à chaque requête : une désactivation ou un
+ * changement de rôle prend effet immédiatement, sans attendre la déconnexion.
+ */
+function admin_session(): ?array
+{
+    if (($_SESSION['is_admin'] ?? null) !== tenant_slug()) {
+        return null;
+    }
+    $id = $_SESSION['admin_account_id'] ?? null;
+    if ($id === null) {
+        return ['role' => 'admin', 'id' => null, 'name' => ''];
+    }
+    static $checked = [];
+    if (!array_key_exists($id, $checked)) {
+        $account = account_find((int) $id);
+        $checked[$id] = $account && (int) $account['is_active'] === 1 && account_is_staff($account['role'])
+            ? ['role' => $account['role'], 'id' => (int) $account['id'], 'name' => $account['name'] !== '' ? $account['name'] : $account['email']]
+            : null;
+    }
+    return $checked[$id];
+}
+
+function is_admin_logged_in(): bool
+{
+    return admin_session() !== null;
+}
+
+function admin_role(): string
+{
+    return admin_session()['role'] ?? '';
+}
+
+/** Connecté ET autorisé à ouvrir la page courante (pour les réponses JSON qui n'appellent pas require_admin()). */
+function admin_access_ok(): bool
+{
+    $session = admin_session();
+    return $session !== null && admin_role_can_access($session['role'], $_SERVER['SCRIPT_NAME'] ?? '');
+}
+
 function require_admin(): void
 {
-    require_owner();
+    $session = admin_session();
+    if ($session === null) {
+        header('Location: /admin/login.php');
+        exit;
+    }
+    if (!admin_role_can_access($session['role'], $_SERVER['SCRIPT_NAME'] ?? '')) {
+        admin_forbidden($session['role']);
+    }
+}
+
+/** Page d'accès refusé (compte connecté, mais rôle sans droit sur cette page). */
+function admin_forbidden(string $role): never
+{
+    http_response_code(403);
+    $content = get_content();
+    ?><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Accès refusé — <?= h($content['site_name']) ?></title>
+<?= tenant_head_html() ?>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<main><section class="tight"><div class="wrap" style="max-width:560px;">
+  <p class="eyebrow">Administration</p>
+  <h1 style="font-size:1.6rem;margin:12px 0;">Accès refusé</h1>
+  <p class="lede">Votre compte (<?= h(account_role_label($role)) ?>) n'a pas accès à cette page. Elle est réservée aux administrateurs.</p>
+  <p style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;">
+    <a class="btn btn-primary" href="<?= h(admin_home_for_role($role)) ?>">Retour à l'administration</a>
+    <a class="btn" href="/admin/logout.php">Se déconnecter</a>
+  </p>
+</div></section></main>
+</body>
+</html>
+<?php
+    exit;
+}
+
+/**
+ * Identifie un compte à partir de l'identifiant et du mot de passe saisis :
+ * d'abord le compte principal du commerce (tenant.php / configuration), puis
+ * les comptes de l'équipe en base. Retourne ['role' => …, 'id' => …] ou null.
+ */
+function admin_login(string $user, string $password): ?array
+{
+    if (admin_login_matches($user, $password)) {
+        return ['role' => 'admin', 'id' => null];
+    }
+    $account = account_staff_by_login($user);
+    // Vérification factice quand le compte n'existe pas : même durée de réponse, pas d'indice sur les identifiants valides.
+    $hash = $account['password_hash'] ?? '$2y$12$z1UVcc1AoYyQPd3h9tNn8.gcPzUCtAceZH7qkzjYKYhBfeDzC4Y.S';
+    if (password_verify($password, $hash) && $account) {
+        account_touch_login((int) $account['id']);
+        return ['role' => $account['role'], 'id' => (int) $account['id']];
+    }
+    return null;
 }
 
 /* ---------- prix & panier ---------- */
@@ -1586,23 +3449,105 @@ function is_fixed_price(?string $price): bool
 function price_to_cents(?string $price): ?int
 {
     if (!$price) return null;
-    
-    // Nettoyer le prix : retirer symboles monétaires, espaces, etc.
-    $cleanPrice = preg_replace('/[^\d.,-]/u', '', $price);
-    
-    // Gérer les formats : "10", "10.50", "10,50", "10,5", "1 000", "10,5"
-    if (preg_match('/^(\d{1,10})([.,](\d{1,2}))?$/', str_replace(' ', '', $cleanPrice), $m)) {
-        $euros = (int) $m[1];
-        $cents = isset($m[3]) ? (int) str_pad($m[3], 2, '0') : 0;
-        return $euros * 100 + $cents;
-    }
-    
-    return null;
+    // Espaces insécables (prix copié-collé : « 1 250 € ») lues comme des espaces, sinon le montant s'arrêterait à « 1 ».
+    $price = str_replace(["\xc2\xa0", "\xe2\x80\xaf"], ' ', $price);
+    if (!preg_match('/(\d[\d\s]*)(?:[,.](\d{1,2}))?/', $price, $m)) return null;
+    $euros = (int) str_replace(' ', '', $m[1]);
+    $cents = isset($m[2]) ? (int) str_pad($m[2], 2, '0') : 0;
+    return $euros * 100 + $cents;
+}
+
+/**
+ * Prix saisi dans un champ numérique du back-office (« 25 », « 25,5 », « 25.50 ») → texte enregistré (« 25 € », « 25,50 € »). Champ vide : $fallback.
+ * Un ancien texte (« 25-35 € », « sur devis ») envoyé tel quel est gardé, pour ne rien casser.
+ */
+function price_from_input($raw, string $fallback = ''): string
+{
+    $raw = trim((string) $raw);
+    if ($raw === '') return $fallback;
+    $n = str_replace([' ', "\xc2\xa0", ','], ['', '', '.'], preg_replace('/€|euros?$/iu', '', $raw));
+    if (is_numeric($n)) return (float) $n >= 0 && (float) $n < 10000000 ? price_research_format(round((float) $n, 2)) : $fallback;
+    return mb_substr($raw, 0, 40);
+}
+
+/** Valeur d'un champ <input type="number"> (point décimal) pour un prix enregistré en texte ; '' s'il n'a pas un seul montant (« 25-35 € », « sur devis »). */
+function price_input_value(?string $price): string
+{
+    $price = trim((string) $price);
+    if ($price === '' || preg_match('/d[eè]s|à partir|environ|sur devis/iu', $price)) return '';
+    if (!preg_match_all('/\d[\d\s]*(?:[,.]\d{1,2})?/', $price, $m) || count($m[0]) !== 1) return '';
+    $v = (float) str_replace([' ', ','], ['', '.'], $m[0][0]);
+    return $v > 0 ? rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.') : '';
+}
+
+/** Prix indicatif de l'IA (« 25-35 € ») → un seul montant (« 30 € ») : la moyenne des deux bornes. */
+function price_single(string $hint): string
+{
+    if (!preg_match_all('/\d+(?:[.,]\d{1,2})?/', str_replace(' ', '', $hint), $m) || !$m[0]) return '';
+    $vals = array_map(static fn ($v): float => (float) str_replace(',', '.', $v), array_slice($m[0], 0, 2));
+    $mean = array_sum($vals) / count($vals);
+    return price_research_format($mean >= 10 ? round($mean) : round($mean * 2) / 2);
 }
 
 function format_cents(int $cents): string
 {
     return number_format($cents / 100, 2, ',', ' ') . ' €';
+}
+
+/** « Marie Dupont » → ['Marie', 'Dupont'] ; pour les anciens comptes qui n'ont qu'un seul champ nom. */
+function contact_name_parts(string $name): array
+{
+    $name = trim(preg_replace('/\s+/u', ' ', $name));
+    if ($name === '') return ['', ''];
+    $pos = mb_strpos($name, ' ');
+    return $pos === false ? [$name, ''] : [mb_substr($name, 0, $pos), mb_substr($name, $pos + 1)];
+}
+
+/* ---------- Coordonnées du panier mémorisées sur l'appareil (préremplissage) ---------- */
+
+const CART_CONTACT_COOKIE_DAYS = 180;
+
+/** Nom du cookie propre au commerce : plusieurs boutiques peuvent partager le même domaine. */
+function cart_contact_cookie_name(): string
+{
+    return 'brocs_cc_' . substr(hash('sha256', tenant_slug()), 0, 10);
+}
+
+/** Dernières coordonnées saisies sur cet appareil, ou [] si rien n'a été mémorisé. */
+function cart_contact_cookie_get(): array
+{
+    $raw = (string) ($_COOKIE[cart_contact_cookie_name()] ?? '');
+    if ($raw === '') return [];
+    $data = json_decode($raw, true);
+    if (!is_array($data)) return [];
+    $clean = static fn (string $key, int $max): string => mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($data[$key] ?? ''))), 0, $max);
+    return array_filter([
+        'first_name' => $clean('first_name', 40),
+        'last_name' => $clean('last_name', 40),
+        'email' => $clean('email', 120),
+        'phone' => $clean('phone', 30),
+    ], static fn (string $value): bool => $value !== '');
+}
+
+/** Mémorise les coordonnées sur l'appareil pour préremplir les prochaines commandes. */
+function cart_contact_cookie_remember(array $contact): void
+{
+    $data = array_filter([
+        'first_name' => mb_substr(trim((string) ($contact['first_name'] ?? '')), 0, 40),
+        'last_name' => mb_substr(trim((string) ($contact['last_name'] ?? '')), 0, 40),
+        'email' => mb_substr(trim((string) ($contact['email'] ?? '')), 0, 120),
+        'phone' => mb_substr(trim((string) ($contact['phone'] ?? '')), 0, 30),
+    ], static fn (string $value): bool => $value !== '');
+    if (!$data) return;
+    $json = (string) json_encode($data, JSON_UNESCAPED_UNICODE);
+    setcookie(cart_contact_cookie_name(), $json, [   // setcookie encode la valeur automatiquement
+        'expires' => time() + CART_CONTACT_COOKIE_DAYS * 86400,
+        'path' => tenant_base_path() . '/',
+        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'httponly' => false,                        // relu par le script du panier pour mémoriser une saisie non envoyée
+        'samesite' => 'Lax',
+    ]);
+    $_COOKIE[cart_contact_cookie_name()] = $json;
 }
 
 function cart_get(): array
@@ -1640,6 +3585,33 @@ function cart_clear(): void
     $_SESSION['cart'] = [];
 }
 
+/**
+ * Jeton anti-CSRF des formulaires du panier (ajout, quantités, destination,
+ * passage à la caisse) : un autre site ne peut pas remplir le panier d'un
+ * visiteur ni l'envoyer à la caisse à son insu. Même principe que
+ * admin_csrf_token(), dans la session du commerce ; champ « csrf ».
+ */
+function cart_csrf_token(): string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) return '';
+    if (empty($_SESSION['cart_csrf'])) {
+        $_SESSION['cart_csrf'] = bin2hex(random_bytes(16));
+    }
+    return $_SESSION['cart_csrf'];
+}
+
+function cart_csrf_field(): string
+{
+    return '<input type="hidden" name="csrf" value="' . h(cart_csrf_token()) . '">';
+}
+
+/** Vrai si le formulaire envoyé porte le jeton de la session (faux : formulaire d'un autre site, ou page restée ouverte au-delà de la session). */
+function cart_csrf_valid(): bool
+{
+    $token = cart_csrf_token();
+    return $token !== '' && hash_equals($token, (string) ($_POST['csrf'] ?? ''));
+}
+
 function cart_count(): int
 {
     return array_sum(cart_get());
@@ -1673,6 +3645,158 @@ function cart_lines(): array
 function cart_total_cents(): int
 {
     return array_sum(array_column(cart_lines(), 'total_cents'));
+}
+
+/* ---------- Remises du panier (paliers par total ou par nombre d'articles) ---------- */
+
+/** Paliers de remise (administration → Remises du panier). */
+function cart_discounts_list(bool $activeOnly = true): array
+{
+    try {
+        return db()->query('SELECT * FROM cart_discounts' . ($activeOnly ? ' WHERE is_active = 1' : '') . ' ORDER BY kind, threshold, id')->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/** Nombre d'articles du panier (somme des quantités). */
+function cart_total_qty(array $lines): int
+{
+    return (int) array_sum(array_map(static fn (array $l): int => (int) $l['qty'], $lines));
+}
+
+function cart_tier_reached(array $tier, int $subtotalCents, int $qty): bool
+{
+    return $tier['kind'] === 'qty' ? $qty >= (int) $tier['threshold'] : $subtotalCents >= (int) $tier['threshold'];
+}
+
+/** Montant (centimes) retiré par un palier : jamais plus que le sous-total. */
+function cart_discount_amount(array $tier, int $subtotalCents): int
+{
+    $value = (int) $tier['value'];
+    $cents = $tier['type'] === 'percent' ? intdiv($subtotalCents * max(0, min(100, $value)) + 50, 100) : $value;
+    return max(0, min($cents, $subtotalCents));
+}
+
+/** Remise applicable au panier : une seule, la plus avantageuse. -> ['cents' => int, 'tier' => ?array] */
+function cart_discount_for(int $subtotalCents, int $qty, ?array $tiers = null): array
+{
+    $best = ['cents' => 0, 'tier' => null];
+    foreach ($tiers ?? cart_discounts_list() as $tier) {
+        if (!cart_tier_reached($tier, $subtotalCents, $qty)) continue;
+        $cents = cart_discount_amount($tier, $subtotalCents);
+        if ($cents > $best['cents']) $best = ['cents' => $cents, 'tier' => $tier];
+    }
+    if (!empty($_SESSION['reward_code'])) {   // récompense de fidélité choisie par le client (plugin « Espace visiteur ») : s'ajoute à la remise du palier
+        try {
+            require_once __DIR__ . '/plugins.php';
+            $best = plugin_filter('cart_discount', $best, ['subtotal' => $subtotalCents, 'qty' => $qty, 'code' => (string) $_SESSION['reward_code']]);
+        } catch (Throwable $e) {
+            error_log('cart_discount : ' . $e->getMessage());
+        }
+    }
+    return $best;
+}
+
+function cart_discount_effect(array $tier): string
+{
+    return $tier['type'] === 'percent' ? '−' . (int) $tier['value'] . ' %' : '−' . format_cents((int) $tier['value']);
+}
+
+/** « −10 % dès 100,00 € d'achats », « −5,00 € dès 3 articles ». */
+function cart_discount_describe(array $tier): string
+{
+    $n = (int) $tier['threshold'];
+    $cond = $tier['kind'] === 'qty' ? 'dès ' . $n . ' article' . ($n > 1 ? 's' : '') : "dès " . format_cents($n) . " d'achats";
+    return cart_discount_effect($tier) . ' ' . $cond;
+}
+
+/** Nom court de la remise (palier nommé, sinon sa description) : affiché au client et sur la page de paiement Stripe. */
+function cart_discount_label(array $tier): string
+{
+    $label = trim((string) ($tier['label'] ?? ''));
+    return $label !== '' ? $label : cart_discount_describe($tier);
+}
+
+/** Phrase d'encouragement vers le palier le plus proche qui améliorerait la remise déjà obtenue ($currentCents), ou null. */
+function cart_discount_hint(int $subtotalCents, int $qty, ?array $tiers = null, int $currentCents = 0): ?string
+{
+    $best = null;
+    foreach ($tiers ?? cart_discounts_list() as $tier) {
+        if (cart_tier_reached($tier, $subtotalCents, $qty)) continue;
+        // inutile de viser un palier moins avantageux que la remise déjà acquise
+        $atTier = $tier['kind'] === 'total' ? max($subtotalCents, (int) $tier['threshold']) : $subtotalCents;
+        if (cart_discount_amount($tier, $atTier) <= $currentCents) continue;
+        $threshold = max(1, (int) $tier['threshold']);
+        $gap = $tier['kind'] === 'qty' ? $threshold - $qty : $threshold - $subtotalCents;
+        $ratio = $gap / $threshold;
+        if ($best === null || $ratio < $best[0]) $best = [$ratio, $tier, $gap];
+    }
+    if (!$best) return null;
+    [, $tier, $gap] = $best;
+    $effect = cart_discount_effect($tier);
+    return $tier['kind'] === 'qty'
+        ? 'Ajoutez ' . $gap . ' article' . ($gap > 1 ? 's' : '') . ' de plus pour obtenir ' . $effect
+        : "Ajoutez encore " . format_cents($gap) . " d'achats pour obtenir " . $effect;
+}
+
+/* ---------- Emballage cadeau ---------- */
+
+/** L'emballage cadeau est-il proposé au panier ? (Administration → Paiement & livraison) */
+function gift_wrap_enabled(?array $content = null): bool
+{
+    $content = $content ?? get_content();
+    return (string) ($content['gift_wrap_enabled'] ?? '0') === '1';
+}
+
+/** Prix de l'emballage cadeau en centimes (0 = offert). */
+function gift_wrap_price_cents(?array $content = null): int
+{
+    $content = $content ?? get_content();
+    return price_to_cents(trim((string) ($content['gift_wrap_price'] ?? ''))) ?? 0;
+}
+
+/** Libellé de l'emballage cadeau tel qu'affiché au client. */
+function gift_wrap_label(?array $content = null): string
+{
+    $content = $content ?? get_content();
+    $label = trim((string) ($content['gift_wrap_label'] ?? ''));
+    return $label !== '' ? $label : 'Emballage cadeau';
+}
+
+/* ---------- Retrait seul (dons et petits prix) ---------- */
+
+/** Seuil (en centimes) sous lequel un article n'est pas livré, réglé dans l'administration (0 = seuls les dons à 0 € sont concernés). */
+function pickup_only_threshold_cents(?array $content = null): int
+{
+    $content = $content ?? get_content();
+    return price_to_cents(trim((string) ($content['pickup_only_below'] ?? '10'))) ?? 0;
+}
+
+/** Message affiché à la place des modes de livraison. */
+function pickup_only_message(?array $content = null): string
+{
+    $content = $content ?? get_content();
+    $message = trim((string) ($content['pickup_only_message'] ?? ''));
+    return $message !== '' ? $message : "Retrait à l'adresse du vendeur.";
+}
+
+/** Une ligne du panier peut-elle être livrée ? Non pour un don (0 €) ni sous le seuil. */
+function cart_line_deliverable(array $line, int $thresholdCents): bool
+{
+    $unit = (int) $line['unit_cents'];
+    return $unit > 0 && ($thresholdCents === 0 || $unit >= $thresholdCents);
+}
+
+/** Panier en retrait seul : aucune ligne ne peut être livrée (un seul article livrable suffit à proposer la livraison). */
+function cart_pickup_only(array $lines, ?array $content = null): bool
+{
+    if (!$lines) return false;
+    $threshold = pickup_only_threshold_cents($content);
+    foreach ($lines as $line) {
+        if (cart_line_deliverable($line, $threshold)) return false;
+    }
+    return true;
 }
 
 /* ---------- Transporteurs & tarifs de livraison ---------- */
@@ -1835,12 +3959,15 @@ function matching_shipping_rates(int $weightG, string $zone = 'metropole'): arra
  * $params peut contenir des tableaux imbriqués (line_items, etc.), encodés
  * comme Stripe l'attend (clé[index][champ]=valeur).
  */
-function stripe_request(string $method, string $path, array $params = []): array
+function stripe_request(string $method, string $path, array $params = [], bool $platform = false): array
 {
-    $ch = curl_init('https://api.stripe.com/v1' . $path);
+    // $platform : paiement géré par la plateforme (Stripe Connect, voir includes/connect.php) ; sinon les clés propres de la boutique.
+    $conn = $platform ? connect_platform() : null;
+    if ($platform && $conn === null) throw new RuntimeException("Stripe n'est pas configuré pour la plateforme.");
+    $ch = curl_init(($conn['base'] ?? 'https://api.stripe.com/v1') . $path);
     $opts = [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_USERPWD => STRIPE_SECRET_KEY . ':',
+        CURLOPT_USERPWD => ($conn['key'] ?? STRIPE_SECRET_KEY) . ':',
         CURLOPT_TIMEOUT => 20,
     ];
     if ($method === 'POST') {
@@ -1853,11 +3980,9 @@ function stripe_request(string $method, string $path, array $params = []): array
     $body = curl_exec($ch);
     if ($body === false) {
         $err = curl_error($ch);
-        curl_close($ch);
         throw new RuntimeException('Erreur réseau Stripe : ' . $err);
     }
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     $data = json_decode($body, true) ?? [];
     if ($status >= 400) {
@@ -1867,12 +3992,26 @@ function stripe_request(string $method, string $path, array $params = []): array
     return $data;
 }
 
+/** Le paiement en ligne de la boutique peut-il fonctionner ? Au moins un moyen configuré (Stripe, Monetico ou PayPal). */
+function shop_checkout_ready(): bool
+{
+    return shop_payment_methods() !== [];
+}
+
 function stripe_configured(): bool
 {
-    return str_starts_with(STRIPE_SECRET_KEY, 'sk_');
+    return str_starts_with(STRIPE_SECRET_KEY, 'sk_') || str_starts_with(STRIPE_SECRET_KEY, 'rk_');
 }
 
 function fulfillment_label(string $status): string
 {
-    return ['a_preparer' => 'À préparer', 'expediee' => 'Expédiée', 'livree' => 'Livrée'][$status] ?? $status;
+    return [
+        'a_confirmer' => 'À confirmer',
+        'a_preparer' => 'À préparer',
+        'pret_retrait' => 'Prêt au retrait',
+        'expediee' => 'Expédiée',
+        'livree' => 'Livrée',
+        'retiree' => 'Retirée',
+    ][$status] ?? $status;
 }
+

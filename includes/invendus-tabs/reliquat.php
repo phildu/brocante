@@ -27,7 +27,7 @@ $stillOpen = $phase === 'collecting';
     <p class="empty-state">Rien à remettre : le point de collecte est vide.</p>
   <?php else: ?>
     <form method="post" action="/admin/invendus-action.php" id="donation-form" class="don-form">
-      <?= csrf_input() ?><input type="hidden" name="action" value="donation_create">
+      <?= shop_csrf_input() ?><input type="hidden" name="action" value="donation_create">
       <input type="hidden" name="return" value="<?= h($return) ?>"><input type="hidden" name="event_id" value="<?= $id ?>">
 
       <div class="field-row-2">

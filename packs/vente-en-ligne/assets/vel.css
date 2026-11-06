@@ -1,0 +1,54 @@
+/* Pack Vente en ligne — styles des écrans (repris des codes de l'administration). */
+.vel-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; margin: 18px 0; }
+.vel-kpi { border: 1px solid var(--line); background: var(--surface); padding: 12px 14px; }
+.vel-kpi strong { display: block; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.vel-kpi span { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+.vel-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0; }
+.vel-tabs a { border: 1px solid var(--line); padding: 6px 12px; font-size: .85rem; color: var(--ink-soft); text-decoration: none; background: var(--bg); }
+.vel-tabs a[aria-current="page"] { border-color: var(--accent); color: var(--ink); background: var(--surface); font-weight: 600; }
+.vel-tabs small { color: var(--ink-soft); margin-left: 4px; }
+.vel-card { border: 1px solid var(--line); background: var(--surface); padding: 16px 18px; margin-top: 16px; }
+.vel-card > h2 { font-size: 1.05rem; margin: 0 0 10px; }
+.vel-card.is-off { opacity: .55; }
+.vel-card.is-off h2::after { content: ' (désactivé)'; font-size: .72rem; color: var(--ink-soft); font-weight: 400; }
+.vel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.vel-head h2 { margin: 0; font-size: 1.05rem; }
+.vel-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.vel-actions form { display: inline; }
+table.vel { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.vel th, .vel td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.vel th { font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); font-weight: 600; }
+.vel .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vel small, .vel .sub { color: var(--ink-soft); font-size: .8rem; display: block; }
+.vel .item-list { margin: 4px 0; }
+.vel .item-list li { list-style: none; }
+.vel .zone-head td { padding: 10px 10px 4px; border-bottom: none; font-family: var(--font-mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+.vel-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-top: 12px; }
+.vel-form label { font-size: .8rem; color: var(--ink-soft); display: grid; gap: 3px; }
+.vel-form input, .vel-form select, .vel-note {
+  background: var(--bg); border: 1px solid var(--line); color: var(--ink);
+  padding: 6px 8px; font-family: var(--font-body); font-size: .85rem; box-sizing: border-box;
+}
+.vel-form input[type="number"] { width: 110px; }
+.vel-note { width: 100%; min-height: 54px; }
+.vel-msg { font-size: .85rem; margin: 12px 0 0; color: var(--ink-soft); }
+.vel-msg[data-kind="error"] { color: #b3261e; font-weight: 600; }
+.vel-msg[data-kind="ok"] { color: #1b6e3c; font-weight: 600; }
+.vel-order { border: 1px solid var(--line); background: var(--surface); padding: 14px 16px; margin-top: 12px; }
+.vel-order-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+.vel-order-head .ref { font-family: var(--font-mono); font-size: .78rem; color: var(--ink-soft); }
+.vel-order .badge { margin-right: 6px; }
+.vel-order details { margin-top: 8px; }
+.vel-order details summary { cursor: pointer; font-size: .82rem; color: var(--accent); }
+.vel-order details ul { margin: 6px 0 0; padding-left: 16px; font-size: .82rem; color: var(--ink-soft); }
+.vel-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 16px; }
+.vel-col { border: 1px solid var(--line); background: var(--surface); padding: 12px 14px; }
+.vel-col h2 { font-size: .95rem; margin: 0 0 8px; display: flex; justify-content: space-between; }
+.vel-col h2 small { color: var(--ink-soft); font-weight: 400; }
+.vel-ticket { border-top: 1px solid var(--line); padding: 10px 0 8px; font-size: .86rem; }
+.vel-ticket:first-of-type { border-top: none; }
+.vel-ticket .who { font-weight: 600; }
+.vel-ticket .meta { color: var(--ink-soft); font-size: .78rem; }
+.vel-ticket form { margin-top: 6px; }
+.vel-journal { max-height: 360px; overflow-y: auto; }
+@media (max-width: 720px) { .vel .hide-sm { display: none; } }

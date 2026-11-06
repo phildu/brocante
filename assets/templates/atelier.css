@@ -1,0 +1,25 @@
+/* Modèle « Atelier » — moderne et doux. Sélecteurs préfixés « html » : plus prioritaires que assets/style.css, chargé après. */
+html header.site { background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom-color: transparent; box-shadow: 0 1px 0 var(--line); }
+html nav.primary a { border-radius: 999px; border-bottom: 0; padding: 8px 14px; }
+html nav.primary a[aria-current="page"], html nav.primary a:hover { background: var(--surface-2); color: var(--ink); }
+html .btn { border-radius: 999px; padding: 13px 26px; }
+html .btn-ghost { border-color: var(--ink); }
+html .eyebrow { font-family: var(--font-body); font-weight: 700; letter-spacing: .12em; }
+html .hero { padding: 88px 0 72px; }
+html .hero h1 { font-weight: 700; letter-spacing: -.02em; line-height: 1.02; }
+html section { padding: 80px 0; }
+html .section-head h2 { letter-spacing: -.015em; }
+html .card { border-radius: 20px; border-color: transparent; box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 14px 30px -18px rgba(0,0,0,.35); overflow: hidden; transition: transform .2s ease, box-shadow .2s ease; padding: 16px; }
+html .card:hover { transform: translateY(-4px); box-shadow: 0 2px 4px rgba(0,0,0,.06), 0 22px 36px -18px rgba(0,0,0,.4); }
+html .card img { border-radius: 14px; }
+html .card h3 { font-family: var(--font-display); font-weight: 600; }
+html .badge { border-radius: 999px; border-color: transparent; background: var(--surface-2); font-family: var(--font-body); font-weight: 600; }
+html .price { font-family: var(--font-body); font-weight: 700; }
+html .card-cta { border-radius: 999px; border-color: var(--ink); }
+html .cat-grid { gap: 14px; background: none; border: 0; }
+html .cat-tile { border-radius: 20px; padding: 28px 20px; transition: transform .2s ease; }
+html .cat-tile:hover { transform: translateY(-3px); }
+html .principle { border-top: 0; background: var(--surface); border-radius: 18px; padding: 22px; }
+html .story-photo img, html .follow-tile img, html .hero-scene img, html .page-banner-media img { border-radius: 22px; }
+html .shop-search input[type="search"], html .field-row input { border-radius: 999px; }
+html .field-row textarea { border-radius: 18px; }

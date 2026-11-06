@@ -5,8 +5,9 @@
  *  - « Au point » : ce qui est en libre-service ; on marque « pris » quand un visiteur l'emporte ;
  *  - « Pris » : les derniers objets partis, avec annulation en cas de fausse manœuvre.
  */
-session_start();
+require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/invendus-layout.php';
+unsold_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/dons/…), extension active
 unsold_private_headers();
 
 $token = unsold_param($_POST, 't') ?: unsold_param($_GET, 't');
@@ -22,7 +23,7 @@ if (!in_array($view, ['arrivals', 'stock', 'taken'], true)) $view = 'stock';
 $q = unsold_line(unsold_param($_GET, 'q'), 60);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_csrf();
+    shop_require_csrf();
     unsold_scalar_post();
     $action = unsold_param($_POST, 'action');
     $offerId = (int) unsold_param($_POST, 'offer_id');
@@ -152,7 +153,7 @@ unsold_field_head($event['point_name'] . ' — ' . $event['name']);
           <?php foreach ($buttons as [$act, $label, $cls]): ?>
             <form method="post" action="/dons-point.php" style="<?= $cls !== 'btn-small' ? 'flex:1;' : '' ?>"
                   <?= $act === 'withdraw' ? 'onsubmit="return confirm(\'Retirer cet objet du point (abîmé, repris par son propriétaire…) ?\');"' : '' ?>>
-              <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
+              <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
               <input type="hidden" name="view" value="<?= h($view) ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
               <input type="hidden" name="action" value="<?= $act ?>"><input type="hidden" name="offer_id" value="<?= (int) $o['id'] ?>">
               <button class="<?= $cls ?><?= $cls !== 'btn-small' ? ' don-big--wide' : '' ?>" type="submit"><?= $label ?></button>
@@ -169,7 +170,7 @@ unsold_field_head($event['point_name'] . ' — ' . $event['name']);
   <details style="margin-top:28px;" class="don-form">
     <summary style="cursor:pointer;font-weight:700;">Quelqu'un dépose un objet sans l'avoir proposé&nbsp;?</summary>
     <form method="post" action="/dons-point.php" style="margin-top:14px;">
-      <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>"><input type="hidden" name="action" value="quick_add">
+      <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>"><input type="hidden" name="action" value="quick_add">
       <div class="field"><label for="qa-title">Objet *</label><input type="text" id="qa-title" name="title" maxlength="100" required placeholder="ex : Sac de vêtements enfant"></div>
       <div class="field-row-2">
         <div class="field"><label for="qa-cat">Catégorie</label>

@@ -1,8 +1,9 @@
 </main>
+<?php if ($__viewFooter = shop_view('footer')): include $__viewFooter; else: ?>
 <footer class="site">
   <div class="wrap footer-grid">
     <div>
-      <p class="mark" style="font-family:var(--font-display);font-size:1.2rem;font-weight:600;"><?= h($siteName ?? 'La Brocante du Petit Chalet') ?></p>
+      <p class="mark" style="font-family:var(--font-display);font-size:1.2rem;font-weight:600;"><?= h($siteName ?? tenant('name')) ?></p>
       <p class="lede" style="margin-top:10px;font-size:0.9rem;"><?= h($siteTagline ?? '') ?></p>
     </div>
     <div>
@@ -17,22 +18,40 @@
     <div>
       <h4>Maison</h4>
       <ul>
-        <li><a href="/index.php#histoire">Notre histoire</a></li>
-        <li><a href="/dons.php">Dons &amp; invendus du vide-grenier</a></li>
+        <li><a href="/notre-histoire.php">Notre histoire</a></li>
+        <li><a href="/visite.php">Visite virtuelle</a></li>
         <li><a href="/index.php#contact">Contact</a></li>
+        <li><a href="/nous-trouver.php">Carte et itinéraire</a></li>
+        <?php if (!function_exists('shop_member_galleries')) require_once __DIR__ . '/galleries.php'; foreach (shop_member_galleries() as $g): ?>
+          <li><a href="<?= h($g['url']) ?>">Galerie « <?= h($g['name']) ?> »</a></li>
+        <?php endforeach; ?>
         <li><a href="/admin/" class="footer-admin-link">Administration</a></li>
       </ul>
     </div>
   </div>
+  <?php if (($footerNote = shop_footer_note()) !== ''): ?>
+    <div class="wrap footer-note"><p><?= h($footerNote) ?></p></div>
+  <?php endif; ?>
   <div class="wrap footer-bottom">
-    <span>© 2026 <?= h($siteName ?? 'La Brocante du Petit Chalet') ?></span>
+    <span>© 2026 <?= h($siteName ?? tenant('name')) ?></span>
+    <?= share_button_html(shop_abs_url('/'), (string) ($siteName ?? tenant('name')), (string) ($siteTagline ?? ''), '', 'share-link') ?>
     <span>Prototype de boutique — déploiement local</span>
   </div>
 </footer>
+<?php endif; ?>
+<?php require_once __DIR__ . '/payment-badges.php'; ?>
+<?php if (($__paymentBadges = payment_badges_html()) !== ''): ?>
+  <div class="wrap payment-badges-bar" style="display:flex;justify-content:center;padding:18px 0 4px;"><?= $__paymentBadges ?></div>
+<?php endif; ?>
+<?php require_once __DIR__ . '/legal.php'; ?>
+<nav class="legal-bar" aria-label="Informations légales"><div class="wrap"><?= legal_links_html() ?></div></nav>
 <div class="quick-preview-overlay" id="quick-preview-overlay" aria-hidden="true">
   <div class="quick-preview-media" id="quick-preview-media"></div>
   <span id="quick-preview-name"></span>
 </div>
+<?= plugin_render('site_footer') ?>
+<?php require_once __DIR__ . '/slideshow-idle.php'; echo slideshow_idle_html(); ?>
+<?php require_once __DIR__ . '/feedback.php'; echo feedback_widget_html(); ?>
 <script>
 (function () {
   // Écran de bienvenue (accueil, mobile) — une seule fois par session, pour
@@ -238,5 +257,70 @@
   });
 })();
 </script>
+<script>
+(function () {
+  // Hero carrousel : la piste défile horizontalement (scroll-snap), les
+  // flèches et les repères la font avancer d'une slide. Le repère actif suit
+  // la slide la plus proche du centre de la piste.
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  document.querySelectorAll('[data-hero-carousel]').forEach(function (root) {
+    var track = root.querySelector('.shop-hero-track');
+    if (!track) return;
+    var slides = Array.prototype.slice.call(track.children);
+    if (slides.length === 0) return;
+    var prev = root.querySelector('[data-hero-prev]');
+    var next = root.querySelector('[data-hero-next]');
+    var dots = Array.prototype.slice.call(root.querySelectorAll('[data-hero-dot]'));
+    var scheduled = false;
+
+    function activeIndex() {
+      var box = track.getBoundingClientRect();
+      var mid = box.left + track.clientWidth / 2;
+      var best = 0, bestDistance = Infinity;
+      slides.forEach(function (slide, i) {
+        var r = slide.getBoundingClientRect();
+        var d = Math.abs(r.left + r.width / 2 - mid);
+        if (d < bestDistance) { bestDistance = d; best = i; }
+      });
+      return best;
+    }
+
+    function goTo(i) {
+      var slide = slides[Math.max(0, Math.min(slides.length - 1, i))];
+      track.scrollTo({ left: slide.offsetLeft - slides[0].offsetLeft, behavior: reduceMotion ? 'auto' : 'smooth' });
+    }
+
+    function sync() {
+      scheduled = false;
+      var i = activeIndex();
+      dots.forEach(function (dot, j) { dot.setAttribute('aria-current', String(i === j)); });
+      if (prev) prev.disabled = track.scrollLeft <= 2;
+      if (next) next.disabled = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+    }
+
+    function queueSync() {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(sync);
+    }
+
+    if (prev) prev.addEventListener('click', function () { goTo(activeIndex() - 1); });
+    if (next) next.addEventListener('click', function () { goTo(activeIndex() + 1); });
+    dots.forEach(function (dot) {
+      dot.addEventListener('click', function () { goTo(parseInt(dot.dataset.heroDot, 10) || 0); });
+    });
+    track.addEventListener('scroll', queueSync, { passive: true });
+    window.addEventListener('resize', queueSync);
+    track.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(activeIndex() - 1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); goTo(activeIndex() + 1); }
+    });
+    sync();
+  });
+})();
+</script>
+<script src="/assets/lightbox.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/lightbox.js') ?>" defer></script>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

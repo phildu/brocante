@@ -1,0 +1,30 @@
+{
+  "id": "communication",
+  "name": "Communication",
+  "version": "0.5.0",
+  "description": "Pack Communication / Promotion : la médiathèque, l'éditeur visuel (affiche, carrousel, vidéo et reel, couches libres, effets) et la publication sur les réseaux sociaux (Facebook, Instagram, Threads, TikTok, programmation) d'electroboy80, portés tels quels (interface d'origine dans un cadre, API adaptée à la boutique, dossier uploads/<boutique>/), et un sélecteur commun pour la fiche, le diaporama, les bandeaux et le hero.",
+  "table_prefix": "com_",
+  "pages": [
+    {"id": "mediatheque", "label": "Médiathèque", "icon": "folder", "file": "pages/mediatheque.php", "roles": ["admin", "community_manager"], "replaces": "media"},
+    {"id": "editeur", "label": "Éditeur visuel", "icon": "palette", "file": "pages/editeur.php", "roles": ["admin", "community_manager"]},
+    {"id": "publication", "label": "Publication", "icon": "cloud", "file": "pages/publication.php", "roles": ["admin", "community_manager"]},
+    {"id": "reseaux", "label": "API & Réseaux", "icon": "gear", "file": "pages/reseaux.php", "roles": ["admin"]},
+    {"id": "palettes", "label": "Palettes des visuels", "icon": "palette", "file": "pages/palettes.php", "roles": ["admin"]}
+  ],
+  "api": [
+    {"id": "eb80", "file": "api/eb80.php", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"], "roles": ["admin", "community_manager"]},
+    {"id": "media-adopt", "file": "api/media-adopt.php", "methods": ["POST"], "roles": ["admin", "community_manager"]},
+    {"id": "product-photo-add", "file": "api/product-photo-add.php", "methods": ["POST"], "roles": ["admin", "community_manager"]}
+  ],
+  "admin_assets": [
+    {"file": "picker.css", "roles": ["admin", "community_manager"]},
+    {"file": "picker.js", "roles": ["admin", "community_manager"]}
+  ],
+  "cron": [
+    {"file": "cron/rs-schedule.php"}
+  ],
+  "agent_api": [
+    {"prefix": "/video-jobs", "file": "api/agent.php"}
+  ],
+  "sync": {"tool": "tools/extract-eb80.php", "source": "electroboy80", "record": "eb80/SOURCE.txt"}
+}

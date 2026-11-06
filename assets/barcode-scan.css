@@ -1,0 +1,21 @@
+/* Scanner de code-barres / QR (assets/barcode-scan.js) : barre en tête du formulaire, résultat, fenêtre caméra. */
+.scan-bar { border: 1px dashed var(--line, #ccc); background: var(--surface, #f6f2ea); padding: 12px 14px; margin: 0 0 16px; display: grid; gap: 8px; }
+.scan-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.scan-row .scan-code { flex: 1 1 240px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line, #ccc); background: var(--bg, #fff); color: inherit; font: inherit; font-size: .9rem; }
+.scan-photo { cursor: pointer; display: inline-flex; align-items: center; }
+.scan-hint { margin: 0; font-size: .78rem; color: var(--ink-soft, #777); }
+.scan-result:empty { display: none; }
+.scan-msg { margin: 4px 0 0; font-size: .86rem; } .scan-msg.is-warn { color: #a3470f; } .scan-msg.is-ok { color: var(--sage, #2e7d4f); }
+.scan-card { display: flex; gap: 14px; align-items: flex-start; padding: 10px 0 0; }
+.scan-cover { width: 92px; max-height: 130px; object-fit: contain; background: #fff; border: 1px solid var(--line, #ccc); flex: none; }
+.scan-body { min-width: 0; display: grid; gap: 4px; }
+.scan-title { margin: 0; font-weight: 700; } .scan-kind { display: inline-block; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; background: var(--accent, #b5502e); color: var(--accent-ink, #fff); padding: 1px 7px; border-radius: 999px; vertical-align: 2px; }
+.scan-facts, .scan-src { margin: 0; font-size: .82rem; color: var(--ink-soft, #777); } .scan-actions { margin: 4px 0 0; }
+.scan-cover-opt { font-size: .84rem; display: flex; gap: 6px; align-items: center; }
+.scan-inline { display: block; font-size: .76rem; color: var(--ink-soft, #777); margin-top: 3px; } .scan-lookup { margin-top: 6px; }
+.scan-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.82); display: grid; place-items: center; padding: 14px; }
+.scan-panel { width: min(520px, 100%); background: #111; color: #fff; padding: 12px; display: grid; gap: 10px; border-radius: 10px; }
+.scan-stage { position: relative; background: #000; min-height: 220px; overflow: hidden; border-radius: 8px; }
+.scan-stage video { display: block; width: 100%; max-height: 62vh; object-fit: cover; }
+.scan-frame { position: absolute; inset: 22% 10%; border: 3px solid rgba(255,255,255,.85); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); pointer-events: none; }
+.scan-reader { width: 100%; } .scan-help { margin: 0; text-align: center; font-size: .9rem; }

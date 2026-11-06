@@ -22,6 +22,8 @@ $stateFile = $tmp . '/state.json';
 file_put_contents($stateFile, '{}');
 
 define('DB_PATH', $dbFile);
+// Base jetable créée à partir de schema.sql : db() (config.php) attend les tables de base d'un commerce (settings, content…).
+(new PDO('sqlite:' . $dbFile))->exec(file_get_contents(__DIR__ . '/../schema.sql'));
 define('CONNECTOR_ALLOW_PRIVATE', true);
 define('CONNECTOR_SECRETS_DIR', $tmp . '/secrets');
 define('CONNECTOR_UPLOADS_DIR', $tmp . '/uploads');

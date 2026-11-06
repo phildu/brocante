@@ -1,23 +1,20 @@
 <?php
-session_start();
-require_once __DIR__ . '/includes/invendus.php';
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/invendus-layout.php';
+unsold_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/dons/…), extension active
 unsold_private_headers();
 
 $token = unsold_param($_POST, 't') ?: unsold_param($_GET, 't');
 $offers = unsold_offers_by_token($token);
 
-$pageTitle = 'Suivi de mes dons';
-$activeNav = 'dons';
-$extraCss = ['/assets/dons.css'];
-$extraHead = '<meta name="robots" content="noindex, nofollow">';
 
 if (!$offers) {
     http_response_code(404);
-    include __DIR__ . '/includes/header.php';
+    unsold_public_head('Suivi de mes dons', true);
     echo '<section class="tight"><div class="don-wrap don-narrow"><h1 style="font-size:1.8rem;">Lien introuvable</h1>'
         . '<p class="lede">Ce lien de suivi n\'existe pas ou n\'est plus valable. Vérifiez que vous l\'avez copié en entier.</p>'
         . '<p><a class="btn btn-ghost" href="/dons.php">Retour aux dons &amp; invendus</a></p></div></section>';
-    include __DIR__ . '/includes/footer.php';
+    unsold_public_foot();
     exit;
 }
 
@@ -29,7 +26,7 @@ foreach ($offers as $o) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_csrf();
+    shop_require_csrf();
     unsold_scalar_post();
     $action = unsold_param($_POST, 'action');
     $offerId = (int) unsold_param($_POST, 'offer_id');
@@ -77,7 +74,7 @@ $donorStatus = function (array $o): string {
     return '';
 };
 
-include __DIR__ . '/includes/header.php';
+unsold_public_head('Suivi de mes dons', true);
 ?>
 <section class="tight">
   <div class="don-wrap don-narrow">
@@ -142,13 +139,13 @@ include __DIR__ . '/includes/header.php';
                 <div class="don-item-actions">
                   <?php if (!$o['confirmed_at']): ?>
                     <form method="post" action="<?= h($self) ?>">
-                      <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
+                      <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
                       <input type="hidden" name="action" value="confirm"><input type="hidden" name="offer_id" value="<?= (int) $o['id'] ?>">
                       <button class="btn-small don-ok" type="submit">C'est un invendu</button>
                     </form>
                   <?php endif; ?>
                   <form method="post" action="<?= h($self) ?>" onsubmit="return confirm('Retirer cet objet de la liste (vendu ou repris) ?');">
-                    <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
+                    <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
                     <input type="hidden" name="action" value="withdraw"><input type="hidden" name="offer_id" value="<?= (int) $o['id'] ?>">
                     <button class="btn-small" type="submit">Je l'ai vendu / repris</button>
                   </form>
@@ -162,7 +159,7 @@ include __DIR__ . '/includes/header.php';
 
     <?php if ($hasUnconfirmed): ?>
       <form method="post" action="<?= h($self) ?>" style="margin-top:22px;">
-        <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>"><input type="hidden" name="action" value="confirm_all">
+        <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>"><input type="hidden" name="action" value="confirm_all">
         <button class="btn btn-primary" type="submit">Tout ce qui reste est invendu — tout confirmer</button>
       </form>
     <?php endif; ?>
@@ -185,4 +182,4 @@ include __DIR__ . '/includes/header.php';
   });
 })();
 </script>
-<?php include __DIR__ . '/includes/footer.php'; ?>
+<?php unsold_public_foot(); ?>

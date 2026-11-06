@@ -285,7 +285,7 @@
     }).catch(function (e) {
       if (e && e.auth) {
         state = 'auth';
-        banner('Votre session a expiré. Vos appuis sont gardés sur ce téléphone.', 'Se reconnecter', '/comptage/login.php');
+        banner('Votre session a expiré. Vos appuis sont gardés sur ce téléphone.', 'Se reconnecter', C.login || '/comptage/login.php');
       } else if (e && e.gone) {
         banner('Cet événement n’existe plus.', 'Recharger', location.href);
       } else {
@@ -602,7 +602,7 @@
   $('btnIn').addEventListener('click', function () { tap(1); });
   if ($('btnOut')) $('btnOut').addEventListener('click', function () { tap(-1); });
   $('btnUndo').addEventListener('click', undo);
-  $('sync').addEventListener('click', function () { if (state === 'auth') { location.href = '/comptage/login.php'; } else { sync(); } });
+  $('sync').addEventListener('click', function () { if (state === 'auth') { location.href = C.login || '/comptage/login.php'; } else { sync(); } });
 
   [['optVibrate', 'vibrate'], ['optSound', 'sound'], ['optWake', 'wake']].forEach(function (pair) {
     var el = $(pair[0]);
@@ -631,7 +631,7 @@
   });
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/comptage/sw.js', { scope: '/comptage/' }).catch(function () {});
+    navigator.serviceWorker.register(C.sw || '/comptage/sw.js', { scope: C.base || '/comptage/' }).catch(function () {});
   }
 
   render();

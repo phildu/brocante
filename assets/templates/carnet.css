@@ -1,0 +1,37 @@
+/* Modèle « Carnet » — papier et encre. Sélecteurs préfixés « html » : plus prioritaires que assets/style.css, chargé après. */
+html body { background-image: repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--ink) 7%, transparent) 31px 32px); background-attachment: fixed; }
+html header.site { background: var(--bg); border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); }
+html .site-bar { padding: 20px 0; }
+html .wordmark .mark { font-style: italic; }
+html nav.primary a { border-bottom: 1px dashed transparent; }
+html nav.primary a[aria-current="page"], html nav.primary a:hover { border-bottom-color: var(--accent); color: var(--accent); }
+html .eyebrow { font-family: var(--font-body); text-transform: uppercase; letter-spacing: .18em; font-size: .66rem; color: var(--accent); }
+html .eyebrow::before { content: "✎  "; letter-spacing: 0; }
+html .hero h1 { font-weight: 400; font-style: italic; line-height: 1.02; }
+html .hero { padding: 76px 0 64px; }
+html .btn { border-radius: 4px; padding: 13px 24px; box-shadow: 4px 4px 0 color-mix(in srgb, var(--ink) 14%, transparent); }
+html .btn-ghost { border: 1px dashed var(--accent); color: var(--accent); box-shadow: none; }
+html section { padding: 80px 0; }
+html .section-head h2 { font-weight: 400; font-style: italic; }
+html .shop-hero-figure img { border-radius: 4px; border: 6px solid var(--bg); box-shadow: 0 0 0 1px var(--line), 10px 12px 0 color-mix(in srgb, var(--ink) 9%, transparent); }
+html .shop-hero-figure-tag { background: var(--bg); color: var(--ink); border: 1px dashed var(--accent); border-radius: 4px; font-family: var(--font-body); }
+html .shop-hero-slide { border-radius: 4px; border: 6px solid var(--bg); box-shadow: 0 0 0 1px var(--line); }
+html .shop-hero-slide-tag { left: 0; right: auto; bottom: 0; border-radius: 0; background: var(--accent); color: var(--accent-ink); font-family: var(--font-body); letter-spacing: .05em; }
+html .shop-hero-arrow { border-radius: 4px; border: 1px dashed var(--accent); color: var(--accent); }
+html .shop-hero-mosaic-item { border-radius: 4px; border: 6px solid var(--bg); box-shadow: 0 0 0 1px var(--line); }
+html .shop-hero-mosaic-item .shop-hero-slide-tag { left: 0; right: auto; bottom: 0; }
+html .card { background: var(--bg); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 4px; padding: 16px; box-shadow: 5px 6px 0 color-mix(in srgb, var(--ink) 7%, transparent); }
+html .card img, html .card-icon { border-radius: 2px; }
+html .card h3 { font-weight: 400; font-style: italic; }
+html .badge { border-radius: 2px; border: 1px dashed var(--accent); background: transparent; color: var(--accent); font-family: var(--font-body); }
+html .price { font-family: var(--font-body); font-weight: 600; letter-spacing: .02em; }
+html .card-cta { border-radius: 3px; border-style: dashed; border-color: var(--accent); color: var(--accent); }
+html .cat-grid { gap: 12px; background: none; border: 0; }
+html .cat-tile { border: 1px dashed var(--line); border-radius: 4px; background: var(--bg); padding: 30px 22px; }
+html .cat-tile:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--bg)); }
+html .principle { border-top: 1px dashed var(--accent); }
+html .principle .num { color: var(--accent); font-style: italic; }
+html .story-photo img, html .follow-tile img { border-radius: 4px; border: 6px solid var(--bg); box-shadow: 0 0 0 1px var(--line); }
+html .story-photo { border: 0; background: transparent; }
+html .shop-search input[type="search"], html .field-row input, html .field-row textarea { border: 1px dashed var(--accent); border-radius: 3px; background: var(--bg); }
+html .footer-grid { border-top: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); padding-top: 40px; }

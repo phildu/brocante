@@ -1,8 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/comptage.php';
-if (session_status() === PHP_SESSION_NONE) session_start();
-require_permission('portail.comptage.exporter');
-cp_boot();
+cp_admin_init();   // ne s'ouvre que depuis l'espace d'une galerie (portail/galerie-comptage.php)
 
 $event = cp_event_get((int) ($_GET['event'] ?? 0));
 if (!$event) {
@@ -17,6 +15,7 @@ if (!in_array($bucket, [15, 30, 60], true)) $bucket = 30;
 $slug = slugify($event['name'], 40) ?: 'evenement';
 $file = 'comptage-' . $slug . ($event['event_date'] ? '-' . $event['event_date'] : '') . '-' . ($what === 'taps' ? 'detail' : 'courbe-' . $bucket . 'min') . '.csv';
 
+cp_url_map_off();   // téléchargement : le contenu du fichier reste tel quel
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $file . '"');
 header('Cache-Control: no-store');

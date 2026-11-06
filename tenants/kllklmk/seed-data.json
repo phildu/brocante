@@ -1,0 +1,45 @@
+{
+    "brand": {
+        "name": "jkjkljl",
+        "tagline": ""
+    },
+    "hero": {
+        "eyebrow": "Nouvelle boutique",
+        "title": "jkjkljl",
+        "subtitle": "livre",
+        "photo": ""
+    },
+    "story": {
+        "eyebrow": "Notre histoire",
+        "title": "Notre histoire",
+        "text": "Cette boutique vient d'ouvrir. Présentez ici qui vous êtes, d'où viennent vos pièces et ce qui les rend uniques. Vous pouvez modifier ce texte à tout moment depuis votre administration.",
+        "photo": "",
+        "photoCaption": "",
+        "principles": [
+            {
+                "title": "Des pièces choisies",
+                "text": "Chaque pièce est sélectionnée avec soin."
+            },
+            {
+                "title": "Un envoi soigné",
+                "text": "Vos achats sont emballés avec attention."
+            },
+            {
+                "title": "Un échange direct",
+                "text": "Une question ? Écrivez-nous, nous répondons."
+            }
+        ]
+    },
+    "contact": {
+        "address": "",
+        "hours": "",
+        "delivery": "Retrait sur place ou envoi postal."
+    },
+    "shipping": {
+        "fee": "6,90 €",
+        "pickupLabel": "Retrait en boutique",
+        "shippingLabel": "Envoi postal"
+    },
+    "featuredRefs": [],
+    "products": []
+}

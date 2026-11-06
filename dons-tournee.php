@@ -3,8 +3,9 @@
  * Page du bénévole de tournée (vélo cargo), accessible par lien secret.
  * Pas de compte : le jeton de la tournée donne accès à CETTE tournée seulement.
  */
-session_start();
+require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/invendus-layout.php';
+unsold_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/dons/…), extension active
 unsold_private_headers();
 
 $token = unsold_param($_POST, 't') ?: unsold_param($_GET, 't');
@@ -17,7 +18,7 @@ $self = '/dons-tournee.php?t=' . $token;
 $who = 'Tournée ' . $tour['volunteer_name'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_csrf();
+    shop_require_csrf();
     unsold_scalar_post();
     $action = unsold_param($_POST, 'action');
     $offerId = (int) unsold_param($_POST, 'offer_id');
@@ -106,7 +107,7 @@ unsold_field_head('Tournée de ' . $tour['volunteer_name']);
 
   <?php if ($tour['status'] === 'planned'): ?>
     <form method="post" action="<?= h($self) ?>" style="margin-top:14px;">
-      <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>"><input type="hidden" name="action" value="start">
+      <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>"><input type="hidden" name="action" value="start">
       <button class="don-big don-big--ok don-big--wide" type="submit">Démarrer la tournée</button>
     </form>
   <?php endif; ?>
@@ -147,14 +148,14 @@ unsold_field_head('Tournée de ' . $tour['volunteer_name']);
               <?php if ($o['status'] === 'proposed'): ?>
                 <?php foreach ([['pick', 'Récupéré', 'don-big don-big--ok'], ['skip', 'Plus dispo', 'don-big don-big--no']] as [$act, $label, $cls]): ?>
                   <form method="post" action="<?= h($self) ?>" style="flex:1;">
-                    <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
+                    <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
                     <input type="hidden" name="action" value="<?= $act ?>"><input type="hidden" name="offer_id" value="<?= (int) $o['id'] ?>">
                     <button class="<?= $cls ?> don-big--wide" type="submit"><?= $label ?></button>
                   </form>
                 <?php endforeach; ?>
               <?php elseif ($o['status'] === 'picked' || $o['status'] === 'withdrawn'): ?>
                 <form method="post" action="<?= h($self) ?>">
-                  <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
+                  <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>">
                   <input type="hidden" name="action" value="<?= $o['status'] === 'picked' ? 'undo' : 'restore' ?>"><input type="hidden" name="offer_id" value="<?= (int) $o['id'] ?>">
                   <button class="btn-small" type="submit">Annuler</button>
                 </form>
@@ -169,7 +170,7 @@ unsold_field_head('Tournée de ' . $tour['volunteer_name']);
   <?php if (!$isDone && $offers): ?>
     <form method="post" action="<?= h($self) ?>" style="margin-top:22px;"
           onsubmit="return confirm('<?= $toVisit ? $toVisit . ' arrêt(s) non visité(s) seront rendus à l\\\'organisation. ' : '' ?>Terminer la tournée et déposer tout ce qui est chargé au point de collecte ?');">
-      <?= csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>"><input type="hidden" name="action" value="finish">
+      <?= shop_csrf_input() ?><input type="hidden" name="t" value="<?= h($token) ?>"><input type="hidden" name="action" value="finish">
       <button class="don-big don-big--wide" type="submit">Tournée terminée — déposé au point de collecte</button>
     </form>
   <?php endif; ?>

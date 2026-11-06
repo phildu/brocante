@@ -13,10 +13,11 @@
  * de tournée et bénévoles du point accèdent à leur page par un lien secret
  * (jeton aléatoire). L'organisation passe, elle, par l'espace admin.
  *
- * Les tables sont créées à la volée (CREATE TABLE IF NOT EXISTS) : le script de
- * déploiement n'envoie jamais brocante.db ni les *.sql, donc le serveur n'a pas
- * d'autre moyen de recevoir ce schéma. Il est aussi recopié dans schema.sql
- * pour les installations neuves — garder les deux synchronisés.
+ * C'est une extension de GALERIE (includes/gallery-modules.php, clé « invendus »),
+ * réservée aux organisateurs de vide-greniers : ses données vivent dans la base
+ * SQLite de la galerie (includes/gallery-sql.php), jamais dans celle d'une
+ * boutique. Les tables sont créées à la volée (CREATE TABLE IF NOT EXISTS) à la
+ * première entrée dans une galerie (unsold_enter_gallery() puis unsold_ensure_schema()).
  */
 
 require_once __DIR__ . '/functions.php';
@@ -151,7 +152,107 @@ function unsold_ensure_schema(): void
     $done = true;
 }
 
-unsold_ensure_schema();
+/* ======================================================================
+ * Contexte : « Invendus & dons » est une extension de galerie
+ * ==================================================================== */
+
+/**
+ * Galerie dans laquelle le module tourne : ['slug', 'name', 'limited', 'map'] (limited : administrateur de cette galerie, sinon exploitant du
+ * portail ; map : réécrire les adresses). Null hors d'une galerie (scripts de test en ligne de commande). Le module n'est jamais servi par une
+ * boutique. Le schéma n'est PAS créé au chargement de ce fichier : on ne sait pas encore dans quelle galerie on est (voir unsold_enter_gallery()).
+ */
+function unsold_gallery_context(?array $set = null): ?array
+{
+    static $ctx = null;
+    if ($set !== null) $ctx = $set;
+    return $ctx;
+}
+
+/**
+ * Entre dans « Invendus & dons » pour une galerie : ses données sont celles de la base de CETTE galerie (includes/gallery-sql.php, tables
+ * unsold_…), jamais celles d'une autre galerie ni d'une boutique. Les adresses du module (/admin/invendus*.php, /dons*.php) sont réécrites
+ * vers l'espace de la galerie, dans la page et dans les redirections (unsold_url_map()). $limited : administrateur de la galerie.
+ */
+function unsold_enter_gallery(array $gallery, bool $limited = false): void
+{
+    require_once __DIR__ . '/gallery-sql.php';
+    $slug = (string) $gallery['slug'];
+    unsold_gallery_context(['slug' => $slug, 'name' => (string) $gallery['name'], 'limited' => $limited, 'map' => true]);
+    $GLOBALS['db_pdo_override'] = gallery_sql($slug);   // db() (config.php) rend cette base pour toute la requête
+    if (!defined('UNSOLD_URLS_MAPPED')) {
+        define('UNSOLD_URLS_MAPPED', true);
+        ob_start('unsold_url_map');
+        header_register_callback(static function (): void {   // redirections : Location réécrit avant l'envoi des en-têtes
+            foreach (headers_list() as $h) {
+                if (stripos($h, 'Location:') === 0) header('Location: ' . unsold_url_map(trim(substr($h, 9))), true);
+            }
+        });
+    }
+}
+
+/** Arrête la réécriture du corps de la réponse (téléchargements : export CSV). Les redirections restent réécrites. */
+function unsold_url_map_off(): void
+{
+    $ctx = unsold_gallery_context();
+    if ($ctx !== null) unsold_gallery_context(['map' => false] + $ctx);
+}
+
+/**
+ * Adresses du module -> adresses de la galerie courante (sans effet hors d'une galerie) :
+ *   /admin/invendus[-x].php[?q]  ->  /portail/galerie-invendus.php?s=invendus[-x][&g=<galerie>][&q]   (espace de la galerie)
+ *   /dons.php[?q]                ->  /galerie/<galerie>/dons/[?q]                                       (page publique)
+ *   /dons-<page>.php             ->  /galerie/<galerie>/dons/<page>.php                                  (point, proposer, suivi, tournée)
+ * Passe-plat de ob_start() : le second paramètre ($phase) est ignoré.
+ */
+function unsold_url_map(string $text, int $phase = 0): string
+{
+    $ctx = unsold_gallery_context();
+    if ($ctx === null || empty($ctx['map']) || (!str_contains($text, 'invendus') && !str_contains($text, 'dons'))) return $text;
+    $slug = $ctx['slug'];
+    $g = $ctx['limited'] ? '' : '&g=' . rawurlencode($slug);
+    $text = preg_replace_callback('~(?<![A-Za-z0-9_.-])/admin/(invendus[a-z-]*)\.php(\?)?~', static fn (array $m): string => '/portail/galerie-invendus.php?s=' . $m[1] . $g . (($m[2] ?? '') !== '' ? '&' : ''), $text) ?? $text;
+    $text = preg_replace('~(?<![A-Za-z0-9_.-])/dons\.php(?![A-Za-z0-9_-])~', '/galerie/' . $slug . '/dons/', $text) ?? $text;
+    return preg_replace('~(?<![A-Za-z0-9_.-])/dons-(point|proposer|suivi|tournee)\.php~', '/galerie/' . $slug . '/dons/$1.php', $text) ?? $text;
+}
+
+/** Nom affiché dans les pages : celui de la galerie (ou, hors galerie, celui du site). */
+function unsold_site_name(): string
+{
+    $ctx = unsold_gallery_context();
+    if ($ctx !== null) return $ctx['name'];
+    return (string) (get_content()['site_name'] ?? '');
+}
+
+/**
+ * Page d'administration du module : ne s'ouvre que depuis l'espace d'une galerie (portail/galerie-invendus.php, qui a vérifié l'accès et
+ * l'extension et appelé unsold_enter_gallery()). Appelée directement (/admin/invendus…), la page n'existe pas. Crée le schéma au besoin.
+ */
+function unsold_admin_init(): void
+{
+    if (unsold_gallery_context() === null) {
+        http_response_code(404);
+        exit('Page introuvable.');
+    }
+    unsold_ensure_schema();
+}
+
+/**
+ * Page publique du module (liste des dons, propositions, suivi, point de collecte, tournée) : la galerie vient de l'adresse
+ * (/galerie/<galerie>/dons/…, réécrite avec ?g=) et doit avoir cette extension active ; sinon la page n'existe pas. À appeler après la session.
+ */
+function unsold_public_enter(): void
+{
+    require_once __DIR__ . '/gallery-admin.php';
+    $slug = strtolower((string) ($_GET['g'] ?? ''));
+    $gallery = gallery_slug_valid($slug) ? gallery_load($slug) : null;
+    if (!$gallery || !gm_enabled($gallery, 'invendus')) {
+        http_response_code(404);
+        header('Content-Type: text/html; charset=utf-8');
+        exit('<!DOCTYPE html><meta charset="utf-8"><title>Page introuvable</title><p style="font-family:sans-serif;padding:40px;">Cette page n\'existe pas.</p>');
+    }
+    unsold_enter_gallery($gallery, false);
+    unsold_ensure_schema();
+}
 
 /* ======================================================================
  * Temps, saisie, affichage
@@ -350,12 +451,21 @@ function unsold_safe_return($r, string $default): string
     if (preg_match('#^/admin/invendus[a-z\-]*\.php(\?[A-Za-z0-9=&_%.+\-]*)?$#', $r)) {
         return $r;
     }
+    // Dans une galerie, la page a déjà réécrit l'adresse de retour de ses formulaires (unsold_url_map()).
+    if (unsold_gallery_context() !== null && preg_match('#^/portail/galerie-invendus\.php\?s=invendus[a-z\-]*(&[A-Za-z0-9=&_%.+\-]*)?$#', $r)) {
+        return $r;
+    }
     return $default;
 }
 
 /** URL absolue à communiquer (liens secrets à copier-coller). */
 function unsold_abs_url(string $path): string
 {
+    if (unsold_gallery_context() !== null) {   // dans une galerie : adresse de la galerie, sur le domaine par lequel on est arrivé
+        $path = unsold_url_map($path);
+        $https = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        return ($https ? 'https://' : 'http://') . preg_replace('/[^A-Za-z0-9.\-:\[\]]/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost')) . $path;
+    }
     if (defined('SITE_URL') && SITE_URL !== '') {
         return rtrim(SITE_URL, '/') . $path;
     }

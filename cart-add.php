@@ -1,10 +1,11 @@
 <?php
-session_start();
+require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/includes/csrf.php';
+require_once __DIR__ . '/includes/recommendations.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_csrf();
+if (!shop_sales_enabled()) {
+    http_response_code(404);
+    exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -15,13 +16,31 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $ref = (string) ($_POST['ref'] ?? '');
 $product = get_product($ref);
 
-if ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
-    cart_add($ref, 1);
-    track_event('add_to_cart', $ref);
-    flash_set('« ' . $product['name'] . ' » ajouté au panier.');
+$redirect = (string) ($_POST['redirect'] ?? '/boutique.php');
+if (!str_starts_with($redirect, '/') || str_starts_with($redirect, '//')) $redirect = '/boutique.php';
+// « Commander » : le bouton envoie redirect = la page du panier, on y va directement ; sinon un bouton « Commander » accompagne la confirmation.
+$toCart = app_unprefix(strtok($redirect, '?#')) === '/cart.php';
+
+// Formulaire sans le jeton de la session (autre site, page restée ouverte trop longtemps) : rien n'est ajouté.
+if (!cart_csrf_valid()) {
+    flash_set("La page avait expiré : rien n'a été ajouté au panier. Recommencez, s'il vous plaît.", 'error');
+    header('Location: ' . $redirect);
+    exit;
 }
 
-$redirect = (string) ($_POST['redirect'] ?? '/boutique.php');
-if (!str_starts_with($redirect, '/')) $redirect = '/boutique.php';
+if ($product && is_fixed_price(effective_price($product)) && in_stock($product) && product_free_qty($product) < 1) {
+    flash_set(product_held_message($product['name']), 'error');
+} elseif ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
+    cart_add($ref, 1);
+    track_event('add_to_cart', $ref);
+    rec_track_cart($ref);
+    try {
+        require_once __DIR__ . '/includes/plugins.php';
+        plugin_fire('cart_add', ['ref' => $ref]);
+    } catch (Throwable $e) {
+        error_log('cart_add : ' . $e->getMessage());
+    }
+    flash_set('« ' . $product['name'] . ' » ajouté au panier.', 'ok', $toCart ? null : ['label' => 'Commander', 'url' => '/cart.php']);
+}
 header('Location: ' . $redirect);
 exit;

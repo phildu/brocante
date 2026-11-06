@@ -17,6 +17,8 @@ if (php_sapi_name() !== 'cli') {
 $tmp = sys_get_temp_dir() . '/brocante-test-impression-' . getmypid();
 @mkdir($tmp, 0700, true);
 define('DB_PATH', $tmp . '/test.db');
+// Base jetable créée à partir de schema.sql : db() (config.php) attend les tables de base d'un commerce (settings, content…).
+(new PDO('sqlite:' . DB_PATH))->exec(file_get_contents(__DIR__ . '/../schema.sql'));
 define('PR_SECRETS_DIR', $tmp . '/secrets');
 $storedFiles = [];
 register_shutdown_function(function () use ($tmp, &$storedFiles) {

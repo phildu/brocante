@@ -1,0 +1,25 @@
+{
+    "hero": "assets/autofeed/mode/hero.jpg",
+    "products": [
+        {
+            "name": "Robe Fleurie d'Été",
+            "desc": "Cette robe légère et fluide est parfaite pour les journées ensoleillées. Son motif floral apporte une touche de fraîcheur et d'élégance décontractée.",
+            "price": "70 €",
+            "photo": "assets/autofeed/mode/produit-0.jpg"
+        },
+        {
+            "name": "Blouse Soie Fluide",
+            "desc": "Une blouse en soie délicate et aérienne, parfaite pour ajouter une touche de sophistication à votre tenue. Sa coupe fluide assure élégance et confort.",
+            "price": "79 €",
+            "photo": "assets/autofeed/mode/produit-1.jpg"
+        },
+        {
+            "name": "Jean Slim Confort",
+            "desc": "Ce jean coupe slim offre un ajustement parfait et un confort exceptionnel grâce à son tissu stretch. Un classique intemporel pour toutes les occasions.",
+            "price": "56 €",
+            "photo": "assets/autofeed/mode/produit-2.jpg"
+        }
+    ],
+    "label": "Mode et vêtements",
+    "created": 1793554058
+}

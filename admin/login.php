@@ -1,29 +1,69 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/oauth.php';
+require_once __DIR__ . '/../includes/login-ui.php';
 
-$content = get_content();
-$error = null;
+// Le QR code du shooting ouvre l'application : après connexion, retour à cette
+// page. Adresse relative uniquement, jamais la page de connexion elle-même.
+$next = (string) ($_GET['next'] ?? ($_POST['next'] ?? ''));
+$nextPath = $next === '' ? '' : (string) (parse_url($next, PHP_URL_PATH) ?: '');
+$nextOk = $next !== ''
+    && $next[0] === '/'
+    && !str_starts_with($next, '//')
+    && !str_contains($next, '\\')
+    && !preg_match('/[\r\n]/', $next)
+    && $nextPath !== ''
+    && !str_ends_with($nextPath, '/admin/login.php');
+$next = $nextOk ? $next : '';
+$after_login = static function (string $role) use ($next, $nextPath): string {
+    if ($next !== '' && admin_role_can_access($role, $nextPath)) {
+        return $next;
+    }
+    return admin_home_for_role($role);
+};
 
-// Déjà connecté : direction la première page accessible.
-if (auth_user() !== null && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: ' . (auth_user()['must_change'] ? '/admin/account.php?force=1' : auth_home_url()));
+// Déjà connecté (bouton « Connexion » du site) : direction l'administration.
+if (is_admin_logged_in()) {
+    header('Location: ' . $after_login(admin_role()));
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!validate_csrf()) {
-        $error = 'Session expirée : rechargez la page et réessayez.';
-    } else {
-        $error = auth_login((string) ($_POST['email'] ?? ''), (string) ($_POST['password'] ?? ''));
-        if ($error === null) {
-            $u = auth_user();
-            header('Location: ' . ($u['must_change'] ? '/admin/account.php?force=1' : auth_home_url()));
-            exit;
-        }
-    }
+$content = get_content();
+$error = null;
+$notice = null;
+if (!empty($_SESSION['login_notice'])) {   // « Mot de passe modifié » (admin/reinitialiser.php)
+    $notice = (string) $_SESSION['login_notice'];
+    unset($_SESSION['login_notice']);
 }
-$noAccess = auth_no_access_configured();
+if (!empty($_SESSION['login_error'])) {   // message laissé par la connexion sociale (oauth/finish.php)
+    $error = (string) $_SESSION['login_error'];
+    unset($_SESSION['login_error']);
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Sans compte configuré, l'administration reste fermée.
+    $login = admin_login((string) ($_POST['username'] ?? ''), (string) ($_POST['password'] ?? ''));
+    if ($login) {
+        session_regenerate_id(true);
+        $_SESSION['is_admin'] = tenant_slug();
+        if ($login['id'] === null) {
+            unset($_SESSION['admin_account_id']);
+        } else {
+            $_SESSION['admin_account_id'] = $login['id'];
+        }
+        if (!empty($_POST['remember'])) {
+            session_remember();
+        }
+        header('Location: ' . $after_login($login['role']));
+        exit;
+    }
+    sleep(1); // freine les essais en série
+    $error = 'Identifiant, nom ou e-mail incorrect.';
+}
+if (!admin_password_configured()) {
+    $error = "Aucun compte n'est défini pour ce commerce : renseignez admin_user et admin_password dans tenants/"
+        . tenant_slug() . '/tenant.php.';
+}
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -32,18 +72,18 @@ $noAccess = auth_no_access_configured();
 <title>Administration — <?= h($content['site_name']) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+<?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/oauth.css">
+<link rel="stylesheet" href="/assets/login.css">
 <style>
-  .login-wrap { max-width: 380px; margin: 14vh auto 0; padding: 0 24px; }
+  .login-wrap { max-width: 420px; margin: 12vh auto 40px; padding: 0 20px; }
   .login-box { background: var(--surface); border: 1px solid var(--line); padding: 32px; }
   .login-box h1 { font-size: 1.5rem; margin-bottom: 6px; }
   .login-box p.lede { font-size: 0.9rem; margin-bottom: 22px; }
-  .login-box input[type="password"], .login-box input[type="email"] {
-    width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--ink);
-    padding: 12px 14px; font-family: var(--font-body); font-size: 0.95rem; margin-bottom: 16px;
-  }
+  .login-notice { font-size: 0.88rem; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--line); background: var(--bg); }
   .login-error { color: var(--accent); font-size: 0.85rem; margin-bottom: 14px; font-family: var(--font-mono); }
+  .login-other { font-size: 0.82rem; margin-top: 16px; text-align: center; }
 </style>
 </head>
 <body>
@@ -52,17 +92,21 @@ $noAccess = auth_no_access_configured();
     <p class="eyebrow">Espace boutique</p>
     <h1>Administration</h1>
     <p class="lede">Connectez-vous pour gérer les contenus et le catalogue.</p>
-    <?php if ($noAccess): ?>
-      <p class="login-error">Aucun accès n'est configuré. Sur le serveur, créez un compte propriétaire avec <code>php scripts/create-owner.php votre@email.fr</code>, ou déposez un mot de passe dans <code>.secrets/admin_password.txt</code>.</p>
-    <?php endif; ?>
+    <?php if ($notice): ?><p class="login-notice" role="status"><?= h($notice) ?></p><?php endif; ?>
     <?php if ($error): ?><p class="login-error"><?= h($error) ?></p><?php endif; ?>
-    <form method="post">
-      <?= csrf_input() ?>
-      <input type="email" name="email" placeholder="E-mail (laisser vide pour le mot de passe principal)" autocomplete="username" autofocus>
-      <input type="password" name="password" placeholder="Mot de passe" autocomplete="current-password" required>
-      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Se connecter</button>
-    </form>
+    <?= login_form_html([
+      'id' => 'admin-login',
+      'identifier_name' => 'username',
+      'social' => oauth_buttons_html('admin'),
+      'forgot_url' => '/admin/mot-de-passe-oublie.php',
+      'submit' => 'Se connecter',
+      'remember' => true,
+      'remember_name' => 'remember',
+      'remember_label' => 'Rester connecté sur cet appareil de confiance (30 jours)',
+    ]) ?>
+    <p class="login-other"><a href="/connexion.php">Connexion unique — boutique, galerie, portail, compte client</a></p>
   </div>
 </div>
+<script src="/assets/pwd-toggle.js" defer></script>
 </body>
 </html>

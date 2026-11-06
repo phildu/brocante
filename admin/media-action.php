@@ -1,7 +1,7 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
-auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
+require_admin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/media.php');
@@ -46,7 +46,22 @@ switch ($action) {
         flash_set('Ressource retirée de la médiathèque.');
         break;
     }
+
+    case 'bulk_delete': {
+        $ids = array_values(array_filter(array_map('intval', (array) ($_POST['ids'] ?? []))));
+        if (!$ids) {
+            flash_set('Aucune ressource cochée.', 'error');
+            break;
+        }
+        $stmt = db()->prepare('DELETE FROM media_library WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')');
+        $stmt->execute($ids);
+        $n = $stmt->rowCount();
+        flash_set($n . ' ressource' . ($n > 1 ? 's retirées' : ' retirée') . ' de la médiathèque.');
+        break;
+    }
 }
 
-header('Location: /admin/media.php');
+// Retour à la vue d'où vient l'action (liste, filtres), jamais vers un autre site.
+$back = app_unprefix((string) ($_POST['back'] ?? ''));
+header('Location: ' . (str_starts_with($back, '/admin/media.php') ? $back : '/admin/media.php'));
 exit;

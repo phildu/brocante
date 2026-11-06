@@ -1,0 +1,460 @@
+{
+  "version": 1,
+  "langue": "fr",
+  "mis_a_jour": "2026-11-03",
+  "note": "Chaque tutoriel décrit un parcours vérifié dans le code. Les captures et les vidéos sont des fiches à produire, pas des médias inventés.",
+  "tutoriels": [
+    {
+      "slug": "creer-son-plan",
+      "role": "organisateur",
+      "titre": "Créer le plan d'implantation d'un événement",
+      "resume": "Dessiner le lieu, poser et numéroter les emplacements, régler les tarifs et publier le plan pour les exposants.",
+      "duree_lecture_min": 7,
+      "difficulte": "moyenne",
+      "prerequis": [
+        "Une galerie, un marché ou un vide-grenier créé et accessible depuis le portail.",
+        "Le type de galerie autorise les exposants et les emplacements.",
+        "Une adresse ou un plan de masse du lieu, si possible."
+      ],
+      "url_cible": "/portail/galerie-plan.php",
+      "mots_cles": ["plan", "implantation", "emplacement", "stand", "numéroter", "tarif", "carte", "exposant"],
+      "etapes": [
+        {
+          "titre": "Ouvrir le plan de la galerie",
+          "texte": "Connectez-vous au portail, ouvrez la galerie concernée, puis cliquez sur « Plan » dans le menu de la galerie. La page s'appelle « Plan d'implantation ».",
+          "a_voir": "La carte, la recherche d'adresse et le bouton « Enregistrer le plan ».",
+          "lien": "/portail/galerie-plan.php"
+        },
+        {
+          "titre": "Cadrer le lieu",
+          "texte": "Tapez l'adresse dans « Rechercher une adresse, une rue, un lieu… », choisissez la suggestion puis centrez la carte. Vous pouvez aussi utiliser « Ma position » depuis le lieu, ou importer un plan de masse dans « Fond importé et rotation de la carte ».",
+          "a_voir": "La carte se replace sur le lieu et l'échelle apparaît en bas à gauche.",
+          "lien": null
+        },
+        {
+          "titre": "Choisir le fond",
+          "texte": "Gardez « Plan (IGN) » ou passez en « Satellite (IGN) ». Pour un plan intérieur, cochez « Masquer le fond de carte (plan seul) » : votre dessin reste sur une grille.",
+          "a_voir": "Le fond change sans déplacer les éléments déjà posés.",
+          "lien": null
+        },
+        {
+          "titre": "Créer les surfaces du catalogue",
+          "texte": "Dans le catalogue du plan, créez les tailles d'emplacement que vous proposez, par exemple « Stand 3 × 2 m ». Un clic sur « Poser » dessine l'emplacement aux bonnes dimensions, à l'endroit choisi, à l'échelle de la carte.",
+          "a_voir": "Chaque surface posée apparaît comme un rectangle ou un polygone sélectionnable.",
+          "lien": null
+        },
+        {
+          "titre": "Ajuster, tourner et dessiner",
+          "texte": "Sélectionnez un élément pour le tourner avec ↺ / ↻ (1°, 15°, 90° ou un angle précis). Utilisez les outils à gauche de la carte pour ajouter un repère (entrée, caisse, toilettes), une zone libre (halle, cour) ou un tracé (allée). Pour une forme, « + Ajouter un point » et « − Supprimer un point » ajustent les bords.",
+          "a_voir": "La fiche « Élément sélectionné » s'ouvre à droite et les poignées apparaissent sur la forme.",
+          "lien": null
+        },
+        {
+          "titre": "Numéroter les emplacements",
+          "texte": "Mettez un numéro dans la fiche de chaque emplacement, ou utilisez « Numéroter tout » pour numéroter d'un coup de gauche à droite et de haut en bas. Pour une zone à quatre coins, « Découper en parcelles » crée plusieurs places numérotées, avec l'option « Allée au milieu ».",
+          "a_voir": "Les numéros s'affichent sur le plan et le compteur « prochain numéro » se met à jour.",
+          "lien": null
+        },
+        {
+          "titre": "Relier les emplacements aux commerces",
+          "texte": "Dans la fiche d'un emplacement, utilisez le champ « Commerce lié » ou « Exposant lié » selon le vocabulaire de votre galerie. Le visiteur voit alors qui se trouve à cette place. L'adresse de la marchandise se règle dans « Présentation et commerces ».",
+          "a_voir": "Le nom du commerce apparaît dans la fiche et sur la page publique.",
+          "lien": null
+        },
+        {
+          "titre": "Régler les tarifs",
+          "texte": "Sélectionnez une zone : la fiche propose « Tarifs de cette zone » avec l'unité, le prix particulier et le prix entreprise. Les emplacements de la zone héritent de ce tarif. « Par mètre linéaire » multiplie le tarif par la façade ; « par m² » le multiplie par la surface.",
+          "a_voir": "Le tarif apparaît sur la fiche de l'emplacement et dans le récapitulatif du plan.",
+          "lien": null
+        },
+        {
+          "titre": "Enregistrer et publier",
+          "texte": "Cliquez sur « Enregistrer le plan ». Rien n'est conservé avant cet enregistrement. Utilisez ensuite « Voir sur la page publique » pour vérifier le rendu côté visiteur.",
+          "a_voir": "Un message de confirmation, puis le plan visible sur la page publique de la galerie.",
+          "lien": "/portail/galerie-plan.php"
+        }
+      ],
+      "erreurs": [
+        {
+          "symptome": "Le plan revient à son état précédent après avoir quitté la page.",
+          "cause": "Le plan n'a pas été enregistré.",
+          "solution": "Cliquez sur « Enregistrer le plan » avant de quitter la page."
+        },
+        {
+          "symptome": "L'adresse saisie ne trouve pas le lieu.",
+          "cause": "L'adresse est incomplète ou le lieu n'est pas référencé.",
+          "solution": "Ajoutez la ville ou le code postal, utilisez « Ma position » sur place, ou importez un plan de masse et calez-le à la main."
+        },
+        {
+          "symptome": "Un emplacement n'est pas proposé aux exposants.",
+          "cause": "Il est déjà lié à un commerce, déjà attribué, ou ce n'est pas une surface réservable (repère ou tracé).",
+          "solution": "Utilisez un rectangle ou un polygone, détachez le commerce si nécessaire, et vérifiez l'état de la place dans Exposants."
+        },
+        {
+          "symptome": "« Numéroter tout » ne numérote pas certains éléments.",
+          "cause": "Seules les zones (rectangles, polygones) sont numérotées ; les repères et tracés gardent un nom libre.",
+          "solution": "Convertissez l'élément en zone ou saisissez son numéro à la main dans sa fiche."
+        }
+      ],
+      "captures": [
+        "plan-01-portail.png",
+        "plan-02-adresse.png",
+        "plan-03-poser.png",
+        "plan-04-numeroter.png",
+        "plan-05-tarifs.png",
+        "plan-06-enregistrer.png"
+      ],
+      "video": "creer-son-plan"
+    },
+    {
+      "slug": "ouvrir-les-demandes",
+      "role": "organisateur",
+      "titre": "Ouvrir les demandes d'emplacement aux exposants",
+      "resume": "Publier l'événement, accepter les demandes en ligne, fixer le délai de réservation et valider les places demandées.",
+      "duree_lecture_min": 6,
+      "difficulte": "moyenne",
+      "prerequis": [
+        "Un événement créé (nom, date, lieu) ou un plan avec des emplacements réservables.",
+        "Le type de galerie autorise les exposants.",
+        "Un tarif ou un nombre de places défini."
+      ],
+      "url_cible": "/portail/galerie-evenement.php",
+      "mots_cles": ["demande", "emplacement", "exposant", "réserver", "ouvrir", "place", "validation", "délai"],
+      "etapes": [
+        {
+          "titre": "Ouvrir l'événement",
+          "texte": "Dans le portail de la galerie, cliquez sur « Événement ». Renseignez le nom, la date, le dernier jour si l'événement dure plusieurs jours, le lieu, l'adresse, les horaires et les consignes affichées aux exposants.",
+          "a_voir": "Le formulaire « L'événement » et la section « et tarif ».",
+          "lien": "/portail/galerie-evenement.php"
+        },
+        {
+          "titre": "Définir les places et les tarifs",
+          "texte": "Choisissez le mode de numérotation : places automatiques de 1 à N, ou plan dessiné. Indiquez le nombre de places, les mètres linéaires disponibles, la longueur d'une place, le prix au mètre linéaire, le prix d'une place et le tarif entreprise ou association.",
+          "a_voir": "Le récapitulatif « Aperçu des places » avec les places libres, en attente et attribuées.",
+          "lien": null
+        },
+        {
+          "titre": "Activer les demandes en ligne",
+          "texte": "Dans la section « Réserver en ligne », cochez « Accepter les demandes d'emplacement en ligne ». Fixez le nombre de jours pendant lesquels « Une demande retient la place », et rédigez la « Phrase d'accueil des exposants ».",
+          "a_voir": "La case est cochée et le délai est enregistré.",
+          "lien": null
+        },
+        {
+          "titre": "Publier l'événement",
+          "texte": "Cliquez sur « Publier l'événement et ouvrir les réservations » (ou « Enregistrer l'événement » si l'événement est déjà publié). Partagez ensuite la page publique de la galerie aux exposants.",
+          "a_voir": "La page publique affiche l'événement, les places libres et le formulaire de demande.",
+          "lien": null
+        },
+        {
+          "titre": "Comprendre le parcours de l'exposant",
+          "texte": "L'exposant choisit une place libre sur le plan public, indique son identité et envoie sa demande. Il reçoit un e-mail avec un lien vers son espace exposant : il peut y suivre l'état de sa demande et, une fois la place confirmée, présenter un pass avec QR code.",
+          "a_voir": "Un message « Votre demande est enregistrée : un e-mail de confirmation vient de vous être envoyé. »",
+          "lien": null
+        },
+        {
+          "titre": "Valider les demandes",
+          "texte": "Ouvrez « Exposants » puis « Demandes d'emplacement ». Pour chaque demande, utilisez « Accepter », « Refuser » ou « Libérer ». Une demande acceptée est définitive jusqu'à libération ; une demande en attente bloque la place pendant le délai fixé.",
+          "a_voir": "Le statut de la demande change et la place passe de « en attente » à « attribuée » ou redevient libre.",
+          "lien": "/portail/galerie-exposants.php"
+        },
+        {
+          "titre": "Vérifier le pass le jour J",
+          "texte": "Un exposant confirmé présente son QR code. Le contrôle du pass affiche seulement l'identité et l'emplacement, jamais l'e-mail ni le téléphone. Une demande encore en attente n'a pas de pass.",
+          "a_voir": "La page « Contrôle du pass » avec le nom et la place, ou un message si le code n'est pas valide.",
+          "lien": null
+        }
+      ],
+      "erreurs": [
+        {
+          "symptome": "La page Exposants affiche « Les demandes ne sont pas ouvertes ».",
+          "cause": "Les réservations en ligne ne sont pas activées, ou l'événement n'est pas publié.",
+          "solution": "Activez « Accepter les demandes d'emplacement en ligne » dans Événement, ou le bloc « Exposants : choisir son emplacement » sur le plan, puis publiez."
+        },
+        {
+          "symptome": "Aucune section « Réserver en ligne » n'apparaît.",
+          "cause": "Le type de galerie ne gère pas les exposants, ou le module organisateur n'est pas actif.",
+          "solution": "Vérifiez le type de galerie et ses fonctionnalités dans « Types de galerie » ; un événement doit être créé pour ce mode."
+        },
+        {
+          "symptome": "Une place n'est plus proposée.",
+          "cause": "Elle est en attente, attribuée, liée à un commerce ou non réservable.",
+          "solution": "Regardez son état dans Exposants ou dans le plan ; libérez-la si elle doit redevenir disponible."
+        },
+        {
+          "symptome": "Le délai de réservation est dépassé et la place est revenue libre.",
+          "cause": "La demande n'a pas été acceptée dans le nombre de jours fixé.",
+          "solution": "Acceptez plus vite, ou augmentez le délai « Une demande retient la place » si vos exposants ont besoin de plus de temps."
+        }
+      ],
+      "captures": [
+        "demandes-01-evenement.png",
+        "demandes-02-tarifs.png",
+        "demandes-03-reserver.png",
+        "demandes-04-exposants.png",
+        "demandes-05-pass.png"
+      ],
+      "video": "ouvrir-les-demandes"
+    },
+    {
+      "slug": "publier-une-piece-studio",
+      "role": "vendeur",
+      "titre": "Publier une pièce avec le Studio (photo)",
+      "resume": "Photographier une pièce depuis le téléphone, laisser l'IA préparer la fiche, relire puis publier dans le catalogue.",
+      "duree_lecture_min": 6,
+      "difficulte": "facile",
+      "prerequis": [
+        "Une boutique ouverte et un accès à l'administration.",
+        "Un téléphone avec appareil photo et une connexion à une adresse sécurisée (https).",
+        "Au moins une photo de face de la pièce."
+      ],
+      "url_cible": "/studio.php",
+      "mots_cles": ["studio", "photo", "publier", "pièce", "fiche", "IA", "catalogue", "téléphone"],
+      "etapes": [
+        {
+          "titre": "Ouvrir le Studio sur le téléphone",
+          "texte": "Ouvrez /studio.php dans le navigateur du téléphone, connectez-vous avec votre identifiant ou votre e-mail et votre mot de passe, puis choisissez « Ajouter à l'écran d'accueil ». La connexion peut être mémorisée 30 jours. Depuis un ordinateur, /admin/quick-add.php affiche un QR code et un bouton de partage du lien.",
+          "a_voir": "L'écran d'accueil du Studio avec le choix entre la prise de vue pièce par pièce et le « Shooting en lot ».",
+          "lien": "/studio.php"
+        },
+        {
+          "titre": "Prendre la photo de face",
+          "texte": "Choisissez « Ouvrir l'appareil photo » ou prenez des photos dans la galerie. Prenez au moins la photo de face ; ajoutez si possible un gros plan, une mesure ou une vidéo. Pour un vêtement, prévoyez le recto et le verso.",
+          "a_voir": "La photo apparaît dans la pièce en cours, avec les boutons « Pièce suivante », « Terminer le shooting » et les indications de prise de vue.",
+          "lien": null
+        },
+        {
+          "titre": "Laisser l'IA préparer la fiche",
+          "texte": "Après la prise de vue, lancez le traitement : l'IA détoure la pièce, la met en situation et rédige une proposition de fiche. Elle n'invente ni prix, ni date, ni chiffre : complétez vous-même ce que vous seul connaissez.",
+          "a_voir": "Une fiche proposée avec un titre, une description, des matières, des couleurs et des dimensions à vérifier.",
+          "lien": null
+        },
+        {
+          "titre": "Relire et corriger",
+          "texte": "Vérifiez le titre, la description, l'état, les dimensions, le poids, la catégorie et le prix. Corrigez ce qui est faux ou imprécis. Une photo floue ou une description approximative se paie en questions client.",
+          "a_voir": "Les champs modifiables de la fiche et le bouton d'enregistrement.",
+          "lien": null
+        },
+        {
+          "titre": "Publier ou enregistrer",
+          "texte": "Validez la pièce. Elle est enregistrée dans le catalogue de la boutique et peut être publiée. Utilisez « Voir mes pièces » pour la retrouver, ou ouvrez Catalogue dans l'administration. Vous pourrez encore la modifier ensuite.",
+          "a_voir": "La pièce dans la liste du catalogue, avec sa photo, son prix et son état.",
+          "lien": "/admin/catalog.php"
+        },
+        {
+          "titre": "Utiliser le shooting en lot",
+          "texte": "Pour plusieurs pièces, choisissez « Shooting en lot » : photographiez à la suite, indiquez le type de chaque pièce, puis « Pièce suivante ». Terminez le shooting et lancez « Générer les fiches » d'un coup, ou « Envoyer sans traiter (plus tard) ».",
+          "a_voir": "La liste « Votre lot », puis l'écran « Traitement du lot » avec la progression et les pièces en échec à réessayer.",
+          "lien": null
+        }
+      ],
+      "erreurs": [
+        {
+          "symptome": "La caméra ne s'ouvre pas sur le téléphone.",
+          "cause": "La page n'est pas servie en https, ou l'autorisation caméra a été refusée.",
+          "solution": "Ouvrez le Studio depuis l'adresse en ligne sécurisée, autorisez la caméra dans le navigateur, ou choisissez des photos dans la galerie du téléphone."
+        },
+        {
+          "symptome": "L'IA ne détoure pas et ne rédige pas la fiche.",
+          "cause": "La clé Gemini n'est pas configurée, ou le crédit IA est épuisé.",
+          "solution": "La pièce est quand même enregistrée : complétez la fiche à la main. Vérifiez le crédit IA dans l'administration et rechargez un pack si besoin."
+        },
+        {
+          "symptome": "La pièce n'apparaît pas dans le catalogue.",
+          "cause": "Le lot n'a pas été traité ou la pièce n'a pas été validée.",
+          "solution": "Rouvrez le Studio, reprenez le lot et cliquez sur « Générer les fiches » ou « Voir mes pièces » ; vérifiez ensuite le catalogue."
+        },
+        {
+          "symptome": "Impossible d'ajouter une pièce.",
+          "cause": "La limite de pièces de votre offre est atteinte.",
+          "solution": "Vérifiez votre offre et la limite de pièces, puis changez d'offre ou retirez une pièce si nécessaire."
+        }
+      ],
+      "captures": [
+        "studio-01-accueil.png",
+        "studio-02-photo.png",
+        "studio-03-fiche-ia.png",
+        "studio-04-catalogue.png",
+        "studio-05-lot.png"
+      ],
+      "video": "publier-une-piece-studio"
+    },
+    {
+      "slug": "encaisser",
+      "role": "vendeur",
+      "titre": "Encaisser les paiements de sa boutique",
+      "resume": "Configurer Stripe, Monetico, PayPal, Revolut ou le virement SEPA, tester en mode test puis encaisser en mode réel.",
+      "duree_lecture_min": 8,
+      "difficulte": "moyenne",
+      "prerequis": [
+        "Une boutique ouverte et un accès administrateur.",
+        "Un compte bancaire ou un compte du prestataire choisi.",
+        "Pour Stripe Connect, l'invitation envoyée par la plateforme."
+      ],
+      "url_cible": "/admin/index.php?s=paiement",
+      "mots_cles": ["encaisser", "paiement", "stripe", "connect", "monetico", "paypal", "revolut", "sepa", "webhook", "test"],
+      "etapes": [
+        {
+          "titre": "Ouvrir les réglages de paiement",
+          "texte": "Dans l'administration de la boutique, ouvrez Réglages puis l'onglet « Paiement & livraison ». La page présente les moyens disponibles : Stripe, Monetico, PayPal, Revolut Merchant et virement SEPA.",
+          "a_voir": "La section « Réglages Stripe » et les blocs des autres prestataires.",
+          "lien": "/admin/index.php?s=paiement"
+        },
+        {
+          "titre": "Choisir le montage Stripe",
+          "texte": "Deux possibilités : un compte Stripe Connect relié à la plateforme, ou vos propres clés Stripe. Avec Connect, la plateforme crée le compte et vous recevez un lien d'inscription ; vous complétez votre identité et votre IBAN chez Stripe. Sans Connect, vous collez vous-même vos clés dans la page.",
+          "a_voir": "Le mode actif (test ou réel) et le statut du compte Connect, s'il existe.",
+          "lien": null
+        },
+        {
+          "titre": "Renseigner les clés Stripe",
+          "texte": "Collez la clé secrète (sk_… ou rk_…), la clé publiable (pk_…) et le secret de signature du webhook (whsec_…). Faites-le pour le mode test et pour le mode réel : les deux paires sont conservées. L'adresse du webhook de la boutique est /stripe-webhook.php.",
+          "a_voir": "Les champs remplis et le bouton « Tester la clé Stripe active ».",
+          "lien": null
+        },
+        {
+          "titre": "Configurer un autre prestataire",
+          "texte": "Monetico : renseignez les identifiants du contrat et déclarez l'URL de confirmation CGI2 dans le back-office de la banque. PayPal : renseignez client_id et secret. Revolut Merchant : activez l'option Merchant, créez la clé API et déclarez l'URL du webhook. Virement SEPA : renseignez l'IBAN et les instructions affichées au client.",
+          "a_voir": "Le bloc du prestataire complété, sans message d'erreur.",
+          "lien": null
+        },
+        {
+          "titre": "Tester en mode test",
+          "texte": "Restez en mode test et passez une commande avec une carte de test Stripe, ou le mode test du prestataire. Vérifiez que la commande apparaît dans Commandes, que le paiement est confirmé et que l'e-mail part. Ne basculez en réel qu'après ce test.",
+          "a_voir": "Une commande « Payée » dans la liste des commandes.",
+          "lien": "/admin/orders.php"
+        },
+        {
+          "titre": "Encaisser en mode réel",
+          "texte": "Basculez le mode actif en réel. Les nouvelles commandes sont encaissées réellement ; les commandes en attente d'un mode restent vérifiables après la bascule. Le client paie sur la page sécurisée du prestataire, jamais sur le serveur Brocs.",
+          "a_voir": "Le bandeau « Mode réel » et les commandes qui arrivent avec leur moyen de paiement.",
+          "lien": null
+        },
+        {
+          "titre": "Suivre les commandes et les versements",
+          "texte": "Dans Commandes, vérifiez un paiement resté en attente avec « Vérifier auprès de Stripe », « Vérifier auprès de PayPal » ou « Vérifier auprès de Revolut ». Pour un virement SEPA, cliquez sur « Marquer le virement reçu » après réception. Les versements sont faits par Stripe ou le prestataire sur votre compte ; la commission éventuelle de la plateforme est prélevée à l'encaissement ou facturée séparément.",
+          "a_voir": "Le statut de la commande et le détail du paiement dans la commande.",
+          "lien": "/admin/orders.php"
+        }
+      ],
+      "erreurs": [
+        {
+          "symptome": "« Aucun moyen de paiement n'est configuré » au moment de payer.",
+          "cause": "Aucun prestataire n'a de clés valides pour le mode actif.",
+          "solution": "Renseignez au moins Stripe, Monetico, PayPal, Revolut ou un IBAN SEPA dans Réglages → Paiement & livraison."
+        },
+        {
+          "symptome": "Le client a payé mais la commande reste en attente.",
+          "cause": "Le webhook n'est pas déclaré, son secret est faux, ou le mode test/réel ne correspond pas.",
+          "solution": "Vérifiez l'adresse /stripe-webhook.php, le secret whsec_… et le mode actif ; utilisez le bouton de vérification du prestataire pour rattraper la commande."
+        },
+        {
+          "symptome": "Le virement SEPA n'est jamais marqué comme payé.",
+          "cause": "Le virement SEPA n'est pas prélevé automatiquement : il doit être constaté par le vendeur.",
+          "solution": "Vérifiez l'arrivée du virement sur le compte, puis cliquez sur « Marquer le virement reçu » dans la commande."
+        },
+        {
+          "symptome": "Le remboursement automatique échoue avec Monetico.",
+          "cause": "L'option « re-crédit » n'est pas activée sur le contrat Monetico.",
+          "solution": "Demandez son activation à la banque, ou effectuez le remboursement depuis le back-office de la banque."
+        }
+      ],
+      "captures": [
+        "encaisser-01-reglages.png",
+        "encaisser-02-stripe.png",
+        "encaisser-03-webhook.png",
+        "encaisser-04-commandes.png",
+        "encaisser-05-sepa.png"
+      ],
+      "video": "encaisser"
+    },
+    {
+      "slug": "exporter-un-plan",
+      "role": "organisateur",
+      "titre": "Exporter la liste des exposants et le registre",
+      "resume": "Télécharger la liste en CSV ou Excel, imprimer le registre en PDF et le préparer pour la mairie.",
+      "duree_lecture_min": 5,
+      "difficulte": "facile",
+      "prerequis": [
+        "Un plan enregistré et des exposants attribués.",
+        "L'événement renseigné pour l'en-tête du registre.",
+        "Un ordinateur avec un navigateur pour l'impression PDF."
+      ],
+      "url_cible": "/portail/galerie-exposants.php",
+      "mots_cles": ["exporter", "plan", "liste", "csv", "excel", "pdf", "imprimer", "registre", "mairie"],
+      "etapes": [
+        {
+          "titre": "Ouvrir la liste des exposants",
+          "texte": "Dans le portail de la galerie, cliquez sur « Exposants ». La page affiche les demandes d'emplacement et les exposants attribués, avec leur place et leur état.",
+          "a_voir": "Les boutons « Exporter (CSV) » et « Registre des vendeurs (imprimer) ».",
+          "lien": "/portail/galerie-exposants.php"
+        },
+        {
+          "titre": "Exporter la liste en CSV",
+          "texte": "Cliquez sur « Exporter (CSV) ». Le fichier s'ouvre dans un tableur (Excel, LibreOffice, Numbers) et contient les exposants, leurs coordonnées et leurs emplacements.",
+          "a_voir": "Un fichier .csv téléchargé, lisible dans votre tableur.",
+          "lien": null
+        },
+        {
+          "titre": "Ouvrir le registre",
+          "texte": "Cliquez sur « Registre des vendeurs (imprimer) », ou ouvrez « Registre » dans le menu de la galerie. La page « Registre de police » reprend l'en-tête de la manifestation, les exposants attribués et leurs références de pièce d'identité.",
+          "a_voir": "L'aperçu du registre et les boutons « Télécharger Excel », « Imprimer / PDF », « CSV » et « Aperçu avant impression ».",
+          "lien": "/portail/galerie-registre.php"
+        },
+        {
+          "titre": "Télécharger en Excel ou en CSV",
+          "texte": "« Télécharger Excel » produit une feuille paysage prête à imprimer, avec une colonne « Signature » vide pour le paraphe. « CSV » donne le même contenu dans un format tableur plus simple.",
+          "a_voir": "Le fichier téléchargé avec l'en-tête, les lignes des exposants et la colonne Signature.",
+          "lien": null
+        },
+        {
+          "titre": "Imprimer ou enregistrer en PDF",
+          "texte": "Cliquez sur « Imprimer / PDF » (ou « Aperçu avant impression »). Dans la boîte d'impression du navigateur, choisissez « Enregistrer au format PDF », le format A4 et l'orientation paysage. C'est le navigateur qui fabrique le PDF, pas un service externe.",
+          "a_voir": "L'aperçu du registre, puis un fichier PDF enregistré sur l'ordinateur.",
+          "lien": null
+        },
+        {
+          "titre": "Préparer le dépôt en mairie",
+          "texte": "Faites signer et parapher le registre avant la manifestation. Déposez-le en mairie dans les 8 jours et conservez-le cinq ans après la clôture. Le registre ne remplace ni l'autorisation d'occupation du domaine public, ni les autres démarches de la commune.",
+          "a_voir": "Le registre signé, daté et prêt à déposer.",
+          "lien": null
+        },
+        {
+          "titre": "Cas du plan lui-même",
+          "texte": "Il n'existe pas encore d'export image ou PDF du plan depuis l'éditeur. Pour obtenir une image du plan, ouvrez la page publique de la galerie et utilisez l'impression ou la capture d'écran du navigateur. La liste des emplacements, elle, s'exporte bien en CSV et en PDF.",
+          "a_voir": "Le plan sur la page publique, sans bouton d'export dédié dans l'éditeur.",
+          "lien": null
+        }
+      ],
+      "erreurs": [
+        {
+          "symptome": "Le registre est vide ou ne contient que l'en-tête.",
+          "cause": "Aucun exposant n'est encore attribué.",
+          "solution": "Acceptez les demandes dans Exposants, puis rouvrez le registre. Un registre vide peut servir à préremplir le cahier papier."
+        },
+        {
+          "symptome": "L'en-tête de la manifestation est incomplet.",
+          "cause": "L'événement n'est pas renseigné (nom, date, lieu).",
+          "solution": "Ouvrez Événement, complétez les champs, enregistrez, puis revenez au registre."
+        },
+        {
+          "symptome": "Le PDF ne ressemble pas à l'aperçu.",
+          "cause": "Les options d'impression du navigateur (marges, échelle, en-têtes) ne sont pas les bonnes.",
+          "solution": "Choisissez A4, paysage, marges par défaut et désactivez les en-têtes et pieds de page du navigateur."
+        },
+        {
+          "symptome": "Aucun bouton pour exporter le plan en image.",
+          "cause": "Cette fonction n'existe pas encore dans l'éditeur de plan.",
+          "solution": "Utilisez la page publique et l'impression ou la capture d'écran ; l'export direct du plan est un écart connu, à arbitrer dans le backlog."
+        }
+      ],
+      "captures": [
+        "export-01-exposants.png",
+        "export-02-csv.png",
+        "export-03-registre.png",
+        "export-04-impression.png",
+        "export-05-plan-public.png"
+      ],
+      "video": "exporter-un-plan"
+    }
+  ]
+}

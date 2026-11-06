@@ -1,0 +1,14 @@
+{
+  "id": "tableau-de-bord",
+  "name": "Tableau de bord",
+  "version": "1.0.0",
+  "description": "{Ext} payant{e} (essai gratuit) : visites, pièces les plus vues, ajouts au panier, commandes et efficacité des réseaux sociaux (liens de campagne). Mesure sans cookie : aucune donnée personnelle conservée.",
+  "table_prefix": "td_",
+  "pages": [
+    { "id": "index", "label": "Tableau de bord", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "stats", "file": "api/stats.php", "methods": ["GET"], "roles": ["admin", "community_manager"] }
+  ]
+}

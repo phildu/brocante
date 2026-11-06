@@ -75,7 +75,7 @@ $shown = array_slice($offers, 0, $limit);
 </p>
 
 <form method="post" action="/admin/invendus-action.php" id="bulk-form">
-  <?= csrf_input() ?>
+  <?= shop_csrf_input() ?>
   <input type="hidden" name="action" value="offer_bulk">
   <input type="hidden" name="return" value="<?= h($return . ($hasFilter ? '&' . http_build_query(array_filter(['f_q' => $filters['q'], 'f_status' => $filters['status'], 'f_handover' => $filters['handover'], 'f_tour' => $filters['tour'], 'f_cat' => $filters['category'], 'f_confirmed' => $filters['confirmed']])) : '')) ?>">
   <input type="hidden" name="event_id" value="<?= $id ?>">

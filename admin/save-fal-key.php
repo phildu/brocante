@@ -1,7 +1,7 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
-auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
+require_admin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/index.php');
@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $key = trim((string) ($_POST['fal_key'] ?? ''));
 
 if ($key !== '') {
-    $secretsDir = __DIR__ . '/../.secrets';
+    $secretsDir = SECRETS_DIR;
     if (!is_dir($secretsDir)) mkdir($secretsDir, 0700, true);
     file_put_contents($secretsDir . '/fal.key', $key);
     chmod($secretsDir . '/fal.key', 0600);
@@ -22,5 +22,5 @@ if ($key !== '') {
     flash_set('Aucune clé fournie — rien de changé.');
 }
 
-header('Location: /admin/index.php#fal-settings');
+header('Location: /admin/social.php#fal-settings');
 exit;

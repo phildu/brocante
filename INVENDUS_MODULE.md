@@ -1,5 +1,13 @@
 # Module « Invendus & dons » d'un vide-grenier
 
+> **Extension de galerie** (`invendus`, `includes/gallery-modules.php`), réservée aux organisateurs de vide-greniers : l'organisateur
+> l'active (essai gratuit, puis abonnement) depuis l'onglet **Extensions** de l'espace de sa galerie, et un bouton **Invendus & dons**
+> apparaît dans son menu (`/portail/galerie-invendus.php`). Prix, essai et types de galerie concernés : portail → *Tarifs des extensions de
+> galerie*. Les données vivent dans la base SQLite de la galerie (`data/galeries/<galerie>.db`), jamais dans une boutique.
+> Dans la suite de ce document, `/dons.php`, `/dons-proposer.php`, `/dons-suivi.php`, `/dons-point.php`, `/dons-tournee.php` et
+> `/admin/invendus*.php` désignent les pages du module ; dans une galerie, ces adresses sont réécrites en `/galerie/<galerie>/dons/…`
+> (public) et `/portail/galerie-invendus.php?s=…` (administration).
+
 Permet de donner une seconde vie aux invendus d'un vide-grenier : les exposants
 proposent des dons sur le site, un point de collecte ouvre en fin de journée,
 les objets y sont amenés (par leur propriétaire ou par une tournée à vélo cargo),
@@ -28,7 +36,7 @@ Seuls les objets « au point » apparaissent sur la page publique.
 
 ## Accès (pas de comptes utilisateurs sur ce site)
 
-- **Admin** : espace `/admin/` existant, entrée « Invendus & dons » (mot de passe admin + jeton CSRF sur chaque action).
+- **Admin** : espace de la galerie (exploitant, ou administrateur de CETTE galerie), entrée « Invendus & dons » ; jeton CSRF sur chaque action.
 - **Exposant** : lien de suivi privé (`/dons-suivi.php?t=…`), partagé par toutes ses propositions faites depuis le même appareil.
 - **Bénévole de tournée** / **bénévoles du point** : liens secrets générés par l'admin (onglets *Tournées* et *Aperçu*).
   Ces pages ne sont ni indexées, ni mises en cache, et n'envoient pas le jeton en `Referer`.
@@ -36,23 +44,25 @@ Seuls les objets « au point » apparaissent sur la page publique.
 
 ## Fichiers
 
-- `includes/invendus.php` : toute la logique (schéma, phases, règles de transition, tournées, remises).
-- `includes/invendus-layout.php`, `includes/invendus-tabs/*` : gabarits admin et pages terrain.
+- `includes/invendus.php` : toute la logique (schéma, phases, règles de transition, tournées, remises) et le rattachement à la galerie
+  (`unsold_enter_gallery()`, `unsold_url_map()`, `unsold_public_enter()`).
+- `includes/invendus-layout.php`, `includes/invendus-tabs/*` : gabarits admin (cadre de l'espace de la galerie), pages publiques et pages terrain.
+- `portail/galerie-invendus.php` : répartiteur (accès + extension active, puis `admin/invendus*.php`).
 - Public : `dons.php`, `dons-proposer.php`, `dons-suivi.php`. Terrain : `dons-tournee.php`, `dons-point.php`.
 - Admin : `admin/invendus*.php` (liste, hub d'édition à onglets, fiche, donneries, bordereau, export, actions).
 - `assets/dons.css`, `scripts/test-invendus.php`.
 
 ## Déploiement
 
-Le déploiement n'envoie ni `brocante.db` ni les `*.sql` : les tables `unsold_*` sont donc **créées automatiquement**
-au premier chargement d'une page du module (`CREATE TABLE IF NOT EXISTS`). Elles sont aussi dans `schema.sql`
-pour les installations neuves — garder `unsold_schema_sql()` et `schema.sql` synchronisés.
+Le déploiement n'envoie ni les bases ni les `*.sql` : les tables `unsold_*` sont donc **créées automatiquement**, dans la base de la
+galerie, au premier accès au module (`unsold_ensure_schema()`, `CREATE TABLE IF NOT EXISTS`). Elles ne sont plus dans `schema.sql`.
 Les photos des propositions sont stockées dans `uploads/don-*.jpg`.
 
 ## Tests
 
 ```bash
-php scripts/test-invendus.php   # logique métier, sur une base SQLite jetable (brocante.db n'est jamais touchée)
+php scripts/test-invendus.php          # logique métier, sur une base SQLite jetable
+php scripts/test-invendus-galerie.php  # extension de galerie : base propre à chaque galerie, adresses réécrites, disponibilité
 ```
 
 ## Limites connues / pistes

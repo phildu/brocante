@@ -1,0 +1,606 @@
+<?php
+require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/autofeed.php';
+require_admin();
+
+$content = get_content();
+$flash = flash_get();
+$current = appearance_current();
+$logos = logos_saved();
+$colors = $current['colors'];
+$fonts = $current['fonts'];
+$activeTemplate = shop_template_active();
+$siteName = trim((string) ($content['site_name'] ?? '')) ?: (string) tenant('name');
+$mediaPhotos = get_media_items('photo');
+
+// Données pour l'aperçu en direct (même calcul qu'appearance_derive, côté navigateur).
+$fontCatalog = [];
+foreach (APPEARANCE_FONTS as $role => $list) {
+    foreach ($list as $name => [$param, $fallback]) {
+        $fontCatalog[$role][$name] = ['url' => 'https://fonts.googleapis.com/css2?family=' . $param . '&display=swap', 'stack' => '"' . $name . '", ' . $fallback];
+    }
+}
+$colorFields = [
+    'bg' => ['Fond', 'Couleur du fond des pages'],
+    'ink' => ['Texte', 'Titres et textes'],
+    'accent' => ['Principale', 'Boutons, liens, prix'],
+    'accent-2' => ['Secondaire', 'Pictogrammes, détails'],
+];
+?><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apparence — <?= h($content['site_name']) ?></title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<?= tenant_head_html() ?>
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+  .tplx-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; margin: 16px 0 10px; }
+  .tplx { position: relative; display: grid; gap: 6px; align-content: start; padding: 10px; border: 2px solid var(--line); background: var(--bg); cursor: pointer; }
+  .tplx input { position: absolute; opacity: 0; }
+  .tplx:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .tplx:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .tplx-mock { display: block; background: var(--p-bg); color: var(--p-ink); border: 1px solid var(--line); min-height: 96px; overflow: hidden; }
+  .tplx-mock svg { width: 100%; height: auto; display: block; }
+  .tplx-mock b { display: block; font-size: 1.8rem; line-height: 1; padding: 14px 12px 4px; }
+  .tplx-mock i { display: block; height: 5px; margin: 5px 12px; background: var(--p-ink); opacity: .28; width: 80%; } .tplx-mock i.s { width: 50%; }
+  .tplx-mock u { display: block; width: 56px; height: 16px; margin: 8px 12px 12px; background: var(--p-accent); }
+  .tplx small { color: var(--ink-soft); line-height: 1.35; } .tplx-sector { font-weight: 600; }
+  .tplx-preview { font-size: .82rem; font-weight: 600; color: var(--accent); }
+  .tplx-opt { display: flex; gap: 8px; align-items: center; font-size: .9rem; }
+  .apx-grid { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 28px; align-items: start; margin-top: 20px; }
+  @media (max-width: 960px) { .apx-grid { grid-template-columns: 1fr; } }
+  .apx-form { display: flex; flex-direction: column; gap: 22px; }
+  .apx-block { background: var(--surface); border: 1px solid var(--line); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .apx-block h2 { font-size: 1.1rem; margin: 0; }
+  .apx-palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .apx-palette { border: 1px solid var(--line); background: var(--bg); padding: 8px; cursor: pointer; text-align: left; font-family: var(--font-body); font-size: 0.8rem; color: var(--ink); display: flex; flex-direction: column; gap: 6px; }
+  .apx-palette[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .apx-swatches { display: flex; height: 22px; }
+  .apx-swatches span { flex: 1; }
+  .apx-colors { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .apx-color { display: grid; grid-template-columns: 44px 1fr; gap: 2px 10px; align-items: center; font-size: 0.85rem; }
+  .apx-color input[type="color"] { grid-row: span 2; width: 44px; height: 44px; padding: 2px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  .apx-color small { color: var(--ink-soft); font-size: 0.75rem; }
+  .apx-font label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; color: var(--ink-soft); }
+  .apx-font select { background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 8px 10px; font-family: var(--font-body); font-size: 0.95rem; }
+  .apx-sample { font-size: 1.5rem; line-height: 1.2; color: var(--ink); }
+  .apx-sample.body { font-size: 0.95rem; line-height: 1.5; }
+  .apx-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .apx-contrast { font-size: 0.8rem; font-family: var(--font-mono); color: var(--ink-soft); }
+  .apx-contrast[data-kind="warn"] { color: #b3261e; }
+  .apx-heroes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .apx-hero { display: flex; gap: 9px; align-items: flex-start; padding: 10px 11px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; font-size: .82rem; line-height: 1.3; }
+  .apx-hero:has(input:checked) { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .apx-hero input { margin-top: 2px; accent-color: var(--accent); }
+  .apx-hero-glyph { font-size: 1.2rem; line-height: 1; color: var(--accent); }
+  .apx-hero strong { display: block; font-size: .84rem; }
+  .apx-hero small { display: block; color: var(--ink-soft); font-size: .75rem; margin-top: 2px; }
+
+  .apx-logo-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 760px) { .apx-logo-grid { grid-template-columns: 1fr 1fr; } .apx-logo-horizontal { grid-column: 1 / -1; } }
+  .apx-logo { display: flex; flex-direction: column; gap: 6px; }
+  .apx-logo-frame {
+    display: grid; place-items: center; padding: 12px; border: 1px solid var(--line);
+    /* Damier : laisse voir la transparence du logo. */
+    background: #fff repeating-conic-gradient(#ececec 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+  }
+  .apx-logo-horizontal .apx-logo-frame { aspect-ratio: 4 / 1.4; }
+  .apx-logo-vertical .apx-logo-frame { aspect-ratio: 3 / 4; }
+  .apx-logo-square .apx-logo-frame { aspect-ratio: 1; }
+  .apx-logo-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .apx-logo-view { display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+  .apx-logo small { color: var(--ink-soft); font-size: 0.78rem; line-height: 1.35; }
+  .apx-logo .apx-logo-format { font-family: var(--font-mono); font-size: 0.7rem; }
+  .apx-logo-pick { align-self: flex-start; cursor: pointer; font-size: 0.85rem; padding: 7px 12px; }
+  .apx-logo-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .apx-logo-media-status { margin: 0; font-size: 0.78rem; color: var(--accent); word-break: break-word; }
+  .apx-logo-reset { font-size: 0.8rem; color: var(--ink-soft); display: flex; gap: 6px; align-items: center; }
+  .apx-logo-zoom { position: fixed; inset: 0; z-index: 300; display: none; align-items: center; justify-content: center; padding: 22px; background: rgba(24,18,12,0.82); }
+  .apx-logo-zoom.is-open { display: flex; }
+  .apx-logo-zoom figure { margin: 0; display: grid; gap: 12px; width: min(1100px, 96vw); max-height: 94vh; }
+  .apx-logo-zoom img {
+    width: 100%; height: auto; max-height: calc(94vh - 64px); object-fit: contain; display: block;
+    background: repeating-conic-gradient(#ececec 0% 25%, #fff 0% 50%) 50% / 20px 20px;
+  }
+  .apx-logo-zoom figcaption { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: #fff; font-size: 0.9rem; }
+  .media-pick-backdrop {
+    position: fixed; inset: 0; z-index: 310; display: none; align-items: center; justify-content: center; padding: 18px;
+    background: rgba(24, 18, 12, 0.62);
+  }
+  .media-pick-backdrop.is-open { display: flex; }
+  .media-pick-box {
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line); width: min(880px, 96vw);
+    max-height: 90vh; padding: 18px; display: flex; flex-direction: column; gap: 14px; overflow: hidden;
+  }
+  .media-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; overflow-y: auto; max-height: 60vh; }
+  .media-pick-item { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; text-align: left; font-size: 0.75rem; color: var(--ink); }
+  .media-pick-item:hover { border-color: var(--accent); }
+  .media-pick-item img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--surface-2); }
+  .apx-preview-wrap { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .apx-preview-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; color: var(--ink-soft); }
+  .apx-mode { display: inline-flex; border: 1px solid var(--line); }
+  .apx-mode button { background: var(--bg); border: 0; padding: 6px 12px; cursor: pointer; font-family: var(--font-body); color: var(--ink); }
+  .apx-mode button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  /* L'aperçu reprend les classes du site, avec ses propres variables. */
+  .apx-preview { background: var(--bg); color: var(--ink); font-family: var(--font-body); border: 1px solid var(--line); overflow: hidden; }
+  .apx-preview .apx-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .apx-preview .apx-name { font-family: var(--font-display); font-weight: 600; font-size: 1.2rem; color: var(--accent); }
+  .apx-preview .apx-nav { display: flex; gap: 14px; align-items: center; font-size: 0.85rem; color: var(--ink-soft); flex-wrap: wrap; }
+  .apx-preview .apx-nav .cta { border: 1px solid var(--accent); color: var(--accent); padding: 5px 10px; font-weight: 600; }
+  .apx-preview .apx-hero { padding: 30px 20px 24px; display: grid; gap: 14px; }
+  .apx-preview .apx-hero h3 { font-family: var(--font-display); font-size: clamp(1.6rem, 3vw, 2.3rem); line-height: 1.1; margin: 0; color: var(--ink); text-wrap: balance; }
+  .apx-preview .apx-hero p { margin: 0; color: var(--ink-soft); max-width: 52ch; }
+  .apx-preview .apx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; padding: 0 20px 24px; }
+  .apx-preview .apx-card { background: var(--surface); border: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .apx-preview .apx-card .pic { aspect-ratio: 4 / 3; background: var(--surface-2); display: grid; place-items: center; color: var(--accent-2); }
+  .apx-preview .apx-card .pic svg { width: 44px; height: 44px; }
+  .apx-preview .apx-card .ref { font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-soft); }
+  .apx-preview .apx-card h4 { font-family: var(--font-display); font-size: 1rem; margin: 0; color: var(--ink); }
+  .apx-preview .apx-card .foot { display: flex; justify-content: space-between; align-items: center; }
+  .apx-preview .apx-card .price { font-family: var(--font-mono); color: var(--ink); }
+  .apx-preview .apx-card .add { border: 1px solid var(--ink); background: none; color: var(--ink); padding: 4px 10px; font-weight: 600; font-family: var(--font-body); }
+  .apx-preview .apx-badge { align-self: flex-start; font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line); padding: 2px 6px; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<?php include __DIR__ . '/../includes/icons.php'; ?>
+<?php $adminNav = 'apparence'; include __DIR__ . '/../includes/admin-nav.php'; ?>
+<main>
+<section class="tight">
+  <div class="wrap">
+    <p class="eyebrow">Identité visuelle</p>
+    <h1 style="font-size:1.8rem;margin:12px 0 12px;">Apparence</h1>
+    <p class="hint">Choisissez une palette toute prête ou vos propres couleurs, les polices, le thème clair/sombre et le hero de l'accueil. L'aperçu se met à jour en direct ; rien ne change sur le site avant « Enregistrer ». Les nuances intermédiaires (fonds de cartes, filets) sont calculées automatiquement à partir de vos quatre couleurs.</p>
+
+    <?php if ($flash): ?>
+      <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin:16px 0;"><?= h($flash['message']) ?></p>
+    <?php endif; ?>
+
+    <form class="apx-block" id="modele" method="post" action="/admin/appearance-action.php" style="margin-top:20px;">
+      <input type="hidden" name="action" value="template">
+      <h2>Modèle de mise en page</h2>
+      <p class="hint" style="margin:0;">Le modèle change la <strong>structure</strong> des pages (en-tête, accueil, boutique, fiche), pas seulement les couleurs. Vos produits, textes et photos restent les mêmes. Pour l'essayer sans rien changer, utilisez « Aperçu » : vous parcourez tout le site avec ce modèle, puis vous le quittez depuis le bandeau noir.</p>
+      <div class="tplx-pick">
+        <?php foreach (SHOP_TEMPLATES as $key => $t): $wire = shop_template_wireframe($key); ?>
+          <label class="tplx<?= $key === $activeTemplate ? ' is-current' : '' ?>" style="--p-bg:<?= h($t['colors']['bg']) ?>;--p-ink:<?= h($t['colors']['ink']) ?>;--p-accent:<?= h($t['colors']['accent']) ?>">
+            <input type="radio" name="template" value="<?= h($key) ?>"<?= $key === $activeTemplate ? ' checked' : '' ?>>
+            <span class="tplx-mock" aria-hidden="true"><?php if ($wire): ?><?= $wire ?><?php else: ?><b style="font-family:'<?= h($t['fonts']['display']) ?>',Georgia,serif">Aa</b><i></i><i class="s"></i><u></u><?php endif; ?></span>
+            <strong><?= h($t['label']) ?><?= $key === $activeTemplate ? ' <small>(actuel)</small>' : '' ?></strong>
+            <small><?= h($t['tagline']) ?></small>
+            <?php if (!empty($t['sector'])): ?><small class="tplx-sector"><?= h($t['sector']) ?></small><?php endif; ?>
+            <?php $tplHero = shop_template_hero($key); if ($tplHero !== ''): ?><small class="tplx-sector">Hero : <?= h(SHOP_HEROES[$tplHero]['label']) ?></small><?php endif; ?>
+            <a class="tplx-preview" href="/index.php?modele=<?= h($key) ?>" target="_blank" rel="noopener">Aperçu ↗</a>
+          </label>
+        <?php endforeach; ?>
+      </div>
+      <label class="tplx-opt"><input type="checkbox" name="with_style" value="1" checked> Adopter aussi la palette et les polices du modèle <small>(décochez pour garder vos couleurs et polices actuelles)</small></label>
+      <button type="submit" class="btn btn-primary" style="margin-top:12px;">Appliquer ce modèle</button>
+    </form>
+
+    <form class="apx-block apx-logos" id="logos" method="post" action="/admin/appearance-action.php" enctype="multipart/form-data" style="margin-top:20px;">
+      <input type="hidden" name="action" value="logos">
+      <h2>Logos</h2>
+      <p class="hint" style="margin:0;">Trois déclinaisons, chacune utilisée là où sa forme convient. Sans logo vertical, le carré est utilisé à sa place. Formats : PNG ou SVG sur fond transparent de préférence, JPG ou WebP acceptés (3 Mo maximum). Cliquez sur un logo pour l'agrandir à l'écran. « Médiathèque… » reprend un visuel déjà en ligne (avatar, ancien logo, photo) ; « Agrandir ×2 » augmente la résolution du fichier sans IA, utile pour l'impression.</p>
+      <div class="apx-logo-grid">
+        <?php foreach (LOGO_VARIANTS as $variant => [$title, $usage, $format]): $custom = isset($logos[$variant]); ?>
+          <div class="apx-logo apx-logo-<?= h($variant) ?>">
+            <div class="apx-logo-frame">
+              <button type="button" class="apx-logo-view" data-logo-zoom="/<?= h(logo_url($variant)) ?>" data-logo-zoom-title="<?= h($title . ' — ' . $siteName) ?>">
+                <img id="logo-img-<?= h($variant) ?>" src="/<?= h(logo_url($variant)) ?>" alt="Logo <?= h(mb_strtolower($title)) ?> actuel">
+              </button>
+            </div>
+            <b><?= h($title) ?></b>
+            <small><?= h($usage) ?></small>
+            <small class="apx-logo-format"><?= h($format) ?> · <?= $custom ? 'personnalisé' : ($variant === 'vertical' && !isset($logos['vertical']) ? 'carré utilisé à la place' : "logo d'origine") ?></small>
+            <div class="apx-logo-actions">
+              <label class="btn btn-ghost apx-logo-pick" for="logo-<?= h($variant) ?>">Choisir un fichier…</label>
+              <input type="file" name="logo_<?= h($variant) ?>" id="logo-<?= h($variant) ?>" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" hidden data-preview="logo-img-<?= h($variant) ?>" data-status="logo-status-<?= h($variant) ?>">
+              <button type="button" class="btn btn-ghost apx-logo-pick" data-open-logo-media="<?= h($variant) ?>" data-open-logo-title="<?= h($title) ?>">Médiathèque…</button>
+              <button type="submit" class="btn-small" name="enlarge" value="<?= h($variant) ?>">Agrandir ×2</button>
+            </div>
+            <input type="hidden" name="media_<?= h($variant) ?>" id="media-<?= h($variant) ?>" value="">
+            <p class="apx-logo-media-status" id="logo-status-<?= h($variant) ?>" role="status" hidden></p>
+            <?php if ($custom): ?>
+              <label class="apx-logo-reset"><input type="checkbox" name="reset_<?= h($variant) ?>" value="1"> Revenir au logo d'origine</label>
+            <?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <div class="apx-actions"><button class="btn btn-primary" type="submit">Enregistrer les logos</button></div>
+    </form>
+
+    <?php if (autofeed_api_key() !== ''): ?>
+    <section class="apx-block" id="logos-ia" style="margin-top:14px;">
+      <h2>✨ Générer les logos avec l'IA</h2>
+      <p class="hint" style="margin:0 0 10px;">L’IA dessine un seul symbole graphique, sans texte, aux couleurs de votre palette. Le nom de la boutique est ensuite écrit à part pour composer les trois déclinaisons (horizontale, verticale, carrée) sur fond transparent : elles partagent donc le même symbole, réservé à cette boutique. Coût estimé : <?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>, décompté de votre crédit IA ; « Revenir au logo d'origine » permet d'annuler une déclinaison.</p>
+      <form method="post" action="/admin/regenerate-image.php" id="logo-ai-form" style="display:grid;gap:10px;max-width:720px;" data-cost="<?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>"
+        data-direction="<?= h(autofeed_logo_direction()) ?>">
+        <input type="hidden" name="target" value="logo"><input type="hidden" name="back" value="logos">
+        <label>Description du symbole <textarea name="prompt" id="logo-ai-prompt" rows="4" maxlength="400" style="width:100%;box-sizing:border-box;"></textarea></label>
+        <div><button class="btn btn-primary" type="submit">Générer le symbole et les 3 logos</button></div>
+      </form>
+
+      <hr style="border:0;border-top:1px solid rgba(0,0,0,.12);margin:18px 0;">
+      <h3 style="margin:0 0 4px;">♻️ Symboles déjà générés</h3>
+      <p class="hint" style="margin:0 0 10px;">Chaque symbole généré est conservé ici, commun à toutes les boutiques. Cliquez sur un symbole pour composer les trois déclinaisons de cette boutique avec son nom : aucun crédit IA n’est décompté. Un logo ne peut servir qu’à une seule boutique : le symbole disparaît de la liste dès qu’il est utilisé.</p>
+      <?php $library = logo_library_list(); ?>
+      <?php if ($library): ?>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;max-width:720px;">
+        <?php foreach (array_slice($library, 0, 24) as $item): ?>
+        <form method="post" action="/admin/regenerate-image.php" style="margin:0;">
+          <input type="hidden" name="target" value="logo_from_library">
+          <input type="hidden" name="symbol" value="<?= h((string) $item['file']) ?>">
+          <input type="hidden" name="back" value="logos">
+          <button type="submit" title="Composer les 3 logos avec ce symbole — sans crédit IA" style="padding:0;border:1px solid rgba(0,0,0,.12);border-radius:10px;background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0 0/16px 16px;cursor:pointer;">
+            <img src="/uploads/logo-library/<?= h((string) $item['file']) ?>" alt="Symbole proposé" width="80" height="80" style="display:block;object-fit:contain;">
+          </button>
+        </form>
+        <?php endforeach; ?>
+      </div>
+      <?php else: ?>
+      <p class="hint">Aucun symbole pour l’instant : la première génération alimentera la médiathèque.</p>
+      <?php endif; ?>
+
+      <hr style="border:0;border-top:1px solid rgba(0,0,0,.12);margin:18px 0;">
+      <h3 style="margin:0 0 4px;">✨ Améliorer le logo actuel</h3>
+      <p class="hint" style="margin:0 0 10px;">Repart du logo enregistré pour la déclinaison, le recadre pour remplir la zone, retire la baseline s’il y en a une et rend le fond transparent, aux couleurs de votre palette. Même coût qu’une génération. Un logo SVG doit d’abord être importé en PNG ou JPG.</p>
+      <form method="post" action="/admin/regenerate-image.php" id="logo-improve-form" style="display:grid;gap:10px;max-width:720px;" data-cost="<?= h(ai_format_eur(autofeed_regen_cost_eur())) ?>">
+        <input type="hidden" name="target" value="logo_improve"><input type="hidden" name="back" value="logos">
+        <label>Déclinaison <select name="variant" id="logo-improve-variant">
+          <?php foreach (LOGO_VARIANTS as $v => [$t]): ?><option value="<?= h($v) ?>"><?= h($t) ?></option><?php endforeach; ?>
+        </select></label>
+        <label>Consigne (facultatif) <textarea name="prompt" rows="3" maxlength="300" style="width:100%;box-sizing:border-box;" placeholder="Ex. simplifier les traits, épaissir les lettres, agrandir le symbole…"></textarea></label>
+        <div><button class="btn btn-primary" type="submit">Améliorer le logo</button></div>
+      </form>
+    </section>
+    <script>
+    (function () {
+      var f = document.getElementById('logo-ai-form'), p = document.getElementById('logo-ai-prompt');
+      p.value = f.dataset.direction;
+      f.addEventListener('submit', function (e) {
+        if (!confirm('Générer un symbole avec l\u2019IA et composer les 3 logos ? Coût estimé : ' + f.dataset.cost + ' (décompté de votre crédit IA).')) { e.preventDefault(); return; }
+        var b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Génération du symbole en cours (~30 s)…';
+      });
+      var fi = document.getElementById('logo-improve-form');
+      if (fi) fi.addEventListener('submit', function (e) {
+        if (!confirm('Améliorer ce logo avec l\u2019IA ? Coût estimé : ' + fi.dataset.cost + ' (décompté de votre crédit IA).')) { e.preventDefault(); return; }
+        var b = fi.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Amélioration en cours (~30 s)…';
+      });
+    })();
+    </script>
+    <?php endif; ?>
+
+    <div class="apx-grid">
+      <form class="apx-form" method="post" action="/admin/appearance-action.php" id="apx-form">
+        <input type="hidden" name="action" value="save">
+
+        <div class="apx-block">
+          <h2>Palette</h2>
+          <div class="apx-palettes" role="group" aria-label="Palettes toutes prêtes">
+            <?php foreach (APPEARANCE_PALETTES as $key => [$label, $bg, $ink, $accent, $accent2]): ?>
+              <button type="button" class="apx-palette" data-colors="<?= h(json_encode(['bg' => $bg, 'ink' => $ink, 'accent' => $accent, 'accent-2' => $accent2])) ?>" aria-pressed="false">
+                <span class="apx-swatches"><span style="background:<?= h($bg) ?>"></span><span style="background:<?= h($accent) ?>"></span><span style="background:<?= h($accent2) ?>"></span><span style="background:<?= h($ink) ?>"></span></span>
+                <?= h($label) ?>
+              </button>
+            <?php endforeach; ?>
+          </div>
+          <div class="apx-colors">
+            <?php foreach ($colorFields as $key => [$label, $help]): ?>
+              <label class="apx-color">
+                <input type="color" name="colors[<?= h($key) ?>]" id="c-<?= h($key) ?>" value="<?= h($colors[$key]) ?>">
+                <span><?= h($label) ?></span>
+                <small><?= h($help) ?></small>
+              </label>
+            <?php endforeach; ?>
+          </div>
+          <p class="apx-contrast" id="apx-contrast" role="status"></p>
+          <label>Thème du site
+            <select name="theme" id="f-theme">
+              <?php foreach (APPEARANCE_THEMES as $themeKey => $themeLabel): ?>
+                <option value="<?= h($themeKey) ?>"<?= $current['theme'] === $themeKey ? ' selected' : '' ?>><?= h($themeLabel) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <p class="hint" style="margin:0;">« Sombre » utilise la variante dessinée du modèle quand elle existe, sinon des nuances calculées à partir de votre palette. « Automatique » suit le réglage clair/sombre de l'appareil du visiteur.</p>
+        </div>
+
+        <div class="apx-block apx-font">
+          <h2>Typographie</h2>
+          <label>Titres
+            <select name="font_display" id="f-display">
+              <?php foreach (APPEARANCE_FONTS['display'] as $name => [, , $style]): ?>
+                <option value="<?= h($name) ?>"<?= $fonts['display'] === $name ? ' selected' : '' ?>><?= h("$name — $style") ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <p class="apx-sample" id="s-display"><?= h($content['site_name'] ?: tenant('name')) ?></p>
+          <label>Textes
+            <select name="font_body" id="f-body">
+              <?php foreach (APPEARANCE_FONTS['body'] as $name => [, , $style]): ?>
+                <option value="<?= h($name) ?>"<?= $fonts['body'] === $name ? ' selected' : '' ?>><?= h("$name — $style") ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <p class="apx-sample body" id="s-body">Chaque pièce est choisie avec soin, décrite honnêtement et emballée pour voyager sans encombre.</p>
+        </div>
+
+        <div class="apx-block">
+          <h2>Hero de la page d'accueil</h2>
+          <?php if (shop_template_layout($activeTemplate) === 'classic'): $tplHeroKey = shop_template_hero($activeTemplate) ?: 'polaroid'; $glyphs = ['polaroid' => '▤', 'plein' => '▭', 'scinde' => '◧', 'carrousel' => '⇆', 'mosaique' => '▦']; ?>
+            <p class="hint" style="margin:0;">Le modèle propose un hero par défaut ; choisissez-en un autre pour cette boutique sans changer le reste du design. Les photos, promos et coups de cœur restent les mêmes.</p>
+            <div class="apx-heroes">
+              <label class="apx-hero">
+                <input type="radio" name="hero" value=""<?= $current['hero'] === '' ? ' checked' : '' ?>>
+                <span class="apx-hero-glyph" aria-hidden="true"><?= h($glyphs[$tplHeroKey] ?? '▤') ?></span>
+                <span><strong>Hero du modèle · <?= h(SHOP_HEROES[$tplHeroKey]['label']) ?></strong><small><?= h(SHOP_HEROES[$tplHeroKey]['tagline']) ?></small></span>
+              </label>
+              <?php foreach (SHOP_HEROES as $heroKey => $hero): ?>
+                <label class="apx-hero">
+                  <input type="radio" name="hero" value="<?= h($heroKey) ?>"<?= $current['hero'] === $heroKey ? ' checked' : '' ?>>
+                  <span class="apx-hero-glyph" aria-hidden="true"><?= h($glyphs[$heroKey] ?? '▤') ?></span>
+                  <span><strong><?= h($hero['label']) ?></strong><small><?= h($hero['tagline']) ?></small></span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          <?php else: ?>
+            <p class="hint" style="margin:0;">Le modèle « <?= h(SHOP_TEMPLATES[$activeTemplate]['label']) ?> » a son propre hero, dessiné avec sa mise en page et sa navigation. Il reste inchangé ; choisissez un modèle classique pour utiliser les variantes de hero.</p>
+            <input type="hidden" name="hero" value="">
+          <?php endif; ?>
+        </div>
+
+        <div class="apx-actions">
+          <button class="btn btn-primary" type="submit">Enregistrer</button>
+          <a class="btn btn-ghost" href="/index.php" target="_blank">Voir le site</a>
+        </div>
+      </form>
+
+      <div class="apx-preview-wrap">
+        <div class="apx-preview-bar">
+          <span>Aperçu</span>
+          <span class="apx-mode" role="group" aria-label="Thème de l'aperçu">
+            <button type="button" data-mode="light" aria-pressed="true">Clair</button>
+            <button type="button" data-mode="dark" aria-pressed="false">Sombre</button>
+          </span>
+        </div>
+        <div class="apx-preview" id="apx-preview">
+          <div class="apx-bar">
+            <span class="apx-name"><?= h($content['site_name'] ?: tenant('name')) ?></span>
+            <span class="apx-nav"><span>Accueil</span><span>La boutique</span><span>Panier</span><span class="cta">Connexion</span></span>
+          </div>
+          <div class="apx-hero">
+            <p class="eyebrow" style="margin:0;"><?= h($content['hero_eyebrow'] ?: 'Nouveautés') ?></p>
+            <h3><?= h($content['hero_title'] ?: tenant('tagline')) ?></h3>
+            <p><?= h(mb_strimwidth((string) ($content['hero_subtitle'] ?: 'Une sélection renouvelée chaque semaine.'), 0, 180, '…')) ?></p>
+            <div class="hero-ctas" style="display:flex;gap:10px;flex-wrap:wrap;">
+              <span class="btn btn-primary">Voir la boutique</span>
+              <span class="btn btn-ghost">Notre histoire</span>
+            </div>
+          </div>
+          <div class="apx-cards">
+            <?php foreach (array_slice(get_products(), 0, 3) ?: [['ref' => '001', 'name' => 'Premier produit', 'price' => '20 €', 'cat' => '']] as $p): ?>
+              <div class="apx-card">
+                <div class="pic"><svg viewBox="0 0 64 64"><use href="#<?= h(category_icon((string) $p['cat'])) ?>"/></svg></div>
+                <span class="ref">Réf. N°<?= h($p['ref']) ?></span>
+                <h4><?= h($p['name']) ?></h4>
+                <span class="apx-badge">Coup de cœur</span>
+                <div class="foot"><span class="price"><?= h(effective_price($p)) ?></span><span class="add">Ajouter</span></div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <?php if ($current['custom']): ?>
+      <form method="post" action="/admin/appearance-action.php" style="margin-top:28px;">
+        <input type="hidden" name="action" value="reset">
+        <p class="hint">Apparence personnalisée active. <button class="btn btn-ghost" type="submit" style="margin-left:8px;">Revenir à l'apparence d'origine</button></p>
+      </form>
+    <?php endif; ?>
+  </div>
+</section>
+</main>
+
+<div class="apx-logo-zoom" data-logo-zoom-box>
+  <figure>
+    <img data-logo-zoom-img alt="">
+    <figcaption>
+      <span data-logo-zoom-caption></span>
+      <button type="button" class="btn-small" data-logo-zoom-close>Fermer</button>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="media-pick-backdrop" data-logo-media-box>
+  <div class="media-pick-box">
+    <p class="eyebrow" style="margin:0;">Choisir un visuel dans la médiathèque — <span data-logo-media-title></span></p>
+    <p class="hint" style="margin:0;">Le visuel sera repris tel quel pour cette déclinaison (aucun texte ajouté). Pour composer les trois logos avec le nom de la boutique, utilisez plutôt un logo généré ou l'avatar depuis « Mon profil ».</p>
+    <?php if (!$mediaPhotos): ?>
+      <p class="empty-state">La médiathèque est vide pour l'instant. <a href="/admin/media.php">Ajouter des visuels →</a></p>
+    <?php else: ?>
+      <div class="media-pick-grid">
+        <?php foreach ($mediaPhotos as $m): ?>
+          <button type="button" class="media-pick-item" data-logo-media-path="<?= h($m['path']) ?>" data-logo-media-label="<?= h($m['label']) ?>">
+            <img src="/<?= h($m['path']) ?>" alt="<?= h($m['label']) ?>" loading="lazy">
+            <span><?= h($m['label']) ?></span>
+          </button>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <a class="btn-small" href="/admin/media.php" target="_blank" rel="noopener">Gérer la médiathèque →</a>
+      <button type="button" class="btn-small" data-logo-media-cancel>Annuler</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var FONTS = <?= json_encode($fontCatalog, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  var preview = document.getElementById('apx-preview');
+  var mode = <?= json_encode($current['theme'] === 'dark' ? 'dark' : 'light') ?>;
+  document.querySelectorAll('.apx-mode button').forEach(function (b) {
+    b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  });
+  var keys = ['bg', 'ink', 'accent', 'accent-2'];
+
+  function rgb(h) { return [1, 3, 5].map(function (i) { return parseInt(h.substr(i, 2), 16); }); }
+  function hex(c) { return '#' + c.map(function (v) { return Math.round(v).toString(16).padStart(2, '0'); }).join(''); }
+  function mix(a, b, t) { var x = rgb(a), y = rgb(b); return hex(x.map(function (v, i) { return v + (y[i] - v) * t; })); }
+  function lum(h) {
+    var c = rgb(h).map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+  function on(h) { return lum(h) > 0.4 ? '#1d1a16' : '#fffaf2'; }
+  function ratio(a, b) { var x = lum(a) + 0.05, y = lum(b) + 0.05; return Math.max(x, y) / Math.min(x, y); }
+
+  // Même calcul qu'appearance_derive() en PHP.
+  function derive(c) {
+    var dBg = mix(c.ink, '#000000', 0.35), dInk = mix(c.bg, '#ffffff', 0.15);
+    var dA = mix(c.accent, '#ffffff', 0.3), dA2 = mix(c['accent-2'], '#ffffff', 0.35);
+    return {
+      light: { bg: c.bg, surface: mix(c.bg, c.ink, 0.06), 'surface-2': mix(c.bg, c.ink, 0.12), ink: c.ink,
+        'ink-soft': mix(c.ink, c.bg, 0.38), accent: c.accent, 'accent-ink': on(c.accent), 'accent-2': c['accent-2'],
+        sage: c['accent-2'], line: mix(c.bg, c.ink, 0.25) },
+      dark: { bg: dBg, surface: mix(dBg, dInk, 0.06), 'surface-2': mix(dBg, dInk, 0.11), ink: dInk,
+        'ink-soft': mix(dInk, dBg, 0.3), accent: dA, 'accent-ink': on(dA), 'accent-2': dA2, sage: dA2, line: mix(dBg, dInk, 0.22) }
+    };
+  }
+
+  function loadFont(role, name) {
+    var f = FONTS[role][name]; if (!f) return '';
+    var id = 'apx-font-' + name.replace(/\W+/g, '-');
+    if (!document.getElementById(id)) {
+      var link = document.createElement('link'); link.id = id; link.rel = 'stylesheet'; link.href = f.url;
+      document.head.appendChild(link);
+    }
+    return f.stack;
+  }
+
+  function current() {
+    var c = {};
+    keys.forEach(function (k) { c[k] = document.getElementById('c-' + k).value; });
+    return c;
+  }
+
+  function render() {
+    var c = current(), vars = derive(c)[mode];
+    Object.keys(vars).forEach(function (k) { preview.style.setProperty('--' + k, vars[k]); });
+    var display = loadFont('display', document.getElementById('f-display').value);
+    var body = loadFont('body', document.getElementById('f-body').value);
+    preview.style.setProperty('--font-display', display);
+    preview.style.setProperty('--font-body', body);
+    document.getElementById('s-display').style.fontFamily = display;
+    document.getElementById('s-body').style.fontFamily = body;
+
+    // Lisibilité : contraste du texte sur le fond et du texte des boutons.
+    var r1 = ratio(c.ink, c.bg), r2 = ratio(on(c.accent), c.accent), note = document.getElementById('apx-contrast');
+    var ok = r1 >= 4.5 && r2 >= 3;
+    note.dataset.kind = ok ? '' : 'warn';
+    note.textContent = 'Contraste texte/fond ' + r1.toFixed(1) + ':1 · boutons ' + r2.toFixed(1) + ':1'
+      + (ok ? ' — lisible' : ' — peu lisible, foncez le texte ou éclaircissez le fond');
+
+    document.querySelectorAll('.apx-palette').forEach(function (b) {
+      var p = JSON.parse(b.dataset.colors);
+      b.setAttribute('aria-pressed', String(keys.every(function (k) { return p[k].toLowerCase() === c[k].toLowerCase(); })));
+    });
+  }
+
+  document.querySelectorAll('.apx-palette').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var p = JSON.parse(b.dataset.colors);
+      keys.forEach(function (k) { document.getElementById('c-' + k).value = p[k]; });
+      render();
+    });
+  });
+  document.getElementById('apx-form').addEventListener('input', render);
+  document.getElementById('apx-form').addEventListener('change', render);
+  document.querySelectorAll('.apx-mode button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      mode = b.dataset.mode;
+      document.querySelectorAll('.apx-mode button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      render();
+    });
+  });
+  render();
+
+  // Logos : aperçu du fichier choisi avant l'envoi.
+  document.querySelectorAll('input[data-preview]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      if (!input.files[0]) return;
+      var url = URL.createObjectURL(input.files[0]);
+      document.getElementById(input.dataset.preview).src = url;
+      var card = input.closest('.apx-logo');
+      var zoom = card && card.querySelector('[data-logo-zoom]');
+      if (zoom) zoom.dataset.logoZoom = url;
+      var media = card && card.querySelector('input[type="hidden"][name^="media_"]');
+      if (media) media.value = '';
+      var status = input.dataset.status && document.getElementById(input.dataset.status);
+      if (status) {
+        status.hidden = false;
+        status.textContent = input.files[0].name + ' — sera enregistré avec « Enregistrer les logos ».';
+      }
+    });
+  });
+})();
+</script>
+<script>
+(function () {
+  // Agrandir un logo à l'écran.
+  var box = document.querySelector('[data-logo-zoom-box]');
+  var img = box.querySelector('[data-logo-zoom-img]');
+  var caption = box.querySelector('[data-logo-zoom-caption]');
+  function closeZoom() { box.classList.remove('is-open'); }
+  document.querySelectorAll('[data-logo-zoom]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      img.src = btn.dataset.logoZoom;
+      caption.textContent = btn.dataset.logoZoomTitle || '';
+      box.classList.add('is-open');
+      box.querySelector('[data-logo-zoom-close]').focus();
+    });
+  });
+  box.addEventListener('click', function (e) { if (e.target === box) closeZoom(); });
+  box.querySelector('[data-logo-zoom-close]').addEventListener('click', closeZoom);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('is-open')) closeZoom(); });
+
+  // Médiathèque : reprendre un visuel existant pour une déclinaison.
+  var pick = document.querySelector('[data-logo-media-box]');
+  var target = null;
+  document.querySelectorAll('[data-open-logo-media]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      target = btn.dataset.openLogoMedia;
+      pick.querySelector('[data-logo-media-title]').textContent = btn.dataset.openLogoTitle || '';
+      pick.classList.add('is-open');
+    });
+  });
+  function closePick() { pick.classList.remove('is-open'); target = null; }
+  pick.querySelector('[data-logo-media-cancel]').addEventListener('click', closePick);
+  pick.addEventListener('click', function (e) { if (e.target === pick) closePick(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && pick.classList.contains('is-open')) closePick(); });
+  pick.querySelectorAll('[data-logo-media-path]').forEach(function (item) {
+    item.addEventListener('click', function () {
+      if (!target) return;
+      var card = document.querySelector('.apx-logo-' + target);
+      var field = document.getElementById('media-' + target);
+      var file = document.getElementById('logo-' + target);
+      var status = document.getElementById('logo-status-' + target);
+      if (!card || !field) return;
+      field.value = item.dataset.logoMediaPath;
+      if (file) file.value = '';
+      card.querySelector('#logo-img-' + target).src = '/' + item.dataset.logoMediaPath;
+      var zoom = card.querySelector('[data-logo-zoom]');
+      if (zoom) zoom.dataset.logoZoom = '/' + item.dataset.logoMediaPath;
+      if (status) {
+        status.hidden = false;
+        status.textContent = item.dataset.logoMediaLabel + ' — sera enregistré avec « Enregistrer les logos ».';
+      }
+      closePick();
+    });
+  });
+})();
+</script>
+</body>
+</html>

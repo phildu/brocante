@@ -1,8 +1,7 @@
 <?php
 /** Export CSV des propositions d'une édition (compatible Excel français : UTF-8 avec BOM, séparateur « ; »). */
-session_start();
 require_once __DIR__ . '/../includes/invendus.php';
-require_permission('portail.invendus.exporter');
+unsold_admin_init();   // ne s'ouvre que depuis l'espace d'une galerie (portail/galerie-invendus.php)
 
 $event = unsold_event_get((int) unsold_param($_GET, 'event'));
 if (!$event) {
@@ -17,6 +16,7 @@ foreach (unsold_tours_list((int) $event['id']) as $t) {
 }
 
 $filename = 'invendus-' . slugify($event['name'], 40) . '-' . $event['event_date'] . '.csv';
+unsold_url_map_off();   // téléchargement : le contenu du fichier reste tel quel
 header('Content-Type: text/csv; charset=UTF-8');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Cache-Control: no-store');

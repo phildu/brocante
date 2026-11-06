@@ -1,7 +1,6 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/invendus-layout.php';
-require_permission('portail.invendus.lire');
+unsold_admin_init();   // ne s'ouvre que depuis l'espace d'une galerie (portail/galerie-invendus.php)
 
 $id = (int) unsold_param($_GET, 'id');
 $event = unsold_event_get($id);

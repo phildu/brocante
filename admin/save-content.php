@@ -1,7 +1,7 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
-auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
+require_admin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/index.php');
@@ -15,8 +15,10 @@ $fields = [
     'principle1_title', 'principle1_text',
     'principle2_title', 'principle2_text',
     'principle3_title', 'principle3_text',
-    'contact_address', 'contact_hours', 'contact_delivery',
+    'contact_delivery',
     'shipping_fee', 'pickup_label', 'shipping_label',
+    'pickup_only_below', 'pickup_only_message',
+    'gift_wrap_enabled', 'gift_wrap_price', 'gift_wrap_label',
 ];
 
 $set = [];
@@ -25,6 +27,23 @@ foreach ($fields as $f) {
     $set[] = "$f = :$f";
     $params[$f] = trim((string) ($_POST[$f] ?? ''));
 }
+
+// Seuil du retrait seul : nombre >= 0 (« 10 », « 7,5 »), sinon valeur par défaut ; message vide : texte par défaut.
+$seuil = str_replace(',', '.', $params['pickup_only_below']);
+$params['pickup_only_below'] = (is_numeric($seuil) && (float) $seuil >= 0 && (float) $seuil < 100000)
+    ? rtrim(rtrim(number_format((float) $seuil, 2, '.', ''), '0'), '.')
+    : '10';
+if ($params['pickup_only_below'] === '') $params['pickup_only_below'] = '0';
+if ($params['pickup_only_message'] === '') $params['pickup_only_message'] = "Retrait à l'adresse du vendeur.";
+
+// Emballage cadeau : case à cocher (absente = désactivé), prix >= 0 (vide = offert), libellé par défaut.
+$params['gift_wrap_enabled'] = !empty($_POST['gift_wrap_enabled']) ? '1' : '0';
+$giftPrice = str_replace(',', '.', $params['gift_wrap_price']);
+$params['gift_wrap_price'] = (is_numeric($giftPrice) && (float) $giftPrice >= 0 && (float) $giftPrice < 100000)
+    ? rtrim(rtrim(number_format((float) $giftPrice, 2, '.', ''), '0'), '.')
+    : '0';
+if ($params['gift_wrap_price'] === '') $params['gift_wrap_price'] = '0';
+if ($params['gift_wrap_label'] === '') $params['gift_wrap_label'] = 'Emballage cadeau';
 
 // Un fichier envoyé prime sur une sélection médiathèque (le JS vide déjà
 // l'input file quand on choisit dans la médiathèque, mais on reste défensif).
@@ -49,6 +68,12 @@ $sql = 'UPDATE content SET ' . implode(', ', $set) . ' WHERE id = 1';
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
 
+if (array_key_exists('footer_note', $_POST)) {
+    shop_setting_set('footer_note', mb_substr(trim((string) $_POST['footer_note']), 0, 200));
+}
+
 flash_set('Contenus mis à jour.');
-header('Location: /admin/index.php');
+$backTab = in_array($_POST['tab'] ?? '', ['general', 'pages', 'paiement'], true) ? $_POST['tab'] : 'general';
+$backPage = in_array($_POST['p'] ?? '', ['accueil', 'sections', 'footer', 'horaires'], true) ? (string) $_POST['p'] : '';
+header('Location: /admin/index.php?s=' . $backTab . ($backPage !== '' ? '&p=' . $backPage : ''));
 exit;

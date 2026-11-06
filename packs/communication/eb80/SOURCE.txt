@@ -1,0 +1,189 @@
+Copie d'electroboy80 faite le 2026-10-18 20:59
+Dossier : /Users/admin/Documents/projet/web local/electroboy80
+Commit : 569921a 2026-10-18 20:59:33 +0200 Éditeur visuel : menu Projet, export, nom automatique ; Apparence et palettes des visuels par l'IA
+Empreinte : d04dff08d0ec534ee351055432d11d3b
+
+Retouches :
+admin.html : adaptation au début : 1
+admin.html : couleurs de la boutique : 1
+admin.html : adaptation à la fin : 1
+admin.html : scripts et styles en chemin relatif : 5
+admin.html : /uploads/ + nom : 6
+admin.html : `/uploads/${…}` : 1
+admin.html : clé IA non exigée dans le navigateur : 3
+admin.html : texte du bouton IA du SEO : 1
+admin.html : fonds sombres : 215
+admin.html : fonds noirs translucides : 77
+admin.html : bordures sombres : 63
+admin.html : textes clairs : 54
+admin.html : textes atténués : 128
+admin.html : retour TikTok : 1
+js/eb80-effects.js : /uploads/ + nom : 0
+js/eb80-effects.js : `/uploads/${…}` : 0
+plugin/sources.js : /uploads/ + nom : 0
+plugin/sources.js : `/uploads/${…}` : 0
+plugin/sources.js : fonds sombres : 6
+plugin/sources.js : fonds noirs translucides : 0
+plugin/sources.js : bordures sombres : 4
+plugin/sources.js : textes clairs : 0
+plugin/sources.js : textes atténués : 6
+js/video-promo/video-ia.js : /uploads/ + nom : 1
+js/video-promo/video-ia.js : `/uploads/${…}` : 0
+js/video-promo/video-ia.js : lecteur en chemin relatif : 1
+js/video-promo/video-ia.js : textes de la boutique : 1
+js/video-promo/video-ia.js : titre de la fenêtre : 1
+js/video-promo/video-ia.js : exemple de consigne : 1
+js/video-promo/video-ia.js : nom de l'IA : 1
+js/video-promo/video-ia.js : exemple de date : 1
+js/video-promo/video-ia.js : exemple d'étiquettes : 1
+js/video-promo/video-ia.js : appel final : 1
+js/video-promo/video-ia.js : lien affiché : 1
+js/video-promo/video-ia.js : nom de la carte finale (liste) : 1
+js/video-promo/video-ia.js : charte (case) : 1
+js/video-promo/video-ia.js : charte (aide) : 1
+js/video-promo/video-ia.js : charte sans logo : 1
+js/video-promo/video-ia.js : nom de la carte finale : 1
+js/video-promo/video-ia.js : scène titre : 1
+js/video-promo/video-ia.js : scène mots-chocs : 1
+js/video-promo/video-ia.js : scènes photo : 1
+js/video-promo/video-ia.js : carte finale (exemple) : 1
+js/video-promo/video-ia.js : carte finale (renvoi) : 1
+js/video-promo/video-ia.js : fin (exemple) : 1
+js/video-promo/video-ia.js : fin (renvoi) : 1
+js/video-promo/video-ia.js : nom de l'IA (visuel) : 1
+js/video-promo/video-ia.js : nom de l'IA (sujet) : 1
+js/video-promo/video-ia.js : nom de l'IA (charte) : 1
+js/video-promo/video-ia.js : nom de l'IA (variantes) : 1
+js/video-promo/video-ia.js : nom de l'IA (scénario) : 1
+js/video-promo/video-ia.js : bandeau défilant : libellé : 1
+js/video-promo/video-ia.js : bandeau défilant : vide = aucun : 1
+video-ia.js (fenêtre) : fonds sombres : 15
+video-ia.js (fenêtre) : fonds noirs translucides : 1
+video-ia.js (fenêtre) : bordures sombres : 13
+video-ia.js (fenêtre) : textes clairs : 7
+video-ia.js (fenêtre) : textes atténués : 5
+js/video-promo/video-ia.js : couleurs de la fenêtre : 1
+js/media-validation.js : /uploads/ + nom : 3
+js/media-validation.js : `/uploads/${…}` : 0
+js/media-picker-outils.js : /uploads/ + nom : 0
+js/media-picker-outils.js : `/uploads/${…}` : 0
+js/video-promo/eb80-video-player.js : /uploads/ + nom : 0
+js/video-promo/eb80-video-player.js : `/uploads/${…}` : 0
+scripts et styles recopiés : js/eb80-effects.js, plugin/sources.js, js/video-promo/video-ia.js, js/media-validation.js, js/media-picker-outils.js, js/video-promo/eb80-video-player.js, js/video-promo/eb80-video-player.css
+config.php : en-tête PHP : 1
+config.php : curl_close retiré : 0
+config.php : imagedestroy retiré : 3
+config.php : en-têtes CORS : 4
+config.php : pré-requêtes OPTIONS : 1
+config.php : type de contenu : 1
+config.php : base propre au portage : 2
+config.php : constantes : 6
+config.php : requireAuth remplacée : 1
+config.php : requirePerm remplacée : 1
+config.php : getCurrentUser remplacée : 1
+config.php : uploadFile remplacée : 1
+config.php : jsonResponse remplacée : 1
+config.php : getJsonInput remplacée : 1
+media.php : en-tête PHP : 1
+media.php : curl_close retiré : 3
+media.php : imagedestroy retiré : 4
+media.php : config : 1
+media.php : adresses des fichiers : 18
+media.php : constantes : 0
+media.php : handleGetMedia remplacée : 1
+media.php : handleUploadChunk remplacée : 1
+media.php : handleImportUrl remplacée : 1
+media.php : handleSeoSuggest remplacée : 1
+media.php : handleDownloadVideo remplacée : 1
+media.php : handleMergeAV remplacée : 1
+media.php : handleExtractAudio remplacée : 1
+media-links.php : en-tête PHP : 1
+media-links.php : curl_close retiré : 0
+media-links.php : imagedestroy retiré : 0
+media-links.php : config : 1
+media-links.php : adresses des fichiers : 0
+media-links.php : constantes : 0
+generate-web-images.php : en-tête PHP : 1
+generate-web-images.php : curl_close retiré : 0
+generate-web-images.php : imagedestroy retiré : 2
+generate-web-images.php : config : 1
+generate-web-images.php : adresses des fichiers : 0
+generate-web-images.php : constantes : 1
+settings.php : en-tête PHP : 1
+settings.php : curl_close retiré : 0
+settings.php : imagedestroy retiré : 0
+settings.php : config : 1
+settings.php : adresses des fichiers : 0
+settings.php : constantes : 0
+ai-generate.php : en-tête PHP : 1
+ai-generate.php : curl_close retiré : 2
+ai-generate.php : imagedestroy retiré : 0
+ai-generate.php : config : 1
+ai-generate.php : adresses des fichiers : 0
+ai-generate.php : constantes : 0
+ai-generate.php : connexion : 1
+ai-generate.php : fournisseur : 1
+ai-generate.php : clé : 1
+ai-generate.php : consommation comptée : 1
+rs-v2.php : en-tête PHP : 1
+rs-v2.php : curl_close retiré : 4
+rs-v2.php : imagedestroy retiré : 0
+rs-v2.php : config : 1
+rs-v2.php : adresses des fichiers : 0
+rs-v2.php : constantes : 0
+rs-v2.php : apiCurl remplacée : 1
+rs-v2.php : refreshTikTokToken remplacée : 1
+rs-v2.php : handleGenerateMessage remplacée : 1
+rs-schedule.php : en-tête PHP : 1
+rs-schedule.php : curl_close retiré : 0
+rs-schedule.php : imagedestroy retiré : 0
+rs-schedule.php : config : 1
+rs-schedule.php : adresses des fichiers : 0
+rs-schedule.php : constantes : 1
+rs-schedule.php : bibliothèque RS : 1
+rs-tiktok-callback.php : en-tête PHP : 1
+rs-tiktok-callback.php : curl_close retiré : 1
+rs-tiktok-callback.php : imagedestroy retiré : 0
+rs-tiktok-callback.php : config : 1
+rs-tiktok-callback.php : adresses des fichiers : 0
+rs-tiktok-callback.php : constantes : 0
+rs-tiktok-callback.php : adresse de retour : 1
+social-feed.php : en-tête PHP : 1
+social-feed.php : curl_close retiré : 1
+social-feed.php : imagedestroy retiré : 0
+social-feed.php : config : 1
+social-feed.php : adresses des fichiers : 0
+social-feed.php : constantes : 0
+video-jobs.php : en-tête PHP : 1
+video-jobs.php : curl_close retiré : 0
+video-jobs.php : imagedestroy retiré : 0
+video-jobs.php : config : 1
+video-jobs.php : adresses des fichiers : 1
+video-jobs.php : constantes : 0
+video-jobs.php : dossier temporaire hors de uploads/ : 1
+video-jobs.php : nom de fichier sans écrasement : 1
+video-jobs.php : contrôle du fichier rendu : 1
+video-jobs-ai.php : en-tête PHP : 1
+video-jobs-ai.php : curl_close retiré : 1
+video-jobs-ai.php : imagedestroy retiré : 2
+video-jobs-ai.php : config : 1
+video-jobs-ai.php : adresses des fichiers : 2
+video-jobs-ai.php : constantes : 0
+video-jobs-ai.php : sujet par défaut : la boutique : 1
+video-jobs-ai.php : clé de l'IA : 1
+video-jobs-ai.php : charte : la boutique : 1
+video-jobs-ai.php : identité de la boutique : 1
+video-jobs-ai.php : photos du sujet : 1
+video-jobs-ai.php : palette sans charte Electroboy : 1
+video-jobs-ai.php : musique sans Electroboy : 1
+video-jobs-ai.php : message sans photo : 1
+video-jobs-ai.php : appel de l'IA remplacé : 1
+palettes.php : en-tête PHP : 1
+palettes.php : curl_close retiré : 0
+palettes.php : imagedestroy retiré : 0
+palettes.php : config : 1
+palettes.php : adresses des fichiers : 0
+palettes.php : constantes : 0
+palettes.php : identité : 1
+palettes.php : appel de l'IA : 1
+reglages-publics.php : en-tête PHP : 1

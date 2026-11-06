@@ -1,34 +1,59 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
-auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
+require_admin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/catalog.php');
     exit;
 }
 
+if (!shop_can_add_items()) {
+    flash_set(shop_limit_message(), 'error');
+    header('Location: /admin/catalog.php');
+    exit;
+}
+
 $validCats = array_column(category_list(), 'key');
-$cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : 'ceramique';
+$cat = in_array($_POST['cat'] ?? '', $validCats, true) ? $_POST['cat'] : default_category_key();
 $name = trim((string) ($_POST['name'] ?? '')) ?: 'Nouvelle pièce';
 $ref = next_ref();
+$nature = product_nature_resolve($_POST['nature'] ?? '', $_POST['sous_categorie'] ?? '');
+$weightGrams = max(0, min(300000, (int) ($_POST['weight_grams'] ?? 0)));
+$weightText = mb_substr(trim((string) ($_POST['weight_text'] ?? '')), 0, 60) ?: product_weight_text($weightGrams);
 
 $photoPath = store_uploaded_photo('photo', 'product-' . $ref);
+// Pas de photo envoyée : la pochette / couverture trouvée par le scanner (case cochée).
+if (!$photoPath && !empty($_POST['use_cover']) && trim((string) ($_POST['cover_url'] ?? '')) !== '') {
+    $photoPath = product_photo_from_cover_url(trim((string) $_POST['cover_url']), 'product-' . $ref);
+}
 
 analytics_ensure_schema();
 $costInput = parse_euros($_POST['cost_price'] ?? null);
-$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, price, badge, featured, sort_order, cost_cents)
-                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :price, :badge, 0, :sort_order, :cost_cents)');
+$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, colors, brand, distributor, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, new_price, badge, featured, sort_order, cost_cents)
+                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :colors, :brand, :distributor, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :new_price, :badge, 0, :sort_order, :cost_cents)');
 $stmt->execute([
     'ref' => $ref,
     'name' => $name,
     'cat' => $cat,
     'photo' => $photoPath,
     'description' => trim((string) ($_POST['description'] ?? '')) ?: 'Description à compléter.',
-    'price' => trim((string) ($_POST['price'] ?? '')) ?: '0 €',
+    'materials' => trim((string) ($_POST['materials'] ?? '')),
+    'colors' => product_colors_clean((string) ($_POST['colors'] ?? '')),
+    'brand' => mb_substr(trim((string) ($_POST['brand'] ?? '')), 0, 80),
+    'distributor' => mb_substr(trim((string) ($_POST['distributor'] ?? '')), 0, 80),
+    'etat' => product_condition_key($_POST['etat'] ?? '') ?: null,
+    'nature' => $nature['nature'] ?: null,
+    'size_text' => mb_substr(trim((string) ($_POST['size_text'] ?? '')), 0, 60),
+    'weight_text' => $weightText,
+    'weight_grams' => $weightGrams,
+    'sous_categorie' => $nature['sous_categorie'] ?: null,
+    'barcode' => product_barcode_clean($_POST['barcode'] ?? '') ?: null,
+    'price' => price_from_input($_POST['price'] ?? '', '0 €'),
+    'new_price' => price_from_input($_POST['new_price'] ?? '') ?: null,
     'badge' => trim((string) ($_POST['badge'] ?? '')) ?: 'Chiné',
     'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),
-    'cost_cents' => ($costInput === null || !auth_can('boutique.produits.cout')) ? null : (int) round($costInput * 100),
+    'cost_cents' => $costInput === null ? null : (int) round($costInput * 100),
 ]);
 
 flash_set('Pièce « ' . $name . ' » ajoutée — Réf. N°' . $ref . '.');

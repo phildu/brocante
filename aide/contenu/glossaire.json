@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "langue": "fr",
+  "mis_a_jour": "2026-11-03",
+  "termes": [
+    {
+      "terme": "Boutique",
+      "definition": "Le site d'un vendeur : sa page d'accueil, son catalogue, son panier, son paiement et son administration. Une boutique peut exister seule ou être rattachée à une galerie.",
+      "exemple": "La boutique « Le Petit Chalet » présente ses pièces et encaisse ses clients directement.",
+      "voir": ["Galerie", "Vendeur"]
+    },
+    {
+      "terme": "Galerie",
+      "definition": "Une page commune qui réunit plusieurs boutiques ou exposants : galerie marchande, marché aux puces, vide-grenier ou quartier marchand. Chaque commerce garde sa propre boutique et son propre panier.",
+      "exemple": "Le vide-grenier de la place du marché rassemble 40 exposants sur une page et un plan uniques.",
+      "voir": ["Vide-grenier", "Exposant", "Plan d'implantation"]
+    },
+    {
+      "terme": "Vendeur",
+      "definition": "La personne ou l'entreprise qui tient une boutique sur Brocs. Elle publie ses pièces, fixe ses prix et prépare ses commandes depuis l'administration de sa boutique.",
+      "exemple": "Un brocanteur publie une commode depuis le Studio et reçoit la commande dans son administration.",
+      "voir": ["Boutique", "Studio"]
+    },
+    {
+      "terme": "Exposant",
+      "definition": "Une personne ou une entreprise qui demande un emplacement sur le plan d'un événement. Selon l'événement, on parle aussi de commerçant ou de stand.",
+      "exemple": "Un exposant choisit la place 12 sur le plan public et envoie sa demande à l'organisateur.",
+      "voir": ["Emplacement", "Demande d'emplacement"]
+    },
+    {
+      "terme": "Emplacement",
+      "definition": "Une place numérotée sur le plan d'un événement, avec une surface et un tarif. Un emplacement peut être libre, en attente ou attribué.",
+      "exemple": "L'emplacement 12 fait 3 m sur 2 m et coûte 12 € pour un particulier.",
+      "voir": ["Plan d'implantation", "Demande d'emplacement"]
+    },
+    {
+      "terme": "Plan d'implantation",
+      "definition": "Le dessin du lieu : allées, zones, emplacements numérotés, entrées et services. Il sert aux exposants pour choisir une place et au public pour se repérer le jour de l'événement.",
+      "exemple": "L'organisateur dessine la halle, numérote les stands de 1 à 60 et publie le plan sur la page de l'événement.",
+      "voir": ["Emplacement", "Territoire"]
+    },
+    {
+      "terme": "Territoire",
+      "definition": "Une zone qui cerne un quartier ou plusieurs rues et sert à découvrir des emplacements potentiels. Il ne s'affiche pas comme un stand réservable.",
+      "exemple": "Un quartier marchand dessine son territoire, puis crée une grille d'emplacements à l'intérieur.",
+      "voir": ["Plan d'implantation", "Zone"]
+    },
+    {
+      "terme": "Demande d'emplacement",
+      "definition": "La demande qu'un exposant envoie depuis le plan public pour réserver une place. Tant qu'elle est en attente, la place est retenue pendant le délai fixé par l'organisateur.",
+      "exemple": "Une demande retient la place 12 pendant 7 jours ; l'organisateur l'accepte ensuite depuis Exposants.",
+      "voir": ["Emplacement", "Exposant"]
+    },
+    {
+      "terme": "Bourse d'échanges",
+      "definition": "Un espace où les visiteurs proposent une pièce à la vente ou répondent à une recherche d'achat publiée par l'organisateur. Ce n'est pas le système de réservation des emplacements.",
+      "exemple": "Une galerie publie « je recherche des céramiques de Vallauris » ; un particulier envoie une photo de son vase.",
+      "voir": ["Galerie", "Exposant"]
+    },
+    {
+      "terme": "Arrhes",
+      "definition": "Une somme versée à la réservation pour engager l'exposant. Les arrhes ne se confondent pas avec le prix total de l'emplacement.",
+      "exemple": "L'organisateur demande 10 € d'arrhes ; le solde est réglé le jour de l'installation.",
+      "voir": ["Emplacement", "Réservation"]
+    },
+    {
+      "terme": "Commission",
+      "definition": "La part prélevée sur une vente par la plateforme ou par une galerie. Elle est indiquée dans l'offre ou dans les réglages de commission, jamais cachée dans le prix affiché.",
+      "exemple": "Une galerie prélève 5 % sur les ventes de ses commerces pour animer la page commune.",
+      "voir": ["Reversement", "Stripe Connect"]
+    },
+    {
+      "terme": "Reversement",
+      "definition": "Le versement du prix de vente au vendeur, après déduction éventuelle de la commission et des frais du prestataire de paiement. Avec Stripe Connect, Stripe verse directement sur le compte du vendeur.",
+      "exemple": "Une pièce vendue 100 € est reversée au vendeur sur son compte Stripe, commission déduite.",
+      "voir": ["Commission", "Stripe Connect"]
+    },
+    {
+      "terme": "Stripe Connect",
+      "definition": "Le montage qui relie le compte Stripe d'un vendeur ou d'une galerie à la plateforme. Il permet d'encaisser pour le compte du vendeur et de prélever une commission à l'encaissement.",
+      "exemple": "Une galerie reçoit un lien d'inscription Stripe, complète son identité et son IBAN, puis reçoit ses versements.",
+      "voir": ["Commission", "Reversement"]
+    },
+    {
+      "terme": "Registre de police",
+      "definition": "Le registre des exposants d'un vide-grenier ou d'un marché : identité, référence de pièce d'identité et emplacement attribué. Il se signe et se paraphe avant la manifestation, puis se dépose en mairie dans les 8 jours.",
+      "exemple": "L'organisateur télécharge le registre en PDF, le fait signer par les exposants et le dépose en mairie.",
+      "voir": ["Exposant", "Dossier de subvention"]
+    },
+    {
+      "terme": "Dossier de subvention",
+      "definition": "Un ensemble de documents préremplis pour demander une aide publique : lettre d'accompagnement, note de cadrage, budget, calendrier et pièces à joindre. Le générateur Brocs ne remplace pas le dépôt officiel auprès du financeur.",
+      "exemple": "Une association de commerçants prépare son dossier sur /dossier/, télécharge le ZIP et le dépose auprès de sa commune.",
+      "voir": ["Registre de police", "Quartier marchand"]
+    },
+    {
+      "terme": "Quartier marchand",
+      "definition": "Une page commune pour les commerces d'un quartier ou d'un village, portée par une commune, une union de commerçants ou une association. Elle présente les commerces, les promotions et une lettre d'information.",
+      "exemple": "Une commune anime un quartier marchand et mesure le nombre de commerces inscrits et d'abonnés à la lettre.",
+      "voir": ["Galerie", "Dossier de subvention"]
+    },
+    {
+      "terme": "Studio",
+      "definition": "L'application mobile de prise de vue : on photographie une pièce, l'IA prépare la fiche, on relit puis on publie. Elle s'installe sur l'écran d'accueil du téléphone et se trouve à l'adresse /studio.php.",
+      "exemple": "Un vendeur photographie cinq pièces en lot depuis son téléphone, corrige les fiches puis les publie.",
+      "voir": ["Boutique", "Crédit IA"]
+    },
+    {
+      "terme": "Studio vidéo",
+      "definition": "Un module distinct du Studio photo : il prépare un script, guide la prise de vue vidéo et permet de monter et d'exporter une courte vidéo dans le navigateur.",
+      "exemple": "Un vendeur tourne une vidéo de 45 secondes sur une commode et l'exporte pour les réseaux sociaux.",
+      "voir": ["Studio"]
+    },
+    {
+      "terme": "Crédit IA",
+      "definition": "Une unité qui paie les générations d'images, de textes ou d'analyses par l'IA. Chaque génération est décomptée et consignée dans l'administration.",
+      "exemple": "Détourer une photo consomme un crédit IA ; le solde restant est visible dans la page Crédit IA.",
+      "voir": ["Studio"]
+    },
+    {
+      "terme": "Application installable (PWA)",
+      "definition": "Une page web qui s'ajoute à l'écran d'accueil du téléphone comme une application, sans passer par un magasin d'applications. Elle reste accessible par le navigateur.",
+      "exemple": "Un client installe la boutique sur son téléphone pour retrouver son catalogue plus vite.",
+      "voir": ["Boutique"]
+    }
+  ]
+}

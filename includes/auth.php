@@ -476,6 +476,20 @@ function auth_legacy_password(): string
 }
 
 /**
+ * Droits fins d'un rôle de includes/accounts.php. Refus par défaut : un rôle inconnu n'a aucun droit.
+ *  - admin : propriétaire (tous les droits, ceux ajoutés plus tard compris), traité avant d'arriver ici ;
+ *  - community_manager : les visuels (niveau « galerie »), comme ses pages dans ACCOUNT_COMMUNITY_MANAGER_PAGES ;
+ *  - photographe : aucun droit du catalogue (il n'a que le shooting du lieu et son profil).
+ */
+function auth_prod_role_permissions(string $role): array
+{
+    if ($role === 'community_manager') {
+        return array_values(array_filter(auth_permission_keys(), static fn (string $k): bool => str_starts_with($k, 'galerie.')));
+    }
+    return [];
+}
+
+/**
  * Utilisateur connecté à l'administration, ou null.
  * Forme : id (0 = mot de passe historique), email, name, role_id, role_name,
  *         owner (bool), perms (liste), perm_set (clé => true), must_change (bool).
@@ -486,6 +500,24 @@ function auth_user(bool $refresh = false): ?array
     static $cache = false;
     if ($refresh) $cache = false;
     if ($cache !== false) return $cache;
+
+    // Ligne de production : l'identité est celle de includes/accounts.php (session d'administration,
+    // connexion unique, SSO). Les droits fins s'en déduisent ; il n'y a ni compte ni rôle à lire ici.
+    // Sans ce pont, toute session « is_admin » passerait pour propriétaire, photographe compris.
+    if (function_exists('admin_session')) {
+        $session = admin_session();
+        if ($session === null) return $cache = null;
+        $role = (string) ($session['role'] ?? '');
+        $owner = $role === 'admin';
+        $perms = $owner ? [] : auth_prod_role_permissions($role);
+        return $cache = [
+            'id' => (int) ($session['id'] ?? 0), 'email' => '',
+            'name' => ($session['name'] ?? '') !== '' ? (string) $session['name'] : 'Compte principal',
+            'role_id' => null, 'role_name' => function_exists('account_role_label') ? account_role_label($role) : $role,
+            'owner' => $owner, 'perms' => $perms, 'perm_set' => array_fill_keys($perms, true),
+            'must_change' => false, 'legacy' => ($session['id'] ?? null) === null,
+        ];
+    }
 
     $legacy = [
         'id' => 0, 'email' => '', 'name' => 'Propriétaire', 'role_id' => null,

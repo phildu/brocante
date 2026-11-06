@@ -1,0 +1,38 @@
+/* Modèle « Jardin » — botanique et lumineux. Sélecteurs préfixés « html » : plus prioritaires que assets/style.css, chargé après. */
+html body { background-image: radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 42%); }
+html header.site { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+html .site-bar { padding: 22px 0; }
+html nav.primary a { font-family: var(--font-body); letter-spacing: .04em; border-bottom: 0; }
+html nav.primary a[aria-current="page"], html nav.primary a:hover { color: var(--accent); }
+html .eyebrow { font-family: var(--font-body); text-transform: uppercase; letter-spacing: .22em; font-size: .68rem; color: var(--accent); }
+html .eyebrow::before { content: "❧  "; letter-spacing: 0; }
+html .hero h1 { font-weight: 500; font-style: italic; letter-spacing: -.015em; line-height: 1.02; }
+html .hero { padding: 76px 0 64px; }
+html .btn { border-radius: 999px; padding: 13px 28px; letter-spacing: .02em; }
+html .btn-ghost { border-color: var(--accent); color: var(--accent); }
+html .btn-ghost:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+html section { padding: 82px 0; }
+html .section-head h2 { font-weight: 500; font-style: italic; }
+html .shop-hero-figure img, html .shop-hero-mosaic-item.m1 img { border-radius: 280px 280px 18px 18px; }
+html .shop-hero-figure, html .shop-hero-mosaic-item { overflow: hidden; }
+html .shop-hero-mosaic-item { border-radius: 18px; }
+html .shop-hero-mosaic-item.m1 { border-radius: 220px 220px 18px 18px; }
+html .shop-hero-figure-tag { border-radius: 999px; left: 22px; right: auto; bottom: 22px; }
+html .shop-hero-arrow { border-color: var(--accent); color: var(--accent); }
+html .shop-hero-slide { border-radius: 20px; }
+html .card { background: var(--surface); border: 1px solid color-mix(in srgb, var(--line) 55%, transparent); border-radius: 20px; padding: 16px; box-shadow: 0 16px 34px -26px rgba(40, 51, 42, .55); }
+html .card img, html .card-icon { border-radius: 14px; }
+html .card h3 { font-weight: 500; font-style: italic; }
+html .badge { border-radius: 999px; border-color: transparent; background: color-mix(in srgb, var(--accent) 13%, var(--bg)); color: var(--accent); font-family: var(--font-body); }
+html .price { font-family: var(--font-body); font-weight: 600; }
+html .card-cta { border-radius: 999px; border-color: var(--accent); color: var(--accent); }
+html .cat-grid { gap: 14px; background: none; border: 0; }
+html .cat-tile { border-radius: 18px; border-color: color-mix(in srgb, var(--line) 55%, transparent); background: var(--surface); padding: 30px 22px; }
+html .cat-tile:hover { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+html .principle { border-top: 0; background: var(--surface); border-radius: 18px; padding: 22px; }
+html .principle .num { color: var(--accent); }
+html .story-photo img, html .follow-tile img { border-radius: 22px; }
+html .story-photo { border: 0; }
+html .shop-search input[type="search"], html .field-row input { border-radius: 999px; }
+html .field-row textarea { border-radius: 18px; }
+html .footer-grid { border-top: 1px solid var(--line); padding-top: 42px; }

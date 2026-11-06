@@ -1,7 +1,7 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
-require_permission('boutique.livraison.lire');
+require_admin();
 
 $content = get_content();
 $carriers = shipping_carriers_list();
@@ -14,7 +14,7 @@ $flash = flash_get();
 <title>Frais de port — <?= h($content['site_name']) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+<?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>
   .carrier-card { background: var(--surface); border: 1px solid var(--line); padding: 18px 20px; margin-top: 20px; }
@@ -59,6 +59,7 @@ $flash = flash_get();
       $carrierNames = array_column($carriers, 'name');
       $hasChronopost = in_array('Chronopost', $carrierNames, true);
       $hasColissimo = in_array('Colissimo', $carrierNames, true);
+      $hasMondialRelay = in_array('Mondial Relay', $carrierNames, true);
       $colissimoId = null;
       $colissimoHasIntl = false;
       foreach ($carriers as $c) {
@@ -72,7 +73,7 @@ $flash = flash_get();
           $colissimoHasIntl = (int) $stmt->fetchColumn() > 0;
       }
     ?>
-    <?php if (!$hasChronopost || !$hasColissimo || ($hasColissimo && !$colissimoHasIntl)): ?>
+    <?php if (!$hasChronopost || !$hasColissimo || !$hasMondialRelay || ($hasColissimo && !$colissimoHasIntl)): ?>
       <div class="admin-block" style="margin-top:20px;">
         <?php if (!$carriers): ?>
           <p class="empty-state" style="margin:0 0 14px;">Aucun transporteur configuré pour l'instant.</p>
@@ -88,6 +89,12 @@ $flash = flash_get();
             <form method="post" action="/admin/shipping-action.php" style="display:inline;">
               <input type="hidden" name="action" value="seed_colissimo">
               <button type="submit" class="btn btn-primary">Charger un exemple Colissimo (22 paliers, 3 zones)</button>
+            </form>
+          <?php endif; ?>
+          <?php if (!$hasMondialRelay): ?>
+            <form method="post" action="/admin/shipping-action.php" style="display:inline;">
+              <input type="hidden" name="action" value="seed_mondial_relay">
+              <button type="submit" class="btn btn-primary">Charger un exemple Mondial Relay (10 paliers Point Relais, France)</button>
             </form>
           <?php endif; ?>
           <?php if ($hasColissimo && !$colissimoHasIntl): ?>
@@ -178,7 +185,7 @@ $flash = flash_get();
                 </td>
                 <td><input type="text" name="weight_min_kg" placeholder="0" required></td>
                 <td><input type="text" name="weight_max_kg" placeholder="1" required></td>
-                <td><input type="text" name="price" placeholder="ex : 23,40 €" required></td>
+                <td><input type="number" name="price" min="0.01" step="0.01" inputmode="decimal" placeholder="ex : 23,40" required aria-label="Prix en euros"></td>
                 <td><input type="text" name="delivery_delay" placeholder="ex : 13h le lendemain"></td>
                 <td><button type="submit" class="btn-small">Ajouter</button></td>
               </form>
@@ -199,6 +206,5 @@ $flash = flash_get();
   </div>
 </section>
 </main>
-<?= auth_ui_gate('shipping-action.php') ?>
 </body>
 </html>

@@ -1,0 +1,10 @@
+/* Plugin de démonstration « Bonjour ». */
+.hello-box { margin-top: 20px; display: grid; gap: 12px; }
+.hello-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.hello-form input { flex: 1 1 220px; min-width: 0; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 8px 10px; font-family: var(--font-body); }
+.hello-status { margin: 0; color: var(--ink-soft); font-size: 0.88rem; }
+.hello-status:empty { display: none; }
+.hello-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.hello-notes li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding: 6px 0; }
+.hello-notes li span { flex: 1 1 200px; overflow-wrap: anywhere; }
+.hello-notes li small { color: var(--ink-soft); font-family: var(--font-mono); font-size: 0.72rem; }

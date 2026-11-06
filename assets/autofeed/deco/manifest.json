@@ -1,0 +1,25 @@
+{
+    "hero": "assets/autofeed/deco/hero.jpg",
+    "products": [
+        {
+            "name": "Vase Céramique Artisanal",
+            "desc": "Élégant vase en céramique fait à la main, idéal pour mettre en valeur vos fleurs ou comme pièce décorative unique sur une étagère ou une table basse.",
+            "price": "45 €",
+            "photo": "assets/autofeed/deco/produit-0.jpg"
+        },
+        {
+            "name": "Bougie Parfumée Coton Frais",
+            "desc": "Créez une ambiance apaisante avec cette bougie parfumée au coton frais. Son doux parfum remplit délicatement votre intérieur pour des moments de détente.",
+            "price": "23 €",
+            "photo": "assets/autofeed/deco/produit-1.jpg"
+        },
+        {
+            "name": "Plaid Doux en Laine Tricotée",
+            "desc": "Enveloppez-vous de confort avec ce plaid en laine tricotée, parfait pour les soirées fraîches. Sa texture moelleuse ajoute une touche de chaleur à votre canapé ou votre lit.",
+            "price": "75 €",
+            "photo": "assets/autofeed/deco/produit-2.jpg"
+        }
+    ],
+    "label": "Déco et maison",
+    "created": 1793666561
+}

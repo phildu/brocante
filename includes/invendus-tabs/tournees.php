@@ -78,7 +78,7 @@ $poolUnits = array_sum(array_map('unsold_offer_units', $pool));
 
     <?php if ($items): ?>
       <form method="post" action="/admin/invendus-action.php" id="tour-form-<?= (int) $t['id'] ?>">
-        <?= csrf_input() ?><input type="hidden" name="action" value="offer_bulk"><input type="hidden" name="bulk" value="unassign">
+        <?= shop_csrf_input() ?><input type="hidden" name="action" value="offer_bulk"><input type="hidden" name="bulk" value="unassign">
         <input type="hidden" name="return" value="<?= h($return) ?>"><input type="hidden" name="event_id" value="<?= $id ?>">
         <div class="don-table-wrap">
           <table class="don-table">
@@ -132,7 +132,7 @@ $poolUnits = array_sum(array_map('unsold_offer_units', $pool));
     <p class="empty-state" style="margin:0;">Rien à affecter pour l'instant.</p>
   <?php else: ?>
     <form method="post" action="/admin/invendus-action.php" id="pool-form">
-      <?= csrf_input() ?><input type="hidden" name="action" value="offer_bulk"><input type="hidden" name="bulk" value="assign">
+      <?= shop_csrf_input() ?><input type="hidden" name="action" value="offer_bulk"><input type="hidden" name="bulk" value="assign">
       <input type="hidden" name="return" value="<?= h($return) ?>"><input type="hidden" name="event_id" value="<?= $id ?>">
       <div class="don-table-wrap">
         <table class="don-table">

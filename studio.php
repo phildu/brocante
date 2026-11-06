@@ -1,0 +1,339 @@
+<?php
+// Studio : application smartphone du commerce (installable sur l'écran d'accueil).
+// Prise de vue pièce par pièce ou en lot, génération des fiches par l'IA, relecture
+// et publication — sans passer par l'administration sur ordinateur.
+// Connexion propre à l'application (identifiant ou e-mail + mot de passe), mémorisable
+// 30 jours sur le téléphone. Les envois passent par admin/quick-add-action.php.
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/share.php';
+require_once __DIR__ . '/includes/oauth.php';
+require_once __DIR__ . '/includes/apps.php';
+require_once __DIR__ . '/includes/login-ui.php';
+
+header('Cache-Control: no-store');
+$content = get_content();
+$error = null;
+$notice = null;
+// Messages laissés par la connexion sociale (oauth/finish.php) ou la réinitialisation du mot de passe (admin/reinitialiser.php).
+if (!empty($_SESSION['login_error'])) { $error = (string) $_SESSION['login_error']; unset($_SESSION['login_error']); }
+if (!empty($_SESSION['login_notice'])) { $notice = (string) $_SESSION['login_notice']; unset($_SESSION['login_notice']); }
+
+// ── Connexion / déconnexion ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $postAction = (string) ($_POST['action'] ?? '');
+    if ($postAction === 'logout') {
+        unset($_SESSION['is_admin'], $_SESSION['admin_account_id']);
+        session_regenerate_id(true);
+        header('Location: /studio.php');
+        exit;
+    }
+    if ($postAction === 'login') {
+        $login = admin_login((string) ($_POST['username'] ?? ''), (string) ($_POST['password'] ?? ''));
+        if ($login) {
+            session_regenerate_id(true);
+            $_SESSION['is_admin'] = tenant_slug();
+            if ($login['id'] === null) {
+                unset($_SESSION['admin_account_id']);
+            } else {
+                $_SESSION['admin_account_id'] = $login['id'];
+            }
+            if (!empty($_POST['remember'])) {
+                // Cookie de session prolongé : le téléphone reste connecté (le fichier de session, lui, est conservé par session.php).
+                $params = session_get_cookie_params();
+                setcookie(session_name(), session_id(), [
+                    'expires' => time() + STUDIO_REMEMBER_DAYS * 86400,
+                    'path' => $params['path'] ?: '/',
+                    'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+                    'httponly' => true,
+                    'samesite' => 'Lax',
+                ]);
+            }
+            header('Location: /studio.php' . (($_GET['tab'] ?? '') === 'pos' ? '?tab=pos' : ''));
+            exit;
+        }
+        sleep(1); // freine les essais en série
+        $error = 'Identifiant, nom ou e-mail incorrect.';
+    }
+}
+
+$account = admin_session();
+$isAdmin = $account !== null && $account['role'] === 'admin';
+$aiReady = (bool) GEMINI_API_KEY;
+$angles = studio_object_angles();
+$qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/studio.php', 'list' => '/studio.php#pieces', 'list_label' => 'Voir mes pièces', 'title' => false, 'later' => true];
+$ico = static fn (string $d): string => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
+$siteName = trim((string) $content['site_name']) ?: (string) tenant('name');
+// L'onglet Caisse a sa propre application installable (« Vente »), le reste est l'application « Article ».
+$studioApp = ($_GET['tab'] ?? '') === 'pos' ? 'vente' : 'article';
+$studioLabel = $studioApp === 'vente' ? 'Vente' : 'Article';
+$studioAppName = shop_app_name($studioApp);
+$venteAppName = $studioApp === 'vente' ? $studioAppName : shop_app_name('vente');
+$studioBase = tenant_base_path();
+$studioManifest = $studioBase . ($studioApp === 'vente' ? '/vente-manifest.php' : '/studio-manifest.php');
+$studioIcon = $studioBase . ($studioApp === 'vente' ? '/vente-icon.php' : '/studio-icon.php');
+$studioSw = $studioBase . ($studioApp === 'vente' ? '/pwa-sw.php' : '/studio-sw.php');
+$studioLoginNext = '/studio.php' . ($studioApp === 'vente' ? '?tab=pos' : '');
+// Adresse de l'application et texte partagé (réseaux, WhatsApp, SMS, e-mail, code QR) : le menu et la page de connexion les proposent.
+[$studioUrl, $studioReachable] = studio_public_url();
+$shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($studioAppName) . '" data-share-text="' . h("$studioAppName : photographiez vos pièces avec votre téléphone, l'application prépare les fiches de la boutique. Ouvrez le lien, connectez-vous, puis « Ajouter à l'écran d'accueil ».") . '" data-share-dialog="1"';
+?><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f4eee1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="<?= h($studioAppName) ?>">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="<?= h($studioManifest) ?>">
+<link rel="apple-touch-icon" href="<?= h($studioIcon) ?>?s=180">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pwa-save.js') ?>" data-auto data-delay="2000" data-key="studio-<?= h($studioApp) ?>" data-name="<?= h($studioAppName) ?>" data-icon="<?= h($studioIcon) ?>?s=192" data-manifest="<?= h($studioManifest) ?>" data-sw="<?= h($studioSw) ?>" data-scope="<?= h($studioBase . '/') ?>"></script>
+<title><?= h($studioAppName) ?></title>
+<?= tenant_head_html() ?>
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/studio.css">
+<link rel="stylesheet" href="/assets/oauth.css">
+<link rel="stylesheet" href="/assets/login.css">
+<link rel="stylesheet" href="/assets/barcode-scan.css">
+<link rel="stylesheet" href="/assets/object-picker.css">
+<link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/assets/share.css') ?>">
+<link rel="stylesheet" href="/assets/measure-tool.css">
+</head>
+<body class="studio">
+<?php if (!$account): ?>
+  <main class="st-login">
+    <img class="st-logo" src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($siteName) ?>">
+    <p class="eyebrow"><?= h($studioLabel) ?></p>
+    <h1>Votre shooting, depuis la poche</h1>
+    <p class="lede">Photographiez vos pièces, l'application prépare les fiches pour la boutique.</p>
+    <?php if ($notice): ?><p class="st-notice" role="status"><?= h($notice) ?></p><?php endif; ?>
+    <?php if ($error): ?><p class="st-error" role="alert"><?= h($error) ?></p><?php endif; ?>
+    <?php if (!admin_password_configured()): ?><p class="st-error" role="alert">Aucun compte n'est défini pour ce commerce.</p><?php endif; ?>
+    <?= login_form_html([
+      'id' => 'studio-login',
+      'identifier_name' => 'username',
+      'social' => oauth_buttons_html('admin', ['next' => $studioLoginNext]),
+      'forgot_url' => '/admin/mot-de-passe-oublie.php?from=studio',
+      'submit' => 'Se connecter',
+      'remember' => true,
+      'remember_name' => 'remember',
+      'remember_label' => 'Rester connecté sur ce téléphone (30 jours)',
+      'remember_checked' => true,
+      'hidden' => ['action' => 'login'],
+    ]) ?>
+    <p class="st-share-row"><button type="button" class="btn btn-ghost"<?= $shareAttrs ?> data-share-open="share">Partager l'application</button></p>
+  </main>
+<?php elseif (!$isAdmin): ?>
+  <main class="st-login">
+    <p class="eyebrow"><?= h($studioLabel) ?></p>
+    <h1>Accès réservé</h1>
+    <p class="lede">L'application <?= h($studioLabel) ?> crée des fiches du catalogue : elle est réservée aux administrateurs de la boutique. Vous êtes connecté·e en tant que « <?= h(account_role_label($account['role'])) ?> ».</p>
+    <form method="post" class="st-form"><input type="hidden" name="action" value="logout"><button class="btn btn-ghost" type="submit">Changer de compte</button></form>
+  </main>
+<?php else: ?>
+  <header class="st-top">
+    <img class="st-top-logo" src="/<?= h(logo_url('horizontal')) ?>" alt="<?= h($siteName) ?>">
+    <button type="button" class="st-share" data-share-open="share"<?= $shareAttrs ?> aria-label="Partager l'application" title="Partager l'application"><?= $ico('<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.3M8.3 13.2l7.4 4.3"/>') ?></button>
+    <details class="st-menu">
+      <summary aria-label="Menu"><?= $ico('<circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/>') ?></summary>
+      <div class="st-menu-box">
+        <p class="qa-note"><?= h($account['name'] ?? '') ?: 'Connecté' ?></p>
+        <button type="button" class="btn btn-ghost" id="st-install" hidden>Installer l'application</button>
+        <button type="button" class="btn btn-ghost" data-share-open="share"<?= $shareAttrs ?>>Partager l'application</button>
+        <button type="button" class="btn btn-ghost" data-share-open="qr"<?= $shareAttrs ?>>Code QR de l'application</button>
+        <?php if (!$studioReachable): ?><p class="qa-note">Adresse locale : un téléphone ne peut pas l'ouvrir. En ligne, le lien fonctionne.</p><?php endif; ?>
+        <a class="btn btn-ghost" href="/admin/dashboard.php">Administration</a>
+        <form method="post"><input type="hidden" name="action" value="logout"><button class="btn btn-ghost" type="submit">Se déconnecter</button></form>
+      </div>
+    </details>
+  </header>
+  <p class="st-variants" id="st-variants" role="status" hidden></p>
+  <aside class="st-hint" id="st-ios" hidden>
+    <span>Pour garder l'application sur l'écran d'accueil : touchez Partager, puis « Sur l'écran d'accueil ».</span>
+    <button type="button" id="st-ios-close" aria-label="Fermer">Fermer</button>
+  </aside>
+
+  <main class="st-main">
+    <!-- Une pièce -->
+    <section class="st-tab" id="tab-single" data-tab="single">
+      <p class="st-queue" id="st-queue" role="status" hidden><span id="st-queue-text"></span><button type="button" class="btn btn-primary" id="st-queue-run">Traiter maintenant</button></p>
+      <?php include __DIR__ . '/includes/quick-add-flow.php'; ?>
+      <div class="qa-bar">
+        <button type="button" class="btn btn-primary" id="main-btn" disabled>Prenez au moins la photo de face</button>
+      </div>
+    </section>
+
+    <!-- En lot -->
+    <section class="st-tab" id="tab-batch" data-tab="batch" hidden>
+      <div class="sb" id="sb">
+        <!-- Prise de vue -->
+        <div class="sb-screen" id="sb-shoot">
+          <div class="sb-intro" id="sb-intro">
+            <h1>Shooting en lot</h1>
+            <p class="qa-note">Photographiez vos pièces à la suite, sans attendre l'IA : choisissez le type de chaque pièce (objet, vêtement en recto / verso seulement, média à scanner), ajoutez une vidéo si vous voulez, puis « Pièce suivante ». Le post-traitement (détourage, mise en situation, fiches) se lance ensuite d'un coup, ou plus tard.</p>
+            <button type="button" class="btn btn-primary" id="sb-start">Ouvrir l'appareil photo</button>
+            <label class="sb-file" for="sb-gallery">ou choisir des photos dans la galerie</label>
+            <input type="file" id="sb-gallery" accept="image/*" multiple hidden>
+            <p class="qa-note" id="sb-resume" hidden></p>
+          </div>
+          <div class="sb-camera" id="sb-camera" hidden>
+            <div class="sb-head"><b id="sb-piece-label">Pièce 1</b><span id="sb-total-label">0 photo</span></div>
+            <div class="sb-kinds" id="sb-kinds" role="group" aria-label="Type de la pièce">
+              <button type="button" data-kind="objet" aria-pressed="true">📦 Objet</button>
+              <button type="button" data-kind="vetement" aria-pressed="false">👕 Vêtement</button>
+              <button type="button" data-kind="media" aria-pressed="false">📚 Média</button>
+            </div>
+            <p class="sb-guide" id="sb-guide"></p>
+            <div class="sb-view">
+              <video id="sb-video" playsinline muted autoplay></video>
+              <div class="sb-flash" id="sb-flash"></div>
+            </div>
+            <div class="sb-chips" id="sb-chips" aria-live="polite"></div>
+            <div class="sb-strip" id="sb-strip" aria-label="Photos de la pièce en cours"></div>
+            <div class="sb-extras">
+              <button type="button" class="sb-extra" id="sb-scan" hidden><?= $ico('<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M11 9v6M15 9v6"/>') ?><span>Scanner le code</span></button>
+              <button type="button" class="sb-extra" id="sb-detail" aria-pressed="false"><?= $ico('<circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2M11 8.5v5M8.5 11h5"/>') ?><span>Gros plan</span></button>
+              <button type="button" class="sb-extra" id="sb-measure"><?= $ico('<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>') ?><span>Mesure</span></button>
+              <button type="button" class="sb-extra" id="sb-rec"><?= $ico('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>') ?><span>Vidéo</span></button>
+              <input type="file" id="sb-video-file" accept="video/*" capture="environment" hidden>
+            </div>
+            <div class="sb-controls">
+              <label class="sb-side" for="sb-gallery" aria-label="Ajouter depuis la galerie"><?= $ico('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>') ?><span>Galerie</span></label>
+              <button type="button" class="sb-shutter" id="sb-shutter" aria-label="Prendre la photo"><span></span></button>
+              <button type="button" class="sb-side" id="sb-next" aria-label="Pièce suivante"><?= $ico('<path d="M5 12h14M13 6l6 6-6 6"/>') ?><span>Pièce suivante</span></button>
+            </div>
+            <button type="button" class="btn btn-primary sb-done" id="sb-done" disabled>Terminer le shooting</button>
+          </div>
+        </div>
+
+        <!-- Relecture du lot -->
+        <div class="sb-screen" id="sb-review" hidden>
+          <h1>Votre lot</h1>
+          <p class="qa-note" id="sb-summary"></p>
+          <p class="qa-note" id="sb-cost" data-piece-eur="<?= h(number_format(ai_eur(ai_estimate_usd(ai_estimate_piece_counts())), 4, '.', '')) ?>"></p>
+          <div class="sb-pieces" id="sb-pieces"></div>
+          <label class="qa-field">Indications pour l'IA, valables pour tout le lot (facultatif)
+            <textarea id="sb-notes" rows="2" maxlength="300" data-saved-prompts="notes" data-prompt-helper="notes" placeholder="Ex. : vaisselle des années 70, ambiance chaleureuse"></textarea>
+          </label>
+          <?php if (!$aiReady): ?><p class="qa-warn">Clé Gemini non configurée : les pièces seront enregistrées, sans détourage ni rédaction automatiques.</p><?php endif; ?>
+          <div class="sb-actions">
+            <button type="button" class="btn btn-primary" id="sb-generate">Générer les fiches</button>
+            <button type="button" class="btn btn-ghost" id="sb-send-only">Envoyer sans traiter (plus tard)</button>
+            <button type="button" class="btn btn-ghost" id="sb-back">Continuer le shooting</button>
+          </div>
+        </div>
+
+        <!-- Envoi et traitement -->
+        <div class="sb-screen" id="sb-run" hidden>
+          <h1 id="sb-run-title">Traitement du lot</h1>
+          <div class="sb-meter" aria-hidden="true"><span id="sb-meter"></span></div>
+          <p class="qa-note" id="sb-run-note">Gardez l'écran allumé et cette page ouverte.</p>
+          <ol class="sb-runlist" id="sb-runlist"></ol>
+          <div class="sb-actions">
+            <button type="button" class="btn btn-ghost" id="sb-stop">Arrêter après la pièce en cours</button>
+            <button type="button" class="btn btn-primary" id="sb-retry" hidden>Réessayer les pièces en échec</button>
+            <button type="button" class="btn btn-primary" id="sb-finish" hidden>Voir mes pièces</button>
+            <button type="button" class="btn btn-ghost" id="sb-again" hidden>Nouveau lot</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Caisse : lecture de QR code, retrait d'un achat en ligne, vente directe en boutique -->
+    <section class="st-tab" id="tab-pos" data-tab="pos" hidden>
+      <p class="qa-note" style="margin:0 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span>Caisse installable sur le téléphone sous le nom « <?= h($venteAppName) ?> ».</span>
+        <a class="btn btn-ghost" href="<?= h($studioBase) ?>/vente.php">Installer l'application Vente</a>
+      </p>
+      <div class="pos" id="pos"></div>
+    </section>
+
+    <!-- Mes pièces -->
+    <section class="st-tab" id="tab-list" data-tab="pieces" hidden>
+      <div class="sl">
+        <div class="sl-head">
+          <h1>Mes pièces</h1>
+          <button type="button" class="btn btn-ghost sl-refresh" id="sl-refresh">Actualiser</button>
+        </div>
+        <div id="sl-bulk" hidden>
+          <button type="button" class="btn btn-primary" id="sl-process-all">Traiter les pièces en attente</button>
+          <p class="qa-note" id="sl-bulk-note"></p>
+        </div>
+        <div id="sl-groups"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Relecture d'une pièce -->
+  <dialog class="sr" id="sr">
+    <form method="dialog" class="sr-close"><button aria-label="Fermer"><?= $ico('<path d="M6 6l12 12M18 6 6 18"/>') ?></button></form>
+    <div class="sr-body" id="sr-body" data-ai-form>
+      <p class="eyebrow" id="sr-ref"></p>
+      <div class="qa-visuals" id="sr-photos"></div>
+      <p class="qa-warn" id="sr-warn" hidden></p>
+      <div class="ai-bar">
+        <button type="button" class="btn btn-ghost ai-all" data-ai-field="all" title="Propose de nouveau un nom, une description, une catégorie, des matières et un prix d'après les photos">Tout régénérer par l'IA</button>
+        <span class="ai-status" data-ai-status role="status"></span>
+      </div>
+      <label class="qa-field">Nom <button type="button" class="ai-btn" data-ai-field="name" title="Générer / régénérer le nom">↻ IA</button><input type="text" id="sr-name" data-ai-input="name" maxlength="120"></label>
+      <div class="qa-two">
+        <label class="qa-field">Prix affiché (€) <button type="button" class="ai-btn" data-ai-field="price" title="Estimer un prix">↻ IA</button> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button><input type="number" id="sr-price" data-ai-input="price" data-price min="0" step="0.01" inputmode="decimal" placeholder="25"></label>
+        <label class="qa-field">Poids (g) <button type="button" class="ai-btn" data-ai-field="weight" title="Estimer le poids (à vérifier avec une balance)">↻ IA</button><input type="number" id="sr-weight" data-ai-input="weight_grams" min="0" step="10" inputmode="numeric" placeholder="500"></label>
+      </div>
+      <label class="qa-field">Taille <button type="button" class="ai-btn" data-ai-field="size" title="Lire la taille sur l'étiquette ou estimer les dimensions">↻ IA</button> <button type="button" class="ai-btn" id="sr-measure" title="Mesurer la pièce sur une photo, avec un repère de taille connue">📏 Mesurer</button><input type="text" id="sr-size" data-ai-input="size_text" maxlength="60" placeholder="20 × 15 × 30 cm, M, 38…"></label>
+      <label class="qa-field">Catégorie <button type="button" class="ai-btn" data-ai-field="category" title="Choisir la catégorie d'après la pièce">↻ IA</button>
+        <select id="sr-cat" data-ai-input="cat">
+          <?php foreach (category_list() as $c): ?>
+            <option value="<?= h($c['key']) ?>"><?= h($c['label']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label class="qa-field">Description <button type="button" class="ai-btn" data-ai-field="description" title="Générer / régénérer la description">↻ IA</button><textarea id="sr-desc" data-ai-input="description" rows="5" maxlength="1200"></textarea></label>
+      <label class="qa-field">Matières <button type="button" class="ai-btn" data-ai-field="materials" title="Reconnaître les matières visibles">↻ IA</button><input type="text" id="sr-materials" data-ai-input="materials" maxlength="200" placeholder="grès émaillé, bois de chêne…"></label>
+      <div class="qa-two">
+        <label class="qa-field">Couleurs <button type="button" class="ai-btn" data-ai-field="colors" title="Lire les couleurs dominantes sur la photo">↻ IA</button><input type="text" id="sr-colors" data-ai-input="colors" maxlength="120" placeholder="bleu marine, blanc"></label>
+        <label class="qa-field">Marque <button type="button" class="ai-btn" data-ai-field="brand" title="Lire la marque sur l'objet ou son étiquette">↻ IA</button><input type="text" id="sr-brand" data-ai-input="brand" maxlength="80" placeholder="Levi's, Olivetti…"></label>
+        <label class="qa-field">Distributeur<input type="text" id="sr-distributor" data-ai-input="distributor" maxlength="80" placeholder="éditeur, revendeur…"></label>
+      </div>
+      <label class="qa-field">État <button type="button" class="ai-btn" data-ai-field="etat" title="Estimer l'état d'après les photos">↻ IA</button><select id="sr-etat" data-ai-input="etat"><?= product_condition_select_html(null) ?></select></label>
+      <label class="qa-field">Nature <button type="button" class="ai-btn" data-ai-field="nature" title="Détecter la nature et la sous-catégorie">↻ IA</button><select id="sr-nature" data-ai-input="nature"><?= product_nature_select_html(null) ?></select></label>
+      <label class="qa-field">Sous-catégorie<select id="sr-sous" data-ai-input="sous_categorie"><?= product_subcategory_select_html(null) ?></select></label>
+      <label class="qa-field">Étiquette<input type="text" id="sr-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
+      <label class="qa-switch"><input type="checkbox" id="sr-publish"> <span>Visible dans la boutique<br><small class="qa-note">Sinon la fiche reste masquée.</small></span></label>
+      <p class="qa-warn" id="sr-error" role="alert" hidden></p>
+      <div class="sr-actions">
+        <button type="button" class="btn btn-primary" id="sr-save">Enregistrer</button>
+        <button type="button" class="btn btn-ghost sr-discard" id="sr-discard">Jeter cette pièce</button>
+      </div>
+    </div>
+  </dialog>
+
+  <nav class="st-tabs" aria-label="Sections">
+    <button type="button" data-go="single" aria-current="page"><?= $ico('<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>') ?><span>Une pièce</span></button>
+    <button type="button" data-go="batch"><?= $ico('<rect x="3" y="7" width="13" height="13" rx="1"/><path d="M8 7V4h13v13h-3"/>') ?><span>En lot</span></button>
+    <button type="button" data-go="pos"><?= $ico('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M7 15h3"/>') ?><span>Caisse</span></button>
+    <button type="button" data-go="pieces"><?= $ico('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>') ?><span>Mes pièces</span><i class="st-count" id="st-count" hidden></i></button>
+  </nav>
+
+  <script src="/assets/price-field.js?v=<?= (int) @filemtime(__DIR__ . '/assets/price-field.js') ?>"></script>
+  <script src="/assets/condition-pricing.js?v=<?= (int) @filemtime(__DIR__ . '/assets/condition-pricing.js') ?>"></script>
+  <script src="/assets/product-ai.js"></script>
+  <script src="/assets/nature-select.js"></script>
+  <script src="/assets/price-research.js"></script>
+  <script src="/assets/saved-prompts.js"></script>
+  <script src="/assets/prompt-helper.js"></script>
+  <script src="/assets/barcode-scan.js"></script>
+  <script src="/assets/measure-tool.js?v=<?= (int) @filemtime(__DIR__ . '/assets/measure-tool.js') ?>"></script>
+  <script src="/assets/object-picker.js?v=<?= (int) @filemtime(__DIR__ . '/assets/object-picker.js') ?>"></script>
+  <script src="/assets/quick-add.js?v=<?= (int) @filemtime(__DIR__ . '/assets/quick-add.js') ?>"></script>
+  <script src="/assets/vendor/qrcode-generator.js"></script>
+  <script src="/assets/pos.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pos.js') ?>" data-action="/admin/pos-action.php"></script>
+  <script src="/assets/studio.js?v=<?= (int) @filemtime(__DIR__ . '/assets/studio.js') ?>" data-action="/admin/quick-add-action.php" data-sw="/studio-sw.php" data-variants="/admin/mobile-variants.php"></script>
+<?php endif; ?>
+<script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/assets/share.js') ?>" defer></script>
+<script src="/assets/pwd-toggle.js" defer></script>
+</body>
+</html>

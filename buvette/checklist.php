@@ -11,7 +11,7 @@ if (bv_post_action() === 'toggle' && $event) {
     db()->prepare('UPDATE bv_tasks SET done = 1 - done,
         done_at = CASE WHEN done = 0 THEN datetime(\'now\', \'localtime\') ELSE NULL END,
         done_by = CASE WHEN done = 0 THEN ? ELSE \'\' END WHERE id = ? AND event_id = ?')->execute([$who, $id, $event['id']]);
-    header('Location: /buvette/checklist.php#task-' . $id);
+    header('Location: ' . bv_url_map('/buvette/checklist.php#task-' . $id));
     exit;
 }
 

@@ -3,21 +3,18 @@ require_once __DIR__ . '/includes/functions.php';
 
 $content = get_content();
 $orientation = ($_GET['orientation'] ?? $content['slideshow_orientation']) === 'vertical' ? 'vertical' : 'horizontal';
+$embed = !empty($_GET['embed']);
 
-$slides = [];
-foreach (slideshow_slides_list() as $s) {
-    $data = slideshow_render_data($s);
-    if ($data) $slides[] = $data;
-}
+$slides = slideshow_public_slides();
 ?><!DOCTYPE html>
-<html lang="fr" data-orientation="<?= h($orientation) ?>">
+<html lang="fr" data-orientation="<?= h($orientation) ?>" data-embed="<?= $embed ? '1' : '0' ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Diaporama — <?= h($content['site_name']) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;600&family=Special+Elite&display=swap" rel="stylesheet">
+<?= tenant_head_html() ?>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: "Archivo", ui-sans-serif, system-ui, sans-serif; }
@@ -47,6 +44,28 @@ foreach (slideshow_slides_list() as $s) {
   .slide-product-price { font-family: "Special Elite", monospace; font-size: 2.6vw; margin: 0; }
   .slide-product-price .old { text-decoration: line-through; color: #6b5c48; font-size: 0.6em; margin-right: 0.6vw; }
 
+  .slide-product.is-promo { background: #fbeee2; }
+  .slide-product.is-promo .slide-product-badge { background: #b5502e; border-color: #b5502e; color: #fff; }
+  .slide-product-kicker {
+    align-self: flex-start; margin: 0 0 -0.8vw; font-family: "Special Elite", monospace; text-transform: uppercase;
+    letter-spacing: 0.1em; font-size: 1.05vw; color: #b5502e;
+  }
+  .slide-product-price .now { color: #b5502e; }
+  .slide-promo-ribbon {
+    position: absolute; top: 2vw; left: 2vw; z-index: 2; background: #b5502e; color: #fff;
+    font-family: "Special Elite", monospace; font-size: 2vw; line-height: 1; padding: 1vw 1.4vw;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+  }
+
+  .embed-hint {
+    position: fixed; left: 50%; bottom: 2.4vh; transform: translateX(-50%); z-index: 9;
+    padding: 0.7rem 1.2rem; background: rgba(0,0,0,0.62); color: rgba(255,255,255,0.9);
+    border: 1px solid rgba(255,255,255,0.28); border-radius: 999px; pointer-events: none;
+    font-family: "Archivo", sans-serif; font-size: 0.95rem; white-space: nowrap;
+    animation: embed-hint-fade 1.6s ease 7s forwards;
+  }
+  @keyframes embed-hint-fade { to { opacity: 0; } }
+
   .empty-msg {
     display: flex; align-items: center; justify-content: center; height: 100%;
     color: #fff; font-family: "Archivo", sans-serif; text-align: center; padding: 40px; line-height: 1.6;
@@ -73,22 +92,21 @@ foreach (slideshow_slides_list() as $s) {
       <?php elseif ($s['kind'] === 'ambiance'): ?>
         <img class="slide-media" src="/<?= h($s['path']) ?>" alt="">
         <?php if ($s['caption'] !== ''): ?><div class="slide-caption"><?= h($s['caption']) ?></div><?php endif; ?>
-      <?php else: /* product */ ?>
-        <div class="slide-product">
+      <?php else: /* product */ $isPromo = !empty($d['promo']); ?>
+        <div class="slide-product<?= $isPromo ? ' is-promo' : '' ?>">
           <div class="slide-product-media">
             <?php if (!empty($p['photo'])): ?><img src="/<?= h($p['photo']) ?>" alt="<?= h($p['name']) ?>"><?php endif; ?>
+            <?php if ($isPromo): ?><span class="slide-promo-ribbon"><?= (int) ($d['discount'] ?? 0) > 0 ? '−' . (int) $d['discount'] . ' %' : 'Promo' ?></span><?php endif; ?>
           </div>
           <div class="slide-product-info">
-            <?php if (!empty($p['badge'])): ?><span class="slide-product-badge"><?= h($p['badge']) ?></span><?php endif; ?>
+            <?php if ($isPromo): ?><p class="slide-product-kicker">Offre en cours</p><?php endif; ?>
+            <?php if (!$isPromo && !empty($p['badge']) && (shop_sales_enabled() || !has_promo_price($p))): ?><span class="slide-product-badge"><?= h($p['badge']) ?></span><?php endif; ?>
             <h2 class="slide-product-name"><?= h($p['name']) ?></h2>
             <?php if (!empty($p['description'])): ?><p class="slide-product-desc"><?= h($p['description']) ?></p><?php endif; ?>
-            <p class="slide-product-price">
-              <?php if (has_promo_price($p)): ?>
-                <span class="old"><?= h($p['price']) ?></span><?= h($p['promo_price']) ?>
-              <?php else: ?>
-                <?= h($p['price']) ?>
-              <?php endif; ?>
-            </p>
+            <?php if (shop_sales_enabled()): ?><p class="slide-product-price">
+              <?php if (has_promo_price($p)): ?><span class="old"><?= h($p['price']) ?></span><span class="now"><?= h($p['promo_price']) ?></span>
+              <?php else: ?><?= h($p['price']) ?><?php endif; ?>
+            </p><?php endif; ?>
           </div>
         </div>
       <?php endif; ?>
@@ -96,12 +114,28 @@ foreach (slideshow_slides_list() as $s) {
   <?php endforeach; ?>
 <?php endif; ?>
 
+<?php if ($embed): ?><div class="embed-hint">Touchez l'écran pour revenir à la boutique</div><?php endif; ?>
 <button type="button" class="fullscreen-btn" id="fullscreen-btn">Plein écran</button>
 
 <script>
 (function () {
   var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
   var fsBtn = document.getElementById('fullscreen-btn');
+  var embed = document.documentElement.dataset.embed === '1';
+
+  function leaveEmbed() {
+    if (!embed || window.parent === window) return;
+    try { window.parent.postMessage({ type: 'brocs-kiosk:close' }, window.location.origin); } catch (err) {}
+  }
+  if (embed) {
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('.fullscreen-btn')) return;
+      leaveEmbed();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') leaveEmbed();
+    });
+  }
 
   function goFullscreen() {
     var el = document.documentElement;

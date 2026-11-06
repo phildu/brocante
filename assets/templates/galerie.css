@@ -1,0 +1,28 @@
+/* Modèle « Galerie » — éditorial et épuré. Sélecteurs préfixés « html » : plus prioritaires que assets/style.css, chargé après. */
+html header.site { border-bottom: 1px solid var(--ink); }
+html .site-bar { padding: 22px 0; }
+html nav.primary a { text-transform: uppercase; letter-spacing: .16em; font-size: .72rem; border-bottom-width: 1px; }
+html nav.primary a:hover, html nav.primary a[aria-current="page"] { border-bottom-color: var(--ink); color: var(--ink); }
+html .eyebrow { font-family: var(--font-body); letter-spacing: .3em; color: var(--ink-soft); font-size: .68rem; }
+html .hero { padding: 120px 0 100px; }
+html .hero h1 { font-weight: 400; font-size: clamp(2.8rem, 6.6vw, 5.4rem); line-height: 1; letter-spacing: -.01em; }
+html .lede { font-size: 1.12rem; line-height: 1.7; }
+html section { padding: 104px 0; }
+html .section-head { margin-bottom: 52px; }
+html .section-head h2 { font-weight: 400; font-size: clamp(1.9rem, 4vw, 2.8rem); }
+html .btn { border-radius: 0; text-transform: uppercase; letter-spacing: .16em; font-size: .72rem; padding: 16px 32px; }
+html .btn-primary { background: var(--ink); color: var(--bg); }
+html .btn-primary:hover { background: var(--accent); color: var(--accent-ink); }
+html .btn-ghost { border-color: var(--ink); }
+html .grid-products { gap: 56px 30px; }
+html .card { background: transparent; border: 0; padding: 0; gap: 12px; }
+html .card h3 { font-family: var(--font-display); font-weight: 400; font-size: 1.2rem; }
+html .card p.desc { color: var(--ink-soft); }
+html .badge { border: 0; background: var(--ink); color: var(--bg); font-family: var(--font-body); letter-spacing: .14em; }
+html .price { font-family: var(--font-body); letter-spacing: .05em; }
+html .card-cta { border-radius: 0; text-transform: uppercase; letter-spacing: .14em; font-size: .68rem; }
+html .cat-grid { gap: 0; background: none; border: 0; }
+html .cat-tile { background: transparent; border: 1px solid var(--line); margin: 0 -1px -1px 0; padding: 48px 26px; }
+html .cat-tile:hover { background: var(--surface); }
+html .principle { border-top-color: var(--ink); }
+html .shop-search input[type="search"], html .field-row input, html .field-row textarea { border-radius: 0; background: transparent; border-color: var(--ink); }

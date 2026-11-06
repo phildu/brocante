@@ -1,0 +1,6 @@
+/* Onglets des deux parcours de prise de vue (includes/shooting-tabs.php). */
+.shoot-tabs { display: flex; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--line); }
+.shoot-tabs a { flex: 1 1 0; text-align: center; padding: 9px 12px; font-size: 0.84rem; font-weight: 600; color: var(--ink-soft); text-decoration: none; border: 1px solid transparent; }
+.shoot-tabs a:hover { color: var(--ink); }
+.shoot-tabs a[aria-current="page"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+@media (min-width: 560px) { .shoot-tabs a { flex: 0 0 auto; min-width: 180px; } }

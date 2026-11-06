@@ -14,6 +14,9 @@ if (php_sapi_name() !== 'cli') {
 $tmpDir = sys_get_temp_dir() . '/brocante-nt-test-' . getmypid();
 mkdir($tmpDir, 0700, true);
 putenv('BROCANTE_DB=' . $tmpDir . '/test.db');
+putenv('SITE_URL=https://brocante.arrimage.com'); // adresse publique pour les liens de désinscription (sinon : celle du commerce actif, vide en test)
+// Base jetable créée à partir de schema.sql : db() (config.php) attend les tables de base d'un commerce (settings, content…).
+(new PDO('sqlite:' . $tmpDir . '/test.db'))->exec(file_get_contents(__DIR__ . '/../schema.sql'));
 define('NT_CONFIG_FILE', $tmpDir . '/cfg/notifications.json');
 register_shutdown_function(function () use ($tmpDir) {
     foreach (glob($tmpDir . '/{,.}*', GLOB_BRACE) ?: [] as $f) {
@@ -471,8 +474,8 @@ if (function_exists('proc_open')) {
 echo "\nImport des bénévoles et des clients\n";
 bv_boot();
 db()->exec("INSERT INTO bv_volunteers (name, phone, email) VALUES ('Léa Petit', '06 55 44 33 22', 'lea@example.fr'), ('Sans contact', '', ''), ('Alice Martin', '', 'alice@example.fr')");
-db()->exec("CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, email TEXT, status TEXT)");
-db()->exec("INSERT INTO orders (email, status) VALUES ('Client@Example.fr', 'paid'), ('client@example.fr', 'paid'), ('attente@example.fr', 'pending'), ('', 'paid')");
+// La table orders vient de schema.sql (stripe_session_id obligatoire et unique).
+db()->exec("INSERT INTO orders (stripe_session_id, email, status) VALUES ('cs_t1', 'Client@Example.fr', 'paid'), ('cs_t2', 'client@example.fr', 'paid'), ('cs_t3', 'attente@example.fr', 'pending'), ('cs_t4', '', 'paid')");
 $imp = nt_import_volunteers();
 check('bénévoles : 1 créé, 1 déjà connu (Alice), 1 sans contact ignoré', [$imp['created'], $imp['existing']], [1, 1]);
 $lea = nt_user_find_by_address('email', 'lea@example.fr');

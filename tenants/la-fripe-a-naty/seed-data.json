@@ -1,0 +1,95 @@
+{
+    "brand": {
+        "name": "La \"fripe\"  a naty",
+        "tagline": "couleur et tissus"
+    },
+    "hero": {
+        "eyebrow": "Cuit ce matin",
+        "title": "Le bon pain, comme au fournil.",
+        "subtitle": "Farines locales, levain entretenu depuis quinze ans et cuisson au feu de bois : à réserver en ligne, à retirer tout chaud.",
+        "photo": ""
+    },
+    "story": {
+        "eyebrow": "Notre histoire",
+        "title": "Une histoire de farine et de patience",
+        "text": "Installés depuis 2009, nous pétrissons chaque nuit des pains à longue fermentation et des viennoiseries au beurre AOP.",
+        "photo": "",
+        "photoCaption": "",
+        "principles": [
+            {
+                "title": "Levain naturel",
+                "text": "Fermentation lente, sans levure ajoutée."
+            },
+            {
+                "title": "Farines locales",
+                "text": "Blés de moulins situés à moins de 50 km."
+            },
+            {
+                "title": "Fait maison",
+                "text": "Tout est préparé sur place, chaque nuit."
+            }
+        ]
+    },
+    "contact": {
+        "address": "8 rue des Fours, 69004 Lyon",
+        "hours": "Du mardi au dimanche, 6 h 30 – 19 h 30",
+        "delivery": "Retrait en boutique, livraison à vélo dans le quartier"
+    },
+    "shipping": {
+        "fee": "3,50 €",
+        "pickupLabel": "Retrait en boutique",
+        "shippingLabel": "Envoi postal"
+    },
+    "featuredRefs": [
+        "001",
+        "002",
+        "003"
+    ],
+    "products": [
+        {
+            "ref": "001",
+            "name": "Tourte de seigle",
+            "cat": "pains",
+            "desc": "Mie dense, croûte épaisse, se garde une semaine.",
+            "price": "6,80 €",
+            "badge": "Signature",
+            "icon": "ic-basket"
+        },
+        {
+            "ref": "002",
+            "name": "Baguette tradition",
+            "cat": "pains",
+            "desc": "Farine Label Rouge, pétrie et façonnée à la main.",
+            "price": "1,30 €",
+            "badge": "",
+            "icon": "ic-basket"
+        },
+        {
+            "ref": "003",
+            "name": "Croissant au beurre",
+            "cat": "viennoiseries",
+            "desc": "Beurre AOP Charentes-Poitou, feuilletage en trois jours.",
+            "price": "1,40 €",
+            "badge": "Coup de cœur",
+            "icon": "ic-bowls"
+        },
+        {
+            "ref": "004",
+            "name": "Tarte aux pralines",
+            "cat": "patisseries",
+            "desc": "Pour 6 personnes, pralines roses de Saint-Genix.",
+            "price": "18 €",
+            "badge": "",
+            "icon": "ic-candle"
+        },
+        {
+            "ref": "005",
+            "name": "Confiture d'abricot",
+            "cat": "epicerie-fine",
+            "desc": "Abricots de la Drôme, cuits en chaudron.",
+            "price": "7,50 €",
+            "badge": "Nouveau",
+            "icon": "ic-pot"
+        }
+    ]
+}

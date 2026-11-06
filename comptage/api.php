@@ -5,7 +5,9 @@
  * rafraîchissement). POST uniquement, jeton CSRF en en-tête X-CSRF-Token.
  */
 require_once __DIR__ . '/../includes/comptage.php';
-if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/../includes/session.php';
+cp_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/comptage/…), extension active
+cp_url_map_off();    // réponse JSON : rien à réécrire
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -21,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') cp_json(405, ['error' => 'method']);
 if (!cp_is_volunteer()) cp_json(401, ['error' => 'auth']);
 
 $token = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
-if ($token === '' || !hash_equals(csrf_token(), $token)) cp_json(403, ['error' => 'csrf']);
+if ($token === '' || !hash_equals(shop_csrf_token(), $token)) cp_json(403, ['error' => 'csrf']);
 // Libère le verrou de session : plusieurs téléphones / onglets peuvent synchroniser sans s'attendre.
 session_write_close();
 

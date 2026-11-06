@@ -1,0 +1,14 @@
+{
+  "id": "ventes-flash",
+  "name": "Ventes flash",
+  "version": "1.0.0",
+  "description": "{Ext} payant{e} (essai gratuit) : baisses de prix programmées et automatiques (ex. -5 % toutes les heures, jusqu'à -40 %) pour animer une fin de marché ou une braderie. Les prix d'origine sont rétablis à la fin.",
+  "table_prefix": "vf_",
+  "pages": [
+    { "id": "index", "label": "Ventes flash", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "sales", "file": "api/sales.php", "methods": ["GET", "POST"], "roles": ["admin"] }
+  ]
+}

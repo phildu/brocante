@@ -1,0 +1,13 @@
+{
+  "id": "bourse",
+  "name": "Bourse d'échanges",
+  "version": "1.0.0",
+  "description": "Les visiteurs proposent une pièce à la vente ; le commerçant publie ses recherches d'achat (« je recherche des céramiques ») et traite propositions et réponses dans une boîte de réception unique. Chaque boutique garde ses demandes dans sa base.",
+  "table_prefix": "bourse_",
+  "pages": [
+    { "id": "index", "label": "Bourse d'échanges", "icon": "receipt", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "action", "file": "api/action.php", "methods": ["POST"], "roles": ["admin", "community_manager"] }
+  ]
+}

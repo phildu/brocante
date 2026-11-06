@@ -1,0 +1,17 @@
+{
+  "id": "messagerie",
+  "name": "Messagerie & WhatsApp",
+  "version": "1.0.0",
+  "description": "{Ext} payant{e} (essai gratuit) : bouton WhatsApp et formulaire de question sur chaque fiche pièce ; messages reçus dans l'administration et par e-mail, réponse en un clic.",
+  "table_prefix": "ms_",
+  "pages": [
+    { "id": "index", "label": "Messagerie", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] },
+    { "id": "inbox", "file": "api/inbox.php", "methods": ["GET", "POST"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/messages", "file": "api/public.php" }
+  ]
+}

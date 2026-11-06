@@ -1,0 +1,19 @@
+{
+  "id": "assistance-vendeur",
+  "name": "Assistance vendeur",
+  "version": "1.0.0",
+  "description": "Un vendeur se déclare disponible pour répondre aux visiteurs ; le site affiche sa présence et permet de poser une question (e-mail, WhatsApp ou demande d'appel). Quand un visiteur s'attarde sur une pièce, remplit son panier ou ouvre le paiement, le vendeur est prévenu (alerte vocale dans l'administration, e-mail, SMS, WhatsApp) et peut retenir la pièce quelques minutes, le temps de répondre ou de la vendre en boutique.",
+  "table_prefix": "av_",
+  "pages": [
+    { "id": "index", "label": "Assistance vendeur", "icon": "users", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "state", "file": "api/state.php", "methods": ["GET"], "roles": ["admin", "community_manager"] },
+    { "id": "save", "file": "api/save.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "action", "file": "api/action.php", "methods": ["POST"], "roles": ["admin", "community_manager"] },
+    { "id": "test", "file": "api/test.php", "methods": ["POST"], "roles": ["admin", "community_manager"] }
+  ],
+  "agent_api": [
+    { "prefix": "/presence", "file": "api/public.php" }
+  ]
+}

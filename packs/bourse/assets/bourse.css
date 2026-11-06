@@ -1,0 +1,185 @@
+/* Bourse d'échanges de la boutique : page publique /bourse.php.
+   Les couleurs viennent du thème du commerce (style.css) : --bg, --surface, --ink, --accent… */
+
+.bourse-page { padding-top: 34px; }
+
+.bourse-title {
+  font-size: clamp(1.9rem, 4vw, 2.8rem);
+  margin: 8px 0 10px;
+}
+
+.bourse-intro { margin: 0 0 26px; }
+
+.bourse-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  padding-bottom: 40px;
+}
+
+@media (max-width: 860px) {
+  .bourse-layout { grid-template-columns: 1fr; }
+}
+
+.bourse-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 26px 26px 28px;
+}
+
+.bourse-card-soft { background: var(--bg); }
+
+.bourse-card-title {
+  font-size: 1.45rem;
+  margin: 6px 0 10px;
+  line-height: 1.2;
+}
+
+.bourse-muted {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  margin: 0 0 20px;
+}
+
+.bourse-form .field { margin-bottom: 16px; }
+
+.bourse-form .field input,
+.bourse-form .field select,
+.bourse-form .field textarea {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 11px 12px;
+  font-family: var(--font-body);
+  font-size: 0.94rem;
+  width: 100%;
+  border-radius: 2px;
+}
+
+.bourse-form .field input[type="file"] {
+  background: transparent;
+  border: 1px dashed var(--line);
+  padding: 10px 12px;
+}
+
+.bourse-form .field input:focus,
+.bourse-form .field select:focus,
+.bourse-form .field textarea:focus {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 1px;
+}
+
+.bourse-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .bourse-row { grid-template-columns: 1fr; gap: 0; }
+}
+
+.bourse-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.bourse-optional {
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  opacity: 0.85;
+}
+
+.bourse-hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.bourse-consent {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 0.84rem;
+  color: var(--ink-soft);
+  margin: 4px 0 20px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.bourse-consent input { margin-top: 3px; flex: none; }
+
+.bourse-submit { width: 100%; justify-content: center; }
+
+.bourse-searches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bourse-search {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+}
+
+.bourse-search-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.bourse-search-head h3 {
+  font-size: 1.08rem;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.bourse-tag {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.bourse-search p {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.bourse-search-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  margin-bottom: 12px !important;
+}
+
+.bourse-search-meta strong { color: var(--ink); }
+
+.bourse-reply { font-size: 0.84rem; padding: 9px 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

@@ -1,13 +1,22 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
-require_permission('galerie.slideshow.lire');
+require_admin();
 
 $content = get_content();
 $slides = slideshow_slides_list();
-$mediaAll = get_media_items();
+// Médiathèque propre ET visuels / vidéos des galeries de pièces (dont les vidéos générées par l'IA) ; les vidéos d'abord.
+$mediaAll = get_media_overview();
+usort($mediaAll, static fn (array $a, array $b): int => [$a['type'] === 'video' ? 0 : 1] <=> [$b['type'] === 'video' ? 0 : 1]);
 $products = get_products(null, true);
 $flash = flash_get();
+
+$promosAuto = shop_setting('slideshow_auto_promos', '1') !== '0';
+$promos = shop_sales_enabled() ? slideshow_promo_products() : [];
+$idleEnabled = shop_setting('slideshow_idle_enabled', '0') === '1';
+$idleMinutes = max(1, min(120, (int) shop_setting('slideshow_idle_minutes', '3')));
+$vitrineLink = app_prefix('/index.php') . '?vitrine=1';
+$vitrineOffLink = app_prefix('/index.php') . '?vitrine=0';
 
 $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' => 'Fiche produit'];
 ?><!DOCTYPE html>
@@ -18,7 +27,7 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
 <title>Diaporama boutique — <?= h($content['site_name']) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+<?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>
   .gm-list { display: flex; flex-direction: column; gap: 16px; }
@@ -27,7 +36,7 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
     padding: 16px; background: var(--surface); border: 1px solid var(--line);
   }
   .gm-thumb { width: 120px; height: 90px; background: var(--surface-2); overflow: hidden; display:flex; align-items:center; justify-content:center; }
-  .gm-thumb img, .gm-thumb video { width: 100%; height: 100%; object-fit: cover; }
+  .gm-thumb img, .gm-thumb video { width: 100%; height: 100%; object-fit: contain; }
   .gm-thumb-empty { font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-soft); text-transform: uppercase; }
   .gm-kind-label { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 8px; }
   .gm-fields input[type="text"] {
@@ -54,9 +63,24 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
   }
   .media-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; overflow-y: auto; max-height: 60vh; }
   .media-pick-item { border: 1px solid var(--line); background: var(--surface); cursor: pointer; padding: 0; }
-  .media-pick-item img, .media-pick-item video { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
+  .media-pick-item img, .media-pick-item video { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--surface-2); display: block; }
   .media-pick-item span { display: block; font-size: 0.68rem; padding: 4px 6px; color: var(--ink-soft); }
   .media-pick-item:hover { outline: 2px solid var(--accent); }
+
+  .catalog-pick-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;
+    max-height: 420px; overflow-y: auto; margin-top: 12px; padding: 10px;
+    border: 1px solid var(--line); background: var(--surface);
+  }
+  .catalog-pick { display: flex; gap: 8px; align-items: center; padding: 6px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; font-size: 0.8rem; }
+  .catalog-pick img { width: 44px; height: 44px; object-fit: cover; flex: 0 0 auto; background: var(--surface-2); }
+  .catalog-pick input { flex: 0 0 auto; }
+  .catalog-pick small { display: block; color: var(--ink-soft); font-size: 0.7rem; }
+  .promo-auto-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
+  .promo-auto-item { display: flex; gap: 10px; align-items: center; padding: 8px; border: 1px solid var(--line); background: var(--surface); }
+  .promo-auto-item img { width: 54px; height: 54px; object-fit: cover; flex: 0 0 auto; background: var(--surface-2); }
+  .promo-auto-item b { color: var(--accent); }
+  .promo-auto-item span { display: block; font-size: 0.8rem; color: var(--ink-soft); }
 </style>
 </head>
 <body>
@@ -67,7 +91,7 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
   <div class="wrap">
     <p class="eyebrow">Écran boutique</p>
     <h1 style="font-size:1.8rem;margin:12px 0 12px;">Diaporama boutique</h1>
-    <p class="hint">Composez un diaporama à diffuser sur un écran ou une tablette en magasin : vidéos, images d'ambiance, fiches produits. Chaque diapositive a sa propre durée d'affichage.</p>
+    <p class="hint">Composez un diaporama à diffuser sur un écran ou une tablette en magasin : vidéos, images d'ambiance, fiches produits. Chaque diapositive a sa propre durée d'affichage. Les <strong>promotions en cours</strong> peuvent s'ajouter automatiquement en tête, et le diaporama peut se lancer seul après un temps d'inactivité en <strong>mode vitrine</strong>.</p>
 
     <?php if ($flash): ?>
       <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin:16px 0;"><?= h($flash['message']) ?></p>
@@ -87,12 +111,66 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
         </label>
         <button type="submit" class="btn btn-primary">Enregistrer</button>
       </form>
+
+      <form method="post" action="/admin/slideshow-action.php" style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-top:18px;padding-top:18px;border-top:1px solid var(--line);">
+        <input type="hidden" name="action" value="set_idle">
+        <label style="display:flex;gap:8px;align-items:center;">
+          <input type="checkbox" name="idle_enabled" value="1" <?= $idleEnabled ? 'checked' : '' ?>>
+          Lancer automatiquement le diaporama après inactivité
+        </label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:0.9rem;">
+          Délai
+          <input type="number" name="idle_minutes" min="1" max="120" value="<?= (int) $idleMinutes ?>" style="width:74px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px 10px;"> min
+        </label>
+        <label style="display:flex;gap:8px;align-items:center;">
+          <input type="checkbox" name="auto_promos" value="1" <?= $promosAuto ? 'checked' : '' ?>>
+          Ajouter les promotions en cours en tête
+        </label>
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
+      </form>
+
+      <?php if ($idleEnabled): ?>
+        <p class="hint" style="margin-top:14px;">
+          Sur l'appareil du magasin (tablette ou TV), ouvrez une fois
+          <a href="<?= h($vitrineLink) ?>" target="_blank" rel="noopener"><strong>le mode vitrine</strong></a> :
+          le réglage reste sur cet appareil, et le diaporama démarre après <?= (int) $idleMinutes ?> min sans activité.
+          Pour l'arrêter sur l'appareil : <a href="<?= h($vitrineOffLink) ?>" target="_blank" rel="noopener">désactiver le mode vitrine</a>.
+        </p>
+      <?php else: ?>
+        <p class="hint" style="margin-top:14px;">Le lancement automatique est désactivé : le diaporama ne s'ouvre que par le bouton ci-dessous ou l'adresse directe.</p>
+      <?php endif; ?>
+
       <a class="btn btn-primary" href="/slideshow.php" target="_blank" style="margin-top:16px;display:inline-flex;">Lancer le diaporama</a>
       <p class="hint" style="margin-top:14px;">
         À ouvrir en plein écran sur l'appareil connecté à l'écran boutique : <strong><?= h(SITE_URL) ?>/slideshow.php</strong>
         — <a href="/slideshow.php?orientation=horizontal" target="_blank">aperçu horizontal</a> ·
         <a href="/slideshow.php?orientation=vertical" target="_blank">aperçu vertical</a>
       </p>
+    </div>
+
+    <div class="admin-block" style="margin-top:20px;">
+      <h2 style="font-size:1.1rem;">Promotions en cours</h2>
+      <?php if (!shop_sales_enabled()): ?>
+        <p class="hint" style="margin-top:10px;">La vente en ligne est désactivée sur cette boutique : les promotions ne sont pas diffusées.</p>
+      <?php elseif (!$promosAuto): ?>
+        <p class="hint" style="margin-top:10px;">L'ajout automatique est décoché : les articles en promotion ne sont pas ajoutés au diaporama.</p>
+      <?php elseif (!$promos): ?>
+        <p class="hint" style="margin-top:10px;">Aucune promotion en cours pour l'instant. Dès qu'un article a la mention « Promo » et un prix promo, il est ajouté ici automatiquement. <a href="/admin/catalog.php">Ouvrir le catalogue →</a></p>
+      <?php else: ?>
+        <p class="hint" style="margin-top:10px;"><?= count($promos) ?> pièce<?= count($promos) > 1 ? 's' : '' ?> en promotion ser<?= count($promos) > 1 ? 'ont' : 'a' ?> diffusée<?= count($promos) > 1 ? 's' : '' ?> en tête du diaporama, avant la sélection manuelle.</p>
+        <div class="promo-auto-list">
+          <?php foreach ($promos as $p): $discount = slideshow_promo_discount($p); ?>
+            <div class="promo-auto-item">
+              <?php if (!empty($p['photo'])): ?><img src="/<?= h($p['photo']) ?>" alt="" loading="lazy"><?php endif; ?>
+              <div>
+                <strong><?= h($p['name']) ?></strong>
+                <span><?= h($p['price']) ?> → <b><?= h($p['promo_price']) ?></b><?= $discount > 0 ? ' (−' . (int) $discount . ' %)' : '' ?></span>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+      <p class="hint" style="margin-top:10px;">La liste se met à jour toute seule à chaque visite du diaporama. <a href="/admin/promos.php">Voir les statistiques de mise en avant →</a></p>
     </div>
 
     <div class="gm-list" style="margin-top:24px;">
@@ -161,23 +239,30 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
     </div>
 
     <div class="admin-block" style="margin-top:24px;">
-      <h2 style="font-size:1.1rem;">Ajouter une fiche produit</h2>
-      <form method="post" action="/admin/slideshow-action.php" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;">
-        <input type="hidden" name="action" value="add_product">
-        <select name="ref" required style="max-width:320px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:9px 10px;font-family:var(--font-body);">
-          <option value="">— Choisir un produit —</option>
-          <?php foreach ($products as $p): ?>
-            <option value="<?= h($p['ref']) ?>">
-              <?= h($p['name']) ?> (Réf. <?= h($p['ref']) ?>)<?= $p['is_hidden'] ? ' — masqué' : '' ?><?= (int) $p['stock'] <= 0 ? ' — épuisé' : '' ?>
-            </option>
+      <h2 style="font-size:1.1rem;">Ajouter une sélection du catalogue</h2>
+      <form method="post" action="/admin/slideshow-action.php" style="margin-top:14px;">
+        <input type="hidden" name="action" value="add_products">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <input type="search" id="catalog-pick-filter" placeholder="Filtrer par nom ou référence…" style="max-width:320px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:9px 10px;font-family:var(--font-body);">
+          <label style="display:flex;gap:6px;align-items:center;font-size:0.82rem;color:var(--ink-soft);">
+            Durée <input type="number" name="duration_seconds" min="1" max="120" value="8" style="width:64px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px 10px;">s
+          </label>
+          <button type="submit" class="btn btn-primary">Ajouter la sélection</button>
+        </div>
+        <div class="catalog-pick-grid">
+          <?php foreach ($products as $p): $search = mb_strtolower($p['name'] . ' ' . $p['ref']); ?>
+            <label class="catalog-pick" data-pick-name="<?= h($search) ?>">
+              <input type="checkbox" name="refs[]" value="<?= h($p['ref']) ?>">
+              <?php if (!empty($p['photo'])): ?><img src="/<?= h($p['photo']) ?>" alt="" loading="lazy"><?php else: ?><span style="width:44px;height:44px;background:var(--surface-2);flex:0 0 auto;"></span><?php endif; ?>
+              <span>
+                <?= h($p['name']) ?>
+                <small>Réf. <?= h($p['ref']) ?><?= $p['is_hidden'] ? ' · masqué' : '' ?><?= (int) $p['stock'] <= 0 ? ' · épuisé' : '' ?></small>
+              </span>
+            </label>
           <?php endforeach; ?>
-        </select>
-        <label style="display:flex;gap:6px;align-items:center;font-size:0.82rem;color:var(--ink-soft);">
-          Durée <input type="number" name="duration_seconds" min="1" max="120" value="8" style="width:64px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px 10px;">s
-        </label>
-        <button type="submit" class="btn btn-primary">Ajouter</button>
+        </div>
+        <p class="hint" style="margin-top:10px;">Cochez plusieurs pièces pour les ajouter d'un coup, dans l'ordre du catalogue. Les fiches masquées ou en rupture n'apparaissent pas dans le diaporama tant qu'elles ne redeviennent pas disponibles.</p>
       </form>
-      <p class="hint" style="margin-top:10px;">Les fiches masquées ou en rupture n'apparaissent pas dans le diaporama tant qu'elles ne redeviennent pas disponibles.</p>
     </div>
   </div>
 </section>
@@ -197,7 +282,7 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
             <?php else: ?>
               <img src="/<?= h($m['path']) ?>" alt="<?= h($m['label']) ?>">
             <?php endif; ?>
-            <span><?= h($m['label']) ?><?= $m['type'] === 'video' ? ' (vidéo)' : '' ?></span>
+            <span><?= h($m['label']) ?><?= $m['type'] === 'video' ? ' (vidéo)' : '' ?><?= ($m['kind'] ?? '') === 'fiche' ? ' — ' . h($m['origin_name']) : '' ?></span>
           </button>
         <?php endforeach; ?>
       </div>
@@ -232,8 +317,20 @@ $kindLabels = ['video' => 'Vidéo', 'ambiance' => "Image d'ambiance", 'product' 
     });
   });
 })();
+
+(function () {
+  var filter = document.getElementById('catalog-pick-filter');
+  if (!filter) return;
+  var items = Array.prototype.slice.call(document.querySelectorAll('[data-pick-name]'));
+  filter.addEventListener('input', function () {
+    var query = filter.value.toLowerCase().trim();
+    items.forEach(function (item) {
+      item.hidden = query !== '' && item.dataset.pickName.indexOf(query) === -1;
+    });
+  });
+})();
 </script>
 <script src="/assets/admin-upload-check.js"></script>
-<?= auth_ui_gate('slideshow-action.php') ?>
+<script src="/assets/lightbox.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/lightbox.js') ?>" defer></script>
 </body>
 </html>

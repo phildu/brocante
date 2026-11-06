@@ -1,8 +1,7 @@
 <?php
 /** Bordereau de remise à une donnerie — page autonome, pensée pour l'impression. */
-session_start();
 require_once __DIR__ . '/../includes/invendus-layout.php';
-require_permission('portail.invendus.exporter');
+unsold_admin_init();   // ne s'ouvre que depuis l'espace d'une galerie (portail/galerie-invendus.php)
 
 $donation = unsold_donation_get((int) unsold_param($_GET, 'id'));
 if (!$donation) {
@@ -12,7 +11,7 @@ if (!$donation) {
 }
 $event = unsold_event_get((int) $donation['event_id']);
 $items = unsold_donation_offers((int) $donation['id']);
-$content = get_content();
+$siteName = unsold_site_name();
 
 // Regroupement par catégorie + totaux.
 $byCat = [];
@@ -61,7 +60,7 @@ $ref = sprintf('REM-%s-%04d', date('Y', strtotime($donation['created_at']) ?: ti
   <div style="color:#555;"><?= h($ref) ?> · <?= h(unsold_fr_date(substr($donation['created_at'], 0, 10))) ?> à <?= h(unsold_fr_time($donation['created_at'])) ?></div>
 
   <div class="meta">
-    <div><b>Donateur</b><?= h($content['site_name'] ?? '') ?><br><?= h($event['name'] ?? '') ?><?= $event ? '<br>' . h(unsold_fr_date($event['event_date'])) : '' ?><?= !empty($event['location']) ? '<br>' . h($event['location']) : '' ?></div>
+    <div><b>Donateur</b><?= h($siteName) ?><br><?= h($event['name'] ?? '') ?><?= $event ? '<br>' . h(unsold_fr_date($event['event_date'])) : '' ?><?= !empty($event['location']) ? '<br>' . h($event['location']) : '' ?></div>
     <div><b>Structure bénéficiaire</b><?= h($donation['recipient_name']) ?><br><?= h($donation['recipient_address']) ?><?= $donation['recipient_phone'] !== '' ? '<br>' . h($donation['recipient_phone']) : '' ?></div>
   </div>
   <?php if ($donation['handed_by'] !== '' || $donation['note'] !== ''): ?>
@@ -87,7 +86,7 @@ $ref = sprintf('REM-%s-%04d', date('Y', strtotime($donation['created_at']) ?: ti
   <p style="font-size:.85rem;color:#555;">Objets donnés à titre gratuit et sans contrepartie.</p>
 
   <div class="sign">
-    <div>Pour <?= h($content['site_name'] ?? 'l\'organisation') ?><br>Nom, date, signature</div>
+    <div>Pour <?= h($siteName !== '' ? $siteName : 'l\'organisation') ?><br>Nom, date, signature</div>
     <div>Pour <?= h($donation['recipient_name']) ?><br>Nom, date, signature</div>
   </div>
 </div>

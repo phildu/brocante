@@ -1,0 +1,14 @@
+{
+  "id": "studio-video",
+  "name": "Studio vidéo",
+  "version": "1.0.0",
+  "description": "Prépare, tourne et monte une vidéo de la boutique sans quitter le navigateur. L'IA écrit le script et la liste des plans à partir de quelques phrases ; l'écran aide à la prise de vue (repères de cadrage, téléprompteur, niveau du son, mesure de la lumière, décompte) ; les prises restent dans le navigateur, se montent (ordre, coupes, titres, fondu) et s'exportent en un fichier vidéo prêt à publier.",
+  "table_prefix": "studio_",
+  "pages": [
+    { "id": "index", "label": "Studio vidéo", "icon": "camera", "file": "pages/index.php", "roles": ["admin", "community_manager"] }
+  ],
+  "api": [
+    { "id": "projects", "file": "api/projects.php", "methods": ["GET", "POST", "DELETE"], "roles": ["admin", "community_manager"] },
+    { "id": "ai", "file": "api/ai.php", "methods": ["POST"], "roles": ["admin", "community_manager"] }
+  ]
+}

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/comptage-layout.php';
-if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/../includes/session.php';
+cp_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/comptage/…), extension active
 cp_boot();
 
 if (cp_is_volunteer()) {

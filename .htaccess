@@ -1,0 +1,71 @@
+# Routage des adresses (Apache / OVH).
+RewriteEngine On
+
+# Racine du domaine : index.php décide. Déploiement « portail » : l'accueil de la plateforme (accueil/index.php ; annuaire/,
+# inscription/ et galerie/ sont ses autres pages publiques ; le portail de l'exploitant reste à /portail/). Le domaine propre d'un
+# commerce (site_url sans chemin dans son tenant.php, ex. brocante.arrimage.com) ouvre sa boutique à la racine, comme sous
+# /<identifiant>/ ; un déploiement à un seul commerce affiche toujours la boutique.
+DirectoryIndex index.php
+
+# Galeries commerciales (page publique, sans connexion) : /galerie/ et /galerie/<identifiant>/ — voir galerie/index.php.
+RewriteRule ^galerie/?$ galerie/index.php [L]
+# Connexion à l'administration d'UNE galerie : /galerie/<identifiant>/admin (galerie/admin.php sans identifiant reste la connexion générique).
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/admin/?$ galerie/admin.php?g=$1 [L,QSA]
+# Espace des bénévoles de la buvette d'une galerie : /galerie/<identifiant>/buvette/ et /galerie/<identifiant>/buvette/<page>.php (extension Buvette).
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/buvette/?$ buvette/index.php?g=$1 [L,QSA]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/buvette/([a-z]+)\.php$ buvette/$2.php?g=$1 [L,QSA]
+# Comptage de foule d'une galerie : /galerie/<identifiant>/comptage/, /comptage/<page>.php, sw.js et manifest.json (extension Comptage de foule).
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/comptage/?$ comptage/index.php?g=$1 [L,QSA]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/comptage/(index|login|logout|api)\.php$ comptage/$2.php?g=$1 [L,QSA]
+RewriteRule ^galerie/[a-z0-9][a-z0-9-]*/comptage/(sw\.js|manifest\.json)$ comptage/$1 [L]
+# Dons et invendus d'une galerie : /galerie/<identifiant>/dons/ et /galerie/<identifiant>/dons/<page>.php (extension Invendus & dons).
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/dons/?$ dons.php?g=$1 [L,QSA]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/dons/(point|proposer|suivi|tournee)\.php$ dons-$2.php?g=$1 [L,QSA]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/?$ galerie/index.php?g=$1 [L,QSA]
+
+# Agents externes des plugins (ex. agent de rendu vidéo) : /api/… → plugin-agent.php, aussi sous /<commerce>/api/… (après la
+# réécriture du commerce ci-dessous, la règle s'applique au second passage). La route du plugin authentifie l'agent (jeton).
+RewriteRule ^api/([a-z0-9/-]+)$ plugin-agent.php?agent_path=$1 [L,QSA]
+
+# Un commerce servi sous le domaine du portail : /<identifiant>/… affiche la
+# boutique de tenants/<identifiant>/ (le PHP reconnaît le commerce à l'adresse
+# demandée, voir tenant_from_path() dans includes/tenant.php). Un dossier réel
+# de même nom (admin/, assets/…) n'a pas de tenant.php : il n'est pas touché.
+RewriteCond %{DOCUMENT_ROOT}/tenants/$1/tenant.php -f
+RewriteRule ^([a-z0-9][a-z0-9_-]*)$ /$1/ [R=301,L]
+RewriteCond %{DOCUMENT_ROOT}/tenants/$1/tenant.php -f
+RewriteRule ^([a-z0-9][a-z0-9_-]*)/$ index.php [L]
+RewriteCond %{DOCUMENT_ROOT}/tenants/$1/tenant.php -f
+RewriteRule ^([a-z0-9][a-z0-9_-]*)/(.+)$ $2 [L,QSA]
+
+# Protection des fichiers sensibles (Apache / OVH).
+# Bases SQLite, sauvegardes, schéma, journaux : jamais servis en HTTP.
+<FilesMatch "\.(db|sqlite|sqlite3|sql|log|bak)$|\.db\.bak-">
+    Require all denied
+</FilesMatch>
+
+# Fichiers et dossiers cachés (.secrets/, .tenant, .env*, .git/…),
+# sauf .well-known (certificats Let's Encrypt).
+RedirectMatch 404 "(?:^|/)\.(?!well-known)"
+
+# Dossiers internes : configuration des commerces, bases, scripts, journaux.
+RedirectMatch 404 "^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$)"
+
+# Plugins : seules les ressources de packs/<id>/assets/ sont servies (le reste est aussi refusé par packs/.htaccess).
+RedirectMatch 404 "^/packs(?:/|$)(?![a-z0-9][a-z0-9-]*/assets/)"
+
+# Fichiers envoyés (uploads/, y compris sous /<commerce>/) : jamais exécutés comme scripts, quelle que soit leur extension.
+RedirectMatch 404 "(?:^|/)uploads/.*\.(?:php\d?|phtml|phar|pl|py|cgi|sh)$"
+
+# Fichiers de travail Markdown à la racine (consignes, audits : _NOM.md) : jamais servis.
+RedirectMatch 404 "^/_[^/]*\.md$"
+
+# Scripts et styles : toujours revalidés (ETag / Last-Modified), pour que chaque déploiement soit pris en compte tout de suite
+# au lieu d'attendre l'expiration du cache du navigateur (15 minutes par défaut) avec une ancienne version des scripts.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(js|css)$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>
+
+Options -Indexes

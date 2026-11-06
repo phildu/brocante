@@ -9,26 +9,15 @@ require_once __DIR__ . '/buvette.php';
 /* ---------- administration ---------- */
 
 /**
- * Droit exigé par une action POST de l'administration de la buvette, déduit de
- * son nom : delete_* -> supprimer ; add_*, create_*, load_*, duplicate_* -> créer ;
- * le reste (update_*, set_*, assign, toggle, reset, save_*, activate_*…) -> modifier.
+ * Droits + schéma : à appeler en tête de chaque page admin/buvette/. Ces pages ne sont jamais servies seules : c'est
+ * portail/galerie-buvette.php (espace d'une galerie) qui les ouvre, après avoir vérifié l'accès et l'extension, et qui place la buvette
+ * dans cette galerie (bv_enter_gallery()). Appelée directement (/admin/buvette/…), la page n'existe pas.
  */
-function bv_action_verb(string $action): string
-{
-    if (str_starts_with($action, 'delete')) return 'supprimer';
-    foreach (['add', 'create', 'load', 'duplicate'] as $prefix) {
-        if (str_starts_with($action, $prefix)) return 'creer';
-    }
-    return 'modifier';
-}
-
-/** Session + droits (consulter, et selon l'action : créer / modifier / supprimer) + schéma : à appeler en tête de chaque page admin/buvette/. */
 function bv_admin_init(): void
 {
-    if (session_status() === PHP_SESSION_NONE) session_start();
-    require_permission('portail.buvette.lire');
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-        require_permission(auth_perm('portail.buvette', bv_action_verb((string) ($_POST['action'] ?? ''))));
+    if (bv_gallery_context() === null) {
+        http_response_code(404);
+        exit('Page introuvable.');
     }
     bv_boot();
 }
@@ -53,31 +42,22 @@ function bv_asset_url(string $path): string
     return $path . (is_file($file) ? '?v=' . filemtime($file) : '');
 }
 
+/** Feuille de style d'appoint : le module est écrit pour le thème de la boutique, il s'affiche ici dans celui du portail. */
+function bv_gallery_css(): string
+{
+    return ':root { --ink-soft: var(--muted); --surface: var(--panel); --surface-2: var(--panel-2); --sage: var(--ok); --font-display: var(--font-ui); --font-body: var(--font-ui); }'
+        . '.bv-admin .bv-title { display: none; }'
+        . '@media print { .pnav, .pbar, .phead, .pnav-veil, .ga-actions { display: none !important; } body.has-admin-shell { padding: 0 !important; } .app, .gwrap, .ga-page { margin: 0 !important; padding: 0 !important; max-width: none !important; } }';
+}
+
+/** En-tête d'une page de la buvette : le cadre de l'espace de la galerie (portail/_galerie-layout.php), puis les sections du module. */
 function bv_admin_header(string $title, string $section): void
 {
-    $content = get_content();
     $event = bv_active_event();
     $flash = flash_get();
-    $adminNav = 'buvette';
-    $siteName = $content['site_name'] ?? '';
-    ?><!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title><?= h($title) ?> — Buvette — <?= h($siteName) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.css">
-<link rel="stylesheet" href="<?= h(bv_asset_url('/assets/buvette.css')) ?>">
-</head>
-<body class="bv-admin">
-<?php include __DIR__ . '/admin-nav.php'; ?>
-<main>
-<section class="tight">
-  <div class="wrap">
+    ga_head($title . ' · Buvette', '', '<link rel="stylesheet" href="' . h(bv_asset_url('/assets/buvette.css')) . '"><style>' . bv_gallery_css() . '</style>');
+    ?>
+    <div class="bv-admin">
     <nav class="bv-subnav bv-noprint" aria-label="Sections de la buvette">
       <?php foreach (bv_admin_sections() as $key => [$href, $label]): ?>
         <a href="<?= h($href) ?>"<?= $section === $key ? ' aria-current="page"' : '' ?>><?= h($label) ?></a>
@@ -95,8 +75,6 @@ function bv_admin_header(string $title, string $section): void
       <p class="bv-callout bv-noprint">Aucun événement pour l'instant — <a href="/admin/buvette/index.php#nouvel-evenement">créez-en un</a> pour utiliser le prévisionnel, le planning et la check-list.</p>
     <?php endif; ?>
 
-    <h1 class="bv-title"><?= h($title) ?></h1>
-
     <?php if ($flash): ?>
       <p class="publish-status bv-flash" role="status" data-kind="<?= h($flash['kind']) ?>"><?= h($flash['message']) ?></p>
     <?php endif; ?>
@@ -106,9 +84,7 @@ function bv_admin_header(string $title, string $section): void
 function bv_admin_footer(): void
 {
     ?>
-  </div>
-</section>
-</main>
+    </div>
 <script>
 // Confirmation avant les actions destructrices : <form data-confirm="…">
 document.addEventListener('submit', function (e) {
@@ -116,16 +92,15 @@ document.addEventListener('submit', function (e) {
   if (msg && !window.confirm(msg)) e.preventDefault();
 });
 </script>
-</body>
-</html>
 <?php
+    ga_foot();
 }
 
 /** Redirection après POST (PRG) avec message flash. */
 function bv_redirect(string $url, ?string $message = null, string $kind = 'ok'): void
 {
     if ($message !== null) flash_set($message, $kind);
-    header('Location: ' . $url);
+    header('Location: ' . bv_url_map($url));
     exit;
 }
 
@@ -133,7 +108,7 @@ function bv_redirect(string $url, ?string $message = null, string $kind = 'ok'):
 function bv_form_open(string $action, array $hidden = [], string $confirm = '', string $class = ''): string
 {
     $html = '<form method="post"' . ($class !== '' ? ' class="' . h($class) . '"' : '') . ($confirm !== '' ? ' data-confirm="' . h($confirm) . '"' : '') . '>'
-        . csrf_input()
+        . shop_csrf_input()
         . '<input type="hidden" name="action" value="' . h($action) . '">';
     foreach ($hidden as $name => $value) {
         $html .= '<input type="hidden" name="' . h($name) . '" value="' . h($value) . '">';
@@ -145,7 +120,7 @@ function bv_form_open(string $action, array $hidden = [], string $confirm = '', 
 function bv_post_action(): string
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') return '';
-    require_csrf();
+    shop_require_csrf();
     return (string) ($_POST['action'] ?? '');
 }
 
@@ -172,15 +147,15 @@ function bv_vol_sections(): array
 
 function bv_vol_init(): void
 {
-    if (session_status() === PHP_SESSION_NONE) session_start();
+    require_once __DIR__ . '/session.php';
+    bv_public_enter();   // galerie d'après l'adresse, extension active
     bv_boot();
     bv_require_volunteer();
 }
 
 function bv_vol_header(string $title, string $section, bool $withNav = true): void
 {
-    $content = get_content();
-    $siteName = $content['site_name'] ?? 'La Brocante';
+    $siteName = bv_site_name() ?: 'La Buvette';
     $flash = flash_get();
     ?><!DOCTYPE html>
 <html lang="fr">

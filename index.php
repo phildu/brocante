@@ -1,5 +1,18 @@
 <?php
+require_once __DIR__ . '/includes/tenant.php';
+
+// Déploiement portail : la racine du domaine du portail ouvre l'accueil de la
+// plateforme. Le domaine propre d'un commerce (site_url sans chemin, ex.
+// brocante.arrimage.com) ouvre sa boutique, comme sous /<identifiant>/.
+if (tenant_from_path() === '' && tenant_from_host() === '' && tenant_from_domain() === ''
+    && is_file(__DIR__ . '/portail/index.php')) {
+    require __DIR__ . '/accueil/index.php';
+    return;
+}
+
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/hero.php';
+require_once __DIR__ . '/includes/recommendations.php';
 
 $content = get_content();
 $products = get_products();
@@ -7,11 +20,10 @@ $featured = featured_products();
 $promo = promo_products();
 $heroSlides = hero_slides_list();
 
-// La pile de polaroïds du hero mélange des rôles fixes (accueil, promo du
-// moment, coup de cœur) et les photos d'ambiance curées en back office —
-// voir includes/footer.php pour la rotation d'affichage et le clic "ramener
-// au premier plan". Les 3 premières cartes de la liste occupent les 3
-// positions visibles (p1/p2/p3) ; les suivantes attendent leur tour.
+// Le hero mélange des rôles fixes (accueil, promo du moment, coup de cœur) et
+// les photos d'ambiance curées en back office. Selon le type actif (modèle ou
+// réglage Apparence), includes/hero.php en fait une pile de polaroïds, une
+// image plein écran, un scindé, un carrousel ou une mosaïque.
 $heroPromo = $promo[0] ?? null;
 $heroFeatured = null;
 foreach ($featured as $fp) {
@@ -38,64 +50,39 @@ $activeNav = 'accueil';
 $pageTitle = null;
 include __DIR__ . '/includes/header.php';
 ?>
+<?php // Le lien de suivi mémorisé par /suivi.php (appli installée) reste à portée de main sur l'accueil. ?>
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('brocs_track');
+    if (!t || t.indexOf('/suivi.php?') === -1) return;
+    var a = document.createElement('a');
+    a.href = t;
+    a.className = 'btn btn-ghost';
+    a.textContent = 'Suivre ma commande';
+    a.style.cssText = 'display:block;max-width:1080px;margin:14px auto 0;padding:10px 16px;';
+    document.querySelector('main').prepend(a);
+  } catch (e) {}
+})();
+</script>
+<?php
+// Modèle à mise en page propre (views/<modèle>/home.php) : il remplace l'accueil d'origine, avec les mêmes données.
+if ($view = shop_view('home')) {
+    include $view;
+    echo rec_for_you_section_html(array_merge(array_column($promo, 'ref'), array_column($featured, 'ref')));
+    include __DIR__ . '/includes/footer.php';
+    return;
+}
+?>
 
 <div class="welcome-splash" id="welcome-splash">
-  <img src="/assets/logo.png" alt="<?= h($content['site_name']) ?>" class="welcome-splash-logo">
+  <img src="/<?= h(logo_url('vertical')) ?>" alt="<?= h($content['site_name']) ?>" class="welcome-splash-logo">
   <p class="welcome-splash-text">Bienvenue</p>
 </div>
 
-<section class="hero<?= $heroBanner ? ' has-page-banner' : '' ?>">
-  <?php if ($heroBanner): ?><?php render_page_banner('accueil'); ?><?php endif; ?>
-  <div class="wrap hero-grid">
-    <div>
-      <p class="eyebrow"><?= h($content['hero_eyebrow']) ?></p>
-      <h1><?= h($content['hero_title']) ?></h1>
-      <p class="lede"><?= h($content['hero_subtitle']) ?></p>
-      <div class="hero-ctas">
-        <a class="btn btn-primary" href="/boutique.php">Voir la boutique</a>
-        <a class="btn btn-ghost" href="#histoire">Notre histoire</a>
-      </div>
-    </div>
-    <div class="hero-scene hero-polaroid-scene">
-      <?php foreach ($heroFrameItems as $fi => $item):
-        $posClass = ['p1', 'p2', 'p3'][$fi] ?? 'is-waiting';
-        $extraClass = $item['type'] === 'promo' ? ' polaroid-promo' : '';
-        $dwell = $item['type'] === 'promo' ? 7000 : 4200;
-      ?>
-        <div class="polaroid-frame<?= $extraClass ?> <?= $posClass ?>" data-dwell="<?= $dwell ?>">
-          <?php if ($item['type'] === 'welcome'): ?>
-            <div class="polaroid-welcome-inner">
-              <span class="welcome-macaron"><img src="/assets/logo-macaron.png" alt="<?= h($content['site_name']) ?>"></span>
-              <p class="welcome-caption">Bienvenue</p>
-            </div>
-          <?php elseif ($item['type'] === 'promo'): $pr = $item['data']; ?>
-            <a href="/produit.php?ref=<?= urlencode($pr['ref']) ?>" class="hero-slide hero-slide-promo is-active">
-              <?php if (!empty($pr['photo'])): ?><img src="/<?= h($pr['photo']) ?>" alt="<?= h($pr['name']) ?>"><?php endif; ?>
-              <span class="hero-promo-tag">
-                <?php if (has_promo_price($pr)): ?>
-                  <span class="price-old"><?= h($pr['price']) ?></span> <?= h($pr['promo_price']) ?>
-                <?php else: ?>
-                  Promo
-                <?php endif; ?>
-                · <?= h($pr['name']) ?>
-              </span>
-            </a>
-          <?php elseif ($item['type'] === 'featured'): $fp = $item['data']; ?>
-            <a href="/produit.php?ref=<?= urlencode($fp['ref']) ?>" class="hero-slide is-active">
-              <?php if (!empty($fp['photo'])): ?><img src="/<?= h($fp['photo']) ?>" alt="<?= h($fp['name']) ?>"><?php endif; ?>
-              <span class="hero-featured-tag">Coup de cœur · <?= h($fp['name']) ?></span>
-            </a>
-          <?php else: $s = $item['data']; ?>
-            <div class="hero-slide is-active">
-              <img src="/<?= h($s['path']) ?>" alt="<?= h($s['caption']) ?>">
-              <?php if ($s['caption'] !== ''): ?><span class="hero-slide-caption"><?= h($s['caption']) ?></span><?php endif; ?>
-            </div>
-          <?php endif; ?>
-        </div>
-      <?php endforeach; ?>
-    </div>
-  </div>
-</section>
+<?= shop_hero_html(shop_hero_type(), $heroFrameItems, $content, (bool) $heroBanner) ?>
+
+<?= promo_section_html() ?>
 
 <section class="tight" id="histoire">
   <div class="wrap story-grid">
@@ -112,6 +99,7 @@ include __DIR__ . '/includes/header.php';
           <p><?= h($content['story_photo_caption']) ?></p>
         </div>
       <?php endif; ?>
+      <p style="margin-top:22px;"><a class="btn btn-ghost" href="/notre-histoire.php">Lire notre histoire</a></p>
     </div>
     <div class="principles">
       <?php for ($i = 1; $i <= 3; $i++): ?>
@@ -130,8 +118,8 @@ include __DIR__ . '/includes/header.php';
 <section>
   <div class="wrap">
     <div class="section-head">
-      <p class="eyebrow">Explorer par univers</p>
-      <h2 style="font-size:1.9rem;">Cinq univers, une même armoire</h2>
+      <p class="eyebrow"><?= h(tenant_text('categories_eyebrow')) ?></p>
+      <h2 style="font-size:1.9rem;"><?= h(tenant_text('categories_title')) ?></h2>
     </div>
   </div>
   <div class="wrap">
@@ -140,7 +128,7 @@ include __DIR__ . '/includes/header.php';
         <a class="cat-tile" href="/boutique.php?cat=<?= h($c['key']) ?>">
           <svg viewBox="0 0 64 64"><use href="#<?= h($c['icon']) ?>"/></svg>
           <span class="name"><?= h($c['label']) ?></span>
-          <span class="count"><?= $n ?> <?= $n === 1 ? 'pièce' : 'pièces' ?></span>
+          <span class="count"><?= $n ?> <?= h(tenant_text($n === 1 ? 'item_singular' : 'item_plural')) ?></span>
         </a>
       <?php endforeach; ?>
     </div>
@@ -176,11 +164,13 @@ include __DIR__ . '/includes/header.php';
   </div>
 </section>
 
+<?= rec_for_you_section_html(array_merge(array_column($promo, 'ref'), array_column($featured, 'ref'))) ?>
+
 <?php if ($followPhotos): ?>
 <section class="follow tight">
   <div class="wrap">
-    <p class="eyebrow">Au fil des trouvailles</p>
-    <h2 style="font-size:1.6rem;margin-top:10px;">Suivez l'armoire au quotidien</h2>
+    <p class="eyebrow"><?= h(tenant_text('follow_eyebrow')) ?></p>
+    <h2 style="font-size:1.6rem;margin-top:10px;"><?= h(tenant_text('follow_title')) ?></h2>
     <div class="follow-grid">
       <?php foreach ($followPhotos as $p): ?>
         <div class="follow-tile"><img src="/<?= h($p['photo']) ?>" alt=""></div>
@@ -203,11 +193,12 @@ include __DIR__ . '/includes/header.php';
   <div class="wrap contact-grid">
     <div>
       <p class="eyebrow">Restez informé·e</p>
-      <h2 style="font-size:1.9rem;margin:12px 0 10px;">Les nouvelles trouvailles, avant tout le monde</h2>
-      <p class="lede">Un e-mail par mois, quand une nouvelle tournée de brocante rentre à l'atelier. Pas plus.</p>
+      <h2 style="font-size:1.9rem;margin:12px 0 10px;"><?= h(tenant_text('newsletter_title')) ?></h2>
+      <p class="lede"><?= h(tenant_text('newsletter_text')) ?></p>
       <form method="post" action="/newsletter.php">
         <div class="field-row">
           <input type="email" name="email" required placeholder="votre@email.fr" aria-label="Adresse e-mail">
+          <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
           <button class="btn btn-primary" type="submit">S'abonner</button>
         </div>
         <?php if (!empty($_GET['inscrit'])): ?>
@@ -222,8 +213,10 @@ include __DIR__ . '/includes/header.php';
         <li><strong>Horaires</strong> <?= h($content['contact_hours']) ?></li>
         <li><strong>Livraison</strong> <?= h($content['contact_delivery']) ?></li>
       </ul>
+      <?= shop_locate_actions_html(['class' => 'shop-locate-contact-actions']) ?>
     </div>
   </div>
 </section>
 
+<?= plugin_render('visiteur_link') ?>
 <?php include __DIR__ . '/includes/footer.php'; ?>

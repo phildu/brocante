@@ -1,19 +1,19 @@
 <?php
-session_start();
+require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/csrf.php';
-auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
+require_admin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: /admin/dashboard.php');
+    header('Location: /admin/rentabilite.php');
     exit;
 }
-require_csrf();
+shop_require_csrf();
 analytics_ensure_schema();
 
 // Retour sur la même vue (mois/année) et la même section après l'action.
 $back = (string) ($_POST['return'] ?? '');
-if (!preg_match('#^/admin/dashboard\.php(\?[A-Za-z0-9=&_%-]*)?(\#[A-Za-z0-9_-]+)?$#', $back)) $back = '/admin/dashboard.php';
+if (!preg_match('#^/admin/rentabilite\.php(\?[A-Za-z0-9=&_%-]*)?(\#[A-Za-z0-9_-]+)?$#', $back)) $back = '/admin/rentabilite.php';
 
 function dash_redirect(string $back, string $anchor = ''): void
 {
@@ -32,11 +32,6 @@ function dash_valid_date(?string $d): ?string
 
 $action = (string) ($_POST['action'] ?? '');
 $pdo = db();
-
-// Créer ≠ modifier un frais (selon la présence d'un id).
-if ($action === 'cost_save') {
-    require_permission((int) ($_POST['id'] ?? 0) > 0 ? 'portail.tableau_bord.modifier' : 'portail.tableau_bord.creer');
-}
 
 if ($action === 'cost_save') {
     $id = (int) ($_POST['id'] ?? 0);

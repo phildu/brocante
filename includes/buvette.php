@@ -151,6 +151,90 @@ function bv_boot(): void
 }
 
 /* ====================================================================== */
+/* Contexte : la buvette est une extension de galerie                      */
+/* ====================================================================== */
+
+/**
+ * Galerie dans laquelle la buvette tourne : ['slug', 'name', 'limited'] (limited : administrateur de cette galerie ; sinon exploitant du
+ * portail ou bénévole). Null hors d'une galerie (scripts de test en ligne de commande) : la buvette n'est jamais servie par une boutique.
+ */
+function bv_gallery_context(?array $set = null): ?array
+{
+    static $ctx = null;
+    if ($set !== null) $ctx = $set;
+    return $ctx;
+}
+
+/**
+ * Entre dans la buvette d'une galerie : ses données sont celles de la base de CETTE galerie (includes/gallery-sql.php, tables bv_…), jamais
+ * celles d'une autre galerie ni d'une boutique. Les adresses du module (/admin/buvette/…, /buvette/…) sont réécrites vers l'espace de
+ * la galerie, dans la page et dans les redirections (bv_url_map()). $limited : administrateur de la galerie.
+ */
+function bv_enter_gallery(array $gallery, bool $limited = false): void
+{
+    require_once __DIR__ . '/gallery-sql.php';
+    $slug = (string) $gallery['slug'];
+    bv_gallery_context(['slug' => $slug, 'name' => (string) $gallery['name'], 'limited' => $limited]);
+    $GLOBALS['db_pdo_override'] = gallery_sql($slug);   // db() (config.php) rend cette base pour toute la requête
+    if (!defined('BV_URLS_MAPPED')) {
+        define('BV_URLS_MAPPED', true);
+        ob_start('bv_url_map');
+    }
+}
+
+/**
+ * Adresses du module -> adresses de la galerie courante (sans effet hors d'une galerie) :
+ *   /admin/buvette/<page>.php[?x]  ->  /portail/galerie-buvette.php?s=<section>[&g=<galerie>][&x]   (espace de la galerie)
+ *   /buvette/…                     ->  /galerie/<galerie>/buvette/…                                     (espace des bénévoles)
+ * Passe-plat de ob_start() : le second paramètre ($phase) est ignoré.
+ */
+function bv_url_map(string $text, int $phase = 0): string
+{
+    $ctx = bv_gallery_context();
+    if ($ctx === null || !str_contains($text, 'buvette/')) return $text;
+    $slug = $ctx['slug'];
+    $g = $ctx['limited'] ? '' : '&g=' . rawurlencode($slug);
+    $text = preg_replace_callback('~(?<![A-Za-z0-9_.-])/admin/buvette/([a-z]+)\.php(\?)?~', static fn (array $m): string => '/portail/galerie-buvette.php?s=' . ($m[1] === 'index' ? 'dashboard' : $m[1]) . $g . (($m[2] ?? '') !== '' ? '&' : ''), $text) ?? $text;
+    return preg_replace('~(?<![A-Za-z0-9_.-])/buvette/~', '/galerie/' . $slug . '/buvette/', $text) ?? $text;
+}
+
+/** Nom affiché dans les pages : celui de la galerie (ou, hors galerie, celui du site). */
+function bv_site_name(): string
+{
+    $ctx = bv_gallery_context();
+    if ($ctx !== null) return $ctx['name'];
+    return (string) (get_content()['site_name'] ?? '');
+}
+
+/** L'utilisateur est-il responsable de CETTE galerie (administrateur de la galerie ou exploitant du portail) ? */
+function bv_is_staff(): bool
+{
+    $ctx = bv_gallery_context();
+    if ($ctx === null) return !empty($_SESSION['is_admin']);
+    if (!empty($_SESSION['portail_user'])) return true;
+    if (!function_exists('ga_current')) require_once __DIR__ . '/gallery-admin.php';
+    $admin = ga_current();
+    return $admin !== null && in_array($ctx['slug'], $admin['slugs'], true);
+}
+
+/**
+ * Page publique de la buvette (espace des bénévoles) : la galerie vient de l'adresse (/galerie/<galerie>/buvette/…, réécrite avec ?g=), et
+ * doit avoir cette extension active ; sinon la page n'existe pas. À appeler après la session.
+ */
+function bv_public_enter(): void
+{
+    require_once __DIR__ . '/gallery-admin.php';
+    $slug = strtolower((string) ($_GET['g'] ?? ''));
+    $gallery = gallery_slug_valid($slug) ? gallery_load($slug) : null;
+    if (!$gallery || !gm_enabled($gallery, 'buvette')) {
+        http_response_code(404);
+        header('Content-Type: text/html; charset=utf-8');
+        exit('<!DOCTYPE html><meta charset="utf-8"><title>Page introuvable</title><p style="font-family:sans-serif;padding:40px;">Cette page n\'existe pas.</p>');
+    }
+    bv_enter_gallery($gallery, false);
+}
+
+/* ====================================================================== */
 /* Référentiels                                                           */
 /* ====================================================================== */
 
@@ -874,20 +958,27 @@ function bv_volunteer_code(): string
 
 function bv_volunteer_space_url(): string
 {
+    $ctx = bv_gallery_context();
+    if ($ctx !== null) {
+        $origin = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        return $origin . '/galerie/' . $ctx['slug'] . '/buvette/';
+    }
     $base = defined('SITE_URL') ? rtrim((string) SITE_URL, '/') : '';
     return $base . '/buvette/';
 }
 
 function bv_is_volunteer(): bool
 {
-    // Le personnel connecté n'a besoin du code bénévole que s'il a le droit de consulter la buvette.
-    return !empty($_SESSION['bv_volunteer']) || auth_can('portail.buvette.lire');
+    $ctx = bv_gallery_context();
+    // Dans une galerie, l'accès bénévole vaut pour CETTE galerie seulement (la session retient son identifiant) ; ses responsables passent d'office.
+    if ($ctx !== null) return (string) ($_SESSION['bv_volunteer'] ?? '') === $ctx['slug'] || bv_is_staff();
+    return !empty($_SESSION['bv_volunteer']) || !empty($_SESSION['is_admin']);
 }
 
 function bv_require_volunteer(): void
 {
     if (!bv_is_volunteer()) {
-        header('Location: /buvette/login.php');
+        header('Location: ' . bv_url_map('/buvette/login.php'));
         exit;
     }
 }
@@ -926,7 +1017,7 @@ function bv_volunteer_login(string $submitted): ?string
     if (hash_equals($code, trim($submitted))) {
         db()->prepare('DELETE FROM bv_login_attempts WHERE ip = ?')->execute([bv_client_ip()]);
         session_regenerate_id(true);
-        $_SESSION['bv_volunteer'] = true;
+        $_SESSION['bv_volunteer'] = bv_gallery_context()['slug'] ?? true;
         return null;
     }
     bv_login_record_failure();

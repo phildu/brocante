@@ -1,6 +1,7 @@
 <?php
-session_start();
-require_once __DIR__ . '/includes/invendus.php';
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/invendus-layout.php';
+unsold_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/dons/…), extension active
 
 // Éditions qui acceptent encore des propositions (avant l'ouverture du point, ou pendant).
 $open = [];
@@ -20,7 +21,7 @@ $prefill = $_SESSION['dons_donor'] ?? [];
 $values = array_merge(['handover' => 'self', 'size' => 'M', 'quantity' => 1, 'category' => 'autre'], $prefill);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_csrf();
+    shop_require_csrf();
     unsold_scalar_post();
 
     // Piège à robots : ce champ est invisible pour un humain.
@@ -87,10 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 $val =fn(string $k, $default = '') => $values[$k] ?? $default;
 
-$pageTitle = 'Proposer un objet à donner';
-$activeNav = 'dons';
-$extraCss = ['/assets/dons.css'];
-include __DIR__ . '/includes/header.php';
+unsold_public_head('Proposer un objet à donner');
 ?>
 <section class="tight">
   <div class="don-wrap don-narrow">
@@ -115,7 +113,7 @@ include __DIR__ . '/includes/header.php';
     <?php endif; ?>
 
     <form class="don-form" method="post" action="/dons-proposer.php" enctype="multipart/form-data" novalidate>
-      <?= csrf_input() ?>
+      <?= shop_csrf_input() ?>
       <div class="don-hp" aria-hidden="true">
         <label>Ne pas remplir<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
       </div>
@@ -242,4 +240,4 @@ include __DIR__ . '/includes/header.php';
 <?php endif; ?>
   </div>
 </section>
-<?php include __DIR__ . '/includes/footer.php'; ?>
+<?php unsold_public_foot(); ?>

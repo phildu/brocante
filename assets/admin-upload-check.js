@@ -50,7 +50,7 @@
       var fd = new FormData();
       fd.append('photo', file);
 
-      fetch('/admin/enhance-image.php', { method: 'POST', body: fd })
+      fetch((window.APP_BASE || '') + '/admin/enhance-image.php', { method: 'POST', body: fd })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (!data.ok) {

@@ -3,7 +3,7 @@
 /**
  * Génère un token CSRF unique pour la session
  */
-function csrf_token(): string
+function shop_csrf_token(): string
 {
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -14,7 +14,7 @@ function csrf_token(): string
 /**
  * Valide un token CSRF soumis via un formulaire POST
  */
-function validate_csrf(): bool
+function shop_validate_csrf(): bool
 {
     if (!isset($_SESSION['csrf_token'], $_POST['csrf_token'])) {
         return false;
@@ -25,17 +25,17 @@ function validate_csrf(): bool
 /**
  * Génère un input hidden avec le token CSRF (pour les formulaires)
  */
-function csrf_input(): string
+function shop_csrf_input(): string
 {
-    return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+    return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(shop_csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
 }
 
 /**
  * Vérifie et valide le token CSRF, puis arrête l'exécution si invalide
  */
-function require_csrf(): void
+function shop_require_csrf(): void
 {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !validate_csrf()) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !shop_validate_csrf()) {
         http_response_code(403);
         die('CSRF token validation failed');
     }

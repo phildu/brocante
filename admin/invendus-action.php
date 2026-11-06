@@ -4,30 +4,20 @@
  * Contrairement à certaines actions plus anciennes du site, chacune est
  * protégée par un jeton CSRF en plus de la session admin.
  */
-session_start();
 require_once __DIR__ . '/../includes/invendus.php';
-auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));
+unsold_admin_init();   // ne s'ouvre que depuis l'espace d'une galerie (portail/galerie-invendus.php)
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/invendus.php');
     exit;
 }
-require_csrf();
+shop_require_csrf();
 unsold_scalar_post(['ids']);
 
 $action = unsold_param($_POST, 'action');
 $return = unsold_safe_return(unsold_param($_POST, 'return'), '/admin/invendus.php');
 $ids = array_values(array_filter(array_map('intval', (array) ($_POST['ids'] ?? []))));
 $eventId = (int) unsold_param($_POST, 'event_id');
-
-// Droits qui dépendent des données (le contrôle de base est déjà fait plus haut) :
-// créer ≠ modifier (selon la présence d'un id) et supprimer en lot exige « supprimer ».
-if (in_array($action, ['event_save', 'tour_save', 'recipient_save'], true)) {
-    require_permission((int) unsold_param($_POST, 'id') > 0 ? 'portail.invendus.modifier' : 'portail.invendus.creer');
-}
-if ($action === 'offer_bulk') {
-    require_permission(unsold_param($_POST, 'bulk') === 'delete' ? 'portail.invendus.supprimer' : 'portail.invendus.modifier');
-}
 
 /** Redirige et termine. */
 $go = function (?string $to = null) use (&$return): void {

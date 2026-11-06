@@ -1,0 +1,13 @@
+/* Boutons « Continuer avec Google / Facebook… » (inscription, administration, compte client). Variables du thème de la page si présentes. */
+.oauth-box { display: grid; gap: 10px; margin: 0; }
+.oauth-form { margin: 0; }
+.oauth-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+  padding: 11px 14px; border: 1px solid var(--line, #cfc8bb); border-radius: var(--oauth-radius, 10px);
+  background: var(--surface, #fff); color: var(--ink, #222); font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer;
+}
+.oauth-btn:hover, .oauth-btn:focus-visible { border-color: var(--ink-soft, #777); filter: brightness(.98); }
+.oauth-btn svg { flex: none; }
+.oauth-sep { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--ink-soft, #888); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+.oauth-sep::before, .oauth-sep::after { content: ""; flex: 1; border-top: 1px solid var(--line, #d9d3c7); }
+.oauth-note { color: var(--ink-soft, #777); font-size: .82rem; margin: 10px 0 0; }

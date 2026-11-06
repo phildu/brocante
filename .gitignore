@@ -1,5 +1,6 @@
 .secrets/
 .venv/
+vendor/
 var/log/
 var/tmp/
 uploads/import/
@@ -9,4 +10,15 @@ config.local.php
 .env.deploy
 brocante.db
 db-backup/
+# Marque blanche : commerce actif sur un serveur, bases des autres commerces,
+# identifiants FTP par commerce, sauvegardes de base.
+.tenant
+data/
+.env.deploy.*
+*.db.bak-*
+# Bases des commerces (contenu réel, jamais versionné) et caches locaux.
+tenants/*/*.db
+tenants/*/*.sqlite
+tenants/*/secrets/
+.phpunit.result.cache
 backups/

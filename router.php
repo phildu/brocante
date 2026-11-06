@@ -1,0 +1,121 @@
+<?php
+
+// Routeur du serveur PHP intégré (php -S … router.php) : reproduit les règles
+// d'adresses du .htaccess pour tester un commerce servi sous /<identifiant>/
+// sans Apache. Inutile en ligne, où le .htaccess s'en charge.
+
+$path = (string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+
+// Chemins qui ne doivent jamais sortir, comme dans le .htaccess et LocalValetDriver.php : bases et leurs sauvegardes,
+// configuration des commerces, clés, journaux.
+$decoded = rawurldecode($path);
+if (preg_match('#^/(?:data|tenants|scripts|includes|views|var|db-backup)(?:/|$)#', $decoded)
+    || preg_match('#(?:^|/)\.(?!well-known)#', $decoded)
+    || preg_match('#\.(?:db|sqlite|sqlite3|sql|log|bak)(?:$|[./-])#i', $decoded)) {
+    http_response_code(403);
+    echo 'Accès interdit.';
+    return true;
+}
+// Fichiers envoyés : jamais exécutés comme scripts (comme le .htaccess).
+if (preg_match('#(?:^|/)uploads/.*\.(?:php\d?|phtml|phar|pl|py|cgi|sh)$#i', $decoded)) {
+    http_response_code(404);
+    return true;
+}
+// Plugins : rien de packs/ n'est servi directement, sauf packs/<id>/assets/ (comme packs/.htaccess), y compris sous /<commerce>/.
+$packsPath = preg_replace('#^/[a-z0-9][a-z0-9_-]*(?=/packs(?:/|$))#', '', $decoded);
+if (preg_match('#^/packs(?:/|$)#', $packsPath)
+    && !preg_match('#^/packs/[a-z0-9][a-z0-9-]*/assets/(?:[a-z0-9_-]+/)*[a-z0-9_.-]+\.(?:js|css|html|svg|png|jpe?g|webp|gif|woff2?)$#', $packsPath)) {
+    http_response_code(403);
+    echo 'Accès interdit.';
+    return true;
+}
+
+// Racine du domaine : la page d'accueil de la plateforme, quand le portail est présent (déploiement portail)
+// et que l'hôte n'est pas le domaine propre d'un commerce (site_url sans chemin, ex. brocante.arrimage.com).
+require_once __DIR__ . '/includes/tenant.php';
+if ($path === '/' && !getenv('TENANT') && is_file(__DIR__ . '/portail/index.php')
+    && tenant_from_host() === '' && tenant_from_domain() === '') {
+    $_SERVER['SCRIPT_NAME'] = '/accueil/index.php';
+    require __DIR__ . '/accueil/index.php';
+    return true;
+}
+
+// Connexion à l'administration d'une galerie : /galerie/<identifiant>/admin (même règle que dans le .htaccess).
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/admin/?$#', $path, $m)) {
+    $_GET['g'] = $m[1];
+    $_SERVER['SCRIPT_NAME'] = '/galerie/admin.php';
+    require __DIR__ . '/galerie/admin.php';
+    return true;
+}
+
+// Espace des bénévoles de la buvette d'une galerie : /galerie/<identifiant>/buvette/[<page>.php] (même règle que dans le .htaccess).
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/buvette(?:/(?:([a-z]+)\.php)?)?$#', $path, $m) && is_file(__DIR__ . '/buvette/' . ($m[2] ?? '') . (($m[2] ?? '') === '' ? 'index' : '') . '.php')) {
+    $_GET['g'] = $m[1];
+    $page = ($m[2] ?? '') === '' ? 'index' : $m[2];
+    $_SERVER['SCRIPT_NAME'] = '/buvette/' . $page . '.php';
+    require __DIR__ . '/buvette/' . $page . '.php';
+    return true;
+}
+
+// Comptage de foule d'une galerie : /galerie/<identifiant>/comptage/[<page>.php], sw.js et manifest.json (même règles que dans le .htaccess).
+if (preg_match('#^/galerie/[a-z0-9][a-z0-9-]*/comptage/(sw\.js|manifest\.json)$#', $path, $m)) {
+    header('Content-Type: ' . ($m[1] === 'sw.js' ? 'application/javascript' : 'application/manifest+json') . '; charset=utf-8');
+    readfile(__DIR__ . '/comptage/' . $m[1]);
+    return true;
+}
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/comptage(?:/|/(index|login|logout|api)\.php)?$#', $path, $m)) {
+    $_GET['g'] = $m[1];
+    $page = ($m[2] ?? '') === '' ? 'index' : $m[2];
+    $_SERVER['SCRIPT_NAME'] = '/comptage/' . $page . '.php';
+    require __DIR__ . '/comptage/' . $page . '.php';
+    return true;
+}
+
+// Dons et invendus d'une galerie : /galerie/<identifiant>/dons/[<page>.php] (même règle que dans le .htaccess).
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/dons(?:/|/(point|proposer|suivi|tournee)\.php)?$#', $path, $m)) {
+    $_GET['g'] = $m[1];
+    $script = ($m[2] ?? '') === '' ? 'dons' : 'dons-' . $m[2];
+    $_SERVER['SCRIPT_NAME'] = '/' . $script . '.php';
+    require __DIR__ . '/' . $script . '.php';
+    return true;
+}
+
+// Galeries commerciales : /galerie/ et /galerie/<identifiant>/ (même règle que dans le .htaccess).
+if (preg_match('#^/galerie(?:/([a-z0-9][a-z0-9-]*))?/?$#', $path, $m)) {
+    $_GET['g'] = $m[1] ?? '';
+    $_SERVER['SCRIPT_NAME'] = '/galerie/index.php';
+    require __DIR__ . '/galerie/index.php';
+    return true;
+}
+
+// Agents externes des plugins : /api/… et /<commerce>/api/… → plugin-agent.php (comme le .htaccess).
+if (preg_match('#^(?:/([a-z0-9][a-z0-9_-]*))?/api/([a-z0-9/-]+)$#', $path, $m)
+    && ($m[1] === '' || (is_file(__DIR__ . '/tenants/' . $m[1] . '/tenant.php') && !file_exists(__DIR__ . '/' . $m[1])))) {
+    $_GET['agent_path'] = $m[2];
+    $_SERVER['SCRIPT_NAME'] = '/plugin-agent.php';
+    require __DIR__ . '/plugin-agent.php';
+    return true;
+}
+
+if (preg_match('#^/([a-z0-9][a-z0-9_-]*)(/.*)?$#', $path, $m)
+    && is_file(__DIR__ . '/tenants/' . $m[1] . '/tenant.php')
+    && !file_exists(__DIR__ . '/' . $m[1])) {
+    $rest = $m[2] ?? '';
+    if ($rest === '') {
+        header('Location: /' . $m[1] . '/' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== '' ? '?' . $_SERVER['QUERY_STRING'] : ''), true, 301);
+        return true;
+    }
+    $target = $rest === '/' ? '/index.php' : $rest;
+    $file = __DIR__ . $target;
+    if (is_file($file) && str_ends_with($file, '.php')) {
+        $_SERVER['SCRIPT_NAME'] = $target;
+        $_SERVER['PHP_SELF'] = $target;
+        $_SERVER['SCRIPT_FILENAME'] = $file;
+        chdir(dirname($file));
+        require $file;
+        return true;
+    }
+}
+
+// Tout le reste : comportement habituel du serveur intégré.
+return false;

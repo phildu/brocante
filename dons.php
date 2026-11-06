@@ -1,6 +1,7 @@
 <?php
-session_start();
-require_once __DIR__ . '/includes/invendus.php';
+require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/invendus-layout.php';
+unsold_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/dons/…), extension active
 
 $events = unsold_public_events();
 $requested = (int) unsold_param($_GET, 'event');
@@ -17,10 +18,7 @@ $stats = $event ? unsold_event_stats((int) $event['id']) : null;
 $available = ($event && $phase === 'collecting') ? unsold_available_offers((int) $event['id'], $cat, $q) : [];
 $canPropose = $event && in_array($phase, ['proposals', 'collecting'], true);
 
-$pageTitle = 'Dons & invendus du vide-grenier';
-$activeNav = 'dons';
-$extraCss = ['/assets/dons.css'];
-include __DIR__ . '/includes/header.php';
+unsold_public_head('Dons & invendus du vide-grenier');
 ?>
 <section class="tight">
   <div class="wrap">
@@ -138,4 +136,4 @@ include __DIR__ . '/includes/header.php';
 <?php endif; ?>
   </div>
 </section>
-<?php include __DIR__ . '/includes/footer.php'; ?>
+<?php unsold_public_foot(); ?>

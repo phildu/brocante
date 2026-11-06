@@ -12,6 +12,8 @@ if (php_sapi_name() !== 'cli') {
 $tmp = sys_get_temp_dir() . '/brocante-test-cp-' . getmypid() . '.db';
 putenv('BROCANTE_DB=' . $tmp);
 register_shutdown_function(fn() => is_file($tmp) && unlink($tmp));
+// Base jetable créée à partir de schema.sql : db() (config.php) attend les tables de base d'un commerce (settings, content…).
+(new PDO('sqlite:' . $tmp))->exec(file_get_contents(__DIR__ . '/../schema.sql'));
 
 require_once __DIR__ . '/../includes/comptage.php';
 require_once __DIR__ . '/../includes/qrcode.php';

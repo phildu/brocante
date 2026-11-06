@@ -1,0 +1,1 @@
+ALTER TABLE aco_operations ADD COLUMN stopped_at INTEGER NOT NULL DEFAULT 0;
