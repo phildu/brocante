@@ -29,7 +29,7 @@ $brand = fv_setting('marque_nom', 'Brocs');
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Connexion — Forces de vente <?= e($brand) ?></title>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="assets/vente.css?v=6">
 </head>
 <body class="fv-body fv-login">

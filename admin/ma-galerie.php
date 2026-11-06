@@ -46,7 +46,7 @@ foreach (gallery_list() as $ga) {
     // Repère du plan (ou centre de l'emplacement) : sert à retrouver l'adresse d'un clic.
     $spot = null;
     foreach (($ga['map']['items'] ?? []) as $it) {
-        if ((string) ($it['shop'] ?? '') !== $shopKey || in_array($it['role'] ?? '', ['zone', 'territoire'], true)) continue;
+        if ((string) ($it['shop'] ?? '') !== $shopKey || in_array($it['role'] ?? '', ['zone', 'territoire', 'secteur'], true)) continue;
         [$lat, $lng] = gallery_map_centroid($it['pts']);
         if ($spot === null || $it['kind'] === 'marker') $spot = [round($lat, 7), round($lng, 7)];
     }
@@ -58,8 +58,6 @@ foreach (gallery_list() as $ga) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mes galeries — <?= h($content['site_name']) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 </head>

@@ -18,7 +18,7 @@ $mediaPhotos = get_media_items('photo');
 $fontCatalog = [];
 foreach (APPEARANCE_FONTS as $role => $list) {
     foreach ($list as $name => [$param, $fallback]) {
-        $fontCatalog[$role][$name] = ['url' => 'https://fonts.googleapis.com/css2?family=' . $param . '&display=swap', 'stack' => '"' . $name . '", ' . $fallback];
+        $fontCatalog[$role][$name] = ['url' => '/assets/fonts.css', 'stack' => '"' . $name . '", ' . $fallback];
     }
 }
 $colorFields = [
@@ -33,8 +33,6 @@ $colorFields = [
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Apparence — <?= h($content['site_name']) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
 <style>

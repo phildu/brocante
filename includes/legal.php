@@ -29,6 +29,33 @@ const LEGAL_FIELDS = [
     'withdrawal' => ['Délai de rétractation (jours)', '14 jours par défaut ; indiquez 0 si vous ne vendez pas aux consommateurs (vente entre particuliers)'],
 ];
 
+/** Statut du vendeur : décide des champs demandés dans l'administration et des mentions des textes légaux. */
+const LEGAL_KINDS = [
+    'particulier' => ['Particulier', 'Vous vendez à titre personnel : seuls votre nom et un moyen de contact sont demandés.'],
+    'association' => ['Association', 'Association (loi 1901) : nom, adresse, contact et responsable de publication.'],
+    'entreprise' => ['Professionnel / entreprise', 'Entreprise ou entrepreneur individuel : SIRET, TVA, médiateur et rétractation sont demandés.'],
+];
+
+/** Champs d'identité demandés selon le statut (les autres restent enregistrés mais ne sont ni affichés ni utilisés). */
+const LEGAL_KIND_FIELDS = [
+    'particulier' => ['company', 'address', 'email', 'phone'],
+    'association' => ['company', 'siret', 'address', 'address_extra', 'floor', 'access', 'email', 'phone', 'director'],
+    'entreprise' => ['company', 'siret', 'address', 'address_extra', 'floor', 'access', 'email', 'phone', 'vat', 'director', 'host', 'mediator', 'withdrawal'],
+];
+
+/** Champs obligatoires pour valider les textes, selon le statut. */
+const LEGAL_KIND_REQUIRED = [
+    'particulier' => ['company', 'email'],
+    'association' => ['company', 'address', 'email'],
+    'entreprise' => ['company', 'siret', 'address', 'email', 'host', 'mediator'],
+];
+
+/** Libellés du champ « company » selon le statut. */
+const LEGAL_COMPANY_LABELS = [
+    'particulier' => ['Vos nom et prénom', 'Ex. Marie Dupont'],
+    'association' => ['Nom de l\'association', 'Ex. Les Amis de la Brocante du Petit Chalet'],
+];
+
 /** Hébergeur proposé tant que le portail n'en a pas enregistré un autre (Réglages → Hébergeur par défaut). */
 const LEGAL_HOST_OVH = 'OVH SAS — 2 rue Kellermann, 59100 Roubaix, France';
 
@@ -38,6 +65,19 @@ const LEGAL_MEDIATOR_LINKS = [
     ['label' => 'CM2C', 'url' => 'https://www.cm2c.net/inscription-professionnel.php', 'note' => 'Inscription d\'un professionnel — Centre de médiation de la consommation de conciliateurs de justice'],
     ['label' => 'SAS Médiation Solution', 'url' => 'https://sasmediationsolution-conso.fr/professionnels/demander-une-convention', 'note' => 'Demander une convention — médiateur de la consommation généraliste'],
 ];
+
+/** Statut normalisé ; sans valeur enregistrée, « entreprise » (comportement historique des boutiques existantes). */
+function legal_kind_normalize(string $raw): string
+{
+    $raw = mb_strtolower(trim($raw));
+    return isset(LEGAL_KINDS[$raw]) ? $raw : 'entreprise';
+}
+
+/** Statut du vendeur de la boutique courante. */
+function legal_kind(): string
+{
+    return legal_kind_normalize(shop_setting('legal_kind', ''));
+}
 
 function legal_get(string $field): string
 {
@@ -79,6 +119,7 @@ function legal_identity_values(array $saved, string $site, array $content): arra
 {
     $out = [];
     foreach (array_keys(LEGAL_FIELDS) as $f) $out[$f] = trim((string) ($saved[$f] ?? ''));
+    $out['kind'] = legal_kind_normalize((string) ($saved['kind'] ?? ''));
     if ($out['company'] === '') $out['company'] = $site;
     if ($out['address'] === '') {
         $a = trim((string) ($content['contact_address'] ?? ''));
@@ -86,6 +127,7 @@ function legal_identity_values(array $saved, string $site, array $content): arra
     }
     if ($out['host'] === '') $out['host'] = legal_default_host();
     if ($out['withdrawal'] === '') $out['withdrawal'] = '14';
+    if ($out['kind'] !== 'entreprise') $out['withdrawal'] = '0';        // vente hors activité professionnelle : pas de droit de rétractation
     $out['site'] = $site;
     return $out;
 }
@@ -97,6 +139,7 @@ function legal_identity(): array
     $site = trim((string) ($c['site_name'] ?? '')) ?: (string) tenant('name');
     $saved = [];
     foreach (array_keys(LEGAL_FIELDS) as $f) $saved[$f] = legal_get($f);
+    $saved['kind'] = legal_get('kind');
     return legal_identity_values($saved, $site, $c);
 }
 
@@ -145,6 +188,7 @@ function legal_settings_from_pdo(PDO $pdo): array
     }
     $out = [];
     foreach (array_keys(LEGAL_FIELDS) as $f) $out[$f] = (string) ($all['legal_' . $f] ?? '');
+    $out['kind'] = (string) ($all['legal_kind'] ?? '');
     return $out;
 }
 
@@ -156,6 +200,7 @@ function legal_save_identity(PDO $pdo, array $values): void
     foreach (array_keys(LEGAL_FIELDS) as $f) {
         if (array_key_exists($f, $values)) $stmt->execute(['legal_' . $f, (string) $values[$f]]);
     }
+    if (array_key_exists('kind', $values)) $stmt->execute(['legal_kind', legal_kind_normalize((string) $values['kind'])]);
 }
 
 /** Champ d'identité nettoyé (même règle que l'administration du commerce). */
@@ -170,7 +215,7 @@ function legal_clean_field(string $field, string $value): string
 function legal_missing_fields(): array
 {
     $id = legal_identity();
-    $need = ['company', 'siret', 'address', 'email', 'host', 'mediator'];
+    $need = LEGAL_KIND_REQUIRED[$id['kind']];
     return array_values(array_filter($need, static fn ($f) => trim((string) ($id[$f] ?? '')) === ''));
 }
 
@@ -180,24 +225,34 @@ function legal_default_text(string $page): string
     $id = legal_identity();
     $v = static fn (string $k): string => trim((string) ($id[$k] ?? '')) !== '' ? trim((string) $id[$k]) : '[À COMPLÉTER]';
     $site = $id['site'];
-    $address = legal_address_display($id);
-    if ($address === '') $address = '[À COMPLÉTER]';
-    $days = max(0, (int) $id['withdrawal']);
+    $kind = $id['kind'];
+    $pro = $kind === 'entreprise';
+    $addressRaw = legal_address_display($id);
+    $address = $addressRaw !== '' ? $addressRaw : '[À COMPLÉTER]';
+    $days = $pro ? max(0, (int) $id['withdrawal']) : 0;
     $mail = $v('email');
+    // Mentions qui dépendent du statut : SIRET (obligatoire pour une entreprise, facultatif pour une association, absent pour un particulier) et TVA.
+    $siret = $pro ? 'SIRET ' . $v('siret') : ($kind === 'association' && trim((string) $id['siret']) !== '' ? 'SIREN/SIRET ' . trim((string) $id['siret']) : '');
+    $vat = $pro ? $v('vat') : '';
+    $sellerAddress = ($kind === 'particulier' && $addressRaw === '') ? '' : ', ' . $address;
+    $nonProLabel = $kind === 'association' ? 'une association' : 'un particulier';
     $retract = $days > 0
         ? "## 7. Droit de rétractation\nSi vous êtes un consommateur, vous disposez d'un délai de {$days} jours à compter de la réception de la pièce pour vous rétracter, sans avoir à justifier de motif ni à payer de pénalités. Pour l'exercer, écrivez-nous à {$mail} en indiquant clairement votre décision, puis renvoyez la pièce, en bon état, dans les {$days} jours suivant votre notification. Les frais de retour sont à votre charge. Nous vous remboursons au plus tard {$days} jours après réception de la pièce, par le même moyen de paiement.\nLe droit de rétractation ne s'applique pas aux pièces confectionnées sur mesure ni aux pièces qui ne peuvent être renvoyées pour des raisons d'hygiène ou de protection de la santé une fois descellées.\n"
-        : "## 7. Droit de rétractation\nLes ventes sont conclues par un particulier : le droit de rétractation prévu par le Code de la consommation ne s'applique pas. Vous pouvez néanmoins nous contacter en cas de difficulté ({$mail}).\n";
+        : "## 7. Droit de rétractation\nLes ventes sont conclues par {$nonProLabel}, qui n'agit pas à titre professionnel : le droit de rétractation prévu par le Code de la consommation ne s'applique pas. Vous pouvez néanmoins nous contacter en cas de difficulté ({$mail}).\n";
     switch ($page) {
         case 'cgv':
-            return "## 1. Vendeur\n{$v('company')}, {$address} — SIRET {$v('siret')}. {$v('vat')}. Contact : {$mail}" . ($id['phone'] !== '' ? ", {$id['phone']}" : '') . ".\n\n"
+            return "## 1. Vendeur\n{$v('company')}{$sellerAddress}" . ($siret !== '' ? " — {$siret}" : '') . ($vat !== '' ? ". {$vat}" : '') . ". Contact : {$mail}" . ($id['phone'] !== '' ? ", {$id['phone']}" : '') . ".\n\n"
                 . "## 2. Objet\nLes présentes conditions régissent les ventes de pièces proposées sur le site {$site} (boutique en ligne). Toute commande implique l'acceptation sans réserve de ces conditions, que vous cochez avant de payer.\n\n"
                 . "## 3. Pièces proposées\nLes pièces sont, sauf mention contraire, d'occasion, chinées et le plus souvent uniques. Chaque fiche décrit la pièce (état, dimensions, matières, défauts éventuels) et la présente en photos ; les photos et les couleurs peuvent légèrement varier selon votre écran. Une pièce unique ne peut être vendue qu'une fois : elle est réservée pendant le paiement, puis retirée de la boutique.\n\n"
-                . "## 4. Prix\nLes prix sont indiqués en euros, toutes taxes comprises le cas échéant ({$v('vat')}), hors frais de livraison. Le prix applicable est celui affiché au moment de la commande. Les frais de livraison sont indiqués avant le paiement.\n\n"
+                . "## 4. Prix\nLes prix sont indiqués en euros" . ($vat !== '' ? ", toutes taxes comprises le cas échéant ({$vat})" : '') . ", hors frais de livraison. Le prix applicable est celui affiché au moment de la commande. Les frais de livraison sont indiqués avant le paiement.\n\n"
                 . "## 5. Commande et paiement\nVous choisissez vos pièces, votre mode de livraison, puis vous payez en ligne par carte bancaire (paiement sécurisé par Stripe : nous ne conservons aucun numéro de carte). La commande est confirmée dès l'acceptation du paiement et un e-mail de confirmation vous est envoyé. Nous pouvons annuler et rembourser une commande en cas de pièce devenue indisponible.\n\n"
                 . "## 6. Livraison et retrait\nLes pièces sont expédiées à l'adresse indiquée lors du paiement, dans les pays proposés dans le panier, ou retirées sur place lorsque cette option est proposée. Les délais indiqués sont des estimations ; les pièces fragiles sont emballées avec soin. Les risques de transport sont à notre charge jusqu'à la remise de la pièce.\n\n"
                 . $retract . "\n"
-                . "## 8. Garanties\nLes pièces vendues par un professionnel à un consommateur bénéficient de la garantie légale de conformité et de la garantie légale des vices cachés (articles L.217-3 et suivants du Code de la consommation et 1641 et suivants du Code civil). Pour les pièces d'occasion, la durée de la garantie légale de conformité peut être réduite à douze mois, ce que la fiche de la pièce précise le cas échéant. Contactez-nous à {$mail} en cas de problème.\n\n"
-                . "## 9. Réclamations et médiation\nEn cas de litige, écrivez-nous d'abord à {$mail}. Si aucune solution amiable n'est trouvée, vous pouvez saisir gratuitement le médiateur de la consommation : {$v('mediator')}.\n\n"
+                . ($pro
+                    ? "## 8. Garanties\nLes pièces vendues par un professionnel à un consommateur bénéficient de la garantie légale de conformité et de la garantie légale des vices cachés (articles L.217-3 et suivants du Code de la consommation et 1641 et suivants du Code civil). Pour les pièces d'occasion, la durée de la garantie légale de conformité peut être réduite à douze mois, ce que la fiche de la pièce précise le cas échéant. Contactez-nous à {$mail} en cas de problème.\n\n"
+                      . "## 9. Réclamations et médiation\nEn cas de litige, écrivez-nous d'abord à {$mail}. Si aucune solution amiable n'est trouvée, vous pouvez saisir gratuitement le médiateur de la consommation : {$v('mediator')}.\n\n"
+                    : "## 8. Garanties\nLa pièce est vendue par {$nonProLabel}, qui n'agit pas à titre professionnel : les garanties légales propres aux ventes entre un professionnel et un consommateur ne s'appliquent pas. La garantie des vices cachés (articles 1641 et suivants du Code civil) reste applicable. Chaque fiche décrit la pièce le plus fidèlement possible (état, dimensions, défauts éventuels).\n\n"
+                      . "## 9. Réclamations\nEn cas de difficulté, écrivez-nous à {$mail} : nous chercherons une solution amiable.\n\n")
                 . "## 10. Données personnelles\nLes informations recueillies (identité, e-mail, téléphone, adresse) servent à traiter et livrer votre commande, dans les conditions de notre politique de confidentialité.\n\n"
                 . "## 11. Droit applicable\nLes présentes conditions sont soumises au droit français. Les juridictions françaises sont compétentes, sans préjudice de vos droits de consommateur.\n";
         case 'cgu':
@@ -210,16 +265,21 @@ function legal_default_text(string $page): string
                 . "## 7. Évolution des conditions\nNous pouvons modifier ces conditions ; la version applicable est celle en ligne au moment de votre utilisation du site ou de votre commande.\n\n"
                 . "## 8. Droit applicable\nLes présentes conditions sont soumises au droit français.\n";
         case 'confidentialite':
-            return "## Qui est responsable de vos données ?\n{$v('company')}, {$address} (SIRET {$v('siret')}), responsable du traitement. Contact pour toute question : {$mail}.\n\n"
-                . "## Quelles données recueillons-nous ?\n- Commande : nom, adresse e-mail, numéro de téléphone, adresse de livraison, contenu et montant de la commande.\n- Compte client : nom, adresse e-mail, téléphone, mot de passe (conservé chiffré, jamais en clair) ou identifiant du compte Google, Facebook, etc. utilisé.\n- Newsletter, alertes ou programme de fidélité si vous vous y inscrivez : adresse e-mail et préférences.\n- Navigation : un cookie technique de session (panier, connexion) ; pas de cookie publicitaire.\n\n"
+            return "## Qui est responsable de vos données ?\n{$v('company')}{$sellerAddress}" . ($siret !== '' ? " ({$siret})" : '') . ", responsable du traitement. Contact pour toute question : {$mail}.\n\n"
+                . "## Quelles données recueillons-nous ?\n- Commande : nom, adresse e-mail, numéro de téléphone, adresse de livraison, contenu et montant de la commande.\n- Compte client : nom, adresse e-mail, téléphone, mot de passe (conservé chiffré, jamais en clair) ou identifiant du compte Google, Facebook, etc. utilisé.\n- Newsletter, alertes ou programme de fidélité si vous vous y inscrivez : adresse e-mail et préférences.\n- Navigation : un cookie technique de session (panier, connexion) ; pas de cookie publicitaire ni de traceur. Les polices de caractères et les bibliothèques du site sont hébergées sur nos serveurs : aucun service tiers ne reçoit votre adresse IP simplement parce que vous consultez nos pages. Les mesures d'audience n'utilisent ni cookie ni identifiant stocké.\n- Notifications du navigateur, si vous les activez : un identifiant technique fourni par votre navigateur (adresse du service de notification de Google, Mozilla, Apple ou Microsoft, et clés de chiffrement). Rien n'est demandé avant votre clic ; vous les retirez à tout moment depuis votre page de préférences ou les réglages de votre navigateur.\n\n"
                 . "## Pourquoi, et sur quelle base ?\n- Traiter, livrer et suivre votre commande, et répondre à vos demandes (exécution du contrat).\n- Gérer votre compte client (exécution du contrat).\n- Vous joindre à propos d'une livraison : votre numéro de téléphone n'est utilisé que pour cela (intérêt légitime).\n- Tenir notre comptabilité et répondre à nos obligations légales (obligation légale).\n- Vous envoyer notre lettre d'information ou vos alertes (votre consentement, retirable à tout moment).\n\n"
-                . "## Qui reçoit vos données ?\nNos prestataires, uniquement pour ce qui les concerne : Stripe (paiement sécurisé), les transporteurs (livraison), notre hébergeur ({$v('host')}) et les services d'envoi d'e-mails. L'aide à la saisie d'adresse utilise les services de l'État (Base Adresse Nationale) et d'OpenStreetMap. Nous ne vendons pas vos données.\n\n"
+                . "## Qui reçoit vos données ?\nNos prestataires, uniquement pour ce qui les concerne : Stripe (paiement sécurisé), les transporteurs (livraison), notre hébergeur ({$v('host')}) et les services d'envoi d'e-mails. L'aide à la saisie d'adresse utilise les services de l'État (Base Adresse Nationale) et d'OpenStreetMap ; les cartes interactives chargent leurs fonds de carte auprès de l'IGN ou d'OpenStreetMap, qui voient alors votre adresse IP. Si vous activez les notifications du navigateur, le service de notification de votre navigateur (Google, Mozilla, Apple ou Microsoft) transmet les messages. Nous ne vendons pas vos données.\n\n"
                 . "## Combien de temps ?\nCommandes et factures : 10 ans (obligations comptables). Compte client : jusqu'à sa suppression, ou 3 ans sans activité. Prospects, newsletter et fidélité : jusqu'à votre désinscription ou 3 ans sans contact.\n\n"
                 . "## Vos droits\nVous pouvez demander l'accès à vos données, leur rectification, leur effacement, leur portabilité, la limitation ou vous opposer à leur traitement, en écrivant à {$mail}. Depuis « Mon compte », vous modifiez vos informations ou supprimez votre compte. Vous pouvez aussi introduire une réclamation auprès de la CNIL (www.cnil.fr).\n";
         case 'mentions':
-            return "## Éditeur du site\n{$v('company')}\nAdresse : {$address}\nSIRET : {$v('siret')}\n{$v('vat')}\nE-mail : {$mail}" . ($id['phone'] !== '' ? "\nTéléphone : {$id['phone']}" : '') . "\nDirecteur de la publication : {$v('director')}\n\n"
+            $director = trim((string) $id['director']);
+            if ($director === '' && $kind === 'particulier') $director = trim((string) $id['company']);
+            if ($director === '') $director = '[À COMPLÉTER]';
+            return "## Éditeur du site\n{$v('company')}" . ($kind === 'particulier' && $addressRaw === '' ? '' : "\nAdresse : {$address}")
+                . ($siret !== '' ? "\n" . preg_replace('/^(SIRET|SIREN\/SIRET) /', '$1 : ', $siret) : '') . ($vat !== '' ? "\n{$vat}" : '')
+                . "\nE-mail : {$mail}" . ($id['phone'] !== '' ? "\nTéléphone : {$id['phone']}" : '') . "\nDirecteur de la publication : {$director}\n\n"
                 . "## Hébergement\n{$v('host')}\n\n"
-                . "## Médiation de la consommation\nConformément à l'article L.612-1 du Code de la consommation, le consommateur peut recourir gratuitement à un médiateur : {$v('mediator')}.\n\n"
+                . ($pro ? "## Médiation de la consommation\nConformément à l'article L.612-1 du Code de la consommation, le consommateur peut recourir gratuitement à un médiateur : {$v('mediator')}.\n\n" : '')
                 . "## Propriété intellectuelle\nLes contenus du site (photographies, textes, logos) sont protégés. Toute reproduction sans autorisation est interdite.\n\n"
                 . "## Données personnelles\nVoir notre politique de confidentialité.\n";
     }

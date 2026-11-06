@@ -38,7 +38,7 @@ return array (
     'sage' => '#879aa9',
     'line' => '#4e473f',
   ),
-  'fonts_url' => 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap',
+  'fonts_url' => '/assets/fonts.css',
   'categories' => 
   array (
     0 => 

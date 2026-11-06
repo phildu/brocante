@@ -190,7 +190,7 @@ function gpx_render(array $gallery, array $map, string $pageKey): GdImage
         if ($kind === 'polygon') {
             $flat = [];
             foreach ($pts as $p) { $flat[] = (int) round($p[0]); $flat[] = (int) round($p[1]); }
-            $isZone = in_array((string) ($it['role'] ?? ''), ['zone', 'territoire'], true);
+            $isZone = in_array((string) ($it['role'] ?? ''), ['zone', 'territoire', 'secteur'], true);
             imagefilledpolygon($img, $flat, $alphaOf($hex, $isZone ? 88 : 55));
             imagesetthickness($img, $isZone ? 4 : 3);
             imagepolygon($img, $flat, imagecolorallocate($img, ($hex >> 16) & 255, ($hex >> 8) & 255, $hex & 255));

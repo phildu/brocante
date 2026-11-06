@@ -108,7 +108,7 @@ nt_admin_header('Canaux & réglages', 'canaux');
   <?= nt_form_open('quick_test') ?>
     <div class="nt-form-grid">
       <div class="field"><label for="qtc">Canal</label>
-        <select class="nt-input" id="qtc" name="channel"><?php foreach (nt_channels() as $k => $d): ?><option value="<?= h($k) ?>"><?= h($d['label']) ?><?= $status[$k]['ready'] ? '' : ' (non configuré)' ?></option><?php endforeach; ?></select></div>
+        <select class="nt-input" id="qtc" name="channel"><?php foreach (nt_channels() as $k => $d): if (!empty($d['self_service'])) continue; ?><option value="<?= h($k) ?>"><?= h($d['label']) ?><?= $status[$k]['ready'] ? '' : ' (non configuré)' ?></option><?php endforeach; ?></select></div>
       <div class="field span-2"><label for="qta">Adresse (e-mail, mobile, ID Discord ou webhook, chat ID Telegram)</label><input class="nt-input" id="qta" name="address" required autocomplete="off"></div>
     </div>
     <div class="nt-actions"><button class="btn" type="submit">Envoyer un test</button></div>

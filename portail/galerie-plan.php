@@ -141,8 +141,8 @@ $priceUnits = GALLERY_PRICE_UNITS;
 $publicUrl = '/galerie/' . $gaGallery['slug'] . '/' . ($gaGallery['published'] ? '' : '?apercu=' . gallery_preview_token($gaGallery)) . '#plan-commerces';
 ga_head('Plan des commerces');
 ?>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.css">
+    <link rel="stylesheet" href="/assets/lib/leaflet/leaflet.min.css">
+    <link rel="stylesheet" href="/assets/lib/leaflet-geoman/leaflet-geoman.css">
     <style>
       #planWrap { position: relative; isolation: isolate; overflow: hidden; height: 64vh; min-height: 400px; border: 1px solid var(--line); border-radius: 10px; background: #e9e5dd; }
       #plan { width: 100%; height: 100%; }
@@ -371,7 +371,7 @@ ga_head('Plan des commerces');
         <div class="selhead"><strong>Élément sélectionné</strong><button type="button" id="selClose" title="Fermer la fiche" aria-label="Fermer la fiche">✕</button></div>
         <label class="f">Nom affiché<input type="text" id="selLabel" maxlength="60" placeholder="Brocante de Paul, Entrée…"></label>
         <label class="f" title="Numéro d'emplacement affiché sur le plan (ex. 12 ou A3).">N° d'emplacement<input type="text" id="selNum" maxlength="12" placeholder="12"></label>
-        <label class="f" id="natureBox" title="Une zone regroupe des emplacements (rue, hall…) : elle porte un nom, un type et des tarifs. Un territoire cerne un quartier ou plusieurs rues et sert à y découvrir les emplacements potentiels.">Nature<select id="selRole"><option value="slot">Emplacement</option><option value="zone">Zone (rue, hall…)</option><option value="territoire">Territoire (quartier…)</option></select></label>
+        <label class="f" id="natureBox" title="Une zone regroupe des emplacements (rue, hall…) : elle porte un nom, un type et des tarifs. Un territoire cerne un quartier ou plusieurs rues et sert à y découvrir les emplacements potentiels. Une sous-zone (bâtiment, hall, cour) a sa propre page publique avec les seuls commerces posés dedans.">Nature<select id="selRole"><option value="slot">Emplacement</option><option value="zone">Zone (rue, hall…)</option><option value="territoire">Territoire (quartier…)</option><option value="secteur">Sous-zone (bâtiment, hall…)</option></select></label>
         <label class="f" id="ztypeBox" hidden>Type de zone<select id="selZtype"><?php foreach ($zoneTypes as $zk => $zl): ?><option value="<?= e($zk) ?>"><?= e($zl) ?></option><?php endforeach; ?></select></label>
         <label class="f" id="usageBox" hidden>Affectation<select id="selUsage"></select></label>
         <label class="f" id="flowBox" hidden>Sens de circulation<select id="selFlow"></select></label>
@@ -570,8 +570,8 @@ ga_head('Plan des commerces');
       <p class="meta" style="margin:0;">Fond de carte © IGN (Géoplateforme) : plan ou orthophoto, sans clé d'API. Secours automatique CARTO / Esri si l'IGN ne couvre pas le lieu. Google Maps n'est pas utilisé : il impose une clé d'API facturable et interdit de recopier son fond de carte ailleurs.</p>
     </form>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.17.0/dist/leaflet-geoman.min.js"></script>
+    <script src="/assets/lib/leaflet/leaflet.min.js"></script>
+    <script src="/assets/lib/leaflet-geoman/leaflet-geoman.min.js"></script>
     <script>
     (function () {
       var data = <?= json_encode($payload, $flags) ?>;
@@ -772,6 +772,9 @@ ga_head('Plan des commerces');
       }
       function isZone(l) { return l instanceof L.Polygon && l._plan && l._plan.role === 'zone'; }
       function isTerr(l) { return l instanceof L.Polygon && l._plan && l._plan.role === 'territoire'; }
+      function isSect(l) { return l instanceof L.Polygon && l._plan && l._plan.role === 'secteur'; }
+      // Territoire ou sous-zone : cerne des emplacements sans en être un (ni tarif, ni numéro, ni découpe)
+      function isArea(l) { return isTerr(l) || isSect(l); }
       function look(layer) {
         var m = layer._plan;
         // L'affectation règle le remplissage et le trait ; la couleur reste celle de l'élément (modifiable dans sa fiche).
@@ -779,28 +782,29 @@ ga_head('Plan des commerces');
           parking: { fill: 0.16, dash: '6 4', w: 2 }, exclu: { fill: 0.1, dash: '3 4', w: 2 }, acces: { fill: 0.12, dash: null, w: 2.5 } }[m.usage];
         if (layer instanceof L.Marker) layer.setIcon(dot(m.color));
         else if (isTerr(layer)) layer.setStyle({ color: m.color, weight: 2.5, dashArray: '2 6', fillColor: m.color, fillOpacity: 0.04 });
+        else if (isSect(layer)) layer.setStyle({ color: m.color, weight: 3, dashArray: '10 4', fillColor: m.color, fillOpacity: 0.06 });
         else if (uo) layer.setStyle({ color: m.color, weight: uo.w, dashArray: uo.dash, fillColor: m.color, fillOpacity: layer instanceof L.Polygon ? uo.fill : 0 });
         else if (isZone(layer)) layer.setStyle({ color: m.color, weight: 2, dashArray: '8 6', fillColor: m.color, fillOpacity: 0.07 });
         else layer.setStyle({ color: m.color, weight: 2, dashArray: null, fillColor: m.color, fillOpacity: layer instanceof L.Polygon ? 0.3 : 0 });
         layer.unbindTooltip();
-        if (!isZone(layer) && !isTerr(layer) && tip(m)) layer.bindTooltip(text(tip(m)), layer instanceof L.Marker ? { permanent: true, direction: 'top', offset: [0, -10], className: 'plan-label' } : { permanent: true, direction: 'center', className: 'plan-label' });
+        if (!isZone(layer) && !isArea(layer) && tip(m)) layer.bindTooltip(text(tip(m)), layer instanceof L.Marker ? { permanent: true, direction: 'top', offset: [0, -10], className: 'plan-label' } : { permanent: true, direction: 'center', className: 'plan-label' });
       }
       // Zones et territoires restent sous les emplacements ; la dernière zone dessinée passe devant les précédentes, pour qu'un clic
       // dans un recouvrement sélectionne bien la zone qu'on vient de créer et non celle d'en dessous.
       function restack() {
         var zones = [], terrs = [];
-        group.getLayers().forEach(function (l) { if (isTerr(l)) terrs.push(l); else if (isZone(l)) zones.push(l); });
+        group.getLayers().forEach(function (l) { if (isArea(l)) terrs.push(l); else if (isZone(l)) zones.push(l); });
         zones.slice().reverse().forEach(function (l) { l.bringToBack(); });
         terrs.slice().reverse().forEach(function (l) { l.bringToBack(); });
       }
       // Étiquettes des zones (« RUE · Rue des Fleurs ») et territoires (« ⬡ Quartier… ») posées au milieu du bord nord, hors du fichier enregistré
       function refreshZoneLabels() {
         zoneLabels.clearLayers();
-        polygons().filter(function (l) { return isZone(l) || isTerr(l); }).forEach(function (z) {
+        polygons().filter(function (l) { return isZone(l) || isArea(l); }).forEach(function (z) {
           var b = z.getBounds(), n = document.createElement('span'); n.className = 'plan-zone';
-          if (isTerr(z)) { var q = document.createElement('small'); q.textContent = '⬡'; n.appendChild(q); }
+          if (isArea(z)) { var q = document.createElement('small'); q.textContent = isSect(z) ? '▣' : '⬡'; n.appendChild(q); }
           var use = z._plan.usage && z._plan.usage !== 'vente' ? (data.usages[z._plan.usage] || '') : '';
-          var zt = use || data.zoneTypes[z._plan.ztype] || '', zl = z._plan.label || (isTerr(z) ? '(territoire sans nom)' : '(zone sans nom)'); if (zt && zl.toLowerCase().indexOf(zt.toLowerCase()) !== 0 && (use || z._plan.ztype !== 'autre')) { var t = document.createElement('small'); t.textContent = zt; n.appendChild(t); } n.appendChild(document.createTextNode(zl));
+          var zt = use || data.zoneTypes[z._plan.ztype] || '', zl = z._plan.label || (isSect(z) ? '(sous-zone sans nom)' : isTerr(z) ? '(territoire sans nom)' : '(zone sans nom)'); if (zt && zl.toLowerCase().indexOf(zt.toLowerCase()) !== 0 && (use || z._plan.ztype !== 'autre')) { var t = document.createElement('small'); t.textContent = zt; n.appendChild(t); } n.appendChild(document.createTextNode(zl));
           z._planLab = n;
           zoneLabels.addLayer(L.marker(z._plan.ztype === 'allee' || z._plan.usage === 'circulation' ? b.getCenter() : [b.getNorth(), b.getCenter().lng], { icon: L.divIcon({ className: '', html: n, iconSize: [0, 0] }), interactive: false, keyboard: false }));
         });
@@ -824,7 +828,7 @@ ga_head('Plan des commerces');
       }
       // Zone qui contient l'emplacement (la plus petite si elles se recouvrent) ; un territoire ne tarife pas
       function zoneOf(layer) {
-        if (!(layer instanceof L.Polygon) || isZone(layer) || isTerr(layer)) return null;
+        if (!(layer instanceof L.Polygon) || isZone(layer) || isArea(layer)) return null;
         var c = centroid(layer), best = null, bestArea = Infinity;
         polygons().filter(isZone).forEach(function (z) { var pz = points(z); if (pointIn(pz, c[0], c[1])) { var a = areaM2(pz); if (a < bestArea) { best = z; bestArea = a; } } });
         return best;
@@ -880,7 +884,7 @@ ga_head('Plan des commerces');
         polys.slice().sort(function (a, b) { return (isZone(b) - isZone(a)) || String(a._plan.num).localeCompare(String(b._plan.num), 'fr', { numeric: true }); }).forEach(function (l) {
           var m = l._plan, tr = document.createElement('tr'), z = zoneOf(l), p = isZone(l) ? null : slotPrice(l, false), pp = isZone(l) ? null : slotPrice(l, true);
           var price = isZone(l) ? (toCents(m.price) ? eur(toCents(m.price)) + ' ' + ({ ml: '/ml', m2: '/m²', slot: '/empl.' })[m.unit] : '') : (p == null ? '' : eur(p) + (pp != null && pp !== p ? ' (pro ' + eur(pp) + ')' : ''));
-          [m.num || '—', (isZone(l) ? '▦ ' : isTerr(l) ? '⬡ ' : '') + (m.label || ''), isZone(l) ? (data.zoneTypes[m.ztype] || '') : (z ? zoneName(z) : ''), m.usage && data.usages[m.usage] ? data.usages[m.usage] : '', m.shop && data.shops[m.shop] ? data.shops[m.shop] : '', fmtM2(areaM2(points(l))), price].forEach(function (v, i) { var td = document.createElement('td'); td.textContent = v; if (i >= 5) td.className = 'num'; tr.appendChild(td); });
+          [m.num || '—', (isZone(l) ? '▦ ' : isSect(l) ? '▣ ' : isTerr(l) ? '⬡ ' : '') + (m.label || ''), isZone(l) ? (data.zoneTypes[m.ztype] || '') : (z ? zoneName(z) : ''), m.usage && data.usages[m.usage] ? data.usages[m.usage] : '', m.shop && data.shops[m.shop] ? data.shops[m.shop] : '', fmtM2(areaM2(points(l))), price].forEach(function (v, i) { var td = document.createElement('td'); td.textContent = v; if (i >= 5) td.className = 'num'; tr.appendChild(td); });
           tr.addEventListener('click', function () { map.fitBounds(l.getBounds().pad(0.8), { maxZoom: 21 }); select(l); });
           body.appendChild(tr);
         });
@@ -931,9 +935,9 @@ ga_head('Plan des commerces');
 
       // --- Numérotation ---
       function numText() { var n = parseInt($('numNext').value, 10); n = isNaN(n) ? 1 : n; var t = $('numPrefix').value + n; $('numNext').value = n + 1; return t; }
-      function autoNum(layer) { if ($('numAuto').checked && layer instanceof L.Polygon && !isZone(layer) && !isTerr(layer) && !layer._plan.num) { layer._plan.num = numText(); look(layer); } }
+      function autoNum(layer) { if ($('numAuto').checked && layer instanceof L.Polygon && !isZone(layer) && !isArea(layer) && !layer._plan.num) { layer._plan.num = numText(); look(layer); } }
       $('numAll').addEventListener('click', function () {
-        var only = $('numOnlyEmpty').checked, order = $('numOrder').value, byZone = $('numByZone').checked, list = polygons().filter(function (l) { return !isZone(l) && !isTerr(l) && (!only || !l._plan.num); });
+        var only = $('numOnlyEmpty').checked, order = $('numOrder').value, byZone = $('numByZone').checked, list = polygons().filter(function (l) { return !isZone(l) && !isArea(l) && (!only || !l._plan.num); });
         if (!list.length) { $('count').textContent = 'Aucun emplacement à numéroter.'; return; }
         if (!only && !confirm('Renuméroter ' + list.length + ' emplacement(s), y compris ceux qui ont déjà un numéro ?')) return;
         pushUndo();
@@ -1070,8 +1074,8 @@ ga_head('Plan des commerces');
         $('usageBox').hidden = false; $('selUsage').value = m.usage || '';
         $('flowBox').hidden = m.usage !== 'circulation'; $('selFlow').value = m.flow || '';
         $('serviceBox').hidden = m.usage !== 'service'; $('selService').value = m.service || '';
-        $('indoorBox').hidden = !poly || isTerr(layer); $('selIndoor').checked = !!m.indoor;
-        $('subBox').hidden = !(poly && p.length > 4 && !isTerr(layer));
+        $('indoorBox').hidden = !poly || isArea(layer); $('selIndoor').checked = !!m.indoor;
+        $('subBox').hidden = !(poly && p.length > 4 && !isArea(layer));
         $('selUnit').value = m.unit; $('selPrice').value = m.price; $('selPricePro').value = m.pricePro;
         $('selLabel').value = m.label; $('selNum').value = m.num; $('selColor').value = m.color; $('selNote').value = m.note;
         shopSel.value = m.shop in data.shops ? m.shop : '';
@@ -1079,13 +1083,13 @@ ga_head('Plan des commerces');
         if (layer instanceof L.Polygon) {
           info = 'Surface : ' + fmtM2(areaM2(p)) + ' m²';
           var c = catalog.filter(function (x) { return x.id === m.surface; })[0]; if (c) info += ' (' + c.name + ')';
-          if (!isZone(layer) && !isTerr(layer)) { var zz = zoneOf(layer), sp = slotPrice(layer, false), sq = slotPrice(layer, true); info += zz ? ' · Zone : ' + zoneName(zz) : ' · hors de toute zone'; if (sp != null) info += ' · Tarif : ' + eur(sp) + (sq != null && sq !== sp ? ' (entreprise ' + eur(sq) + ')' : ''); }
-          if (isTerr(layer)) { var inside = 0; polygons().forEach(function (o) { if (o !== layer && !isZone(o) && !isTerr(o) && pointIn(p, centroid(o)[0], centroid(o)[1])) inside++; }); info += ' · ' + inside + ' emplacement(s) à l\'intérieur'; }
+          if (!isZone(layer) && !isArea(layer)) { var zz = zoneOf(layer), sp = slotPrice(layer, false), sq = slotPrice(layer, true); info += zz ? ' · Zone : ' + zoneName(zz) : ' · hors de toute zone'; if (sp != null) info += ' · Tarif : ' + eur(sp) + (sq != null && sq !== sp ? ' (entreprise ' + eur(sq) + ')' : ''); }
+          if (isArea(layer)) { var inside = 0, shopsIn = {}; polygons().forEach(function (o) { if (o !== layer && !isZone(o) && !isArea(o) && pointIn(p, centroid(o)[0], centroid(o)[1])) { inside++; if (o._plan.shop) shopsIn[o._plan.shop] = 1; } }); info += ' · ' + inside + ' emplacement(s) à l\'intérieur'; if (isSect(layer)) info += ' · ' + Object.keys(shopsIn).length + ' commerce(s) rattaché(s) : page publique propre (?secteur=)'; }
           if (m.usage && data.usages[m.usage]) info += ' · ' + data.usages[m.usage];
         }
         $('selInfo').textContent = info;
         $('rotBox').hidden = layer instanceof L.Marker;
-        $('splitBox').hidden = !(layer instanceof L.Polygon && p.length === 4) || isTerr(layer);
+        $('splitBox').hidden = !(layer instanceof L.Polygon && p.length === 4) || isArea(layer);
         $('splitTitle').textContent = isZone(layer) ? 'Découper cette zone en parcelles' : 'Diviser cet emplacement';
         $('terrBox').hidden = !isTerr(layer);
         justSplit = false;

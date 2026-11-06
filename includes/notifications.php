@@ -1,7 +1,7 @@
 <?php
 /**
  * Module Notifications — envoi de messages aux utilisateurs sur leurs canaux
- * préférés : e-mail, SMS, WhatsApp, Discord, Telegram.
+ * préférés : e-mail, SMS, WhatsApp, Discord, Telegram, notification du navigateur (Web Push).
  *
  * Principes
  *  - Un « utilisateur » (nt_users) est un contact notifiable : client, bénévole,
@@ -25,6 +25,7 @@
 
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/webpush.php';
 
 const NT_MAX_ATTEMPTS = 4;                 // tentatives par envoi avant abandon
 const NT_BACKOFF = [60, 600, 3600];        // secondes avant les 2e, 3e et 4e tentatives
@@ -298,6 +299,9 @@ function nt_channels(): array
         'whatsapp' => ['label' => 'WhatsApp', 'address_label' => 'Mobile (WhatsApp)', 'placeholder' => '06 12 34 56 78', 'max_len' => 4096, 'quiet' => true],
         'discord' => ['label' => 'Discord', 'address_label' => 'Discord (ID utilisateur ou webhook)', 'placeholder' => '123456789012345678', 'max_len' => 2000, 'quiet' => false],
         'telegram' => ['label' => 'Telegram', 'address_label' => 'Telegram (chat ID)', 'placeholder' => '123456789', 'max_len' => 4096, 'quiet' => false],
+        // Navigateur : l'abonnement (adresse) n'existe que si la personne l'accepte elle-même dans son navigateur
+        // (page de préférences) ; l'administration ne peut ni le saisir ni le modifier (self_service).
+        'push' => ['label' => 'Navigateur', 'address_label' => 'Notification du navigateur', 'placeholder' => '', 'max_len' => 240, 'quiet' => false, 'self_service' => true],
     ];
 }
 
@@ -329,6 +333,8 @@ function nt_normalize_address(string $channel, string $raw): ?string
             return preg_match(NT_DISCORD_WEBHOOK_RE, $raw) ? $raw : null;
         case 'telegram':
             return preg_match('/^(-?\d{3,20}|@[A-Za-z][A-Za-z0-9_]{4,31})$/', $raw) ? $raw : null;
+        case 'push':
+            return wp_normalize_subscription($raw);
     }
     return null;
 }
@@ -359,6 +365,7 @@ function nt_mask_address(string $channel, string $address): string
         return mb_substr($local, 0, 2) . '…@' . $domain;
     }
     if ($channel === 'discord' && str_starts_with($address, 'https://')) return 'webhook Discord';
+    if ($channel === 'push') return 'ce navigateur';
     if (in_array($channel, ['sms', 'whatsapp'], true)) return substr($address, 0, 5) . '…' . substr($address, -2);
     return mb_strlen($address) > 6 ? mb_substr($address, 0, 3) . '…' . mb_substr($address, -2) : $address;
 }
@@ -379,6 +386,8 @@ function nt_channel_ready(string $channel, string $address = ''): bool
             return nt_cfg('discord.bot_token') !== '';
         case 'telegram':
             return nt_cfg('telegram.bot_token') !== '';
+        case 'push':
+            return wp_ready();
     }
     return false;
 }
@@ -1016,6 +1025,12 @@ function nt_render(array $d, array $user, array $topic, string $channel): array
         if ($marketing && !str_contains((string) $d['body'], '{lien_preferences}')) {
             $text .= "\n\n—\nPour gérer vos notifications ou vous désinscrire : " . $url;
         }
+    } elseif ($channel === 'push') {
+        // Notification : le sujet fait le titre, le corps le texte ; pas de lien de désinscription dans le texte
+        // (la personne retire l'autorisation dans son navigateur ou depuis sa page de préférences).
+        $short = trim((string) ($d['short_body'] ?? ''));
+        $text = strtr($short !== '' ? $short : (string) $d['body'], $vars);
+        if ($subject === '') $subject = nt_site_name();
     } else {
         $short = trim((string) ($d['short_body'] ?? ''));
         $src = $short !== '' ? $short : (trim((string) $d['subject']) !== '' ? $d['subject'] . "\n\n" . $d['body'] : $d['body']);
@@ -1061,6 +1076,7 @@ function nt_driver_send(string $channel, string $address, array $msg): array
         case 'whatsapp': return nt_send_twilio('whatsapp', $address, $msg['text']);
         case 'discord': return nt_send_discord($address, $msg['text']);
         case 'telegram': return nt_send_telegram($address, $msg['text']);
+        case 'push': return nt_send_push($address, $msg);
     }
     return nt_fail('Canal inconnu : ' . $channel, true);
 }
@@ -1116,6 +1132,46 @@ function nt_json(array $r): array
 {
     $j = json_decode($r['body'], true);
     return is_array($j) ? $j : [];
+}
+
+/* ---------- Navigateur : Web Push ---------- */
+
+/** Contact de l'expéditeur indiqué aux services de push (VAPID « sub ») : l'adresse d'expédition, sinon le site. */
+function nt_push_subject(): string
+{
+    $from = (string) nt_cfg('email.from_email');
+    if (filter_var($from, FILTER_VALIDATE_EMAIL)) return 'mailto:' . $from;
+    $host = parse_url(defined('SITE_URL') ? (string) SITE_URL : '', PHP_URL_HOST) ?: ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return 'https://' . $host;
+}
+
+/** Envoie une notification à un navigateur. 404/410 = abonnement supprimé côté navigateur : on coupe le canal. */
+function nt_send_push(string $address, array $msg): array
+{
+    $sub = json_decode($address, true);
+    $norm = is_array($sub) ? wp_normalize_subscription($address) : null;
+    if ($norm === null) return nt_fail('Abonnement navigateur invalide', true, true);
+    $sub = json_decode($norm, true);
+    $payload = json_encode([
+        'title' => mb_substr((string) $msg['subject'], 0, 80),
+        'body' => (string) $msg['text'],
+        'url' => '/',
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    try {
+        $body = wp_encrypt($payload, (string) wp_b64u_dec($sub['p256dh']), (string) wp_b64u_dec($sub['auth']));
+        $auth = wp_vapid_authorization($sub['endpoint'], nt_push_subject());
+    } catch (Throwable $e) {
+        return nt_fail('Web Push : ' . $e->getMessage(), true);
+    }
+    $r = nt_http('POST', $sub['endpoint'], [
+        'Authorization: ' . $auth,
+        'Content-Type: application/octet-stream',
+        'Content-Encoding: aes128gcm',
+        'TTL: 86400',
+        'Urgency: normal',
+    ], $body);
+    if (in_array($r['status'], [404, 410], true)) return nt_fail('Navigateur : abonnement expiré ou retiré par la personne', true, true);
+    return nt_http_result($r, 'Navigateur', '', false);
 }
 
 /* ---------- Twilio : SMS et WhatsApp ---------- */

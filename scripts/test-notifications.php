@@ -102,7 +102,8 @@ check('Telegram : texte quelconque refusé', nt_normalize_address('telegram', 'b
 
 /* ------------------------------------------------------------------ */
 echo "\nConfiguration\n";
-check('canaux non configurés au départ', array_filter(array_column(nt_channel_status(), 'ready')), []);
+// Le navigateur (Web Push) n'a aucun identifiant à saisir : ses clés VAPID se créent seules.
+check('canaux non configurés au départ (hors navigateur)', array_keys(array_filter(array_map(fn($c) => $c['ready'], nt_channel_status()))), ['push']);
 check('mise à jour de la section e-mail', nt_config_update('email', ['from_email' => 'boutique@brocante.fr', 'from_name' => 'La Brocante, du Petit Chalet', 'transport' => 'mail']), true);
 check('mise à jour Twilio', nt_config_update('twilio', ['account_sid' => 'ACtest', 'auth_token' => 's3cret']), true);
 nt_config_update('sms', ['from' => '+33700000000']);
@@ -116,7 +117,7 @@ check('secret laissé vide : valeur conservée', (function () {
 check('fichier de configuration en 0600', substr(sprintf('%o', fileperms(NT_CONFIG_FILE)), -4), '0600');
 check('dossier protégé par un .htaccess', is_file(dirname(NT_CONFIG_FILE) . '/.htaccess'), true);
 check('rechargé depuis le disque', nt_config(true)['sms']['from'], '+33700000000');
-check('tous les canaux prêts', array_values(array_filter(array_column(nt_channel_status(), 'ready'))), [true, true, true, true, true]);
+check('tous les canaux prêts', array_values(array_filter(array_column(nt_channel_status(), 'ready'))), [true, true, true, true, true, true]);
 
 /* ------------------------------------------------------------------ */
 echo "\nUtilisateurs & canaux\n";
@@ -521,6 +522,73 @@ nt_config_update('email', ['from_email' => '']);
 $r = nt_notify_order_shipped(['id' => 46, 'email' => 'nouveau@example.fr'] + $order);
 check('e-mail non configuré : pas d\'exception, client non prévenu', [$r['status'], str_contains($r['message'], 'non configuré')], ['skipped', true]);
 nt_config_update('email', ['from_email' => $cfgBackup]);
+
+/* ------------------------------------------------------------------ */
+echo "\nNavigateur (Web Push)\n";
+$b64 = fn($x) => wp_b64u_dec($x);
+$uaPub = 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4';
+$uaAuth = 'BTBZMqHH6r4Tts7J_aSIgg';
+// Vecteur de test officiel de la RFC 8291 (annexe A) : le message chiffré doit être identique octet pour octet.
+check('chiffrement : vecteur de la RFC 8291', wp_b64u_enc(wp_encrypt(
+    'When I grow up, I want to be a watermelon', $b64($uaPub), $b64($uaAuth),
+    $b64('yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw'), $b64('DGv6ra1nlYgDCS1FRnbzlw'),
+    $b64('BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8')
+)), 'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN');
+check('chiffrement : deux envois ne donnent pas le même corps (sel et clé éphémères)', wp_encrypt('a', $b64($uaPub), $b64($uaAuth)) !== wp_encrypt('a', $b64($uaPub), $b64($uaAuth)), true);
+check('chiffrement : clé d\'abonné trop courte refusée', (function () use ($b64, $uaAuth) { try { wp_encrypt('a', 'abc', $b64($uaAuth)); return 'accepté'; } catch (RuntimeException $e) { return 'refusé'; } })(), 'refusé');
+
+$keys = wp_keys();
+check('clés VAPID créées : publique 65 octets, privée 32 octets', [strlen($b64($keys['public'])), strlen($b64($keys['private']))], [65, 32]);
+check('clés VAPID stockées avec le fichier de configuration, en 0600', [dirname(wp_keys_path()) === dirname(NT_CONFIG_FILE), substr(sprintf('%o', fileperms(wp_keys_path())), -4)], [true, '0600']);
+check('clés VAPID : relues telles quelles (jamais régénérées)', wp_keys()['public'], $keys['public']);
+$auth = wp_vapid_authorization('https://fcm.googleapis.com/fcm/send/xyz', 'mailto:boutique@brocante.fr', 1900000000);
+preg_match('/^vapid t=([\w-]+)\.([\w-]+)\.([\w-]+), k=([\w-]+)$/', $auth, $m);
+$claims = json_decode($b64($m[2]), true);
+check('VAPID : audience = origine du service de push, contact et expiration', [$claims['aud'], $claims['sub'], $claims['exp'] - 1900000000], ['https://fcm.googleapis.com', 'mailto:boutique@brocante.fr', 43200]);
+$rs = $b64($m[3]);
+$derInt = fn($i) => (ord($i[0]) & 0x80 ? "\0" : '') . $i;
+$r = $derInt(ltrim(substr($rs, 0, 32), "\0")); $sg = $derInt(ltrim(substr($rs, 32), "\0"));
+$der = "\x30" . chr(strlen($r) + strlen($sg) + 4) . "\x02" . chr(strlen($r)) . $r . "\x02" . chr(strlen($sg)) . $sg;
+check('VAPID : signature ES256 valide avec la clé publique, au format r||s', [strlen($rs), $m[4] === $keys['public'], openssl_verify($m[1] . '.' . $m[2], $der, openssl_pkey_get_public(wp_ec_public_pem($b64($keys['public']))), OPENSSL_ALGO_SHA256)], [64, true, 1]);
+
+$endpoint = 'https://fcm.googleapis.com/fcm/send/abcDEF123';
+$subJson = json_encode(['endpoint' => $endpoint, 'keys' => ['p256dh' => $uaPub, 'auth' => $uaAuth]]);
+$canon = nt_normalize_address('push', $subJson);
+check('abonnement valide accepté, forme canonique', json_decode((string) $canon, true), ['endpoint' => $endpoint, 'p256dh' => $uaPub, 'auth' => $uaAuth]);
+check('abonnement déjà canonique accepté', nt_normalize_address('push', (string) $canon), $canon);
+check('abonnement : endpoint quelconque refusé (SSRF)', nt_normalize_address('push', json_encode(['endpoint' => 'https://evil.example/x', 'keys' => ['p256dh' => $uaPub, 'auth' => $uaAuth]])), null);
+check('abonnement : endpoint interne refusé', nt_normalize_address('push', json_encode(['endpoint' => 'https://169.254.169.254/fcm.googleapis.com/', 'keys' => ['p256dh' => $uaPub, 'auth' => $uaAuth]])), null);
+check('abonnement : http (non chiffré) refusé', nt_normalize_address('push', json_encode(['endpoint' => 'http://fcm.googleapis.com/fcm/send/a', 'keys' => ['p256dh' => $uaPub, 'auth' => $uaAuth]])), null);
+check('abonnement : sous-domaine pirate d\'un service refusé', nt_normalize_address('push', json_encode(['endpoint' => 'https://fcm.googleapis.com.evil.example/a', 'keys' => ['p256dh' => $uaPub, 'auth' => $uaAuth]])), null);
+check('abonnement : clé publique invalide refusée', nt_normalize_address('push', json_encode(['endpoint' => $endpoint, 'keys' => ['p256dh' => 'AAAA', 'auth' => $uaAuth]])), null);
+check('abonnement : secret d\'authentification invalide refusé', nt_normalize_address('push', json_encode(['endpoint' => $endpoint, 'keys' => ['p256dh' => $uaPub, 'auth' => 'court']])), null);
+check('abonnement : texte quelconque refusé', nt_normalize_address('push', 'bonjour'), null);
+
+$pushUser = nt_user_create('Hélène Navigateur');
+check('l\'utilisateur enregistre son navigateur', nt_user_set_channel($pushUser, 'push', $subJson, true, 0), null);
+check('adresse masquée (aucun endpoint affiché)', nt_mask_address('push', (string) $canon), 'ce navigateur');
+http_reset();
+http_reply(201);
+$pm = nt_notify('commande', [$pushUser], 'Votre colis est parti', 'Bonjour {prenom}, votre commande part aujourd\'hui.');
+check('push : envoyé', [$pm['processed']['sent'], $pm['processed']['failed']], [1, 0]);
+$call = $http['calls'][0];
+$hdr = implode("\n", $call['headers']);
+check('push : POST vers l\'endpoint du navigateur, corps binaire chiffré', [$call['method'], $call['url'], strlen($call['body']) > 86, str_contains($call['body'], 'colis')], ['POST', $endpoint, true, false]);
+check('push : en-têtes VAPID, aes128gcm et durée de vie', [str_contains($hdr, 'Authorization: vapid t='), str_contains($hdr, 'Content-Encoding: aes128gcm'), str_contains($hdr, 'TTL: 86400')], [true, true, true]);
+check('push : le corps chiffré commence par le sel, la taille 4096 et la clé de 65 octets', [unpack('N', substr($call['body'], 16, 4))[1], ord($call['body'][20])], [4096, 65]);
+$payload = nt_render(['subject' => 'Titre', 'body' => 'Corps', 'short_body' => ''], nt_user_get($pushUser), ['is_marketing' => 1], 'push');
+check('push : titre = objet, texte = corps, pas de lien de désinscription collé au texte', [$payload['subject'], $payload['text']], ['Titre', 'Corps']);
+
+http_reset();
+http_reply(410);
+$pm = nt_notify('commande', [$pushUser], 'Rappel', 'Second message');
+check('push : 410 (abonnement retiré par le navigateur) -> canal coupé', [$pm['processed']['failed'], nt_user_get($pushUser)['channels']['push']['enabled']], [1, 0]);
+nt_user_set_channel($pushUser, 'push', $subJson, true, 0);
+http_reset();
+http_reply(503, [], 30);
+$pm = nt_notify('commande', [$pushUser], 'Rappel 2', 'Troisième message');
+check('push : 503 = erreur temporaire, canal conservé', [$pm['processed']['sent'], nt_user_get($pushUser)['channels']['push']['enabled']], [0, 1]);
+nt_user_delete($pushUser);
 
 /* ------------------------------------------------------------------ */
 echo "\nSuppression, effacement et purge\n";

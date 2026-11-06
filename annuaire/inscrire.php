@@ -95,9 +95,7 @@ $draft['url'] = $scan['final_url'] ?? $input['url'];
 <meta name="robots" content="noindex, follow">
 <title>Inscrire mon site à l’annuaire — <?= saas_e($cfg['name']) ?></title>
 <meta name="description" content="Votre commerce a déjà un site ? Inscrivez-le gratuitement à l’annuaire et ajoutez vos pièces aux galeries.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/assets/saas.css">
 <style>:root { --accent: <?= saas_e($cfg['accent']) ?>; --accent-ink: <?= saas_e(saas_ink_on($cfg['accent'])) ?>; }</style>
 </head>

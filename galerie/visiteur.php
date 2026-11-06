@@ -354,8 +354,8 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
       return new Promise(function (ok, ko) {
         if (window.L) return ok(window.L);
         var css = document.createElement('link'), js = document.createElement('script');
-        css.rel = 'stylesheet'; css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
-        js.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'; js.async = true;
+        css.rel = 'stylesheet'; css.href = '/assets/lib/leaflet/leaflet.min.css';
+        js.src = '/assets/lib/leaflet/leaflet.min.js'; js.async = true;
         css.onerror = ko; js.onerror = ko; js.onload = function () { ok(window.L); };
         document.head.appendChild(css); document.head.appendChild(js);
       });
@@ -370,7 +370,7 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
     }
     function popup(it) {
       var p = document.createElement('div'), h = document.createElement('strong');
-      var title = it.role === 'slot' && it.num ? 'Emplacement ' + it.num : (it.role === 'zone' || it.role === 'territoire' ? (it.label || it.ztype || 'Zone') : (it.shop || it.label || 'Repère'));
+      var title = it.role === 'slot' && it.num ? 'Emplacement ' + it.num : (it.role === 'zone' || it.role === 'territoire' || it.role === 'secteur' ? (it.label || it.ztype || 'Zone') : (it.shop || it.label || 'Repère'));
       h.textContent = title; p.appendChild(h);
       [it.zone, it.note].forEach(function (v) { if (v) { var n = document.createElement('div'); n.textContent = v; p.appendChild(n); } });
       return p;
@@ -441,11 +441,11 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
         loc.items.forEach(function (it) {
           var layer;
           if (it.kind === 'marker') layer = L.circleMarker(it.pts[0], { radius: 7, color: '#fff', weight: 2, fillColor: it.color, fillOpacity: 1 });
-          else if (it.kind === 'polygon') layer = L.polygon(it.pts, (it.role === 'zone' || it.role === 'territoire')
+          else if (it.kind === 'polygon') layer = L.polygon(it.pts, (it.role === 'zone' || it.role === 'territoire' || it.role === 'secteur')
             ? { color: it.color, weight: 2, dashArray: '8 6', fillColor: it.color, fillOpacity: .07 }
             : { color: it.color, weight: 2, fillColor: it.color, fillOpacity: .3 });
           else layer = L.polyline(it.pts, { color: it.color, weight: 3 });
-          if ((it.role === 'zone' || it.role === 'territoire') && it.label && layer.getBounds) {
+          if ((it.role === 'zone' || it.role === 'territoire' || it.role === 'secteur') && it.label && layer.getBounds) {
             var bd = layer.getBounds();
             var sp = document.createElement('span');
             sp.textContent = it.ztype && it.label.toLowerCase().indexOf(it.ztype.toLowerCase()) !== 0 ? it.ztype + ' · ' + it.label : it.label;
@@ -459,7 +459,7 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
             layer.bindTooltip(it.shop || it.label, { direction: 'top' });
           }
           layer.addTo(map);
-          if (it.role === 'zone' || it.role === 'territoire') backLayers.push(layer);
+          if (it.role === 'zone' || it.role === 'territoire' || it.role === 'secteur') backLayers.push(layer);
           bounds.push(layer);
         });
         map.whenReady(function () { backLayers.forEach(function (l) { l.bringToBack(); }); });

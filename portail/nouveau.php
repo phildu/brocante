@@ -51,7 +51,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nouveau commerce — Portail</title>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
@@ -566,7 +566,7 @@ $v = static function (string $key, ?int $i = null) use ($f, $defaults) {
     if (!document.getElementById(id)) {
       var link = document.createElement('link');
       link.id = id; link.rel = 'stylesheet';
-      link.href = 'https://fonts.googleapis.com/css2?family=' + f.css + '&display=swap';
+      link.href = '/assets/fonts.css';
       document.head.appendChild(link);
     }
     return '"' + name + '", ' + f.fallback;

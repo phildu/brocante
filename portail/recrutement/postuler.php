@@ -101,7 +101,7 @@ $dateFr = static function (string $date): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title><?= e($offer ? $offer['title'] . ' — Recrutement' : 'Rejoindre les brocs — Recrutement') ?></title>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <style>
   body.rcp { padding: 0 16px 56px; }

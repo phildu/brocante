@@ -450,7 +450,7 @@ $confirmDelete = !$limited && $edit && ($_GET['supprimer'] ?? '') === '1';
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Galeries commerciales — Portail des commerces</title>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
 <style>
@@ -756,7 +756,7 @@ portail_page_start([
       $placeSpots = [];
       foreach (($g['map']['items'] ?? []) as $it) {
           $k = (string) ($it['shop'] ?? '');
-          if ($k === '' || !isset($placeRows[$k]) || in_array($it['role'] ?? '', ['zone', 'territoire'], true)) continue;
+          if ($k === '' || !isset($placeRows[$k]) || in_array($it['role'] ?? '', ['zone', 'territoire', 'secteur'], true)) continue;
           [$plat, $plng] = gallery_map_centroid($it['pts']);
           if (!isset($placeSpots[$k]) || $it['kind'] === 'marker') $placeSpots[$k] = [round($plat, 7), round($plng, 7)];
       }
@@ -832,7 +832,7 @@ portail_page_start([
     <?php
       $st = $g['style'];
       $fontUrls = [];
-      foreach (APPEARANCE_FONTS as $role => $list) foreach ($list as $name => [$param]) $fontUrls[$name] = 'https://fonts.googleapis.com/css2?family=' . $param . '&display=swap';
+      foreach (APPEARANCE_FONTS as $role => $list) foreach ($list as $name => [$param]) $fontUrls[$name] = '/assets/fonts.css';
       $sel = static fn (string $key, string $value): string => implode('', array_map(static fn ($k, $l) => '<option value="' . e((string) $k) . '"' . ((string) $k === $value ? ' selected' : '') . '>' . e($l) . '</option>', array_keys(GALLERY_STYLE_CHOICES[$key]), GALLERY_STYLE_CHOICES[$key]));
       $fontSel = static fn (string $role, string $value): string => '<option value="">Par défaut</option>' . implode('', array_map(static fn ($n, $f) => '<option value="' . e($n) . '"' . ($n === $value ? ' selected' : '') . '>' . e($n) . ' — ' . e($f[2]) . '</option>', array_keys(APPEARANCE_FONTS[$role]), APPEARANCE_FONTS[$role]));
       // Médiathèque commune : bandeaux partagés non réservés et pas déjà présents dans cette galerie.

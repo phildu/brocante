@@ -40,3 +40,20 @@ function shop_require_csrf(): void
         die('CSRF token validation failed');
     }
 }
+
+/*
+ * Noms courts utilisés par le module Notifications (formulaires admin et page publique
+ * de préférences) : alias des fonctions shop_*, avec le même jeton de session.
+ */
+if (!function_exists('csrf_input')) {
+    function csrf_input(): string
+    {
+        return shop_csrf_input();
+    }
+}
+if (!function_exists('require_csrf')) {
+    function require_csrf(): void
+    {
+        shop_require_csrf();
+    }
+}

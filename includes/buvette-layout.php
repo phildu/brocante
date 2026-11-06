@@ -165,9 +165,7 @@ function bv_vol_header(string $title, string $section, bool $withNav = true): vo
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#b5502e">
 <title><?= h($title) ?> — Buvette — <?= h($siteName) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+<link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/assets/style.css">
 <link rel="stylesheet" href="<?= h(bv_asset_url('/assets/buvette.css')) ?>">
 </head>

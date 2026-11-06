@@ -155,15 +155,15 @@ function appearance_derive(array $c): array
     ];
 }
 
-/** Adresse Google Fonts pour une paire de polices (plus la police machine à écrire du site). */
-function appearance_fonts_url(string $display, string $body): string
+/**
+ * Feuille de style des polices du catalogue, hébergée en local (aucun appel à Google Fonts :
+ * pas d'IP transmise à un tiers). Les @font-face ne téléchargent que les polices réellement
+ * utilisées par la page ; les paramètres sont conservés pour ne pas changer les appelants.
+ * Pour régénérer les fichiers : python3 scripts/fetch-fonts.py
+ */
+function appearance_fonts_url(string $display = '', string $body = ''): string
 {
-    $families = [
-        APPEARANCE_FONTS['display'][$display][0] ?? APPEARANCE_FONTS['display']['Fraunces'][0],
-        APPEARANCE_FONTS['body'][$body][0] ?? APPEARANCE_FONTS['body']['Archivo'][0],
-        'Special+Elite',
-    ];
-    return 'https://fonts.googleapis.com/css2?family=' . implode('&family=', array_unique($families)) . '&display=swap';
+    return '/assets/fonts.css';
 }
 
 /** Valeur CSS font-family d'une police du catalogue. */

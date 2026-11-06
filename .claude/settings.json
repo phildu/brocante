@@ -17,7 +17,13 @@
       "mcp__claude-in-chrome__read_console_messages",
       "mcp__claude-in-chrome__read_network_requests",
       "mcp__claude-in-chrome__get_page_text",
-      "mcp__claude-in-chrome__read_page"
+      "mcp__claude-in-chrome__read_page",
+      "Bash(php -l *)",
+      "mcp__claude-in-chrome__tabs_create_mcp",
+      "mcp__claude-in-chrome__tabs_close_mcp",
+      "mcp__claude-in-chrome__select_browser",
+      "mcp__Claude_Browser__tabs_select",
+      "mcp__Claude_in_Chrome__navigate"
     ]
   }
 }
