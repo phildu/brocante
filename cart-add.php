@@ -32,6 +32,7 @@ if ($product && is_fixed_price(effective_price($product)) && in_stock($product) 
     flash_set(product_held_message($product['name']), 'error');
 } elseif ($product && is_fixed_price(effective_price($product)) && in_stock($product)) {
     cart_add($ref, 1);
+    track_event('add_to_cart', $ref);
     rec_track_cart($ref);
     try {
         require_once __DIR__ . '/includes/plugins.php';

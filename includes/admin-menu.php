@@ -158,6 +158,11 @@ function admin_menu_core_items(): array
         'presence' => ['/admin/presence.php', 'Boutique physique / en ligne', 'grid'],
         'galeries' => ['/admin/ma-galerie.php', 'Mes galeries', 'users'],
         'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
+        // Modules vide-grenier / rentabilité (ligne « main ») : chaque page a ses propres adresses, voir BUVETTE.md, INVENDUS_MODULE.md, COMPTAGE.md.
+        'rentabilite' => ['/admin/rentabilite.php', 'Rentabilité', 'gauge'],
+        'buvette' => ['/admin/buvette/index.php', 'Buvette', 'receipt'],
+        'invendus' => ['/admin/invendus.php', 'Invendus & dons', 'truck'],
+        'comptage' => ['/admin/comptage/index.php', 'Comptage de foule', 'users'],
         'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
         'social' => ['/admin/social.php', 'API & réseaux', 'user'],
         'ia' => ['/admin/ai-usage.php', 'Consommation IA', 'receipt'],

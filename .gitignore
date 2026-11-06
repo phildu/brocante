@@ -20,3 +20,4 @@ tenants/*/*.db
 tenants/*/*.sqlite
 tenants/*/secrets/
 .phpunit.result.cache
+backups/

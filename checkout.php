@@ -344,7 +344,8 @@ if ($paymentMethod !== 'stripe') {
     }, $lines);
 
     try {
-        $stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, shipping_cents, status, items, payment_provider, payment_reference, provider_checkout_id, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, shop_slug, shipping_mode, shipping_label, gift_wrap, gift_wrap_cents, gift_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        analytics_ensure_schema();
+        $stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, shipping_cents, status, items, payment_provider, payment_reference, provider_checkout_id, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, shop_slug, shipping_mode, shipping_label, gift_wrap, gift_wrap_cents, gift_message, source_channel) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $provider . ':' . $reference,
             $orderTotal,
@@ -368,6 +369,7 @@ if ($paymentMethod !== 'stripe') {
             $giftWrap ? 1 : 0,
             $giftWrapCents,
             $giftMessage !== '' ? $giftMessage : null,
+            analytics_session_source(),
         ]);
     } catch (Throwable $e) {
         flash_set('Impossible de créer la commande : ' . $e->getMessage(), 'error');
@@ -386,6 +388,7 @@ if ($paymentMethod !== 'stripe') {
         }
     }
     plugin_fire('checkout_created', ['order_id' => $orderId, 'code' => (string) ($_SESSION['reward_code'] ?? '')]);
+    track_event('checkout');
 
     $order = order_get($orderId);
     $cancelExternal = static function (int $id, string $provider, string $reason): void {
@@ -619,10 +622,13 @@ $itemsSnapshot = array_map(function ($line) {
         'name' => $line['product']['name'],
         'qty' => $line['qty'],
         'unit_cents' => $line['unit_cents'],
+        // Prix d'achat figé au moment de la vente : la marge reste juste même si la fiche change ensuite.
+        'cost_cents' => isset($line['product']['cost_cents']) ? (int) $line['product']['cost_cents'] : null,
     ];
 }, $lines);
 
-$stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, status, items, payment_via, connect_fee_cents, connect_gallery_cents, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, buyer_address, shop_slug, shipping_mode, shipping_label, gift_wrap, gift_wrap_cents, gift_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+analytics_ensure_schema();
+$stmt = db()->prepare('INSERT INTO orders (stripe_session_id, amount_total, status, items, payment_via, connect_fee_cents, connect_gallery_cents, email, phone, terms_at, terms_version, create_account, ship_name, ship_phone, declared_address, buyer_address, shop_slug, shipping_mode, shipping_label, gift_wrap, gift_wrap_cents, gift_message, source_channel) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 $stmt->execute([
     $session['id'],
     cart_total_cents() - $discount['cents'],
@@ -646,6 +652,7 @@ $stmt->execute([
     $giftWrap ? 1 : 0,
     $giftWrapCents,
     $giftMessage !== '' ? $giftMessage : null,
+    analytics_session_source(),
 ]);
 $orderId = (int) db()->lastInsertId();
 checkout_remember_order($orderId);
@@ -660,6 +667,7 @@ if ($contact['create_account']) {
     }
 }
 plugin_fire('checkout_created', ['order_id' => $orderId, 'code' => (string) ($_SESSION['reward_code'] ?? '')]);   // réserve la récompense jusqu'au paiement
+track_event('checkout');
 
 header('Location: ' . $session['url'], true, 303);
 exit;

@@ -283,6 +283,13 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
                     <?php if (price_input_value($p['price']) === '' && trim((string) $p['price']) !== ''): ?><p class="hint" style="margin:4px 0 0;">Prix actuel non numérique : « <?= h($p['price']) ?> ». Saisissez un montant pour le remplacer (laissé vide, il est conservé).</p><?php endif; ?>
                   </div>
                 </div>
+                <div class="field-row-3">
+                  <div class="field">
+                    <label>Prix d'achat (€) — pour la marge</label>
+                    <input type="text" name="cost_price" inputmode="decimal" value="<?= isset($p['cost_cents']) && $p['cost_cents'] !== null ? h(number_format($p['cost_cents'] / 100, 2, ',', '')) : '' ?>" placeholder="ex : 8,50 — ce que la pièce vous a coûté">
+                  </div>
+                  <div></div><div></div>
+                </div>
                 <div class="field-row-3" data-promo-row<?= $p['badge'] === 'Promo' ? '' : ' hidden' ?>>
                   <div class="field"><label>Prix promo (€)</label><input type="number" name="promo_price" min="0" step="0.01" inputmode="decimal" data-price value="<?= h(price_input_value($p['promo_price'])) ?>" placeholder="ex : 20"></div>
                   <div class="field"><label>Remise rapide</label><div class="promo-pcts"><?php foreach ([10, 20, 30, 50] as $pct): ?><button type="button" class="btn-small" data-promo-pct="<?= $pct ?>">−<?= $pct ?> %</button><?php endforeach; ?></div></div>
@@ -476,6 +483,10 @@ function catalog_sort_link(string $key, string $label, string $sortKey, string $
               </select>
             </div>
             <div class="field"><label>Prix affiché (€) <?= $aiBtn('price', 'Estimer un prix') ?> <button type="button" class="ai-btn" data-price-research title="Chercher sur le web le prix du même article, neuf et d'occasion — coût estimé <?= h(ai_estimate_label(['search' => 1])) ?>">Marché</button></label><input type="number" name="price" min="0" step="0.01" inputmode="decimal" data-price placeholder="ex : 25"></div>
+          </div>
+          <div class="field-row-3">
+            <div class="field"><label>Prix d'achat (€) — pour la marge</label><input type="text" name="cost_price" inputmode="decimal" placeholder="ex : 8,50"></div>
+            <div></div><div></div>
           </div>
           <div class="field"><label>Description <?= $aiBtn('description', 'Générer / régénérer la description') ?></label><textarea name="description"></textarea></div>
           <div class="field-row-3">

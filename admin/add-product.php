@@ -28,8 +28,10 @@ if (!$photoPath && !empty($_POST['use_cover']) && trim((string) ($_POST['cover_u
     $photoPath = product_photo_from_cover_url(trim((string) $_POST['cover_url']), 'product-' . $ref);
 }
 
-$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, colors, brand, distributor, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, new_price, badge, featured, sort_order)
-                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :colors, :brand, :distributor, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :new_price, :badge, 0, :sort_order)');
+analytics_ensure_schema();
+$costInput = parse_euros($_POST['cost_price'] ?? null);
+$stmt = db()->prepare('INSERT INTO products (ref, name, cat, photo, icon, description, materials, colors, brand, distributor, etat, nature, sous_categorie, size_text, weight_text, weight_grams, barcode, price, new_price, badge, featured, sort_order, cost_cents)
+                        VALUES (:ref, :name, :cat, :photo, NULL, :description, :materials, :colors, :brand, :distributor, :etat, :nature, :sous_categorie, :size_text, :weight_text, :weight_grams, :barcode, :price, :new_price, :badge, 0, :sort_order, :cost_cents)');
 $stmt->execute([
     'ref' => $ref,
     'name' => $name,
@@ -51,6 +53,7 @@ $stmt->execute([
     'new_price' => price_from_input($_POST['new_price'] ?? '') ?: null,
     'badge' => trim((string) ($_POST['badge'] ?? '')) ?: 'Chiné',
     'sort_order' => (int) db()->query('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM products')->fetchColumn(),
+    'cost_cents' => $costInput === null ? null : (int) round($costInput * 100),
 ]);
 
 flash_set('Pièce « ' . $name . ' » ajoutée — Réf. N°' . $ref . '.');

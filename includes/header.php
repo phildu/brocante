@@ -50,6 +50,7 @@ if (!shop_state_is_public($shopState) && !$shopPreview && !in_array($shopStateSc
 }
 $activeNav = $activeNav ?? '';
 $cartCount = cart_count();
+track_request(basename($_SERVER['SCRIPT_NAME'] ?? '') === 'produit.php' && isset($product['ref']) ? (string) $product['ref'] : null);
 $siteContent = get_content();
 $siteName = $siteContent['site_name'] ?: tenant('name');
 $siteTagline = $siteContent['site_tagline'] ?: tenant('tagline');
@@ -90,6 +91,9 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
 <?php endforeach; ?>
 <?php foreach ((array) ($pageScripts ?? []) as $pageScript): ?><script src="<?= h((string) $pageScript) ?>" defer></script>
 <?php endforeach; ?>
+<?php foreach (($extraCss ?? []) as $css): ?><link rel="stylesheet" href="<?= h($css) ?>">
+<?php endforeach; ?>
+<?= $extraHead ?? '' ?>
 </head>
 <body>
 <?php include __DIR__ . '/icons.php'; ?>
@@ -111,6 +115,7 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
       <a href="/index.php"<?= $activeNav === 'accueil' ? ' aria-current="page"' : '' ?>>Accueil</a>
       <a href="/boutique.php"<?= $activeNav === 'boutique' ? ' aria-current="page"' : '' ?>>La boutique</a>
       <a href="/visite.php"<?= $activeNav === 'visite' ? ' aria-current="page"' : '' ?>>Visite virtuelle</a>
+      <?php if (shop_has_public_donations()): ?><a href="/dons.php"<?= $activeNav === 'dons' ? ' aria-current="page"' : '' ?>>Dons &amp; invendus</a><?php endif; ?>
       <a href="/notre-histoire.php"<?= $activeNav === 'histoire' ? ' aria-current="page"' : '' ?>>Notre histoire</a>
       <a href="/nous-trouver.php"<?= $activeNav === 'nous-trouver' ? ' aria-current="page"' : '' ?>>Nous trouver</a>
       <?php if (shop_sales_enabled()): ?><?= cart_nav_link((int) $cartCount) ?><?php endif; ?>

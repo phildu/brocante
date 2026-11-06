@@ -25,6 +25,8 @@ require_once __DIR__ . '/order-flow.php';
 require_once __DIR__ . '/locate.php';
 require_once __DIR__ . '/payments.php';
 require_once __DIR__ . '/order-availability.php';
+require_once __DIR__ . '/analytics.php';
+require_once __DIR__ . '/csrf.php';
 
 function h($s): string
 {
@@ -4009,4 +4011,21 @@ function fulfillment_label(string $status): string
         'livree' => 'Livrée',
         'retiree' => 'Retirée',
     ][$status] ?? $status;
+}
+
+/**
+ * Une édition « Invendus & dons » est-elle publiée ? Le lien public « Dons & invendus » (en-tête, pied de page) n'apparaît que pour une
+ * boutique qui utilise ce module (includes/invendus.php) ; sans la table, le module n'a jamais servi : pas de lien.
+ */
+function shop_has_public_donations(): bool
+{
+    static $has = null;
+    if ($has !== null) return $has;
+    try {
+        $stmt = db()->prepare("SELECT 1 FROM unsold_events WHERE status = 'published' AND event_date >= ? LIMIT 1");
+        $stmt->execute([date('Y-m-d', strtotime('-2 days'))]);
+        return $has = (bool) $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return $has = false;
+    }
 }
