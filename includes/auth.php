@@ -842,6 +842,7 @@ function auth_action_map(): array
         ],
         'notifications/envoyer.php' => ['preview' => 'portail.notifications.envoyer', 'send' => 'portail.notifications.envoyer'],
         'notifications/historique.php' => ['retry' => 'portail.notifications.envoyer'],
+        'closure-alert.php' => ['send' => 'portail.notifications.envoyer'],   // alerte de fermeture aux clients (admin/closure-alert.php)
         'notifications/rubriques.php' => ['save_topic' => ['portail.notifications.creer', 'portail.notifications.modifier'], 'delete_topic' => 'portail.notifications.supprimer'],
         // Réglages des canaux = clés d'API et mots de passe : même droit que les autres clés (Stripe, Gemini…).
         'notifications/canaux.php' => [
