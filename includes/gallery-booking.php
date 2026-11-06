@@ -30,6 +30,7 @@ const GB_AUDIT_LABELS = [
     'cni_delete' => 'Copie supprimée', 'cni_purged' => 'Copie purgée automatiquement', 'cni_view' => 'Copie consultée',
     'event_cancel' => 'Événement annulé', 'event_reopen' => 'Événement réactivé', 'event_notice' => 'Avis d’annulation envoyé',
     'refund_due' => 'Remboursement à effectuer', 'refund_paid' => 'Remboursement effectué', 'refund_waived' => 'Remboursement renoncé',
+    'refund_adjust' => 'Montant du remboursement ajusté',
 ];
 
 function gb_file(string $slug): string

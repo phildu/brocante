@@ -76,6 +76,13 @@ function gm_defaults(): array
             'default_mode' => 'option',
             'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
         ],
+        'annulation' => [
+            'name' => 'Annulation & remboursements', 'emoji' => '🌧️', 'active' => true, 'order' => 7,
+            'description' => "Annulez le vide-grenier (météo, force majeure, décision de l'organisateur) : demandes fermées, annonce publique, exposants prévenus par e-mail et remboursés en totalité ou en partie, avec un registre des virements, un montant ajustable par exposant et l'export CSV.",
+            'types' => ['vide-grenier'],
+            'default_mode' => 'option',
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
+        ],
     ];
 }
 
