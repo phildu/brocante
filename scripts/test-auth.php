@@ -104,7 +104,7 @@ foreach (glob(__DIR__ . '/../admin/*.php') as $f) {
         $unguarded[] = $name;
     }
 }
-foreach (['buvette' => 'bv_admin_init(', 'comptage' => 'cp_admin_init(|require_permission(', 'impression' => 'pr_admin_init('] as $dir => $guard) {
+foreach (['buvette' => 'bv_admin_init(', 'comptage' => 'cp_admin_init(|require_permission(', 'impression' => 'pr_admin_init(', 'notifications' => 'nt_admin_init('] as $dir => $guard) {
     foreach (glob(__DIR__ . '/../admin/' . $dir . '/*.php') as $f) {
         if (!preg_match('/' . preg_quote(explode('|', $guard)[0], '/') . '|require_permission\(/', file_get_contents($f))) $unguarded[] = $dir . '/' . basename($f);
     }
@@ -122,7 +122,7 @@ foreach ($flat as $name) {
 check('chaque action des scripts à switch est répertoriée dans la table des droits', $missing, []);
 // Modules à actions nommées (clé = chemin relatif à /admin/) : toute action `case` doit avoir son droit.
 $modMissing = [];
-foreach (['comptage/evenements.php', 'comptage/index.php', 'comptage/acces.php', 'impression/index.php', 'impression/nouvelle.php', 'impression/commande.php', 'impression/catalogue.php', 'impression/fournisseurs.php', 'connectors-action.php'] as $rel) {
+foreach (['comptage/evenements.php', 'comptage/index.php', 'comptage/acces.php', 'impression/index.php', 'impression/nouvelle.php', 'impression/commande.php', 'impression/catalogue.php', 'impression/fournisseurs.php', 'notifications/index.php', 'notifications/utilisateurs.php', 'notifications/envoyer.php', 'notifications/historique.php', 'notifications/rubriques.php', 'notifications/canaux.php', 'connectors-action.php'] as $rel) {
     $src = file_get_contents(__DIR__ . '/../admin/' . $rel);
     preg_match_all("/^\s+case '([a-z_]+)':/m", $src, $m1);
     preg_match_all("/(?:post_action\(\)|\\$action) === '([a-z_]+)'/", $src, $m2);
@@ -130,7 +130,7 @@ foreach (['comptage/evenements.php', 'comptage/index.php', 'comptage/acces.php',
         if (auth_action_requirement($rel, $a) === null) $modMissing[] = "$rel : $a";
     }
 }
-check('chaque action des modules Comptage, Impression et Boutiques connectées est répertoriée', $modMissing, []);
+check('chaque action des modules Comptage, Impression, Notifications et Boutiques connectées est répertoriée', $modMissing, []);
 $dashMissing = [];
 preg_match_all("/\\\$action === '([a-z_]+)'/", file_get_contents(__DIR__ . '/../admin/dashboard-action.php'), $m);
 foreach ($m[1] as $a) if (auth_action_requirement('dashboard-action.php', $a) === null) $dashMissing[] = $a;

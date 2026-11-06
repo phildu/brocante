@@ -141,6 +141,17 @@ function auth_catalog(): array
                         'commander' => 'Passer ou annuler une commande chez un fournisseur, passer en mode réel (dépenses)',
                     ],
                 ],
+                'notifications' => [
+                    'label' => 'Notifications',
+                    'hint' => 'Utilisateurs notifiables (clients, bénévoles), préférences, envoi de messages par e-mail, SMS, WhatsApp, Discord ou Telegram, historique. Donne accès à leurs coordonnées. Les clés des canaux relèvent du droit « Clés API ».',
+                    'actions' => [
+                        'lire' => 'Consulter les utilisateurs, rubriques et l\'historique des envois',
+                        'creer' => 'Créer des utilisateurs et des rubriques, importer bénévoles et clients',
+                        'modifier' => 'Modifier les utilisateurs, leurs préférences et les rubriques',
+                        'supprimer' => 'Supprimer des utilisateurs (effacement complet), purger l\'historique',
+                        'envoyer' => 'Envoyer des messages, traiter la file, tester un canal, relancer un envoi',
+                    ],
+                ],
                 'comptage' => [
                     'label' => 'Comptage de foule',
                     'hint' => 'Événements, postes de comptage, corrections, code d\'accès des bénévoles.',
@@ -332,7 +343,7 @@ function auth_default_roles(): array
     $all = auth_permission_keys();
     $readOnly = array_values(array_filter($all, function (string $k): bool {
         if (!str_ends_with($k, '.lire')) return false;
-        foreach (['portail.cles_api.', 'portail.utilisateurs.', 'portail.roles.', 'boutique.commandes.'] as $secret) {
+        foreach (['portail.cles_api.', 'portail.utilisateurs.', 'portail.roles.', 'portail.notifications.', 'boutique.commandes.'] as $secret) {
             if (str_starts_with($k, $secret)) return false;
         }
         return true;
@@ -563,6 +574,7 @@ function auth_nav_items(): array
         'commandes' => ['/admin/orders.php', 'Commandes', ['boutique.commandes.lire']],
         'buvette' => ['/admin/buvette/index.php', 'Buvette', ['portail.buvette.lire']],
         'invendus' => ['/admin/invendus.php', 'Invendus & dons', ['portail.invendus.lire']],
+        'notifications' => ['/admin/notifications/index.php', 'Notifications', ['portail.notifications.lire']],
         'impression' => ['/admin/impression/index.php', 'Impression', ['portail.impression.lire']],
         'comptage' => ['/admin/comptage/index.php', 'Comptage de foule', ['portail.comptage.lire']],
         'hero' => ['/admin/hero.php', 'Diaporama hero', ['galerie.hero.lire']],
@@ -790,6 +802,20 @@ function auth_action_map(): array
         'impression/fournisseurs.php' => [
             'cp_products' => 'portail.impression.modifier', 'save_key' => 'portail.cles_api.modifier', 'save_supplier' => 'portail.impression.modifier',
             'add_supplier' => 'portail.impression.creer', 'delete_supplier' => 'portail.impression.supprimer',
+        ],
+        'notifications/index.php' => ['process_queue' => 'portail.notifications.envoyer', 'purge' => 'portail.notifications.supprimer'],
+        'notifications/utilisateurs.php' => [
+            'create_user' => 'portail.notifications.creer', 'import_volunteers' => 'portail.notifications.creer', 'import_customers' => 'portail.notifications.creer',
+            'save_user' => 'portail.notifications.modifier', 'delete_user' => 'portail.notifications.supprimer', 'test_channel' => 'portail.notifications.envoyer',
+        ],
+        'notifications/envoyer.php' => ['preview' => 'portail.notifications.envoyer', 'send' => 'portail.notifications.envoyer'],
+        'notifications/historique.php' => ['retry' => 'portail.notifications.envoyer'],
+        'notifications/rubriques.php' => ['save_topic' => ['portail.notifications.creer', 'portail.notifications.modifier'], 'delete_topic' => 'portail.notifications.supprimer'],
+        // Réglages des canaux = clés d'API et mots de passe : même droit que les autres clés (Stripe, Gemini…).
+        'notifications/canaux.php' => [
+            'save_general' => 'portail.cles_api.modifier', 'save_email' => 'portail.cles_api.modifier', 'save_twilio' => 'portail.cles_api.modifier',
+            'save_discord' => 'portail.cles_api.modifier', 'save_telegram' => 'portail.cles_api.modifier', 'clear_secret' => 'portail.cles_api.modifier',
+            'quick_test' => 'portail.notifications.envoyer',
         ],
         'comptage/evenements.php' => [
             'create_event' => 'portail.comptage.creer', 'update_event' => 'portail.comptage.modifier', 'activate_event' => 'portail.comptage.modifier',
