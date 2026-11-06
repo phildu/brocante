@@ -1,9 +1,9 @@
 #!/bin/bash
-# Crée .env.deploy.portail (déploiement du portail, ex. brocs.arrimage.com)
+# Crée .env.deploy.portail (déploiement du portail, ex. bricbrok.com)
 # à partir des accès FTP de .env.deploy, et demande le compte du portail.
 #
 # Usage : scripts/prepare-portail.sh [dossier] [url]
-#   par défaut : dossier « brocs », url https://brocs.arrimage.com
+#   par défaut : dossier « brocs », url https://bricbrok.com
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

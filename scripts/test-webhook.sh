@@ -19,7 +19,7 @@ set -euo pipefail
 umask 077
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BASE="https://brocs.arrimage.com"
+BASE="https://bricbrok.com"
 URL=""
 SHOP=""
 SECRET_FILE="${STRIPE_WEBHOOK_SECRET_FILE:-}"
@@ -37,7 +37,7 @@ usage() {
 
 Options :
   --shop SLUG             boutique (l'URL devient <base>/<slug>/stripe-webhook.php)
-  --base URL              base de la plateforme (défaut : https://brocs.arrimage.com)
+  --base URL              base de la plateforme (défaut : https://bricbrok.com)
   --url URL               URL complète de l'endpoint (remplace --shop/--base)
   --secret-file FICHIER   fichier contenant le whsec_... (ou variable STRIPE_WEBHOOK_SECRET)
   --event TYPE            type d'événement (défaut : payment_intent.created, inerte)

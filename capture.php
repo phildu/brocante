@@ -39,6 +39,7 @@ $chunkBytes = capture_chunk_bytes();
   .cap-log .ko { color: #b3261e; white-space: normal; text-align: right; max-width: 60%; }
   .cap-expired { border: 1px solid var(--line); background: var(--surface); padding: 18px; }
 </style>
+<script src="/assets/heic-convert.js"></script>
 </head>
 <body>
 <main class="cap">

@@ -107,6 +107,22 @@ if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'
     }
     error_log('webhook stripe gallery_module ' . ($res['slug'] ?? '?') . ' ' . ($res['module'] ?? '?') . ' → ' . ($res['state'] ?? '?'));
 } elseif (in_array($event['type'], ['checkout.session.completed', 'checkout.session.async_payment_succeeded'], true)
+    && (($obj['metadata']['type'] ?? '') === 'shop_subdomain')) {
+    // Adresse en sous-domaine (nom.domaine) choisie depuis l'administration d'une boutique : activée au paiement.
+    if (($obj['payment_status'] ?? '') !== 'paid') {
+        http_response_code(200);
+        exit('paiement en attente');
+    }
+    require_once dirname(__DIR__) . '/includes/domain-sub.php';
+    try {
+        $sub = domain_sub_apply_session($obj);
+        error_log('webhook stripe shop_subdomain ' . ($obj['metadata']['shop'] ?? '?') . ' → ' . ($sub['state'] ?? '?'));
+    } catch (Throwable $ex) {
+        error_log('webhook stripe shop_subdomain: ' . $ex->getMessage());
+        http_response_code(500);
+        exit('adresse à vérifier');
+    }
+} elseif (in_array($event['type'], ['checkout.session.completed', 'checkout.session.async_payment_succeeded'], true)
     && (($obj['metadata']['type'] ?? '') === 'shop_domain_purchase')) {
     // Nom de domaine acheté depuis l'administration d'une boutique (admin/domaine.php) :
     // le titulaire est déclaré et le panier OVH validé avant le paiement ; il ne reste qu'à transmettre la commande.

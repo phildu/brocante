@@ -5,7 +5,7 @@
 // includes/tenant.php.
 require_once __DIR__ . '/includes/tenant.php';
 
-// Commerce servi sous un préfixe (brocs.arrimage.com/<slug>/) : liens,
+// Commerce servi sous un préfixe (bricbrok.com/<slug>/) : liens,
 // formulaires et redirections vers les pages dynamiques reçoivent ce préfixe
 // — voir tenant_rewrite_output() et tenant_rewrite_location().
 tenant_enable_base_path();
