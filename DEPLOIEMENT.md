@@ -58,7 +58,8 @@ Un serveur sans `.app-env` est traité comme **préprod** (jamais comme prod) : 
 
 - [ ] **OVH** : domaine de prod créé, Hébergement → Multisite sur un dossier **dédié** (ex. `/www/prod/`), SSL actif, redirection HTTPS.
 - [ ] `cp deploy/env.prod.example .env.deploy.portail.prod`, remplir, `chmod 600`. Mots de passe FTP et portail **différents** de la préprod.
-- [ ] `scripts/release.sh prod --portail --dry-run` puis déploiement réel (les bases se créent à la première visite).
+- [ ] `scripts/release.sh prod --portail --dry-run` puis déploiement réel **avec `--no-backup`** (aucune base n'existe encore sur le serveur, la sauvegarde
+  échouerait) : `scripts/release.sh prod --portail --no-backup`. Les bases se créent à la première visite. Dès le déploiement suivant, sans cette option.
 - [ ] `scripts/smoke-remote.sh https://<domaine-prod> prod` au vert ; ouvrir `/portail/` et se connecter.
 - [ ] **Paiements** : saisir les clés **live** (Stripe, et Revolut/PayPal/Monetico si utilisés) depuis l'administration de la prod ; déclarer les
   webhooks côté prestataire avec l'adresse de prod (`stripe-webhook.php`, `revolut-webhook.php`, `monetico-ipn.php`) ; un paiement réel

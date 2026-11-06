@@ -8,6 +8,7 @@
 #   scripts/release.sh prod [options]                 pré-vol → sauvegarde des bases → déploiement prod → contrôle → tag prod-<date>
 #   scripts/release.sh preprod|prod --dry-run [...]   essai à blanc : liste ce qui partirait, n'écrit rien
 # Options (transmises à deploy-brocante.sh) : --portail | --tenant <slug> | --dry-run | --first-install (prod) | --with-db (préprod)
+#   --no-backup           prod seulement : saute la sauvegarde (tout premier déploiement, aucune base encore sur le serveur)
 #   --skip-preprod-check  correctif urgent en prod sans passage préalable en préprod (à justifier dans DEPLOIEMENT.md)
 #
 # Les tags sont créés en local seulement ; les pousser à la main : git push origin <tag>.
@@ -49,17 +50,19 @@ case "$cmd" in
 
   preprod|prod)
     env="$cmd"
-    portail=0; tenant="petit-chalet"; dry=0; first=0; passthru=()
+    portail=0; tenant="petit-chalet"; dry=0; first=0; nobackup=0; passthru=()
     while [ $# -gt 0 ]; do
       case "$1" in
         --portail) portail=1; passthru+=("$1") ;;
         --tenant) tenant="${2:-}"; passthru+=("$1" "$tenant"); shift ;;
         --dry-run) dry=1; passthru+=("$1") ;;
         --first-install) first=1; passthru+=("$1") ;;
+        --no-backup) nobackup=1 ;;
         *) passthru+=("$1") ;;
       esac
       shift
     done
+    [ "$nobackup" = "0" ] || [ "$env" = "prod" ] || die "--no-backup ne concerne que la prod."
     [ "$portail" = "1" ] || [ "$tenant" != "petit-chalet" ] || die "Précisez la cible : --portail (cas courant) ou --tenant <slug>."
 
     branch="$(git rev-parse --abbrev-ref HEAD)"
@@ -79,6 +82,8 @@ case "$cmd" in
       say "2/4 Sauvegarde des bases de la prod"
       if [ "$first" = "1" ]; then
         echo "  --first-install : pas de base existante à sauvegarder."
+      elif [ "$nobackup" = "1" ]; then
+        printf '\033[1;33m⚠ --no-backup : aucune sauvegarde (à réserver au tout premier déploiement).\033[0m\n'
       else
         if [ "$portail" = "1" ]; then scripts/backup-remote-db.sh prod --portail; else scripts/backup-remote-db.sh prod --tenant "$tenant"; fi
       fi
