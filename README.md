@@ -1,5 +1,7 @@
 # Boutique en marque blanche
 
+> **Environnements et mise en ligne** (local → préprod → prod, garde-fous, retour arrière) : voir [DEPLOIEMENT.md](DEPLOIEMENT.md).
+
 Boutique en ligne PHP + SQLite (sans framework ni serveur de base de données),
 créée pour **La Brocante du Petit Chalet** et réutilisable pour n'importe quel
 commerce. Tout ce qui est propre à un commerce est regroupé dans :

@@ -30,6 +30,16 @@
 #                                     si vous voulez délibérément resynchroniser
 #                                     le serveur depuis le local.
 #
+# Environnements (workflow local → preprod → prod, voir DEPLOIEMENT.md) :
+#   --env preprod  (défaut) → fichiers d'accès inchangés : .env.deploy.portail, .env.deploy.<slug>, .env.deploy
+#   --env prod              → .env.deploy.portail.prod, .env.deploy.<slug>.prod, .env.deploy.prod
+#                             Garde-fous : arbre git propre, HEAD déjà déployé en préprod (tag preprod-*),
+#                             serveur différent de la préprod, base JAMAIS envoyée (sauf --first-install),
+#                             confirmation tapée « PROD ». --skip-preprod-check = correctif urgent, à justifier.
+#   Le script dépose .app-env sur le serveur (preprod|prod) ; en préprod, aussi un robots.txt « Disallow: / ».
+#   Modèles des fichiers d'accès : deploy/env.preprod.example et deploy/env.prod.example.
+#   Orchestration complète (pré-vol, sauvegarde, déploiement, vérification, tag) : scripts/release.sh.
+#
 # Prérequis : lftp installé (brew install lftp), .env.deploy rempli
 # (même compte FTP OVH que louxor/electroboy80 — voir ces projets)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,11 +65,14 @@ err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 LOCAL_ONLY_TENANTS="kllklmk zz-sandbox-revolut librairie-des-quais la-fripe-a-naty exemple-librairie _modele mes-livres petit-chalet"
 # Code purement local (tests, outillage, centre d'aide pas encore prêt, pages de test), bases SQLite locales,
 # sauvegardes *.bak-*, fichiers de développement (docs, phpunit, composer, dépendances de dev de vendor/) : jamais envoyé.
-LOCAL_ONLY_EXCLUDES="--exclude '^tests/' --exclude '^scripts/' --exclude '^aide/' --exclude '^admin/sms-test\\.php\$' --exclude '^portail/journal-local\\.php\$' --exclude '^assets/autofeed/.*\\.lock\$' --exclude-glob '*.sqlite' --exclude-glob '*.bak-*' --exclude '^docs/' --exclude '^\\.gitignore\$' --exclude '^\\.phpunit\\.result\\.cache\$' --exclude '^phpunit\\.xml\$' --exclude '^composer\\.(json|lock)\$' --exclude '^schema\\.sql\$' --exclude '^vendor/(bin|composer|phpunit|nikic|sebastian|phar-io|myclabs|staabm|theseer)/' --exclude '^vendor/autoload\\.php\$'"
+LOCAL_ONLY_EXCLUDES="--exclude '^tests/' --exclude '^scripts/' --exclude '^aide/' --exclude '^admin/sms-test\\.php\$' --exclude '^portail/journal-local\\.php\$' --exclude '^assets/autofeed/.*\\.lock\$' --exclude-glob '*.sqlite' --exclude-glob '*.bak-*' --exclude '^docs/' --exclude '^deploy/' --exclude '^\\.gitignore\$' --exclude '^\\.phpunit\\.result\\.cache\$' --exclude '^phpunit\\.xml\$' --exclude '^composer\\.(json|lock)\$' --exclude '^schema\\.sql\$' --exclude '^vendor/(bin|composer|phpunit|nikic|sebastian|phar-io|myclabs|staabm|theseer)/' --exclude '^vendor/autoload\\.php\$'"
 
 WITH_DB=0
 PORTAIL=0
 DRY_RUN=0
+DEPLOY_ENV="preprod"
+FIRST_INSTALL=0
+SKIP_PREPROD_CHECK=0
 TENANT="${TENANT:-petit-chalet}"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -67,10 +80,26 @@ while [ $# -gt 0 ]; do
         --portail) PORTAIL=1 ;;
         --dry-run) DRY_RUN=1 ;;
         --tenant) TENANT="$2"; shift ;;
+        --env) DEPLOY_ENV="$2"; shift ;;
+        --first-install) FIRST_INSTALL=1 ;;
+        --skip-preprod-check) SKIP_PREPROD_CHECK=1 ;;
         *) err "Option inconnue : $1" ;;
     esac
     shift
 done
+case "$DEPLOY_ENV" in
+    preprod|prod) ;;
+    *) err "--env doit valoir preprod ou prod (reçu : $DEPLOY_ENV). Le local se teste sur *.test, il ne se déploie pas." ;;
+esac
+ENV_LABEL="$(printf '%s' "$DEPLOY_ENV" | tr '[:lower:]' '[:upper:]')"
+# La base de la production n'est envoyée que par --first-install (1re installation, base vide côté serveur).
+if [ "$DEPLOY_ENV" = "prod" ]; then
+    [ "$WITH_DB" = "1" ] && err "--with-db est interdit en prod : il écraserait les commandes et données réelles. Première installation uniquement : --first-install."
+    [ "$FIRST_INSTALL" = "1" ] && [ "$PORTAIL" = "1" ] && err "--first-install est inutile avec --portail : les bases absentes du serveur sont créées à la première visite (et l'envoi des bases locales y est exclu en prod)."
+    [ "$FIRST_INSTALL" = "1" ] && WITH_DB=1
+else
+    [ "$FIRST_INSTALL" = "1" ] && err "--first-install ne concerne que --env prod (utilisez --with-db en préprod)."
+fi
 # Essai à blanc : mirror --dry-run liste les envois sans rien écrire ; put/mkdir/chmod sont retirés des scripts lftp.
 DRY_FLAG=""
 [ "$DRY_RUN" = "1" ] && DRY_FLAG="--dry-run"
@@ -94,13 +123,24 @@ DB_REL="$(php -r 'require "config.php"; echo substr(DB_PATH, strlen(__DIR__) + 1
 DEPLOY_UPLOADS="$(php -r 'require "config.php"; echo tenant("deploy_uploads") ? 1 : 0;')"
 
 # ── Charger les credentials ───────────────────────────────────────────────────
-ENV_FILE=".env.deploy.$TENANT"
-[ "$PORTAIL" = "1" ] && ENV_FILE=".env.deploy.portail"
-if [ ! -f "$ENV_FILE" ] && [ "$TENANT" = "petit-chalet" ] && [ "$PORTAIL" = "0" ]; then
-    ENV_FILE=".env.deploy"
-fi
+# Fichier d'accès selon l'environnement. Préprod : noms historiques conservés. Prod : suffixe .prod.
+env_file_for() {
+    local env="$1" f
+    if [ "$PORTAIL" = "1" ]; then
+        f=".env.deploy.portail"
+        [ "$env" = "prod" ] && f=".env.deploy.portail.prod"
+    else
+        f=".env.deploy.$TENANT"
+        [ "$env" = "prod" ] && f=".env.deploy.$TENANT.prod"
+        if [ ! -f "$f" ] && [ "$TENANT" = "petit-chalet" ]; then
+            [ "$env" = "prod" ] && f=".env.deploy.prod" || f=".env.deploy"
+        fi
+    fi
+    printf '%s' "$f"
+}
+ENV_FILE="$(env_file_for "$DEPLOY_ENV")"
 if [ ! -f "$ENV_FILE" ]; then
-    err "$ENV_FILE introuvable. Voir l'en-tête de ce script pour le format attendu."
+    err "$ENV_FILE introuvable (environnement $DEPLOY_ENV). Modèle : deploy/env.$DEPLOY_ENV.example — voir DEPLOIEMENT.md."
 fi
 source "$ENV_FILE"
 
@@ -115,18 +155,53 @@ if [ "$PORTAIL" = "1" ]; then
     [ ${#PORTAIL_PASSWORD} -lt 10 ] && err "PORTAIL_PASSWORD manquant ou trop court (10 caractères minimum) dans $ENV_FILE"
 fi
 
+# ── Garde-fous de la production ───────────────────────────────────────────────
+if [ "$DEPLOY_ENV" = "prod" ]; then
+    # 1. La prod ne doit jamais pointer sur le serveur/dossier de la préprod (fichier recopié par erreur).
+    PREPROD_FILE="$(env_file_for preprod)"
+    if [ -f "$PREPROD_FILE" ]; then
+        PREPROD_TARGET="$( (source "$PREPROD_FILE" >/dev/null 2>&1; printf '%s|%s' "$FTP_SERVER" "$FTP_PATH_FRONT") )"
+        [ "$PREPROD_TARGET" = "${FTP_SERVER}|${FTP_PATH_FRONT}" ] && err "$ENV_FILE vise le même serveur et le même dossier que $PREPROD_FILE : la prod doit avoir son propre dossier (FTP_PATH_FRONT)."
+    fi
+    # 2. Code versionné, arbre propre, et déjà passé par la préprod (tag preprod-* sur HEAD).
+    if [ "$DRY_RUN" = "0" ]; then
+        git rev-parse --git-dir >/dev/null 2>&1 || err "Déploiement en prod : dépôt git requis."
+        [ -z "$(git status --porcelain --untracked-files=no)" ] || err "Déploiement en prod : fichiers suivis modifiés et non commités. Commitez d'abord."
+        if [ "$SKIP_PREPROD_CHECK" = "1" ]; then
+            warn "--skip-preprod-check : le contrôle « déjà en préprod » est ignoré (correctif urgent)."
+        elif [ -z "$(git tag --points-at HEAD 'preprod-*')" ]; then
+            err "HEAD ($(git rev-parse --short HEAD)) n'a pas été déployé en préprod (aucun tag preprod-* dessus). Déployez-le d'abord en préprod : scripts/release.sh preprod"
+        fi
+    fi
+fi
+
 # Fichier « accès interdit » déposé dans les dossiers sensibles du serveur.
 DENY_FILE="$(mktemp)"
 printf 'Require all denied\n' > "$DENY_FILE"
 trap 'rm -f "$DENY_FILE"' EXIT
 
+# Marqueur d'environnement lu par includes/app-env.php (.app-env) ; en préprod, robots.txt interdisant l'indexation.
+APPENV_FILE="$(mktemp)"
+printf '%s\n' "$DEPLOY_ENV" > "$APPENV_FILE"
+ROBOTS_FILE=""
+if [ "$DEPLOY_ENV" = "preprod" ]; then
+    ROBOTS_FILE="$(mktemp)"
+    printf 'User-agent: *\nDisallow: /\n' > "$ROBOTS_FILE"
+fi
+trap 'rm -f "$DENY_FILE" "$APPENV_FILE" "$ROBOTS_FILE"' EXIT
+env_marker_cmds() {
+    echo "put $APPENV_FILE -o ${FTP_PATH_FRONT}.app-env"
+    [ -n "$ROBOTS_FILE" ] && echo "put $ROBOTS_FILE -o ${FTP_PATH_FRONT}robots.txt"
+    return 0
+}
+
 echo ""
 echo -e "${BOLD}════════════════════════════════════════════════${NC}"
 [ "$DRY_RUN" = "1" ] && echo -e "${YELLOW}${BOLD}  ESSAI À BLANC (--dry-run) : rien ne sera écrit sur le serveur${NC}"
 if [ "$PORTAIL" = "1" ]; then
-    echo -e "${BOLD}  DÉPLOIEMENT PREPROD — OVH — portail + tous les commerces${NC}"
+    echo -e "${BOLD}  DÉPLOIEMENT ${ENV_LABEL} — OVH — portail + tous les commerces${NC}"
 else
-    echo -e "${BOLD}  DÉPLOIEMENT PREPROD — OVH — commerce : ${TENANT}${NC}"
+    echo -e "${BOLD}  DÉPLOIEMENT ${ENV_LABEL} — OVH — commerce : ${TENANT}${NC}"
 fi
 echo -e "${BOLD}  Front : ${URL_FRONT}${NC}"
 if [ "$WITH_DB" = "1" ]; then
@@ -136,6 +211,16 @@ else
 fi
 echo -e "${BOLD}════════════════════════════════════════════════${NC}"
 echo ""
+
+# Production : confirmation tapée au clavier (pas d'option pour la contourner).
+if [ "$DEPLOY_ENV" = "prod" ] && [ "$DRY_RUN" = "0" ]; then
+    echo -e "${RED}${BOLD}  PRODUCTION : ${URL_FRONT} — commit $(git rev-parse --short HEAD 2>/dev/null)${NC}"
+    [ "$FIRST_INSTALL" = "1" ] && echo -e "${RED}${BOLD}  --first-install : la base du serveur sera ÉCRASÉE${NC}"
+    [ -t 0 ] || err "Confirmation impossible : la prod se déploie depuis un terminal interactif."
+    read -r -p "  Tapez PROD pour confirmer : " confirm_prod
+    [ "$confirm_prod" = "PROD" ] || err "Confirmation refusée : rien n'a été envoyé."
+    echo ""
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DÉPLOYER LE FRONTEND (PHP + SQLite)
@@ -193,6 +278,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob '*.db.bak-*' \
   --exclude-glob .DS_Store \
   --exclude-glob .tenant \
+  --exclude-glob .app-env \
   --exclude-glob .shared-secrets-from \
   --exclude-glob portail/ \
   --exclude-glob accueil/ \
@@ -210,6 +296,7 @@ mirror --reverse --no-perms --no-umask --exclude-glob *.sqlite --exclude-glob *.
 put tenants/.htaccess -o ${FTP_PATH_FRONT}tenants/.htaccess
 $( [ -d "assets/tenants/$TENANT" ] && echo "mirror --reverse --no-perms --no-umask $DRY_FLAG --verbose assets/tenants/$TENANT ${FTP_PATH_FRONT}assets/tenants/$TENANT" )
 put $tenant_file -o ${FTP_PATH_FRONT}.tenant
+$(env_marker_cmds)
 $shared_link_cmd
 mkdir -p -f ${FTP_PATH_FRONT}.secrets
 put $DENY_FILE -o ${FTP_PATH_FRONT}.secrets/.htaccess
@@ -287,6 +374,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob '*.db.bak-*' \
   --exclude-glob .DS_Store \
   --exclude-glob .tenant \
+  --exclude-glob .app-env \
   --exclude-glob uploads/ \
   $local_tenants_exclude \
   $db_exclude \
@@ -299,6 +387,7 @@ put $DENY_FILE -o ${FTP_PATH_FRONT}.secrets/.htaccess
 mkdir -p -f ${FTP_PATH_FRONT}data
 put $DENY_FILE -o ${FTP_PATH_FRONT}data/.htaccess
 put tenants/.htaccess -o ${FTP_PATH_FRONT}tenants/.htaccess
+$(env_marker_cmds)
 
 quit
 " 2>&1 | grep -v "^$" | while read line; do

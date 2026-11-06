@@ -10,10 +10,12 @@ require_once __DIR__ . '/includes/watchdog.php';
 
 $health = wd_health();
 $full = PHP_SAPI === 'cli';
+$health['env'] = app_env();
 
 if (!$full) {
     $health = [
         'ok' => $health['ok'],
+        'env' => app_env(),
         'time' => $health['time'],
         'db' => $health['db'],
         'issues' => array_keys($health['issues']),
