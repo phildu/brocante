@@ -55,6 +55,14 @@ $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/admin/quick-a
       <?php if (!$studioReachable): ?><p class="qa-warn">Adresse locale : un téléphone ne peut pas l'ouvrir. En ligne, le code fonctionne.</p><?php endif; ?>
     </div>
   </section>
+  <?php
+  require_once __DIR__ . '/../includes/app-install-card.php';
+  app_install_card([
+      'title' => 'Encaisser au smartphone : application Vente',
+      'desc' => "L'application Vente est la caisse de la boutique : scanner un billet de retrait, encaisser une vente (espèces ou carte) et valider une commande en ligne. Scannez ce code, connectez-vous, puis « Ajouter à l'écran d'accueil ».",
+      'url' => str_replace('/studio.php', '/vente.php', $studioUrl),
+  ]);
+  ?>
 </div>
 <?php include __DIR__ . '/../includes/quick-add-flow.php'; ?>
 </main>
@@ -74,6 +82,7 @@ $qaOpts = ['action' => '/admin/quick-add-action.php', 'again' => '/admin/quick-a
   box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
 })();
 </script>
+<?php app_install_cards_script(); ?>
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>
 <script src="/assets/price-field.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/price-field.js') ?>"></script>
 <script src="/assets/condition-pricing.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/condition-pricing.js') ?>"></script>

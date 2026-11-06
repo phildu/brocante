@@ -1,6 +1,6 @@
 <?php
 // Entrée d'installation de l'application « Vente » (caisse) : page d'enregistrement sur l'écran d'accueil,
-// puis ouverture du Studio sur l'onglet Caisse (studio.php?tab=pos).
+// puis ouverture de la caisse (caisse.php, distincte du Studio).
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/studio-theme.php';
@@ -12,8 +12,8 @@ $base = tenant_base_path();
 $name = shop_app_name('vente');
 $site = trim((string) get_content()['site_name']) ?: (string) tenant('name');
 $logo = logo_url('vertical');
-$icon = $base . '/vente-icon.php?s=192';
-$caisse = $base . '/studio.php?tab=pos';
+$icon = shop_app_icon_url('vente', 192, $base);
+$caisse = $base . '/caisse.php';
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -27,7 +27,7 @@ $caisse = $base . '/studio.php?tab=pos';
 <meta name="apple-mobile-web-app-title" content="<?= h($name) ?>">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="<?= h($base) ?>/vente-manifest.php">
-<link rel="apple-touch-icon" href="<?= h($base) ?>/vente-icon.php?s=180">
+<link rel="apple-touch-icon" href="<?= h(shop_app_icon_url('vente', 180, $base)) ?>">
 <script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pwa-save.js') ?>" data-auto data-delay="900" data-key="vente" data-name="<?= h($name) ?>" data-icon="<?= h($icon) ?>" data-manifest="<?= h($base) ?>/vente-manifest.php" data-sw="<?= h($base) ?>/pwa-sw.php" data-scope="<?= h($base) ?>/"></script>
 <style>
   :root { --bg: <?= h($theme['bg']) ?>; --ink: #1f1f1f; --accent: <?= h($theme['accent']) ?>; }

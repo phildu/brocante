@@ -31,6 +31,7 @@ function bv_admin_sections(): array
         'fournitures' => ['/admin/buvette/fournitures.php', 'Fournitures'],
         'previsionnel' => ['/admin/buvette/previsionnel.php', 'Prévisionnel & bilan'],
         'courses' => ['/admin/buvette/courses.php', 'Courses'],
+        'caisse' => ['/admin/buvette/caisse.php', 'Caisse'],
         'benevoles' => ['/admin/buvette/benevoles.php', 'Bénévoles & planning'],
         'checklist' => ['/admin/buvette/checklist.php', 'Check-list'],
     ];

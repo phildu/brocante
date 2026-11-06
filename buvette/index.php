@@ -69,6 +69,7 @@ bv_vol_header('La buvette', 'accueil');
 </div>
 
 <div class="bvv-tiles">
+  <a class="bvv-tile" href="/buvette/caisse.php"><span class="ico" aria-hidden="true">💶</span><span class="t">La caisse</span><span class="s">Encaisser les ventes</span></a>
   <a class="bvv-tile" href="/buvette/carte.php"><span class="ico" aria-hidden="true">☕</span><span class="t">La carte</span><span class="s">Prix et allergènes</span></a>
   <a class="bvv-tile" href="/buvette/recettes.php"><span class="ico" aria-hidden="true">🍳</span><span class="t">Les recettes</span><span class="s">Quantités et préparation</span></a>
   <a class="bvv-tile" href="/buvette/planning.php"><span class="ico" aria-hidden="true">🗓️</span><span class="t">Le planning</span><span class="s">Qui fait quoi, quand</span></a>

@@ -32,7 +32,7 @@ function ga_head(string $title, string $actions = '', string $head = ''): void
     $gaActions .= $actions;
     $gaAppName = gallery_app_name($gaGallery, 'gallery_admin');
     $gaAccent = preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($gaGallery['accent'] ?? '')) ? $gaGallery['accent'] : '#b5502e';
-    $gaIcon = '/galerie/icon.php?g=' . rawurlencode($gaSlug);
+    $gaIcon = gallery_app_icon_base($gaGallery, 'gallery_admin');
     $gaManifest = '/galerie/admin-manifest.php?g=' . rawurlencode($gaSlug);
     ?><!DOCTYPE html>
 <html lang="fr">
@@ -46,7 +46,7 @@ function ga_head(string $title, string $actions = '', string $head = ''): void
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="<?= e(app_short_name($gaAppName, 14)) ?>">
 <link rel="apple-touch-icon" href="<?= e($gaIcon) ?>&amp;s=180">
-<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(PORTAIL_ROOT . '/assets/pwa-save.js') ?>" data-auto="0" data-no-prompt="1" data-key="gadmin-<?= e($gaSlug) ?>" data-name="<?= e($gaAppName) ?>" data-icon="<?= e($gaIcon) ?>" data-accent="<?= e($gaAccent) ?>" data-sw="/pwa-sw.php" data-scope="/portail/"></script>
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(PORTAIL_ROOT . '/assets/pwa-save.js') ?>" data-auto="0" data-no-prompt="1" data-key="gadmin-<?= e($gaSlug) ?>" data-name="<?= e($gaAppName) ?>" data-icon="<?= e($gaIcon) ?>&amp;s=192" data-accent="<?= e($gaAccent) ?>" data-sw="/pwa-sw.php" data-scope="/portail/"></script>
 <title><?= e($title) ?> — <?= e($gaAppName) ?></title>
 <link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">

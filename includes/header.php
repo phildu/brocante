@@ -76,9 +76,9 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="<?= h($shopAppName) ?>">
-<link rel="apple-touch-icon" href="<?= h($pwaBase) ?>/pwa-icon.php?s=180">
-<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto="0" data-no-prompt="1" data-name="<?= h($shopAppName) ?>" data-icon="<?= h($pwaBase) ?>/pwa-icon.php?s=192" data-done-key="pwa_done" data-snooze-key="pwa_snooze"></script>
-<script src="/assets/pwa-install.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-install.js') ?>" defer data-sw="<?= h($pwaBase) ?>/pwa-sw.php" data-scope="<?= h($pwaBase . '/') ?>" data-name="<?= h($shopAppName) ?>" data-icon="<?= h($pwaBase) ?>/pwa-icon.php?s=192"></script>
+<link rel="apple-touch-icon" href="<?= h(shop_app_icon_url('shop', 180, $pwaBase)) ?>">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto="0" data-no-prompt="1" data-name="<?= h($shopAppName) ?>" data-icon="<?= h(shop_app_icon_url('shop', 192, $pwaBase)) ?>" data-done-key="pwa_done" data-snooze-key="pwa_snooze"></script>
+<script src="/assets/pwa-install.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-install.js') ?>" defer data-sw="<?= h($pwaBase) ?>/pwa-sw.php" data-scope="<?= h($pwaBase . '/') ?>" data-name="<?= h($shopAppName) ?>" data-icon="<?= h(shop_app_icon_url('shop', 192, $pwaBase)) ?>"></script>
 <?php endif; ?>
 <link rel="stylesheet" href="/assets/share.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.css') ?>">
 <script src="/assets/share.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/share.js') ?>" defer></script>

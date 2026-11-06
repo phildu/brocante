@@ -11,10 +11,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     shop_setting_set('pwa_prompt', $prompt ? '1' : '0');
     foreach (['shop', 'article', 'vente'] as $app) {
         shop_setting_set('app_name_' . $app, app_name_clean((string) ($_POST['app_name_' . $app] ?? ''), 40));
+        shop_setting_set('app_icon_' . $app, app_icon_mode_clean((string) ($_POST['app_icon_' . $app] ?? ''), $app));
     }
     flash_set(($prompt
         ? 'La boutique propose maintenant aux visiteurs de l\'installer sur leur écran d\'accueil.'
-        : 'L\'incitation à installer la boutique est désactivée.') . ' Noms des applications enregistrés.');
+        : 'L\'incitation à installer la boutique est désactivée.') . ' Noms et icônes des applications enregistrés.');
 }
 header('Location: /admin/index.php#pwa-settings');
 exit;

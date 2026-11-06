@@ -123,6 +123,51 @@ CREATE TABLE IF NOT EXISTS bv_tasks (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+-- Caisse : une vente = un encaissement (espèces ou carte), ses lignes gardent le nom et le prix du jour.
+CREATE TABLE IF NOT EXISTS bv_sales (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES bv_events(id) ON DELETE CASCADE,
+  method TEXT NOT NULL DEFAULT 'cash',          -- cash | card (terminal externe) | stripe (QR de paiement)
+  status TEXT NOT NULL DEFAULT 'paid',          -- paid | pending (QR en attente de paiement) | canceled (QR expiré ou annulé)
+  stripe_session_id TEXT NOT NULL DEFAULT '',
+  client_uid TEXT NOT NULL DEFAULT '',          -- identifiant posé par le téléphone : un envoi répété (synchro hors ligne) ne crée pas deux ventes
+  note TEXT NOT NULL DEFAULT '',                -- ex. « saisi hors ligne »
+  total_cents INTEGER NOT NULL DEFAULT 0,
+  given_cents INTEGER,                          -- espèces remises par le client (pour le rendu de monnaie)
+  by_name TEXT NOT NULL DEFAULT '',
+  voided_at TEXT,                               -- NULL = vente valable
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bv_sale_lines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id INTEGER NOT NULL REFERENCES bv_sales(id) ON DELETE CASCADE,
+  item_id INTEGER REFERENCES bv_items(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  qty INTEGER NOT NULL,
+  unit_cents INTEGER NOT NULL
+);
+
+-- Gratuités des bénévoles (bar, restauration) : une ligne par article offert, scanné sur le badge QR du bénévole.
+CREATE TABLE IF NOT EXISTS bv_gifts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES bv_events(id) ON DELETE CASCADE,
+  volunteer_id INTEGER NOT NULL REFERENCES bv_volunteers(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,                           -- bar | food
+  item_id INTEGER REFERENCES bv_items(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  unit_cents INTEGER NOT NULL DEFAULT 0,        -- valeur offerte (prix de la carte ce jour-là)
+  by_name TEXT NOT NULL DEFAULT '',             -- qui a servi
+  client_uid TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  voided_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_bv_gifts_event ON bv_gifts(event_id, volunteer_id);
+
+CREATE INDEX IF NOT EXISTS idx_bv_sales_event ON bv_sales(event_id);
+CREATE INDEX IF NOT EXISTS idx_bv_sale_lines_sale ON bv_sale_lines(sale_id);
+
 CREATE TABLE IF NOT EXISTS bv_settings (
   k TEXT PRIMARY KEY,
   v TEXT NOT NULL DEFAULT ''
@@ -148,6 +193,15 @@ function bv_boot(): void
         date_default_timezone_set('Europe/Paris');
     }
     db()->exec(BV_SCHEMA);
+    // Bases créées avant le paiement par QR : on ajoute les colonnes manquantes de la caisse.
+    foreach (['bv_sales' => ['status' => "'paid'", 'stripe_session_id' => "''", 'client_uid' => "''", 'note' => "''"], 'bv_gifts' => ['client_uid' => "''", 'note' => "''"]] as $table => $wanted) {
+        $cols = array_column(db()->query("PRAGMA table_info($table)")->fetchAll(), 'name');
+        foreach ($wanted as $col => $default) {
+            if ($cols && !in_array($col, $cols, true)) db()->exec("ALTER TABLE $table ADD COLUMN $col TEXT NOT NULL DEFAULT $default");
+        }
+    }
+    db()->exec('CREATE INDEX IF NOT EXISTS idx_bv_sales_uid ON bv_sales(client_uid)');
+    db()->exec('CREATE INDEX IF NOT EXISTS idx_bv_gifts_uid ON bv_gifts(client_uid)');
 }
 
 /* ====================================================================== */

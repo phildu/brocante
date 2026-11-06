@@ -58,7 +58,7 @@ if (isset($_GET['manifest'])) {                // manifeste : nom personnalisabl
     }
     $name = gallery_app_name($gallery, 'gallery_visitor');
     $accent = preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($gallery['accent'] ?? '')) ? $gallery['accent'] : '#2f6b4f';
-    $icon = '/galerie/icon.php?g=' . rawurlencode($slug);
+    $icon = gallery_app_icon_base($gallery, 'gallery_visitor');
     echo json_encode([
         'id' => app_manifest_id('gallery_visitor', '', $slug),
         'name' => $name,
@@ -118,8 +118,8 @@ $cfg = ['g' => $slug, 'api' => '/galerie/visiteur.php', 'key' => 'gl_t_' . $slug
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="<?= $h(app_short_name($visitorAppName, 14)) ?>">
-<link rel="apple-touch-icon" href="/galerie/icon.php?g=<?= $h($slug) ?>&amp;s=180">
-<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto data-delay="2200" data-key="gl-visiteur-<?= $h($slug) ?>" data-name="<?= $h($visitorAppName) ?>" data-icon="/galerie/icon.php?g=<?= $h($slug) ?>" data-accent="<?= $h($accent) ?>" data-sw="/galerie/pwa-sw.php" data-scope="/galerie/"></script>
+<link rel="apple-touch-icon" href="<?= $h(gallery_app_icon_base($gallery, 'gallery_visitor')) ?>&amp;s=180">
+<script src="/assets/pwa-save.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/pwa-save.js') ?>" data-auto data-delay="2200" data-key="gl-visiteur-<?= $h($slug) ?>" data-name="<?= $h($visitorAppName) ?>" data-icon="<?= $h(gallery_app_icon_base($gallery, 'gallery_visitor')) ?>&amp;s=192" data-accent="<?= $h($accent) ?>" data-sw="/galerie/pwa-sw.php" data-scope="/galerie/"></script>
 <title><?= $h(($loyalty ? $s['program_name'] . ' — ' : '') . $visitorAppName) ?></title>
 <link rel="stylesheet" href="/assets/oauth.css">
 <style>

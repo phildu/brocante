@@ -69,9 +69,10 @@
   }
 
   // ── Onglets ───────────────────────────────────────────────────────────────
-  var TABS = { single: 'tab-single', batch: 'tab-batch', pos: 'tab-pos', pieces: 'tab-list' };
+  var TABS = { single: 'tab-single', batch: 'tab-batch', pieces: 'tab-list' };
   var currentTab = 'single';
   function go(name) {
+    if (name === 'pos') { location.replace('caisse.php'); return; }   // l'ancien onglet Caisse est devenu l'application Vente
     if (!TABS[name]) name = 'single';
     currentTab = name;
     Object.keys(TABS).forEach(function (k) { $(TABS[k]).hidden = k !== name; });
@@ -80,9 +81,8 @@
     });
     if (name !== 'batch') stopCamera(); else resumeCameraIfShooting();
     if (name === 'pieces') { loadList(); if (window.studioRunVariants) window.studioRunVariants(); }
-    // L'onglet Caisse se reconnaît aussi à ?tab=pos : l'application installée « Vente » démarre ainsi.
     var nextUrl = new URL(location.href);
-    if (name === 'pos') nextUrl.searchParams.set('tab', 'pos'); else nextUrl.searchParams.delete('tab');
+    nextUrl.searchParams.delete('tab');
     nextUrl.hash = name === 'single' ? '' : name;
     var nextState = nextUrl.pathname + nextUrl.search + nextUrl.hash;
     if (nextState !== location.pathname + location.search + location.hash) history.replaceState(null, '', nextState);

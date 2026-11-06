@@ -15,7 +15,7 @@ Les quatre applications visées s'y rattachent :
 | 1 | **Studio photo/vidéo** (shooting) | vendeur, photographe | `admin/shooting-assistant.php`, `studio.php`, `admin/shop-shooting.php`, `connecteur-shooting.php` ; envois par `admin/shooting-assistant-action.php` et `admin/quick-add-action.php` | `article` | `fr.brocs.article.<enseigne>` |
 | 2 | **Client / visiteur** (fidélité, suivi d'achat, bourse d'échange) | clients, visiteurs | `visiteur.php` (plugin « Espace visiteur & fidélité »), `galerie/visiteur.php`, `bourse.php`, `suivi.php`, `compte.php` | `shop` + `gallery_visitor` | `fr.brocs.boutique.<enseigne>`, `fr.brocs.galerie.visiteur.<galerie>` |
 | 3 | **Gestion de vide-grenier** (scan QR, exposants, présence) | organisateur | `galerie/admin.php` → portail en mode restreint (`portail/galerie-*.php`), scan et fidélité dans `includes/gallery-loyalty.php`, `includes/gallery-locate.php` | `gallery_admin` | `fr.brocs.galerie.admin.<galerie>` |
-| 4 | **Caisse** (vente et buvette) | vendeur, buvette | `vente.php` → `studio.php?tab=pos`, `includes/pos.php`, `admin/pos-action.php` ; buvette : module `buvette/` sur la branche `main` (voir `BUVETTE.md`) | `vente` | `fr.brocs.vente.<enseigne>` |
+| 4 | **Caisse** (vente et buvette) | vendeur, buvette | `vente.php` → `caisse.php`, `includes/pos.php`, `admin/pos-action.php` ; buvette : module `buvette/` sur la branche `main` (voir `BUVETTE.md`) | `vente` | `fr.brocs.vente.<enseigne>` |
 
 Les applications 2 et 3 sont « déployées à l'identique » d'une galerie à l'autre : la galerie est un
 paramètre (`?g=<slug>`), pas un code différent. Le même principe vaut pour les boutiques

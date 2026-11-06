@@ -151,6 +151,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'apps' => gallery_apps_normalize([
                     'admin' => (string) ($_POST['app_name_admin'] ?? ''),
                     'visitor' => (string) ($_POST['app_name_visitor'] ?? ''),
+                    'caisse' => (string) ($_POST['app_name_caisse'] ?? ''),
+                ]),
+                'app_icons' => gallery_app_icons_normalize([
+                    'admin' => (string) ($_POST['app_icon_admin'] ?? ''),
+                    'visitor' => (string) ($_POST['app_icon_visitor'] ?? ''),
+                    'caisse' => (string) ($_POST['app_icon_caisse'] ?? ''),
                 ]),
             ]);
             $ok = gallery_save($gallery);
@@ -701,16 +707,22 @@ portail_page_start([
       <label class="f">Slogan<input type="text" name="tagline" maxlength="160" value="<?= e($g['tagline']) ?>"></label>
       <label class="f">Présentation (facultative)<textarea name="description" maxlength="1200"><?= e($g['description']) ?></textarea></label>
 
-      <h2 style="margin-top:8px;">Noms des applications</h2>
-      <p class="meta">Le nom affiché sous l'icône quand la galerie est installée sur un téléphone. Un champ vide garde le nom par défaut ; renommer ne casse pas l'installation.</p>
-      <div class="row">
-        <label class="f">Administration — organisateur et exposants
-          <input type="text" name="app_name_admin" maxlength="40" value="<?= e($g['apps']['admin'] ?? '') ?>" placeholder="<?= e('Admin ' . $g['name']) ?>">
-        </label>
-        <label class="f">Espace client — visiteurs
-          <input type="text" name="app_name_visitor" maxlength="40" value="<?= e($g['apps']['visitor'] ?? '') ?>" placeholder="<?= e($g['name']) ?>">
-        </label>
-      </div>
+      <h2 style="margin-top:8px;" id="apps-galerie">Noms et icônes des applications</h2>
+      <p class="meta">Le nom affiché sous l'icône quand l'application est installée sur un téléphone, et son icône : une <strong>icône de base</strong> (un pictogramme sur la couleur de la galerie) ou le <strong>logo de la galerie</strong> (sans logo, l'initiale du nom). Un nom vide garde le nom par défaut ; renommer ou changer l'icône ne casse pas l'installation.</p>
+      <?php
+      foreach ([
+          'admin' => ['gallery_admin', 'Administration — organisateur et exposants'],
+          'visitor' => ['gallery_visitor', 'Espace client — visiteurs'],
+          'caisse' => ['gallery_caisse', 'Caisse — buvette (extension Buvette)'],
+      ] as $appKey => [$appId, $appLabel]) {
+          echo app_icon_picker_html([
+              'label' => $appLabel, 'name_field' => 'app_name_' . $appKey, 'name_value' => (string) ($g['apps'][$appKey] ?? ''),
+              'name_placeholder' => app_default_name($appId, (string) $g['name']), 'icon_field' => 'app_icon_' . $appKey,
+              'mode' => gallery_app_icon_mode($g, $appId),
+              'preview' => static fn (string $m): string => gallery_app_icon_url($g, $appId, 120, $m),
+          ]);
+      }
+      ?>
 
       <h2 style="margin-top:8px;"><?= e(ucfirst(gt_word($g, 'members'))) ?> de ce serveur</h2>
       <p class="meta">Cochez ceux qui font partie de la galerie ; ★ les met en avant dans l'annuaire. Seules les pièces visibles et en stock sont présentées.</p>
