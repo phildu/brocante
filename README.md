@@ -980,7 +980,7 @@ aussi « modules ». Pour ne pas les nommer de trois façons, le portail règle 
   remplace les jetons de toute la page ; ailleurs (messages JSON, e-mails, libellés), on appelle `ext_t('…')`.
   Test : `php scripts/test-vocabulary.php`.
 
-## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule (organisateur d'un vide-grenier)
+## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule, Annulation & remboursements (organisateur d'un vide-grenier)
 
 Les anciennes « options » d'une galerie (carte interactive, espace organisateur, file d'attente : `includes/gallery-modules.php`) sont des
 **extensions de galerie** : l'organisateur les active depuis l'onglet « Extensions » de son espace (essai gratuit, puis abonnement Stripe ou
@@ -1003,6 +1003,10 @@ public (visiteurs, exposants, bénévoles du point et des tournées) passe par `
 (`cp_enter_gallery()`, adresses réécrites par `cp_url_map()`), données dans la base de la galerie (tables `cp_*`), compteur des bénévoles sur
 `/galerie/<galerie>/comptage/` (code partagé propre à la galerie). Le service worker et le manifeste de l'application sont relatifs à leur
 dossier : ils servent aussi bien `/comptage/` qu'une galerie, avec un cache par galerie.
+
+**Annulation & remboursements** (`annulation`, voir `ANNULATION.md`) : annuler le vide-grenier et rembourser les exposants en totalité ou en partie.
+Pas de base SQL : elle s'appuie sur l'événement et le registre des demandes de la galerie (`includes/gallery-cancellation.php`,
+`portail/galerie-annulation.php`). L'annulation passe par l'extension ; le suivi d'un événement déjà annulé reste ouvert si elle s'arrête.
 
 ## Retours testeurs : widget « Un retour ? », triage et relances
 
