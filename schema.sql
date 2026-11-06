@@ -339,3 +339,8 @@ CREATE TABLE IF NOT EXISTS import_sources (
 -- idx_products_source_ext. Elles sont absentes du CREATE TABLE products plus haut :
 -- connectors_ensure_schema() les ajoute par ALTER TABLE (base neuve comme existante).
 
+-- Module Impression (commande d'affiches, cartes de visite, flyers, plans et
+-- goodies auprès de fournisseurs, par API) : ses tables (préfixe pr_) sont
+-- créées automatiquement au premier accès par includes/impression.php
+-- (pr_boot, constante PR_SCHEMA) — rien à lancer ici, ni côté serveur ni
+-- après un déploiement.
