@@ -102,7 +102,8 @@ foreach (['puces', 'marche-de-noel'] as $t) {
     check("…avec essai gratuit ($t)", [gm_start_trial($other, 'annulation'), gcn_available($other)], [null, true]);
 }
 $prod = gallery_normalize('mp-c', ['name' => 'Marché producteurs', 'type' => 'marche-producteurs', 'members' => []]);
-check('non proposée au marché de producteurs (non demandé)', gm_state($prod, 'annulation')['mode'], 'off');
+check('proposée aux marchés de producteurs (option payante)', gm_state($prod, 'annulation')['mode'], 'option');
+check('…avec essai gratuit (marche-producteurs)', [gm_start_trial($prod, 'annulation'), gcn_available($prod)], [null, true]);
 check('inactive tant qu\'elle n\'est ni essayée ni souscrite', gcn_available($vg), false);
 check('essai gratuit démarré', gm_start_trial($vg, 'annulation'), null);
 check('active pendant l\'essai', gcn_available($vg), true);
