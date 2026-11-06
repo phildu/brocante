@@ -12,10 +12,17 @@
 //   pct          pourcentage appliqué au tarif enregistré
 //   amount_cents montant calculé, price_cents tarif de référence, cause, at, paid_at, by, note, notified
 // Une demande encore en attente n'a rien payé : elle est prévenue de l'annulation sans remboursement à effectuer.
+//
+// Extension de galerie « Annulation & remboursements » (clé « annulation », includes/gallery-modules.php, page portail/galerie-annulation.php) :
+// elle donne accès à l'annulation (gcn_cancel), à l'aperçu des remboursements avant de confirmer (gcn_preview), à l'ajustement du montant
+// exposant par exposant (gcn_set_amount : remboursement total, partiel ou nul) et à l'export CSV des virements (gcn_csv). Le suivi d'un événement
+// DÉJÀ annulé (registre, alerte, réactivation) reste possible même si l'extension s'arrête : les exposants attendent leur argent.
 
 require_once __DIR__ . '/gallery-admin.php';
 require_once __DIR__ . '/gallery-booking.php';
 require_once __DIR__ . '/gallery-event.php';
+
+const GCN_MAX_REFUND_CENTS = 1000000;
 
 const GCN_REFUND_STATUSES = [
     'due' => 'À rembourser',
@@ -127,7 +134,56 @@ function gcn_row_refund(array $row): array
         'by' => (string) ($r['by'] ?? ''),
         'note' => (string) ($r['note'] ?? ''),
         'notified' => (int) ($r['notified'] ?? 0),
+        'adjusted' => !empty($r['adjusted']),
     ];
+}
+
+/** L'extension « Annulation & remboursements » est-elle active pour cette galerie ? (elle conditionne l'annulation, pas le suivi). */
+function gcn_available(array $gallery): bool
+{
+    return gm_enabled($gallery, 'annulation');
+}
+
+/** Cause d'annulation valide (« organisateur » par défaut). */
+function gcn_cause(array $in): string
+{
+    return isset(GE_CANCEL_CAUSES[(string) ($in['cause'] ?? '')]) ? (string) $in['cause'] : 'organisateur';
+}
+
+/**
+ * Pourcentage du tarif remboursé selon le choix de l'organisateur : « rules » (conditions de vente, selon la cause), « full » (100 %),
+ * « partial » (pourcentage saisi) ou « none » (0 %). Partagé par l'aperçu et l'annulation pour qu'ils ne puissent pas diverger.
+ */
+function gcn_pct_for(array $rules, array $in): int
+{
+    $mode = in_array($in['refund_mode'] ?? 'rules', ['rules', 'full', 'none', 'partial'], true) ? (string) ($in['refund_mode'] ?? 'rules') : 'rules';
+    return match ($mode) {
+        'full' => 100,
+        'none' => 0,
+        'partial' => max(0, min(100, (int) ($in['refund_pct'] ?? $rules['partial_pct']))),
+        default => gcn_cause_pct($rules, gcn_cause($in)),
+    };
+}
+
+/**
+ * Ce que donnerait l'annulation avec ces réglages, sans rien écrire : pourcentage retenu, montant par exposant et total.
+ * Seules les demandes attribuées sont remboursées ; une demande en attente n'a rien payé.
+ */
+function gcn_preview(array $gallery, array $in = []): array
+{
+    $rules = gcn_rules_from_gallery($gallery);
+    $pct = gcn_pct_for($rules, $in);
+    $rows = [];
+    $total = 0;
+    foreach (gcn_rows($gallery) as $row) {
+        $status = (string) ($row['status'] ?? '');
+        $price = max(0, (int) ($row['price_cents'] ?? 0));
+        $amount = $status === 'taken' ? gcn_refund_amount($price, $pct) : 0;
+        $total += $amount;
+        $rows[] = ['slot_id' => (string) $row['slot_id'], 'slot' => (string) ($row['slot'] ?? ''), 'name' => (string) ($row['name'] ?? ''),
+            'status' => $status, 'price_cents' => $price, 'amount_cents' => $amount];
+    }
+    return ['pct' => $pct, 'rows' => $rows, 'total_cents' => $total, 'rules' => $rules];
 }
 
 /** Demandes rattachées à l'événement (places ev1…evN), avec leur remboursement normalisé. */
@@ -184,14 +240,8 @@ function gcn_cancel(array $gallery, array $in, string $actor = ''): array
     if (!$event) return ['Événement introuvable.', []];
     if (ge_cancelled($event)) return ["L'événement est déjà annulé.", gcn_summary($gallery)];
     $rules = gcn_rules_from_gallery($gallery);
-    $cause = isset(GE_CANCEL_CAUSES[(string) ($in['cause'] ?? '')]) ? (string) $in['cause'] : 'organisateur';
-    $mode = in_array($in['refund_mode'] ?? 'rules', ['rules', 'full', 'none', 'partial'], true) ? (string) $in['refund_mode'] : 'rules';
-    $pct = match ($mode) {
-        'full' => 100,
-        'none' => 0,
-        'partial' => max(0, min(100, (int) ($in['refund_pct'] ?? $rules['partial_pct']))),
-        default => gcn_cause_pct($rules, $cause),
-    };
+    $cause = gcn_cause($in);
+    $pct = gcn_pct_for($rules, $in);
     $cancel = [
         'at' => time(),
         'reason' => mb_substr(trim((string) ($in['reason'] ?? '')), 0, 400),
@@ -279,6 +329,52 @@ function gcn_mark_refund(string $slug, string $slotId, string $status, string $a
     return null;
 }
 
+/**
+ * Ajuste le montant à rembourser à UN exposant (remboursement partiel, geste commercial, frais de dossier retenus, ou rien du tout).
+ * Un montant nul passe la ligne en « Sans remboursement ». Refusé : montant supérieur au tarif payé, demande en attente (rien payé),
+ * ligne déjà remboursée (la repasser d'abord en « À rembourser »). L'exposant est à reprévenir : son alerte est remise à zéro.
+ */
+function gcn_set_amount(string $slug, string $slotId, int $amountCents, string $actor = '', string $note = ''): ?string
+{
+    $gallery = gallery_slug_valid($slug) ? gallery_load($slug) : null;
+    if (!$gallery || !ge_cancelled(gallery_event($gallery))) return "Aucun événement annulé à mettre à jour pour cette galerie.";
+    if ($amountCents < 0 || $amountCents > GCN_MAX_REFUND_CENTS) return 'Montant invalide : saisissez un montant en euros, de 0 à 10 000.';
+    $error = null;
+    $found = gb_update($slug, static function (array &$d) use ($slotId, $amountCents, $actor, $note, &$error): bool {
+        $e = $d['slots'][$slotId] ?? null;
+        if (!is_array($e) || !is_array($e['refund'] ?? null)) return false;
+        if (($e['status'] ?? '') !== 'taken') {
+            $error = "Cette demande était en attente : elle n'a rien payé, il n'y a rien à rembourser.";
+            return false;
+        }
+        if (($e['refund']['status'] ?? '') === 'paid') {
+            $error = 'Ce remboursement est déjà versé : repassez d’abord la ligne en « À rembourser » pour le modifier.';
+            return false;
+        }
+        $price = isset($e['price_cents']) && $e['price_cents'] !== null ? max(0, (int) $e['price_cents']) : 0;
+        if ($price > 0 && $amountCents > $price) {
+            $error = 'Le remboursement ne peut pas dépasser le tarif payé (' . gb_eur($price) . ').';
+            return false;
+        }
+        $r = $e['refund'];
+        $r['price_cents'] = $price;
+        $r['amount_cents'] = $amountCents;
+        $r['pct'] = $price > 0 ? max(0, min(100, (int) round($amountCents * 100 / $price))) : 0;
+        $r['status'] = $amountCents > 0 ? 'due' : 'waived';
+        $r['adjusted'] = true;
+        $r['paid_at'] = 0;
+        $r['notified'] = 0;
+        $r['by'] = mb_substr(trim($actor), 0, 120);
+        if (trim($note) !== '') $r['note'] = mb_substr(trim($note), 0, 300);
+        $d['slots'][$slotId]['refund'] = $r;
+        return true;
+    });
+    if ($error !== null) return $error;
+    if (!$found) return 'Aucune ligne de remboursement pour cet emplacement.';
+    gb_audit($slug, 'refund_adjust', ['slot' => $slotId, 'amount' => $amountCents, 'by' => $actor, 'note' => $note]);
+    return null;
+}
+
 /** Texte de l'e-mail d'alerte envoyé à un exposant. */
 function gcn_notice_body(array $gallery, array $event, array $row, array $cancel): string
 {
@@ -330,9 +426,11 @@ function gcn_notice_body(array $gallery, array $event, array $row, array $cancel
 
 /**
  * Envoie l'alerte d'annulation aux exposants de l'événement (demandes attribuées et en attente), puis le récapitulatif
- * aux administrateurs. $force renvoie l'alerte à tous, même à ceux déjà prévenus. -> nombre d'exposants prévenus.
+ * aux administrateurs. $force renvoie l'alerte à tous, même à ceux déjà prévenus. $only (identifiant d'emplacement) limite l'envoi à UN
+ * exposant, par exemple après l'ajustement de son montant : ni récapitulatif aux administrateurs, ni date d'alerte de l'événement.
+ * -> nombre d'exposants prévenus.
  */
-function gcn_notify(array $gallery, bool $force = false): int
+function gcn_notify(array $gallery, bool $force = false, ?string $only = null): int
 {
     $event = gallery_event($gallery);
     if (!$event || !ge_cancelled($event)) return 0;
@@ -340,6 +438,7 @@ function gcn_notify(array $gallery, bool $force = false): int
     $sent = [];
     foreach (gcn_rows($gallery) as $row) {
         if (!in_array((string) ($row['status'] ?? ''), ['taken', 'pending'], true)) continue;
+        if ($only !== null && (string) $row['slot_id'] !== $only) continue;
         $email = trim((string) ($row['email'] ?? ''));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) continue;
         if (!$force && (int) ($row['refund']['notified'] ?? 0) > 0) continue;
@@ -360,11 +459,15 @@ function gcn_notify(array $gallery, bool $force = false): int
         }
     }
     $count = $sent ? count($sent) : 0;
+    if ($only !== null) {
+        if ($count > 0) gb_audit((string) $gallery['slug'], 'event_notice', ['sent' => $count, 'slot' => $only, 'by' => (string) ($cancel['by'] ?? '')]);
+        return $count;
+    }
     $gallery['event']['cancelled']['notified'] = time();
     gallery_save($gallery);
     if ($count > 0) gb_audit((string) $gallery['slug'], 'event_notice', ['sent' => $count, 'by' => (string) ($cancel['by'] ?? '')]);
 
-    $link = ga_public_url('/portail/galerie-evenement.php?g=' . rawurlencode((string) $gallery['slug']));
+    $link = ga_public_url('/portail/galerie-annulation.php?g=' . rawurlencode((string) $gallery['slug']));
     foreach ((array) ($gallery['admins'] ?? []) as $admin) {
         $to = trim((string) ($admin['email'] ?? ''));
         if (!filter_var($to, FILTER_VALIDATE_EMAIL)) continue;
@@ -375,4 +478,39 @@ function gcn_notify(array $gallery, bool $force = false): int
             . "Suivez les remboursements ligne par ligne : $link\n\n{$gallery['name']}\n");
     }
     return $count;
+}
+
+/** Cellule CSV : une valeur qui commence par = + - @ serait exécutée comme formule par un tableur, on la neutralise. */
+function gcn_csv_cell(mixed $v): string
+{
+    $v = (string) $v;
+    return preg_match('/^[=+\-@\t\r]/', $v) && !is_numeric(str_replace(',', '.', $v)) ? "'" . $v : $v;
+}
+
+/**
+ * Registre des remboursements en CSV (séparateur « ; », UTF-8 avec BOM : s'ouvre directement dans Excel), pour préparer les virements.
+ * $statuses limite aux états voulus (['due'] = seulement ce qui reste à rembourser) ; vide = toutes les lignes.
+ */
+function gcn_csv(array $gallery, array $statuses = []): string
+{
+    $event = gallery_event($gallery);
+    $cancel = $event ? (array) ($event['cancelled'] ?? []) : [];
+    $euro = static fn (int $c): string => number_format($c / 100, 2, ',', '');
+    $date = static fn (int $t): string => $t > 0 ? date('d/m/Y', $t) : '';
+    $fh = fopen('php://temp', 'w+');
+    fwrite($fh, "\xEF\xBB\xBF");
+    fputcsv($fh, ['Emplacement', 'Exposant', 'E-mail', 'Téléphone', 'Demande', 'Tarif payé (€)', 'Part remboursée (%)', 'Montant à rembourser (€)',
+        'État', 'Montant ajusté', 'Remboursé le', 'Par', 'Référence / note', 'Alerte envoyée le', 'Moyen de remboursement', 'Délai (jours)'], ';', '"', '');
+    foreach (gcn_rows($gallery) as $row) {
+        $ref = $row['refund'];
+        if ($statuses && !in_array($ref['status'], $statuses, true)) continue;
+        $taken = ($row['status'] ?? '') === 'taken';
+        $line = [(string) ($row['slot'] ?? ''), (string) ($row['name'] ?? ''), (string) ($row['email'] ?? ''), (string) ($row['phone'] ?? ''),
+            $taken ? 'Attribuée' : 'En attente', $euro((int) $ref['price_cents']), (string) $ref['pct'], $euro((int) $ref['amount_cents']),
+            $taken ? gcn_refund_label($ref) : 'Rien à payer', $ref['adjusted'] ? 'oui' : '', $date((int) $ref['paid_at']), (string) $ref['by'],
+            (string) $ref['note'], $date((int) $ref['notified']), (string) ($cancel['refund_method'] ?? ''), (string) ($cancel['refund_delay_days'] ?? '')];
+        fputcsv($fh, array_map('gcn_csv_cell', $line), ';', '"', '');
+    }
+    rewind($fh);
+    return (string) stream_get_contents($fh);
 }

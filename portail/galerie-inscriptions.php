@@ -65,6 +65,7 @@ if (($_GET['json'] ?? '') === '1') {
 
 $registre = '/portail/galerie-registre.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
 $evenement = '/portail/galerie-evenement.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
+$annulation = '/portail/galerie-annulation.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));   // extension « Annulation & remboursements » : suivi des remboursements
 $exposants = '/portail/galerie-exposants.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
 $hid = '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">' . ($limited ? '' : '<input type="hidden" name="g" value="' . e($gaSlug) . '">')
     . '<input type="hidden" name="etat" value="' . e($filter) . '">';
@@ -74,7 +75,7 @@ ga_head('Inscriptions');
     <section class="gcard" style="border-color:#e0b4b4;background:#fff7f6;">
       <h2 style="margin:0;">Événement annulé</h2>
       <p class="meta" style="margin:4px 0 0;"><?= e(ge_cancel_reason($event)) ?> · Les demandes sont gelées : plus d’acceptation ni de refus. Le remboursement de chaque exposant se suit dans le registre.</p>
-      <p class="row" style="margin:8px 0 0;"><a class="btn btn-primary" href="<?= e($evenement) ?>">Registre des remboursements</a></p>
+      <p class="row" style="margin:8px 0 0;"><a class="btn btn-primary" href="<?= e($annulation) ?>">Registre des remboursements</a></p>
     </section>
     <?php endif; ?>
 
@@ -128,7 +129,7 @@ ga_head('Inscriptions');
           <td><div class="row" style="gap:4px;">
             <a class="btn small" href="/portail/galerie-exposant.php<?= $limited ? '?' : '?g=' . e(urlencode($gaSlug)) . '&amp;' ?>slot=<?= e(urlencode($r['slot_id'])) ?>">Fiche</a>
             <?php if ($cancelled): ?>
-              <a class="btn small" href="<?= e($evenement) ?>">Remboursement</a>
+              <a class="btn small" href="<?= e($annulation) ?>#registre">Remboursement</a>
             <?php else: ?>
             <form method="post" class="row" style="gap:4px;"><?= $hid ?><input type="hidden" name="slot" value="<?= e($r['slot_id']) ?>">
             <?php if ($r['status'] === 'pending' && empty($r['expired'])): ?>

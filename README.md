@@ -982,7 +982,7 @@ aussi « modules ». Pour ne pas les nommer de trois façons, le portail règle 
   remplace les jetons de toute la page ; ailleurs (messages JSON, e-mails, libellés), on appelle `ext_t('…')`.
   Test : `php scripts/test-vocabulary.php`.
 
-## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule (organisateur d'un vide-grenier)
+## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule, Annulation & remboursements (organisateur d'un vide-grenier)
 
 Les anciennes « options » d'une galerie (carte interactive, espace organisateur, file d'attente : `includes/gallery-modules.php`) sont des
 **extensions de galerie** : l'organisateur les active depuis l'onglet « Extensions » de son espace (essai gratuit, puis abonnement Stripe ou
@@ -1005,6 +1005,29 @@ public (visiteurs, exposants, bénévoles du point et des tournées) passe par `
 (`cp_enter_gallery()`, adresses réécrites par `cp_url_map()`), données dans la base de la galerie (tables `cp_*`), compteur des bénévoles sur
 `/galerie/<galerie>/comptage/` (code partagé propre à la galerie). Le service worker et le manifeste de l'application sont relatifs à leur
 dossier : ils servent aussi bien `/comptage/` qu'une galerie, avec un cache par galerie.
+
+**Annulation & remboursements** (`annulation`, voir `ANNULATION.md`, proposée aux vide-greniers, marchés aux puces, marchés de Noël et marchés de producteurs) : annuler l'événement et rembourser les exposants en totalité ou en partie.
+Pas de base SQL : elle s'appuie sur l'événement et le registre des demandes de la galerie (`includes/gallery-cancellation.php`,
+`portail/galerie-annulation.php`). L'annulation passe par l'extension ; le suivi d'un événement déjà annulé reste ouvert si elle s'arrête.
+
+## Horaires et alerte de fermeture d'une galerie
+
+Fonctionnalité « Horaires d'ouverture, fermetures exceptionnelles et alerte aux visiteurs » des types de galerie (`GT_FEATURES['horaires']`, activée par
+défaut ; à couper par type dans le portail → *Types de galerie*). Bouton **Horaires** dans l'espace de la galerie (`portail/galerie-horaires.php`,
+accès : exploitant ou administrateur de CETTE galerie).
+
+- **Formulaire** : grille hebdomadaire (plusieurs créneaux par jour, jours fermés), fermetures exceptionnelles / jours fériés / congés (Du, Au, type,
+  motif) et message libre. Le calcul est celui des boutiques (`includes/shop-hours.php`) : `shop_hours_source()` y substitue les données de la galerie le
+  temps d'un calcul (`gh_with()` dans `includes/gallery-hours.php`) ; les boutiques ne changent pas.
+- **Sur le site** : la page publique de la galerie affiche les horaires et un bandeau (avertissement pendant une fermeture, information dans les 7 jours
+  qui la précèdent) ; le message libre remplace le bandeau automatique. Rien d'affiché tant qu'aucun horaire n'est enregistré.
+- **Alerte aux visiteurs** : chaque fermeture à venir propose « Prévenir les visiteurs… ». L'organisateur choisit le public — abonnés confirmés aux
+  nouveautés, membres du programme de fidélité, exposants ayant une place attribuée —, relit le message prérempli et confirme ; jamais automatique.
+  Un e-mail par adresse (dédoublonnée), 500 destinataires au plus par envoi. Abonnés et membres reçoivent un lien de désinscription signé
+  (`ga_stop()`, nouveau type « member » : plus d'alerte, le compte et les points restent) ; les exposants, le lien de leur espace.
+- **Pas de double envoi** : une période déjà annoncée affiche « Visiteurs prévenus le … » et n'est renvoyée que sur demande (« Renvoyer quand même »).
+  Le journal des alertes est dans `data/galeries/<id>.hours.json` (jamais déployé), avec les horaires ; chaque envoi est aussi tracé dans le journal d'audit.
+- **Tests** : `php scripts/test-gallery-hours.php`.
 
 ## Retours testeurs : widget « Un retour ? », triage et relances
 

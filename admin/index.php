@@ -4,6 +4,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/apps.php';
 require_once __DIR__ . '/../includes/key-check.php';
 require_once __DIR__ . '/../includes/sms.php';
+require_once __DIR__ . '/../includes/closure-alerts.php';
 require_admin();
 
 $content = get_content();
@@ -15,6 +16,8 @@ $pagesSubtabs = ['accueil' => 'Page d’accueil', 'sections' => 'Sections', 'foo
 $pagesSub = isset($pagesSubtabs[$_GET['p'] ?? '']) ? (string) $_GET['p'] : 'accueil';
 $hoursSchedule = shop_hours_editor_schedule();
 $hoursClosures = shop_hours_closures();
+$closureAlertLog = closure_alert_log();
+$canAlert = auth_can('portail.notifications.envoyer');
 $hoursSummary = shop_hours_summary_text();
 $hoursStatus = shop_hours_status();
 $publicAddress = shop_public_address($content);
@@ -77,7 +80,7 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
     <a class="btn btn-primary" href="/slideshow.php" target="_blank" style="margin-bottom:24px;display:inline-flex;">Lancer le diaporama boutique</a>
 
     <?php if ($flash): ?>
-      <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin-bottom:24px;"><?= h($flash['message']) ?></p>
+      <p class="publish-status" data-kind="<?= h($flash['kind']) ?>" style="margin-bottom:24px;"><?= h($flash['message']) ?><?php if (!empty($flash['link'])): ?> <a class="flash-cta" href="<?= h($flash['link']['url']) ?>"><?= h($flash['link']['label']) ?> →</a><?php endif; ?></p>
     <?php endif; ?>
 
     <div class="admin-shell">
@@ -268,7 +271,7 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
           </div>
 
           <h2 style="margin-top:32px;">Fermetures exceptionnelles, jours fériés et vacances</h2>
-          <p class="hint">Chaque période fermée est annoncée automatiquement en haut du site (avec la réouverture) et reprise dans les coordonnées. Laissez « Au » vide pour une fermeture d’un seul jour.</p>
+          <p class="hint">Chaque période fermée est annoncée automatiquement en haut du site (avec la réouverture) et reprise dans les coordonnées. Laissez « Au » vide pour une fermeture d’un seul jour. Une fois enregistrée, vous pouvez aussi prévenir directement vos clients et inscrits.</p>
           <div data-closures>
             <?php if (!$hoursClosures): ?><p class="hint" data-closures-empty>Aucune fermeture enregistrée.</p><?php endif; ?>
             <?php foreach ($hoursClosures as $i => $closure): ?>
@@ -282,6 +285,18 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
                 </label>
                 <label>Motif<input type="text" name="closures[<?= $i ?>][label]" maxlength="120" value="<?= h($closure['label']) ?>" placeholder="ex. Congés d’automne"></label>
                 <button type="button" class="btn-small" data-remove-closure aria-label="Retirer cette fermeture">×</button>
+                <?php $ckey = closure_alert_key($closure); $calert = $closureAlertLog[$ckey] ?? null; $cUpcoming = closure_alert_is_upcoming($closure); ?>
+                <?php if ($calert || ($cUpcoming && $canAlert)): ?>
+                  <div class="closure-alert-line" style="grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <?php if ($calert): ?>
+                      <span class="hint" style="margin:0;">✓ Clients prévenus le <?= h(date('d/m/Y', (int) $calert['at'])) ?> (<?= (int) $calert['recipients'] ?> personne(s)).</span>
+                      <?php if ($cUpcoming && $canAlert): ?><a class="btn-small" href="/admin/closure-alert.php?closure=<?= h(rawurlencode($ckey)) ?>">Renvoyer…</a><?php endif; ?>
+                    <?php else: ?>
+                      <a class="btn-small" href="/admin/closure-alert.php?closure=<?= h(rawurlencode($ckey)) ?>">Prévenir les clients…</a>
+                      <span class="hint" style="margin:0;">Envoi par e-mail / SMS aux clients référencés, après votre confirmation.</span>
+                    <?php endif; ?>
+                  </div>
+                <?php endif; ?>
               </div>
             <?php endforeach; ?>
           </div>

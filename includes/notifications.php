@@ -1461,6 +1461,31 @@ function nt_import_customers(): array
     return $res;
 }
 
+/**
+ * Crée des utilisateurs (e-mail seul) à partir des inscrits à la lettre d'information du site (comptes « newsletter »).
+ * Pas d'abonnement marketing : l'inscription à la lettre ne vaut pas consentement aux autres messages commerciaux.
+ * @return array{created: int, existing: int}
+ */
+function nt_import_newsletter(): array
+{
+    nt_boot();
+    $res = ['created' => 0, 'existing' => 0];
+    if (!nt_table_exists('accounts')) return $res;
+    foreach (db()->query("SELECT DISTINCT lower(trim(email)) AS email, name FROM accounts WHERE source = 'newsletter' AND is_active = 1 AND role IN ('prospect', 'client') AND trim(email) <> ''") as $a) {
+        $email = nt_normalize_address('email', (string) $a['email']);
+        if (!$email) continue;
+        if (nt_user_find_by_address('email', $email)) {
+            $res['existing']++;
+            continue;
+        }
+        $name = trim((string) $a['name']) !== '' ? (string) $a['name'] : ucfirst((string) strstr($email, '@', true));
+        $id = nt_user_create($name, '', 'newsletter', $email);
+        nt_user_set_channel($id, 'email', $email, true, 0);
+        $res['created']++;
+    }
+    return $res;
+}
+
 /* ====================================================================== */
 /* Intégration : commandes de la boutique                                 */
 /* ====================================================================== */

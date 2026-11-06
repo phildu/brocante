@@ -24,6 +24,9 @@ if ($navG && $navMod('attente') && $navOn('exposants')) $navBtn('galerie-attente
 if ($navG && $navMod('buvette')) $navBtn('galerie-buvette.php', 'Buvette');
 if ($navG && $navMod('invendus')) $navBtn('galerie-invendus.php', 'Invendus & dons');
 if ($navG && $navMod('comptage')) $navBtn('galerie-comptage.php', 'Comptage de foule');
+// Annulation & remboursements : bouton tant que l'extension est active, et aussi tant qu'un événement annulé attend ses remboursements (suivi).
+if ($navG && ($navMod('annulation') || !empty($navG['event']['cancelled']['at']))) $navBtn('galerie-annulation.php', 'Annulation');
+if ($navOn('horaires')) $navBtn('galerie-horaires.php', 'Horaires');
 if ($navOn('bourse')) $navBtn('galerie-bourse.php', 'Bourse d’échanges');
 if ($navOn('messages')) {
     $navUnread = $navG ? gmsg_unread_admin((string) ($navG['slug'] ?? $navSlug)) : 0;

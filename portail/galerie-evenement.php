@@ -13,7 +13,6 @@ $orgOn = gm_enabled($gaGallery, 'organisateur');
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $action = (string) ($_POST['action'] ?? '');
-    $actor = (string) (($_SESSION['gallery_admin']['email'] ?? '') ?: 'exploitant');
     if ($action === 'save') {
         $eur = static fn ($v): int => max(0, min(1000000, (int) round((float) str_replace(',', '.', (string) $v) * 100)));
         $in = [
@@ -49,33 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? 'Événement enregistré : ' . ge_place_count($new) . ' place(s) numérotée(s) de 1 à ' . ge_place_count($new) . '.'
                 : "Impossible d'enregistrer l'événement (droits du dossier data).", $ok ? 'ok' : 'error');
         }
-    } elseif ($action === 'cancel_event') {
-        [$err, $res] = gcn_cancel($gaGallery, [
-            'cause' => (string) ($_POST['cause'] ?? 'organisateur'),
-            'reason' => (string) ($_POST['reason'] ?? ''),
-            'refund_mode' => (string) ($_POST['refund_mode'] ?? 'rules'),
-            'refund_pct' => (int) ($_POST['refund_pct'] ?? 0),
-            'refund_delay_days' => (int) ($_POST['refund_delay_days'] ?? 30),
-            'refund_method' => (string) ($_POST['refund_method'] ?? ''),
-            'notify' => !empty($_POST['notify']),
-        ], $actor);
-        if ($err) {
-            portail_flash($err, 'error');
-        } else {
-            $ledger = (array) ($res['ledger'] ?? []);
-            portail_flash('Événement annulé. ' . (int) ($ledger['taken'] ?? 0) . ' exposant(s) attribué(s), ' . (int) ($ledger['pending'] ?? 0)
-                . ' demande(s) en attente. Remboursements à effectuer : ' . gb_eur((int) ($ledger['due_cents'] ?? 0))
-                . '. ' . (int) ($res['notified'] ?? 0) . ' e-mail(s) d’alerte envoyé(s).', 'ok');
-        }
-    } elseif ($action === 'reopen_event') {
-        $err = gcn_reopen($gaGallery, $actor);
-        portail_flash($err ?? 'Événement réactivé : les demandes d’emplacement sont de nouveau ouvertes.', $err ? 'error' : 'ok');
-    } elseif ($action === 'refund_status') {
-        $err = gcn_mark_refund($gaSlug, (string) ($_POST['slot'] ?? ''), (string) ($_POST['status'] ?? ''), $actor, (string) ($_POST['note'] ?? ''));
-        portail_flash($err ?? 'Remboursement mis à jour.', $err ? 'error' : 'ok');
-    } elseif ($action === 'notify_event') {
-        $n = gcn_notify($gaGallery, !empty($_POST['force']));
-        portail_flash($n > 0 ? $n . ' exposant(s) prévenu(s) de l’annulation.' : 'Aucun nouvel e-mail à envoyer : tous les exposants ont déjà été prévenus, ou aucun n’a d’adresse valide.', $n > 0 ? 'ok' : 'error');
     }
     header('Location: ' . $self);
     exit;
@@ -92,11 +64,9 @@ $pending = count(array_filter($evRows, static fn ($r) => ($r['status'] ?? '') ==
 $free = max(0, $count - $taken - $pending);
 $revenue = array_sum(array_map(static fn ($r) => (int) ($r['price_cents'] ?? 0), array_filter($evRows, static fn ($r) => ($r['status'] ?? '') === 'taken')));
 $cancelled = ge_cancelled($event);
-$rules = gcn_rules_from_gallery($gaGallery);
-$cancelSummary = $cancelled ? gcn_summary($gaGallery) : null;
+$annulation = '/portail/galerie-annulation.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
+$cancelState = gm_state($gaGallery, 'annulation');   // l'annulation est une extension : « Annulation & remboursements »
 $hidden = '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">' . ($limited ? '' : '<input type="hidden" name="g" value="' . e($gaSlug) . '">');
-$regles = '/portail/galerie-assistant.php' . ($limited ? '?vue=regles' : '?g=' . urlencode($gaSlug) . '&vue=regles');
-$demoPrice = $price !== null && $price > 0 ? $price : 2000;
 $publicUrl = '/galerie/' . $gaGallery['slug'] . '/' . ($gaGallery['published'] ? '' : '?apercu=' . gallery_preview_token($gaGallery)) . '#evenement';
 $inscriptions = '/portail/galerie-inscriptions.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
 $registre = '/portail/galerie-registre.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
@@ -109,74 +79,16 @@ ga_head('Événement');
     <p class="flash" data-kind="error">{Le ext} « Espace organisateur » n'est pas {?actif|active} pour cette galerie : vous pouvez préparer l'événement, mais les réservations publiques et le tableau de bord resteront fermés. <a href="<?= e($options) ?>">Activer {le ext}</a>.</p>
     <?php endif; ?>
 
-    <?php if ($cancelled && $cancelSummary): ?>
+    <?php if ($cancelled): $cn = (array) $event['cancelled']; ?>
     <section class="gcard" style="border-color:#e0b4b4;background:#fff7f6;">
-      <div class="row" style="justify-content:space-between;align-items:flex-start;">
-        <div>
-          <h2 style="margin:0;">Événement annulé <span class="pill" style="background:#fde8e8;color:#a51b1b;">Annulé le <?= e(date('d/m/Y', (int) $event['cancelled']['at'])) ?></span></h2>
-          <p class="meta" style="margin:4px 0 0;"><?= e(ge_cancel_reason($event)) ?> · Remboursement appliqué : <?= (int) $event['cancelled']['refund_pct'] ?> % · sous <?= (int) $event['cancelled']['refund_delay_days'] ?> jours par <?= e($event['cancelled']['refund_method']) ?>.</p>
-        </div>
-      </div>
-      <p class="meta" style="margin:0;">Les demandes d'emplacement sont fermées et la page publique affiche l'annulation. Le registre ci-dessous suit chaque exposant : à rembourser, remboursé ou sans remboursement.</p>
-      <div class="kpis">
-        <div class="kpi"><b><?= (int) $cancelSummary['taken'] ?></b><span>exposants attribués</span></div>
-        <div class="kpi"><b><?= (int) $cancelSummary['pending'] ?></b><span>demandes en attente</span></div>
-        <div class="kpi"><b><?= e(gb_eur((int) $cancelSummary['due_cents'])) ?></b><span>à rembourser</span></div>
-        <div class="kpi"><b><?= e(gb_eur((int) $cancelSummary['paid_cents'])) ?></b><span>déjà remboursé</span></div>
-        <div class="kpi"><b><?= (int) $cancelSummary['waived'] + (int) $cancelSummary['none'] ?></b><span>sans remboursement</span></div>
-      </div>
-      <p class="meta" style="margin:0;"><?= (int) ($event['cancelled']['notified'] ?? 0) > 0 ? 'Dernière alerte envoyée le ' . e(date('d/m/Y à H:i', (int) $event['cancelled']['notified'])) . '.' : 'Les exposants n’ont pas encore reçu d’alerte par e-mail.' ?></p>
-      <div class="row">
-        <form method="post"><?= $hidden ?>
-          <input type="hidden" name="action" value="notify_event">
-          <button class="btn" type="submit">Prévenir les exposants</button>
-        </form>
-        <form method="post" onsubmit="return confirm('Réactiver cet événement ? Les lignes de remboursement non versées seront supprimées.');"><?= $hidden ?>
-          <input type="hidden" name="action" value="reopen_event">
-          <button class="btn danger" type="submit">Réactiver l'événement</button>
-        </form>
-      </div>
+      <h2 style="margin:0;">Événement annulé <span class="pill" style="background:#fde8e8;color:#a51b1b;">Annulé le <?= e(date('d/m/Y', (int) $cn['at'])) ?></span></h2>
+      <p class="meta" style="margin:4px 0 0;"><?= e(ge_cancel_reason($event)) ?> · Remboursement de base : <?= (int) $cn['refund_pct'] ?> % du tarif · sous <?= (int) $cn['refund_delay_days'] ?> jours par <?= e((string) $cn['refund_method']) ?>.</p>
+      <p class="meta" style="margin:0;">Les demandes d'emplacement sont fermées et la page publique affiche l'annulation. Le suivi des remboursements (montant exposant par exposant, virements, alertes, export CSV) se fait dans {le ext} « Annulation &amp; remboursements ».</p>
+      <p class="row" style="margin:8px 0 0;"><a class="btn btn-primary" href="<?= e($annulation) ?>">Suivre les remboursements</a></p>
     </section>
     <?php endif; ?>
 
-    <?php if ($cancelled): $ledgerRows = gcn_rows($gaGallery); ?>
-    <section class="gcard">
-      <h2>Registre des remboursements</h2>
-      <p class="meta" style="margin:0;">Chaque ligne suit un exposant : montant calculé à l’annulation, puis « Remboursé » quand le virement ou le chèque est parti. La note libre garde la référence du paiement.</p>
-      <?php if (!$ledgerRows): ?>
-        <p class="meta">Aucun exposant inscrit sur cet événement : il n’y a personne à rembourser.</p>
-      <?php else: ?>
-      <div style="overflow-x:auto;"><table class="t"><thead><tr><th>Emplacement</th><th>Exposant</th><th>Demande</th><th class="num">Tarif</th><th>Part</th><th class="num">À rendre</th><th>État</th><th>Suivi</th></tr></thead><tbody>
-      <?php foreach ($ledgerRows as $r): $ref = $r['refund']; ?>
-        <tr>
-          <td><?= e($r['slot']) ?></td>
-          <td><?= e($r['name']) ?><br><small class="meta"><?= e($r['email']) ?></small></td>
-          <td><?= ($r['status'] ?? '') === 'taken' ? '<span class="pill done">Attribuée</span>' : '<span class="pill sent">En attente</span>' ?></td>
-          <td class="num"><?= e(gb_eur((int) ($r['price_cents'] ?? 0))) ?></td>
-          <td><?= (int) $ref['pct'] ?> %</td>
-          <td class="num"><?= e(gb_eur($ref['amount_cents'])) ?></td>
-          <td>
-            <span class="pill <?= $ref['status'] === 'paid' ? 'done' : '' ?>"><?= e(($r['status'] ?? '') === 'pending' ? 'Rien à payer' : gcn_refund_label($ref)) ?></span>
-            <?php if ($ref['paid_at'] > 0): ?><br><small class="meta">le <?= e(date('d/m/Y', $ref['paid_at'])) ?><?= $ref['by'] !== '' ? ' par ' . e($ref['by']) : '' ?></small><?php endif; ?>
-            <?php if ($ref['notified'] > 0): ?><br><small class="meta">alerte envoyée</small><?php endif; ?>
-          </td>
-          <td>
-            <form method="post" class="row" style="gap:4px;">
-              <?= $hidden ?><input type="hidden" name="action" value="refund_status"><input type="hidden" name="slot" value="<?= e($r['slot_id']) ?>">
-              <select name="status">
-                <?php foreach (GCN_REFUND_STATUSES as $sk => $sl): ?><option value="<?= e($sk) ?>"<?= $ref['status'] === $sk ? ' selected' : '' ?>><?= e($sl) ?></option><?php endforeach; ?>
-              </select>
-              <input type="text" name="note" maxlength="300" placeholder="Référence du virement" value="<?= e($ref['note']) ?>" style="max-width:150px;">
-              <button class="btn small" type="submit">Mettre à jour</button>
-            </form>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody></table></div>
-      <?php endif; ?>
-    </section>
-    <?php endif; ?>
-
+    <div class="kpis">
       <div class="kpi"><b><?= $count ?></b><span>places numérotées</span></div>
       <div class="kpi"><b><?= $taken ?></b><span>attribuées</span></div>
       <div class="kpi"><b><?= $pending ?></b><span>en attente</span></div>
@@ -266,52 +178,16 @@ ga_head('Événement');
     <?php if ($event && !$cancelled): ?>
     <section class="gcard" id="annulation">
       <h2>Annuler l’événement</h2>
-      <p class="meta" style="margin:0;">L’annulation ferme les demandes d’emplacement, affiche un avis sur la page publique et crée une ligne de remboursement par exposant. Conditions en vigueur, modifiables dans <a href="<?= e($regles) ?>">l’assistant, onglet Règlements</a> :</p>
-      <table class="t"><tbody>
-        <?php foreach (gcn_rules_lines($rules) as $label => $value): ?>
-          <tr><th style="width:46%;"><?= e($label) ?></th><td><?= e($value) ?></td></tr>
-        <?php endforeach; ?>
-      </tbody></table>
-      <form method="post" onsubmit="return confirm('Annuler cet événement ? Les demandes d’emplacement seront fermées et les remboursements calculés.');">
-        <?= $hidden ?><input type="hidden" name="action" value="cancel_event">
-        <div class="row">
-          <label class="f">Cause de l’annulation<select name="cause" id="cn-cause">
-            <?php foreach (GE_CANCEL_CAUSES as $ck => $cl): ?><option value="<?= e($ck) ?>"><?= e($cl) ?></option><?php endforeach; ?>
-          </select></label>
-          <label class="f">Règle appliquée<select name="refund_mode" id="cn-mode">
-            <option value="rules">Selon les conditions de vente</option>
-            <option value="full">Remboursement intégral (100 %)</option>
-            <option value="partial">Pourcentage personnalisé</option>
-            <option value="none">Aucun remboursement</option>
-          </select></label>
-          <label class="f">Pourcentage personnalisé<input type="number" name="refund_pct" id="cn-pct" min="0" max="100" value="<?= (int) $rules['partial_pct'] ?>"></label>
-          <label class="f">Délai de remboursement (jours)<input type="number" name="refund_delay_days" min="0" max="180" value="<?= (int) $rules['refund_delay_days'] ?>"></label>
-        </div>
-        <div class="row">
-          <label class="f">Moyen de remboursement<input type="text" name="refund_method" maxlength="120" value="<?= e((string) $rules['refund_method']) ?>"></label>
-          <label class="f"><span><input type="checkbox" name="notify" value="1" checked> Prévenir les exposants par e-mail (alerte immédiate)</span></label>
-        </div>
-        <label class="f">Motif communiqué aux exposants<textarea name="reason" rows="2" maxlength="400" placeholder="Ex. : arrêté municipal, terrain impraticable, nombre d’inscrits insuffisant…"></textarea></label>
-        <p class="meta" id="cn-hint" role="status"></p>
-        <p><button class="btn danger" type="submit">Annuler l’événement</button></p>
-      </form>
+      <?php if ($cancelState['enabled']): ?>
+        <p class="meta" style="margin:0;">Météo, arrêté municipal, trop peu d’inscrits… {Le ext} « Annulation &amp; remboursements » ferme les demandes, annonce l’annulation, prévient les exposants et les rembourse en totalité ou en partie.</p>
+        <p><a class="btn danger" href="<?= e($annulation) ?>">Annuler l’événement…</a></p>
+      <?php elseif ($cancelState['mode'] !== 'off'): ?>
+        <p class="meta" style="margin:0;">{Le ext} « Annulation &amp; remboursements » permet d’annuler l’événement, de prévenir les exposants et de les rembourser en totalité ou en partie. {Ce ext} n’est pas encore {?activé|activée} pour cette galerie.</p>
+        <p><a class="btn" href="<?= e($options) ?>#m-annulation">Activer {le ext}</a></p>
+      <?php else: ?>
+        <p class="meta" style="margin:0;">{Le ext} « Annulation &amp; remboursements » n’est pas {?proposé|proposée} pour ce type de galerie.</p>
+      <?php endif; ?>
     </section>
-    <script>
-    (function () {
-      var cause = document.getElementById('cn-cause'), mode = document.getElementById('cn-mode'), pct = document.getElementById('cn-pct'), hint = document.getElementById('cn-hint');
-      if (!cause) return;
-      var rules = {organizer: <?= (int) $rules['organizer_pct'] ?>, weather: <?= (int) $rules['force_majeure_pct'] ?>, partial: <?= (int) $rules['partial_pct'] ?>}, price = <?= (int) $demoPrice ?>;
-      function refresh() {
-        var p = mode.value === 'full' ? 100 : mode.value === 'none' ? 0
-          : mode.value === 'partial' ? Math.max(0, Math.min(100, parseInt(pct.value, 10) || 0))
-          : (cause.value === 'meteo' || cause.value === 'force_majeure' ? rules.weather : rules.organizer);
-        var amount = Math.round(price * p / 100);
-        hint.textContent = 'Remboursement appliqué : ' + p + ' % du tarif, soit ' + (amount / 100).toFixed(2).replace('.', ',') + ' € pour une place à ' + (price / 100).toFixed(2).replace('.', ',') + ' €.';
-      }
-      [cause, mode, pct].forEach(function (el) { el.addEventListener('change', refresh); el.addEventListener('input', refresh); });
-      refresh();
-    })();
-    </script>
     <?php endif; ?>
 
     <style>
