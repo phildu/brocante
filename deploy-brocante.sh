@@ -10,7 +10,7 @@
 # Mode portail (--portail) : déploie TOUS les commerces et le portail de
 # gestion dans un même dossier (ex. brocs.arrimage.com, chaque commerce sur
 # <slug>.brocs.arrimage.com). Identifiants dans .env.deploy.portail :
-#   FTP_SERVER, FTP_USER, FTP_PASS, FTP_PATH_FRONT (ex. /www/brocs/),
+#   FTP_SERVER, FTP_USER, FTP_PASS, FTP_PATH_FRONT (ex. /www/pre-bricbrok/ en préprod, /www/bricbrok/ en prod),
 #   URL_FRONT (ex. https://brocs.arrimage.com),
 #   PORTAIL_USER, PORTAIL_PASSWORD (compte de connexion au portail en ligne).
 #

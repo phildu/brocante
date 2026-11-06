@@ -18,10 +18,20 @@ Document de travail (jamais envoyé en ligne). Rien ne se déploie sans commande
 | Paiements | clés de test | clés de **test** uniquement | clés **live**, saisies sur le serveur |
 | Moteurs de recherche | `noindex` | `noindex` + `robots.txt` « Disallow: / » | indexable |
 | Accès de déploiement | — | `.env.deploy.portail` (ou `.env.deploy.<slug>`) | `.env.deploy.portail.prod` (ou `.env.deploy.<slug>.prod`) |
-| Dossier serveur | — | ex. `/www/brocs/` | **autre dossier** (le script refuse le même) |
+| Dossier serveur | — | `/www/pre-bricbrok/` (aujourd'hui encore `/www/brocs/`, voir « Noms des dossiers ») | `/www/bricbrok/` (différent de la préprod : le script refuse le même) |
 
 Un serveur sans `.app-env` est traité comme **préprod** (jamais comme prod) : `includes/app-env.php`.
 `/health.php` annonce l'environnement (`"env":"prod"`) ; les contrôles s'en servent pour détecter un mauvais dossier.
+
+## Noms des dossiers
+
+- **Code** : le dossier local `brocante` (dépôt git `phildu/brocante`) est la seule source. L'ancien dossier local `brocs`
+  (sans git, ~50 fichiers PHP, modèle `PROJECT_CONTEXT.md` jamais rempli) est une ébauche abandonnée : il ne sert plus.
+- **Serveur** : préprod = `/www/pre-bricbrok/`, prod = `/www/bricbrok/`. Historiquement le portail est en ligne dans `/www/brocs/`
+  (domaine `brocs.arrimage.com`) et Petit Chalet seul dans `/www/brocante/` (abandonné : `petit-chalet` n'est plus déployé).
+- **Renommer la préprod existante** (action manuelle, le script ne le fait pas) : chez OVH, renommer `/www/brocs/` en `/www/pre-bricbrok/`
+  (les bases, `.secrets/` et `uploads/` suivent), mettre à jour le dossier racine du domaine dans Hébergement → Multisite, puis
+  changer `FTP_PATH_FRONT` dans `.env.deploy.portail`. Les adresses (`brocs.arrimage.com`) ne changent pas.
 
 ## Cycle de travail
 
@@ -56,7 +66,7 @@ Un serveur sans `.app-env` est traité comme **préprod** (jamais comme prod) : 
 
 ## Première mise en prod : liste de contrôle
 
-- [ ] **OVH** : domaine de prod créé, Hébergement → Multisite sur un dossier **dédié** (ex. `/www/prod/`), SSL actif, redirection HTTPS.
+- [ ] **OVH** : domaine de prod créé, Hébergement → Multisite sur un dossier **dédié** `/www/bricbrok/`, SSL actif, redirection HTTPS.
 - [ ] `cp deploy/env.prod.example .env.deploy.portail.prod`, remplir, `chmod 600`. Mots de passe FTP et portail **différents** de la préprod.
 - [ ] `scripts/release.sh prod --portail --dry-run` puis déploiement réel **avec `--no-backup`** (aucune base n'existe encore sur le serveur, la sauvegarde
   échouerait) : `scripts/release.sh prod --portail --no-backup`. Les bases se créent à la première visite. Dès le déploiement suivant, sans cette option.
