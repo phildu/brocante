@@ -108,6 +108,31 @@ PHP 8.0 ou plus, SQLite (déjà requis par le site). **HTTPS obligatoire** en
 production pour le mode hors-ligne (service worker) et l'écran qui reste
 allumé — c'est déjà le cas de `https://brocante.arrimage.com`.
 
+## Vérifier un déploiement
+
+Après `./deploy-brocante.sh`, lancer depuis le dossier du projet :
+
+```bash
+./scripts/verify-deploy.sh
+```
+
+Il lit l'adresse du site dans `.env.deploy` (ou prend `https://…` en argument) et ne demande
+aucun identifiant FTP : ce sont de simples requêtes HTTP. Il contrôle que les pages du comptage
+répondent et sont protégées, que le service worker et le manifeste sont servis correctement,
+que les fichiers du détecteur sont arrivés entiers (taille, type MIME), que la base
+(`brocante.db`), `.env.deploy` et `.secrets/` ne sont pas téléchargeables, et que le site est en HTTPS.
+Deux options :
+
+- `--full` télécharge les ≈ 17 Mo du détecteur et compare leurs empreintes SHA-256 (détecte un
+  fichier abîmé pendant l'envoi FTP, ce que la simple taille ne voit pas) ;
+- `COMPTAGE_CODE=votre_code ./scripts/verify-deploy.sh` ajoute un essai de connexion bénévole
+  et d'appel de l'API, sans rien écrire dans les comptages.
+
+Code de sortie 0 s'il n'y a aucun échec (les avertissements ⚠ ne comptent pas), 1 sinon. Reste à
+faire à la main : ouvrir le compteur sur un vrai téléphone, l'ajouter à l'écran d'accueil, tester
+le mode caméra et le mode avion. Si le détecteur est mis à jour, mettre à jour aussi les tailles
+et empreintes en tête de la section « Mode caméra » du script.
+
 ## Fichiers
 
 ```
@@ -124,6 +149,7 @@ assets/comptage-vision.js      suivi des personnes et franchissement de ligne (s
 assets/vendor/mediapipe/       détecteur de personnes hébergé sur le site (voir son README : origine, licences)
 scripts/test-comptage.php      tests de la logique PHP (base jetable, php scripts/test-comptage.php)
 scripts/test-comptage-vision.js tests du suivi par caméra, sur trajectoires simulées (node scripts/test-comptage-vision.js)
+scripts/verify-deploy.sh       vérifications après déploiement (voir « Vérifier un déploiement »)
 ```
 
 ## Limites à connaître
