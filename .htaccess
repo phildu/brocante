@@ -11,6 +11,9 @@ DirectoryIndex index.php
 RewriteRule ^galerie/?$ galerie/index.php [L]
 # Connexion à l'administration d'UNE galerie : /galerie/<identifiant>/admin (galerie/admin.php sans identifiant reste la connexion générique).
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/admin/?$ galerie/admin.php?g=$1 [L,QSA]
+# Espace des bénévoles de la buvette d'une galerie : /galerie/<identifiant>/buvette/ et /galerie/<identifiant>/buvette/<page>.php (extension Buvette).
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/buvette/?$ buvette/index.php?g=$1 [L,QSA]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/buvette/([a-z]+)\.php$ buvette/$2.php?g=$1 [L,QSA]
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/?$ galerie/index.php?g=$1 [L,QSA]
 
 # Agents externes des plugins (ex. agent de rendu vidéo) : /api/… → plugin-agent.php, aussi sous /<commerce>/api/… (après la

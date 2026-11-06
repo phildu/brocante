@@ -4,12 +4,18 @@ Gestion de la buvette / restauration d'un vide-grenier par une association :
 carte et prix, recettes, fournitures, quantités à acheter, planning des
 bénévoles et check-list du jour J.
 
-- **Responsable** : *Administration → Buvette* (`/admin/buvette/`), même mot de passe que le reste de l'admin.
-- **Bénévoles** : `/buvette/`, depuis un téléphone, avec un **code partagé** (à définir dans le tableau de bord). Lecture seule, sauf pour cocher la check-list.
+- **C'est une extension de galerie** (pour l'organisateur d'un vide-grenier, pas pour les exposants) : elle se trouve dans l'espace de la
+  galerie, onglet **Extensions**, où on l'essaie gratuitement puis on s'abonne ; une fois active, un bouton **Buvette** apparaît dans son menu
+  (`/portail/galerie-buvette.php`). Proposée d'office aux galeries de type « vide-grenier » ; prix, essai et types concernés se règlent dans le
+  portail → *Tarifs des extensions de galerie*, et le mode par type dans *Types de galerie*.
+- **Responsable** : l'administrateur de la galerie (ou l'exploitant du portail).
+- **Bénévoles** : `/galerie/<galerie>/buvette/`, depuis un téléphone, avec un **code partagé** (à définir dans le tableau de bord). Lecture seule, sauf pour cocher la check-list. Un code ne vaut que pour sa galerie.
+- **Données** : une base SQLite par galerie (`data/galeries/<galerie>.db`, tables `bv_…`, créée au premier accès, supprimée avec la galerie), jamais partagée avec une autre galerie ni avec une boutique. Les pages du module (`admin/buvette/`, `buvette/`) ne sont plus servies seules : `/admin/buvette/…` et `/buvette/…` sans galerie renvoient une page introuvable. Les adresses écrites en dur dans le module sont réécrites vers la galerie (`bv_url_map()`).
+- **Tests** : `php scripts/test-buvette.php` (module) et `php scripts/test-buvette-galerie.php` (galerie : base, adresses, accès).
 
 ## Pour démarrer
 
-1. Ouvrir *Administration → Buvette*.
+1. Dans l'espace de la galerie, activer l'extension (onglet *Extensions*), puis ouvrir *Buvette*.
 2. Cliquer sur **« Charger la buvette d'exemple »** (café, boissons, sandwichs, hot-dogs, crêpes, gâteaux, avec recettes, planning et check-list) et tout modifier, **ou** créer un événement et saisir ses propres données.
 3. Définir le **code d'accès bénévoles** dans le tableau de bord, puis leur envoyer le lien et le code.
 

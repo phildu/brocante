@@ -48,6 +48,15 @@ if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/admin/?$#', $path, $m)) {
     return true;
 }
 
+// Espace des bénévoles de la buvette d'une galerie : /galerie/<identifiant>/buvette/[<page>.php] (même règle que dans le .htaccess).
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/buvette(?:/(?:([a-z]+)\.php)?)?$#', $path, $m) && is_file(__DIR__ . '/buvette/' . ($m[2] ?? '') . (($m[2] ?? '') === '' ? 'index' : '') . '.php')) {
+    $_GET['g'] = $m[1];
+    $page = ($m[2] ?? '') === '' ? 'index' : $m[2];
+    $_SERVER['SCRIPT_NAME'] = '/buvette/' . $page . '.php';
+    require __DIR__ . '/buvette/' . $page . '.php';
+    return true;
+}
+
 // Galeries commerciales : /galerie/ et /galerie/<identifiant>/ (même règle que dans le .htaccess).
 if (preg_match('#^/galerie(?:/([a-z0-9][a-z0-9-]*))?/?$#', $path, $m)) {
     $_GET['g'] = $m[1] ?? '';

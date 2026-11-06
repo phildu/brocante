@@ -150,6 +150,7 @@ function portail_account(): ?array
 // L'exploitant, connecté au portail, garde l'accès complet ; en local, une connexion d'administrateur de galerie fait passer en mode restreint.
 require_once __DIR__ . '/../includes/gallery-admin.php';
 const GA_PAGES = ['galeries.php', 'galerie-tableau.php', 'galerie-prospects.php', 'galerie-compte.php', 'galerie-offre.php', 'galerie-plan.php', 'galerie-exposants.php', 'galerie-exposant.php', 'galerie-messages.php', 'galerie-attente.php', 'galerie-bourse.php', 'galerie-cni.php', 'galerie-import.php', 'galerie-assistant.php', 'galerie-promos.php', 'addons.php',
+    'galerie-buvette.php',   // extension « Buvette » (portail/galerie-buvette.php) : pages du module ouvertes dans l'espace de la galerie
     'galerie-evenement.php', 'galerie-inscriptions.php', 'galerie-registre.php', 'galerie-fidelite.php', 'galerie-modules.php',   // espace organisateur, fidélité, options : proposées par le menu (_galerie-nav.php), sinon renvoyées sur le tableau de bord
     'recherche.php'];   // palette ⌘K : elle ne renvoie que les fiches de SA galerie (portail/_search-galerie.php)
 $portailLoginRoute = basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'login.php'

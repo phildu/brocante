@@ -94,6 +94,15 @@ class LocalValetDriver extends BasicValetDriver
             return $this->run($sitePath, '/galerie/admin.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
         }
 
+        // Espace des bénévoles de la buvette d'une galerie : /galerie/<identifiant>/buvette/[<page>.php]
+        if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/buvette(?:/(?:([a-z]+)\.php)?)?$#', $uri, $m)) {
+            $page = ($m[2] ?? '') === '' ? 'index' : $m[2];
+            if (is_file($sitePath . '/buvette/' . $page . '.php')) {
+                $_GET['g'] = strtolower($m[1]);
+                return $this->run($sitePath, '/buvette/' . $page . '.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
+            }
+        }
+
         // Galeries commerciales : /galerie/ et /galerie/<identifiant>/
         if (preg_match('#^/galerie(?:/([A-Za-z0-9][A-Za-z0-9-]*))?/?$#', $uri, $m)) {
             $_GET['g'] = strtolower($m[1] ?? '');

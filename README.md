@@ -938,7 +938,7 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   la surcharge explicite de la boutique prime. Le pack Annonces Leboncoin/Vinted utilise aussi ce panneau ; les anciennes souscriptions
   de ce pack sont reprises automatiquement dans le nouveau registre d'accès à leur première ouverture. Dans une portée héritée, un champ vide
   conserve la valeur supérieure ; les cases « hériter » permettent de rétablir l'héritage d'un champ configuré localement.
-- **Modules pour vide-greniers** (`buvette`, `invendus-dons`, `comptage-foule`) : trois plugins payants, gérés comme les autres. Ils
+- **Modules pour vide-greniers** (`invendus-dons`, `comptage-foule`) : deux plugins payants, gérés comme les autres (la **Buvette**, elle, est une extension de galerie : voir plus bas). Ils
   n'ont pas de menu en dur : l'entrée apparaît dans la catégorie « Extensions » du menu de la boutique, une fois le plugin **activé**
   dans le portail → Plugins. Prix, essai, modes de paiement et disponibilité se règlent dans le portail → Plugins → Tarifs et
   modalités (ou « Types de galerie » : inclus / disponible / indisponible par type). Par défaut ils sont **réservés aux galeries de
@@ -989,6 +989,22 @@ aussi « modules ». Pour ne pas les nommer de trois façons, le portail règle 
   les accords (`activé{e}`, `proposé{es}`) et `{?inclus|incluse}` pour les accords irréguliers. Dans une page HTML, `ext_page()` en tête
   remplace les jetons de toute la page ; ailleurs (messages JSON, e-mails, libellés), on appelle `ext_t('…')`.
   Test : `php scripts/test-vocabulary.php`.
+
+## Extensions de galerie : la Buvette (organisateur d'un vide-grenier)
+
+Les anciennes « options » d'une galerie (carte interactive, espace organisateur, file d'attente : `includes/gallery-modules.php`) sont des
+**extensions de galerie** : l'organisateur les active depuis l'onglet « Extensions » de son espace (essai gratuit, puis abonnement Stripe ou
+accès offert par l'exploitant). Réglages dans le portail : **Tarifs des extensions de galerie** (`portail/extensions-galerie.php` :
+proposée ou non, mode d'origine, prix mensuel et annuel, jours d'essai, types de galerie concernés ; écrit dans
+`data/saas/galeries-modules.json`) et **Types de galerie** (mode de chacune par type : inclus, payante, non proposée).
+
+La **Buvette** (`buvette`, voir `BUVETTE.md`) est la première extension de galerie qui a de vraies tables : elle range ses données dans une
+**base SQLite par galerie** (`includes/gallery-sql.php` : `data/galeries/<galerie>.db`), pas dans une base de boutique. Le module garde son
+code (`includes/buvette.php`, `admin/buvette/`, `buvette/`) ; `portail/galerie-buvette.php` ouvre ses pages dans l'espace de la galerie
+(accès : exploitant ou administrateur de la galerie, extension active), en plaçant `db()` sur la base de la galerie
+(`bv_enter_gallery()`), et les adresses du module sont réécrites vers la galerie (`bv_url_map()`). Côté bénévoles :
+`/galerie/<galerie>/buvette/` (règle dans `.htaccess`, `router.php`, `LocalValetDriver.php`), avec un code partagé propre à la galerie.
+Les invendus & dons et le comptage de foule suivront le même chemin.
 
 ## Retours testeurs : widget « Un retour ? », triage et relances
 

@@ -18,7 +18,7 @@ if (!$gaGallery) {
 $gaOrigin = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
 /** Début de page (jusqu'à la barre de navigation). */
-function ga_head(string $title, string $actions = ''): void
+function ga_head(string $title, string $actions = '', string $head = ''): void
 {
     global $gaGallery, $gaSlug, $gaOrigin, $limited;
     $flash = portail_flash();
@@ -51,6 +51,7 @@ function ga_head(string $title, string $actions = ''): void
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
+<?= $head ?>
 </head>
 <body>
 <div class="app">

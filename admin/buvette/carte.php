@@ -53,7 +53,6 @@ switch (bv_post_action()) {
 
 $costs = bv_item_costs();
 $poster = !empty($_GET['affiche']);
-$content = get_content();
 
 if ($poster):
     bv_admin_header('Affiche de la carte', 'carte');
@@ -65,7 +64,7 @@ if ($poster):
   </div>
   <div class="bv-poster">
     <h1>La Buvette</h1>
-    <p class="sub"><?= h($content['site_name'] ?? '') ?></p>
+    <p class="sub"><?= h(bv_site_name()) ?></p>
     <?php if (!$groups): ?><p>La carte est vide.</p><?php endif; ?>
     <?php foreach ($groups as $cat => $items): ?>
       <h2><?= h(bv_item_categories()[$cat]) ?></h2>

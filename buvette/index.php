@@ -11,7 +11,7 @@ if (bv_post_action() === 'set_me') {
     } else {
         unset($_SESSION['bv_me']);
     }
-    header('Location: /buvette/index.php');
+    header('Location: ' . bv_url_map('/buvette/index.php'));
     exit;
 }
 

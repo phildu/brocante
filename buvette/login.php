@@ -1,11 +1,11 @@
 <?php
 require_once __DIR__ . '/../includes/buvette-layout.php';
 require_once __DIR__ . '/../includes/session.php';
-shop_module_require_public('buvette');
+bv_public_enter();   // galerie d'après l'adresse, extension active
 bv_boot();
 
 if (bv_is_volunteer()) {
-    header('Location: /buvette/index.php');
+    header('Location: ' . bv_url_map('/buvette/index.php'));
     exit;
 }
 
@@ -13,7 +13,7 @@ $error = null;
 if (bv_post_action() === 'login') {
     $error = bv_volunteer_login((string) ($_POST['code'] ?? ''));
     if ($error === null) {
-        header('Location: /buvette/index.php');
+        header('Location: ' . bv_url_map('/buvette/index.php'));
         exit;
     }
 }

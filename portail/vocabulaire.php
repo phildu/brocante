@@ -19,7 +19,7 @@ function vocab_extensions(): array
     }
     foreach (gm_modules() as $key => $m) {
         if (isset($out[$key])) { $out[$key][1] = 'both'; $out[$key][2] = 'both'; continue; }   // même identifiant des deux côtés
-        $out[$key] = [(string) $m['name'], 'gallery', 'gallery', '/portail/offres-galerie.php'];
+        $out[$key] = [(string) $m['name'], 'gallery', 'gallery', '/portail/extensions-galerie.php'];
     }
     return $out;
 }
@@ -125,7 +125,7 @@ foreach ($extensions as $id => $x) $counts[ext_scope($id, $x[1])]++;
       <?php foreach ($extensions as $id => [$name, $defaultScope, $origin, $link]): $scope = ext_scope($id, $defaultScope); ?>
         <tr<?= $scope !== $defaultScope ? ' class="is-changed"' : '' ?>>
           <td><strong><?= e($name) ?></strong><br><small class="hint" style="margin:0;"><?= e($id) ?></small></td>
-          <td><a href="<?= e($link) ?>"><?= $origin === 'gallery' ? 'Types de galerie' : ($origin === 'both' ? 'Tarifs et types de galerie' : 'Tarifs') ?></a></td>
+          <td><a href="<?= e($link) ?>"><?= $origin === 'gallery' ? 'Tarifs des ' . ext_word('plural') . ' de galerie' : ($origin === 'both' ? 'Tarifs et types de galerie' : 'Tarifs') ?></a></td>
           <td>
             <select name="scope[<?= e($id) ?>]" aria-label="Portée de <?= e($name) ?>">
               <?php foreach (VOCAB_SCOPES as $sk => $sl): ?><option value="<?= e($sk) ?>"<?= $scope === $sk ? ' selected' : '' ?>><?= e($sl) ?><?= $sk === $defaultScope ? ' (d’origine)' : '' ?></option><?php endforeach; ?>

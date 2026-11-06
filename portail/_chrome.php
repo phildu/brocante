@@ -162,6 +162,7 @@ function portail_nav_groups(): array
             ['href' => '/portail/ia.php', 'label' => 'Coûts IA', 'icon' => 'sparkles'],
             ['href' => '/portail/ia-fournisseurs.php', 'label' => 'Fournisseurs IA', 'icon' => 'plug'],
             ['href' => '/portail/addons.php', 'label' => ext_t('Tarifs des {exts}'), 'icon' => 'receipt'],
+            ['href' => '/portail/extensions-galerie.php', 'label' => ext_t('Tarifs des {exts} de galerie'), 'icon' => 'receipt'],
         ]],
         ['label' => 'Plateforme', 'items' => array_merge([
             ['href' => '/portail/api.php', 'label' => 'API & réseaux', 'icon' => 'key'],

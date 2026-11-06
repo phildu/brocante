@@ -18,7 +18,6 @@ require_once __DIR__ . '/addons.php';
 
 /** id du plugin => [nom, page d'accueil du module dans l'administration, texte du bouton]. */
 const SHOP_MODULES = [
-    'buvette' => ['Buvette', '/admin/buvette/index.php', 'Ouvrir la buvette'],
     'invendus-dons' => ['Invendus & dons', '/admin/invendus.php', 'Ouvrir Invendus & dons'],
     'comptage-foule' => ['Comptage de foule', '/admin/comptage/index.php', 'Ouvrir le comptage de foule'],
 ];
