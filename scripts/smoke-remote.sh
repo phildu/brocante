@@ -2,7 +2,7 @@
 # Contrôles rapides d'un site déployé (ou local) : requêtes HTTP ordinaires, rien n'est modifié.
 #
 # Usage : scripts/smoke-remote.sh <url> <local|preprod|prod>
-#   ex. : scripts/smoke-remote.sh https://brocs.arrimage.com preprod
+#   ex. : scripts/smoke-remote.sh https://pre.bricbrok.com preprod
 #
 # Vérifie : site joignable, /health.php (200 + bon environnement), HTTPS, indexation
 # (noindex hors prod), et que bases/secrets/dossiers internes ne sont pas téléchargeables.

@@ -12,7 +12,7 @@ Document de travail (jamais envoyé en ligne). Rien ne se déploie sans commande
 
 | | local | préprod | prod |
 |---|---|---|---|
-| Adresse | `http://brocante.test` (Herd) | `https://brocs.arrimage.com` | à définir (`URL_FRONT` de `.env.deploy.portail.prod`) |
+| Adresse | `http://brocante.test` (Herd) | `https://pre.bricbrok.com` (cible ; `www.bricbrok.com` et `brocs.arrimage.com` la servent encore, voir « Adresses ») | `https://www.bricbrok.com` (cible, pas encore en service) |
 | `APP_ENV` | `local` (présence de `config.local.php`) | `preprod` (`.app-env` déposé par le script) | `prod` (`.app-env` déposé par le script) |
 | Données | bases `*.db` locales, jetables | bases propres à la préprod | **données réelles** : jamais écrasées |
 | Paiements | clés de test | clés de **test** uniquement | clés **live**, saisies sur le serveur |
@@ -34,8 +34,25 @@ Un serveur sans `.app-env` est traité comme **préprod** (jamais comme prod) : 
   1. Chez OVH, renommer `/www/brocs/` en `/www/pre-bricbrok/` (les bases, `.secrets/` et `uploads/` suivent).
   2. Aussitôt : Hébergement → Mes sites → site « brocs » → ⋮ → Modifier le site → Répertoire racine = `www/pre-bricbrok`.
   3. Changer `FTP_PATH_FRONT` dans `.env.deploy.portail`.
-  4. Contrôler : `scripts/smoke-remote.sh https://www.bricbrok.com preprod` (ou `/health.php` en 200).
-  Les adresses (`brocs.arrimage.com`, `bricbrok.com`) ne changent pas. Diagnostic d'un 500 : OVH → Logs → « HTTP error logs ».
+  4. Contrôler : `scripts/smoke-remote.sh https://pre.bricbrok.com preprod` (ou `/health.php` en 200).
+  Diagnostic d'un 500 : OVH → Logs → « HTTP error logs ».
+
+## Adresses
+
+Cible : **prod = `https://www.bricbrok.com`**, **préprod = `https://pre.bricbrok.com`**.
+
+- Site OVH « brocs » (racine `www/pre-bricbrok`) = **préprod**. Il porte `bricbrok.com`, `www.bricbrok.com`, `*.bricbrok.com`
+  (donc `pre.bricbrok.com` répond déjà, vérifié le 06/11) et `brocs.arrimage.com`.
+- **Tant que la prod n'est pas lancée**, `www.bricbrok.com` continue de servir la préprod (en `noindex`) : aucune coupure.
+  Utiliser `pre.bricbrok.com` partout (`URL_FRONT` de `.env.deploy.portail`, contrôles, partage).
+- **Au lancement de la prod** (ordre à respecter) :
+  1. Créer chez OVH un second site Multisite, racine `www/bricbrok` (dossier vide), SSL actif.
+  2. Détacher `www.bricbrok.com` (et `bricbrok.com`) du site « brocs » puis les attacher au nouveau site. `pre.bricbrok.com` reste
+     sur « brocs » via `*.bricbrok.com`. Entre l'étape 2 et le premier déploiement, `www` affiche une page vide : enchaîner sans pause.
+  3. `.env.deploy.portail.prod` : `FTP_PATH_FRONT=/www/bricbrok/`, `URL_FRONT=https://www.bricbrok.com` ; déploiement prod
+     (liste de contrôle ci-dessous).
+  4. Rediriger `bricbrok.com` (sans www) vers `https://www.bricbrok.com`.
+- `brocs.arrimage.com` : ancienne adresse du portail, conservée sur la préprod ; à retirer du site « brocs » quand plus personne ne l'utilise.
 
 ## Cycle de travail
 
@@ -70,7 +87,8 @@ Un serveur sans `.app-env` est traité comme **préprod** (jamais comme prod) : 
 
 ## Première mise en prod : liste de contrôle
 
-- [ ] **OVH** : domaine de prod créé, Hébergement → Multisite sur un dossier **dédié** `/www/bricbrok/`, SSL actif, redirection HTTPS.
+- [ ] **OVH** : `www.bricbrok.com` déplacé vers un site Multisite sur un dossier **dédié** `/www/bricbrok/`, SSL actif, redirection HTTPS
+  (procédure : section « Adresses »).
 - [ ] `cp deploy/env.prod.example .env.deploy.portail.prod`, remplir, `chmod 600`. Mots de passe FTP et portail **différents** de la préprod.
 - [ ] `scripts/release.sh prod --portail --dry-run` puis déploiement réel **avec `--no-backup`** (aucune base n'existe encore sur le serveur, la sauvegarde
   échouerait) : `scripts/release.sh prod --portail --no-backup`. Les bases se créent à la première visite. Dès le déploiement suivant, sans cette option.
