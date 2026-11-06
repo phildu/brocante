@@ -1,0 +1,15 @@
+{
+  "name": "Comptage de foule",
+  "short_name": "Comptage",
+  "description": "Compter les visiteurs d'un vide-grenier, même sans réseau.",
+  "lang": "fr",
+  "start_url": "/comptage/index.php",
+  "scope": "/comptage/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4eee1",
+  "theme_color": "#b5502e",
+  "icons": [
+    { "src": "/assets/logo-macaron.png", "sizes": "596x600", "type": "image/png", "purpose": "any" }
+  ]
+}

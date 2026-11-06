@@ -23,9 +23,9 @@ Chacun voit ses propres droits et change son mot de passe dans **Mon compte** (`
 
 | Niveau | Ressources (droits au-delà de consulter / créer / modifier / supprimer) |
 |---|---|
-| **Portail** | Tableau de bord · Réglages du site · Clés API · Collaborateurs · Rôles et droits · Module Buvette · Module Invendus & dons (*exporter*) |
+| **Portail** | Tableau de bord · Réglages du site · Clés API · Collaborateurs · Rôles et droits · Module Buvette · Module Invendus & dons (*exporter*) · Module Impression (*commander* = dépenses chez les fournisseurs) · Comptage de foule (*exporter*) |
 | **Galerie** | Photos des pièces (*IA*) · Médiathèque (*IA*) · Diaporama d'accueil · Diaporama boutique · Bandeaux de page |
-| **Boutique** | Catalogue (*masquer/réafficher*, *prix d'achat*) · Import par lot (*IA*) · Commandes · Transporteurs et frais de port |
+| **Boutique** | Catalogue (*masquer/réafficher*, *prix d'achat*) · Boutiques connectées (*synchroniser*) · Import par lot (*IA*) · Commandes · Transporteurs et frais de port |
 
 Un droit s'écrit `niveau.ressource.action`, par exemple `boutique.produits.supprimer`.
 « Consulter » est coché d'office dès qu'un autre droit l'est sur la même ressource.
@@ -88,7 +88,7 @@ scripts/test-auth.php      tests
 ## Brancher une nouvelle page ou action
 
 - **Page** : `require_permission('niveau.ressource.lire');` en tête (plusieurs droits = au moins un).
-- **Script d'action (POST)** : ajouter ses actions dans `auth_action_map()` puis `auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));`.
+- **Script d'action (POST)** : ajouter ses actions dans `auth_action_map()` (clé = nom du script, ou `dossier/script.php` pour un module en sous-dossier) puis `auth_require_action(basename(__FILE__), (string) ($_POST['action'] ?? ''));`.
 - **Endpoint AJAX** : `require_permission_json(...)` (réponse 403 en JSON).
 - **Masquer un contrôle** : `<?php if (auth_can('boutique.produits.cout')): ?> … <?php endif; ?>`, ou `auth_ui_gate('mon-action.php')` avant `</body>` pour adapter tous les formulaires d'un script.
 - `require_admin()` est désormais réservé au **propriétaire** (refus par défaut).
@@ -103,8 +103,8 @@ Base jetable, ne touche jamais à `brocante.db`. Vérifie le catalogue, que **ch
 
 ## Limites connues
 
-- Les modules **Buvette** et **Invendus & dons** sont gérés par ressource entière (consulter / créer / modifier / supprimer), pas par onglet.
+- Les modules **Buvette**, **Invendus & dons**, **Impression** et **Comptage de foule** sont gérés par ressource entière (consulter / créer / modifier / supprimer), pas par onglet.
 - Le tableau de bord est un seul bloc : qui le consulte voit aussi les marges et frais.
-- L'espace bénévoles `/buvette/` et les liens secrets des dons gardent leur propre accès (code partagé, jeton) — hors de ce système.
+- L'espace bénévoles `/buvette/` et `/comptage/`, et les liens secrets des dons gardent leur propre accès (code partagé, jeton) — hors de ce système.
 - Pas de journal d'audit (qui a fait quoi) ni de double authentification pour l'instant.
 - Les écrans d'administration existants hors équipe n'avaient pas de jeton CSRF avant ce changement et n'en ont toujours pas (hors tableau de bord et Invendus).
