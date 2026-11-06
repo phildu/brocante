@@ -6,6 +6,8 @@
  */
 require_once __DIR__ . '/../includes/comptage.php';
 require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/shop-modules.php';
+shop_module_require_public('comptage-foule');
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');

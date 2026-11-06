@@ -3,6 +3,8 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/invendus.php';
 require_admin();
+require_once __DIR__ . '/../includes/shop-modules.php';
+shop_module_require('invendus-dons');   // plugin activé + accès payé, en essai, offert ou inclus
 
 $event = unsold_event_get((int) unsold_param($_GET, 'event'));
 if (!$event) {

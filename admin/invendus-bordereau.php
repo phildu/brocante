@@ -3,6 +3,8 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/invendus-layout.php';
 require_admin();
+require_once __DIR__ . '/../includes/shop-modules.php';
+shop_module_require('invendus-dons');   // plugin activé + accès payé, en essai, offert ou inclus
 
 $donation = unsold_donation_get((int) unsold_param($_GET, 'id'));
 if (!$donation) {

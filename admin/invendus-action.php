@@ -7,6 +7,8 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/invendus.php';
 require_admin();
+require_once __DIR__ . '/../includes/shop-modules.php';
+shop_module_require('invendus-dons');   // plugin activé + accès payé, en essai, offert ou inclus
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /admin/invendus.php');

@@ -4022,6 +4022,8 @@ function shop_has_public_donations(): bool
     static $has = null;
     if ($has !== null) return $has;
     try {
+        require_once __DIR__ . '/shop-modules.php';
+        if (!shop_module_active('invendus-dons')) return $has = false;   // plugin payant : pas de lien sans le module
         $stmt = db()->prepare("SELECT 1 FROM unsold_events WHERE status = 'published' AND event_date >= ? LIMIT 1");
         $stmt->execute([date('Y-m-d', strtotime('-2 days'))]);
         return $has = (bool) $stmt->fetchColumn();

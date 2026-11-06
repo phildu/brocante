@@ -178,6 +178,10 @@ const PLUGIN_RULE_DEFAULTS = [
     // Doublon fonctionnel : les actions commerciales portent déjà la vente flash programmée. Les boutiques qui ont
     // ventes-flash le gardent (baisse progressive automatique, absente des actions commerciales).
     'ventes-flash' => ['listed' => false],
+    // Modules pour vide-greniers : gérés dans le portail (activation, tarifs, type de galerie), jamais proposés d'office à l'inscription.
+    'buvette' => ['listed' => false],
+    'invendus-dons' => ['listed' => false],
+    'comptage-foule' => ['listed' => false],
     'registre-police' => ['activities' => ['brocante']],   // antiquaires et brocanteurs
     'qr-story' => ['activities' => ['brocante']],          // antiquaires et brocanteurs
     'reservation-arrhes' => ['online_sales' => true],      // vente en ligne avec paiement

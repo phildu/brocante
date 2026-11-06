@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/buvette.php';
+require_once __DIR__ . '/shop-modules.php';
 
 /* ---------- administration ---------- */
 
@@ -13,6 +14,7 @@ function bv_admin_init(): void
 {
     require_once __DIR__ . '/session.php';
     require_admin();
+    shop_module_require('buvette');   // plugin activé + accès payé, en essai, offert ou inclus (includes/shop-modules.php)
     bv_boot();
 }
 
@@ -41,7 +43,7 @@ function bv_admin_header(string $title, string $section): void
     $content = get_content();
     $event = bv_active_event();
     $flash = flash_get();
-    $adminNav = 'buvette';
+    $adminNav = 'plugin:buvette:index';
     $siteName = $content['site_name'] ?? '';
     ?><!DOCTYPE html>
 <html lang="fr">
@@ -156,6 +158,7 @@ function bv_vol_sections(): array
 function bv_vol_init(): void
 {
     require_once __DIR__ . '/session.php';
+    shop_module_require_public('buvette');
     bv_boot();
     bv_require_volunteer();
 }

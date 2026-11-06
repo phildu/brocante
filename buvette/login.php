@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/buvette-layout.php';
 require_once __DIR__ . '/../includes/session.php';
+shop_module_require_public('buvette');
 bv_boot();
 
 if (bv_is_volunteer()) {

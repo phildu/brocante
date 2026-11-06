@@ -7,6 +7,7 @@
  */
 
 require_once __DIR__ . '/invendus.php';
+require_once __DIR__ . '/shop-modules.php';
 
 function unsold_html_head(string $title, string $bodyClass = '', bool $noindex = false): void
 {
@@ -40,7 +41,7 @@ function unsold_flash_html(): void
 function unsold_admin_head(string $title): void
 {
     $content = get_content();
-    $adminNav = 'invendus';
+    $adminNav = 'plugin:invendus-dons:index';
     unsold_html_head($title . ' — ' . ($content['site_name'] ?? ''));
     include __DIR__ . '/icons.php';
     include __DIR__ . '/admin-nav.php';

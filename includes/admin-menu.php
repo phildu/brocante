@@ -52,7 +52,7 @@ function admin_menu_default_order(): array
     return [
         'pilotage' => ['assistant', 'dashboard', 'rentabilite', 'emails'],
         'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'batch'],
-        'ventes' => ['commandes', 'buvette', 'invendus', 'comptage', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
+        'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
         'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal'],
         'boutique' => ['presence', 'galeries', 'apparence', 'social', 'domaine'],
         'reglages' => ['ia', 'sms', 'plugins', 'menu', 'sync', 'reglages-general', 'reglages-pages', 'reglages-paiement', 'profil'],
@@ -158,11 +158,9 @@ function admin_menu_core_items(): array
         'presence' => ['/admin/presence.php', 'Boutique physique / en ligne', 'grid'],
         'galeries' => ['/admin/ma-galerie.php', 'Mes galeries', 'users'],
         'commandes' => ['/admin/orders.php', 'Commandes', 'receipt'],
-        // Modules vide-grenier / rentabilité (ligne « main ») : chaque page a ses propres adresses, voir BUVETTE.md, INVENDUS_MODULE.md, COMPTAGE.md.
+        // Page économique de la boutique (chiffre d'affaires, marge, frais, fréquentation), ligne « main » : voir admin/rentabilite.php.
+        // Buvette, Invendus & dons et Comptage de foule sont des plugins payants (packs/, includes/shop-modules.php) : leurs entrées de menu viennent d'eux.
         'rentabilite' => ['/admin/rentabilite.php', 'Rentabilité', 'gauge'],
-        'buvette' => ['/admin/buvette/index.php', 'Buvette', 'receipt'],
-        'invendus' => ['/admin/invendus.php', 'Invendus & dons', 'truck'],
-        'comptage' => ['/admin/comptage/index.php', 'Comptage de foule', 'users'],
         'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
         'social' => ['/admin/social.php', 'API & réseaux', 'user'],
         'ia' => ['/admin/ai-usage.php', 'Consommation IA', 'receipt'],

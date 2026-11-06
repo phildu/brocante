@@ -1,0 +1,31 @@
+{
+  "id": "invendus-dons",
+  "name": "Invendus & dons",
+  "version": "1.0.0",
+  "description": "Module payant pour vide-greniers : les exposants proposent ce qu'ils ne veulent pas remporter, un point de collecte les reçoit, des tournées de bénévoles (vélo cargo) les remettent aux structures de don, avec bordereau et suivi.",
+  "table_prefix": "unsold_",
+  "pages": [
+    {
+      "id": "index",
+      "label": "Invendus & dons",
+      "icon": "truck",
+      "file": "pages/index.php",
+      "roles": [
+        "admin"
+      ]
+    }
+  ],
+  "api": [
+    {
+      "id": "access",
+      "file": "api/access.php",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "roles": [
+        "admin"
+      ]
+    }
+  ]
+}

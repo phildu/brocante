@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/invendus.php';
+require_once __DIR__ . '/includes/shop-modules.php';
+shop_module_require_public('invendus-dons');
 
 $events = unsold_public_events();
 $requested = (int) unsold_param($_GET, 'event');

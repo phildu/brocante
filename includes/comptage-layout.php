@@ -6,6 +6,7 @@
  */
 
 require_once __DIR__ . '/comptage.php';
+require_once __DIR__ . '/shop-modules.php';
 
 const CP_FONTS = 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=Special+Elite&display=swap';
 
@@ -14,6 +15,7 @@ function cp_admin_init(): void
 {
     require_once __DIR__ . '/session.php';
     require_admin();
+    shop_module_require('comptage-foule');   // plugin activé + accès payé, en essai, offert ou inclus (includes/shop-modules.php)
     cp_boot();
 }
 
@@ -36,7 +38,7 @@ function cp_admin_header(string $title, string $section): void
 {
     $content = get_content();
     $flash = flash_get();
-    $adminNav = 'comptage';
+    $adminNav = 'plugin:comptage-foule:index';
     $siteName = $content['site_name'] ?? '';
     ?><!DOCTYPE html>
 <html lang="fr">

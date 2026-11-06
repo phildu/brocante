@@ -938,6 +938,16 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   la surcharge explicite de la boutique prime. Le pack Annonces Leboncoin/Vinted utilise aussi ce panneau ; les anciennes souscriptions
   de ce pack sont reprises automatiquement dans le nouveau registre d'accès à leur première ouverture. Dans une portée héritée, un champ vide
   conserve la valeur supérieure ; les cases « hériter » permettent de rétablir l'héritage d'un champ configuré localement.
+- **Modules pour vide-greniers** (`buvette`, `invendus-dons`, `comptage-foule`) : trois plugins payants, gérés comme les autres. Ils
+  n'ont pas de menu en dur : l'entrée apparaît dans la catégorie « Extensions » du menu de la boutique, une fois le plugin **activé**
+  dans le portail → Plugins. Prix, essai, modes de paiement et disponibilité se règlent dans le portail → Plugins → Tarifs et
+  modalités (ou « Types de galerie » : inclus / disponible / indisponible par type). Par défaut ils sont **réservés aux galeries de
+  type « vide-grenier »** et **sans prix** : essai gratuit de 14 jours et souscription manuelle, aucun paiement Stripe tant qu'un montant
+  n'est pas fixé. Leur code reste celui de leurs pages propres (`admin/buvette/`, `admin/invendus*.php`, `admin/comptage/` et, pour les
+  bénévoles et le public, `buvette/`, `dons*.php`, `comptage/`) ; le plugin (`packs/<id>/`) ne porte que l'entrée de menu et le panneau
+  d'activation. La garde (`includes/shop-modules.php`) ouvre ces pages seulement si le plugin est activé **et** l'accès payé, en essai,
+  offert ou inclus : sinon une page d'administration renvoie sur la fiche du plugin, et une page publique est introuvable (404).
+  Le lien public « Dons & invendus » n'apparaît que si le module est actif et qu'une édition est publiée.
 - **Tâches planifiées** : une seule entrée dans la tâche planifiée de l'hébergeur (OVH : Hébergement → Tâches planifiées - Cron,
   langage PHP 8) lance `scripts/plugins-cron.php`. Sur un hébergement mutualisé OVH, la plus petite fréquence possible est **une fois par
   heure** (le champ Minutes est désactivé) : la tâche tourne donc à la minute choisie de chaque heure. Sur un serveur avec crontab, on

@@ -2,6 +2,8 @@
 require_once __DIR__ . '/../../includes/comptage.php';
 require_once __DIR__ . '/../../includes/session.php';
 require_admin();
+require_once __DIR__ . '/../../includes/shop-modules.php';
+shop_module_require('comptage-foule');
 cp_boot();
 
 $event = cp_event_get((int) ($_GET['event'] ?? 0));
