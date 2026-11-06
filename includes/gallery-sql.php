@@ -4,7 +4,7 @@
  * Base SQLite d'une galerie : data/galeries/<identifiant>.db.
  *
  * Les galeries gardent leurs données dans des fichiers JSON (includes/galleries.php, gallery-admin.php). Une extension de galerie qui a
- * besoin de vraies tables (la buvette, plus tard les invendus et le comptage de foule) les range ici : une base par galerie, jamais
+ * besoin de vraies tables (la buvette, invendus & dons ; plus tard le comptage de foule) les range ici : une base par galerie, jamais
  * partagée avec une autre galerie ni avec une boutique. Les tables de chaque extension portent son préfixe (bv_…, unsold_…, cp_…) et se
  * créent toutes seules au premier accès. Le dossier data/ n'est servi ni envoyé par le déploiement ; la base disparaît avec sa galerie
  * (gallery_delete()).

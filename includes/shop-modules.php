@@ -1,14 +1,14 @@
 <?php
 
 /**
- * Modules payants pour vide-greniers : Buvette, Invendus & dons, Comptage de foule.
+ * Module payant pour vide-greniers encore géré au niveau de la boutique : Comptage de foule (la Buvette et Invendus & dons sont des
+ * extensions de galerie : includes/gallery-modules.php).
  *
- * Ce sont des plugins comme les autres (packs/<id>/) du point de vue du portail : activés boutique par boutique (portail → Plugins),
+ * C'est un plugin comme les autres (packs/<id>/) du point de vue du portail : activés boutique par boutique (portail → Plugins),
  * vendus avec prix, essai et modalités (portail → Plugins → Tarifs et modalités, includes/addons.php : addon_defaults()), et réservés
  * par défaut aux types de galerie « vide-grenier » (réglable : « Types de galerie », ou le ciblage du module).
  *
- * Leur code, lui, reste celui de leurs pages d'administration propres (admin/buvette/, admin/invendus*.php, admin/comptage/) et de
- * leurs pages publiques (buvette/, dons*.php, comptage/) : un plugin « fin » (packs/<id>/) porte seulement l'entrée du menu et le
+ * Son code, lui, reste celui de ses pages d'administration propres (admin/comptage/) et de ses pages publiques (comptage/) : un plugin « fin » (packs/<id>/) porte seulement l'entrée du menu et le
  * panneau d'activation (essai, abonnement). Cette garde fait le lien : une boutique n'ouvre ces pages que si le plugin est activé
  * ET si l'accès est payé, essayé, offert ou inclus par sa galerie.
  */
@@ -18,7 +18,6 @@ require_once __DIR__ . '/addons.php';
 
 /** id du plugin => [nom, page d'accueil du module dans l'administration, texte du bouton]. */
 const SHOP_MODULES = [
-    'invendus-dons' => ['Invendus & dons', '/admin/invendus.php', 'Ouvrir Invendus & dons'],
     'comptage-foule' => ['Comptage de foule', '/admin/comptage/index.php', 'Ouvrir le comptage de foule'],
 ];
 

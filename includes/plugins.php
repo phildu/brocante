@@ -181,7 +181,6 @@ const PLUGIN_RULE_DEFAULTS = [
     // ventes-flash le gardent (baisse progressive automatique, absente des actions commerciales).
     'ventes-flash' => ['listed' => false],
     // Modules pour vide-greniers : gérés dans le portail (activation, tarifs, type de galerie), jamais proposés d'office à l'inscription.
-    'invendus-dons' => ['listed' => false],
     'comptage-foule' => ['listed' => false],
     'registre-police' => ['activities' => ['brocante']],   // antiquaires et brocanteurs
     'qr-story' => ['activities' => ['brocante']],          // antiquaires et brocanteurs

@@ -1,13 +1,13 @@
 <?php
 /**
- * Gabarits HTML du module pour les pages hors du thème boutique :
- *  - pages admin (même squelette que les autres pages /admin/) ;
+ * Gabarits HTML de l'extension de galerie « Invendus & dons » :
+ *  - pages admin : le cadre de l'espace de la galerie (portail/_galerie-layout.php) ;
+ *  - pages publiques (liste des dons, proposer, suivi) : un en-tête simple au nom de la galerie ;
  *  - pages « terrain » des bénévoles (tournée, point de collecte), pensées pour
  *    un téléphone tenu à une main : gros boutons, peu de chrome.
  */
 
 require_once __DIR__ . '/invendus.php';
-require_once __DIR__ . '/shop-modules.php';
 
 function unsold_html_head(string $title, string $bodyClass = '', bool $noindex = false): void
 {
@@ -37,20 +37,92 @@ function unsold_flash_html(): void
     }
 }
 
-/** En-tête d'une page admin du module (nav + ouverture de <main>). */
+/** Feuille de style d'appoint : le module est écrit pour le thème de la boutique, il s'affiche ici dans celui du portail. */
+function unsold_gallery_css(): string
+{
+    return ':root { --ink-soft: var(--muted); --surface: var(--panel); --sage: var(--ok); --accent-ink: #fff; --font-display: var(--font-ui); --font-body: var(--font-ui); --font-mono: "IBM Plex Mono", monospace; }'
+        . '.don-admin .wrap { max-width: none; padding: 0; }'
+        . '.don-admin section.tight { padding: 0; }'
+        . '.don-admin .eyebrow { display: none; }'
+        . '.don-admin h1 { display: none; }'
+        . '.don-admin a:not(.btn):not(.btn-small):not(.pill) { color: var(--accent); }'
+        . '.don-admin .btn-small, .don-admin .pill { display: inline-block; padding: 7px 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: .84rem; font-weight: 600; text-decoration: none; cursor: pointer; }'
+        . '.don-admin .btn-small:hover, .don-admin .pill:hover { border-color: var(--accent); color: var(--accent); }'
+        . '.don-admin .pill[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }'
+        . '.don-admin .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }'
+        . '.don-admin .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }'
+        . '.don-admin .field > label { font-size: .8rem; font-weight: 600; color: var(--muted); }'
+        . '.don-admin .field-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }'
+        . '@media (max-width: 640px) { .don-admin .field-row-2 { grid-template-columns: 1fr; } }'
+        . '.don-admin .publish-status { padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }'
+        . '.don-admin .publish-status[data-kind="error"] { border-color: #c0392b; color: #c0392b; }'
+        . '.don-admin .publish-status[data-kind="ok"] { border-color: var(--ok); }'
+        . '@media print { .pnav, .pbar, .phead, .pnav-veil, .ga-actions { display: none !important; } body.has-admin-shell { padding: 0 !important; } .app, .gwrap, .ga-page { margin: 0 !important; padding: 0 !important; max-width: none !important; } }';
+}
+
+function unsold_asset_url(string $path): string
+{
+    $file = dirname(__DIR__) . $path;
+    return $path . (is_file($file) ? '?v=' . filemtime($file) : '');
+}
+
+/** En-tête d'une page admin du module : le cadre de l'espace de la galerie (portail/_galerie-layout.php), puis le contenu du module. */
 function unsold_admin_head(string $title): void
 {
-    $content = get_content();
-    $adminNav = 'plugin:invendus-dons:index';
-    unsold_html_head($title . ' — ' . ($content['site_name'] ?? ''));
-    include __DIR__ . '/icons.php';
-    include __DIR__ . '/admin-nav.php';
-    echo "<main>\n";
+    $name = ext_t('Invendus & dons');
+    ga_head($title === $name ? $title : $title . ' · ' . $name, '', '<link rel="stylesheet" href="' . h(unsold_asset_url('/assets/dons.css')) . '"><style>' . unsold_gallery_css() . '</style>');
+    echo "<div class=\"don-admin\">\n";
 }
 
 function unsold_admin_foot(): void
 {
-    echo "</main>\n</body>\n</html>\n";
+    echo "</div>\n";
+    ga_foot();
+}
+
+/**
+ * En-tête d'une page publique du module (liste des dons, proposer, suivi) : sans le thème d'une boutique, au nom de la galerie.
+ * Ouvre <main> ; unsold_public_foot() le referme.
+ */
+function unsold_public_head(string $title, bool $noindex = false): void
+{
+    $ctx = unsold_gallery_context();
+    $name = unsold_site_name();
+    $home = '/';
+    if ($ctx !== null) {
+        require_once __DIR__ . '/galleries.php';
+        $g = gallery_load($ctx['slug']);
+        if ($g) $home = gallery_public_url($g);
+    }
+    unsold_html_head($title . ' — ' . $name, 'don-public', $noindex);
+    include __DIR__ . '/icons.php';
+    ?>
+<style>
+  body.don-public { margin: 0; background: var(--bg); color: var(--ink); }
+  .don-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 18px; padding: 14px clamp(16px, 4vw, 40px); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .don-bar a { color: var(--ink); text-decoration: none; }
+  .don-bar .don-brand { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
+  .don-bar nav { display: flex; gap: 14px; flex-wrap: wrap; font-size: .95rem; }
+  .don-bar nav a:hover { color: var(--accent); }
+  .don-foot { padding: 24px clamp(16px, 4vw, 40px); border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .88rem; }
+  .don-foot a { color: inherit; }
+</style>
+<header class="don-bar">
+  <a class="don-brand" href="<?= h($home) ?>"><?= h($name) ?></a>
+  <nav aria-label="Dons">
+    <a href="/dons.php">Dons &amp; invendus</a>
+    <a href="/dons-proposer.php">Proposer un objet</a>
+    <a href="<?= h($home) ?>">← <?= h($name) ?></a>
+  </nav>
+</header>
+<main>
+<?php
+}
+
+function unsold_public_foot(): void
+{
+    $name = unsold_site_name();
+    echo "</main>\n<footer class=\"don-foot\">" . h($name) . " · Dons et invendus du vide-grenier</footer>\n</body>\n</html>\n";
 }
 
 /** En-tête d'une page terrain (bénévoles) : sans navigation du site, jamais indexée. */

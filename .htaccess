@@ -14,6 +14,9 @@ RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/admin/?$ galerie/admin.php?g=$1 [L,QSA
 # Espace des bénévoles de la buvette d'une galerie : /galerie/<identifiant>/buvette/ et /galerie/<identifiant>/buvette/<page>.php (extension Buvette).
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/buvette/?$ buvette/index.php?g=$1 [L,QSA]
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/buvette/([a-z]+)\.php$ buvette/$2.php?g=$1 [L,QSA]
+# Dons et invendus d'une galerie : /galerie/<identifiant>/dons/ et /galerie/<identifiant>/dons/<page>.php (extension Invendus & dons).
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/dons/?$ dons.php?g=$1 [L,QSA]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/dons/(point|proposer|suivi|tournee)\.php$ dons-$2.php?g=$1 [L,QSA]
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/?$ galerie/index.php?g=$1 [L,QSA]
 
 # Agents externes des plugins (ex. agent de rendu vidéo) : /api/… → plugin-agent.php, aussi sous /<commerce>/api/… (après la

@@ -1,25 +1,20 @@
 <?php
 require_once __DIR__ . '/includes/session.php';
-require_once __DIR__ . '/includes/invendus.php';
-require_once __DIR__ . '/includes/shop-modules.php';
-shop_module_require_public('invendus-dons');
+require_once __DIR__ . '/includes/invendus-layout.php';
+unsold_public_enter();   // galerie d'après l'adresse (/galerie/<galerie>/dons/…), extension active
 unsold_private_headers();
 
 $token = unsold_param($_POST, 't') ?: unsold_param($_GET, 't');
 $offers = unsold_offers_by_token($token);
 
-$pageTitle = 'Suivi de mes dons';
-$activeNav = 'dons';
-$extraCss = ['/assets/dons.css'];
-$extraHead = '<meta name="robots" content="noindex, nofollow">';
 
 if (!$offers) {
     http_response_code(404);
-    include __DIR__ . '/includes/header.php';
+    unsold_public_head('Suivi de mes dons', true);
     echo '<section class="tight"><div class="don-wrap don-narrow"><h1 style="font-size:1.8rem;">Lien introuvable</h1>'
         . '<p class="lede">Ce lien de suivi n\'existe pas ou n\'est plus valable. Vérifiez que vous l\'avez copié en entier.</p>'
         . '<p><a class="btn btn-ghost" href="/dons.php">Retour aux dons &amp; invendus</a></p></div></section>';
-    include __DIR__ . '/includes/footer.php';
+    unsold_public_foot();
     exit;
 }
 
@@ -79,7 +74,7 @@ $donorStatus = function (array $o): string {
     return '';
 };
 
-include __DIR__ . '/includes/header.php';
+unsold_public_head('Suivi de mes dons', true);
 ?>
 <section class="tight">
   <div class="don-wrap don-narrow">
@@ -187,4 +182,4 @@ include __DIR__ . '/includes/header.php';
   });
 })();
 </script>
-<?php include __DIR__ . '/includes/footer.php'; ?>
+<?php unsold_public_foot(); ?>

@@ -57,6 +57,15 @@ if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/buvette(?:/(?:([a-z]+)\.php)?)?$
     return true;
 }
 
+// Dons et invendus d'une galerie : /galerie/<identifiant>/dons/[<page>.php] (même règle que dans le .htaccess).
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/dons(?:/|/(point|proposer|suivi|tournee)\.php)?$#', $path, $m)) {
+    $_GET['g'] = $m[1];
+    $script = ($m[2] ?? '') === '' ? 'dons' : 'dons-' . $m[2];
+    $_SERVER['SCRIPT_NAME'] = '/' . $script . '.php';
+    require __DIR__ . '/' . $script . '.php';
+    return true;
+}
+
 // Galeries commerciales : /galerie/ et /galerie/<identifiant>/ (même règle que dans le .htaccess).
 if (preg_match('#^/galerie(?:/([a-z0-9][a-z0-9-]*))?/?$#', $path, $m)) {
     $_GET['g'] = $m[1] ?? '';

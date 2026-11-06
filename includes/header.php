@@ -115,7 +115,6 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
       <a href="/index.php"<?= $activeNav === 'accueil' ? ' aria-current="page"' : '' ?>>Accueil</a>
       <a href="/boutique.php"<?= $activeNav === 'boutique' ? ' aria-current="page"' : '' ?>>La boutique</a>
       <a href="/visite.php"<?= $activeNav === 'visite' ? ' aria-current="page"' : '' ?>>Visite virtuelle</a>
-      <?php if (shop_has_public_donations()): ?><a href="/dons.php"<?= $activeNav === 'dons' ? ' aria-current="page"' : '' ?>>Dons &amp; invendus</a><?php endif; ?>
       <a href="/notre-histoire.php"<?= $activeNav === 'histoire' ? ' aria-current="page"' : '' ?>>Notre histoire</a>
       <a href="/nous-trouver.php"<?= $activeNav === 'nous-trouver' ? ' aria-current="page"' : '' ?>>Nous trouver</a>
       <?php if (shop_sales_enabled()): ?><?= cart_nav_link((int) $cartCount) ?><?php endif; ?>

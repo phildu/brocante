@@ -103,6 +103,12 @@ class LocalValetDriver extends BasicValetDriver
             }
         }
 
+        // Dons et invendus d'une galerie : /galerie/<identifiant>/dons/[<page>.php]
+        if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/dons(?:/|/(point|proposer|suivi|tournee)\.php)?$#', $uri, $m)) {
+            $_GET['g'] = strtolower($m[1]);
+            return $this->run($sitePath, '/' . (($m[2] ?? '') === '' ? 'dons' : 'dons-' . $m[2]) . '.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
+        }
+
         // Galeries commerciales : /galerie/ et /galerie/<identifiant>/
         if (preg_match('#^/galerie(?:/([A-Za-z0-9][A-Za-z0-9-]*))?/?$#', $uri, $m)) {
             $_GET['g'] = strtolower($m[1] ?? '');

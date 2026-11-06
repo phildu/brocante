@@ -20,7 +20,6 @@
       <ul>
         <li><a href="/notre-histoire.php">Notre histoire</a></li>
         <li><a href="/visite.php">Visite virtuelle</a></li>
-        <?php if (shop_has_public_donations()): ?><li><a href="/dons.php">Dons &amp; invendus du vide-grenier</a></li><?php endif; ?>
         <li><a href="/index.php#contact">Contact</a></li>
         <li><a href="/nous-trouver.php">Carte et itinéraire</a></li>
         <?php if (!function_exists('shop_member_galleries')) require_once __DIR__ . '/galleries.php'; foreach (shop_member_galleries() as $g): ?>

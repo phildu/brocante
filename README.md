@@ -938,16 +938,15 @@ Le chargeur est `includes/plugins.php` ; `packs/hello/` est un plugin de démons
   la surcharge explicite de la boutique prime. Le pack Annonces Leboncoin/Vinted utilise aussi ce panneau ; les anciennes souscriptions
   de ce pack sont reprises automatiquement dans le nouveau registre d'accès à leur première ouverture. Dans une portée héritée, un champ vide
   conserve la valeur supérieure ; les cases « hériter » permettent de rétablir l'héritage d'un champ configuré localement.
-- **Modules pour vide-greniers** (`invendus-dons`, `comptage-foule`) : deux plugins payants, gérés comme les autres (la **Buvette**, elle, est une extension de galerie : voir plus bas). Ils
-  n'ont pas de menu en dur : l'entrée apparaît dans la catégorie « Extensions » du menu de la boutique, une fois le plugin **activé**
-  dans le portail → Plugins. Prix, essai, modes de paiement et disponibilité se règlent dans le portail → Plugins → Tarifs et
-  modalités (ou « Types de galerie » : inclus / disponible / indisponible par type). Par défaut ils sont **réservés aux galeries de
-  type « vide-grenier »** et **sans prix** : essai gratuit de 14 jours et souscription manuelle, aucun paiement Stripe tant qu'un montant
-  n'est pas fixé. Leur code reste celui de leurs pages propres (`admin/buvette/`, `admin/invendus*.php`, `admin/comptage/` et, pour les
-  bénévoles et le public, `buvette/`, `dons*.php`, `comptage/`) ; le plugin (`packs/<id>/`) ne porte que l'entrée de menu et le panneau
-  d'activation. La garde (`includes/shop-modules.php`) ouvre ces pages seulement si le plugin est activé **et** l'accès payé, en essai,
-  offert ou inclus : sinon une page d'administration renvoie sur la fiche du plugin, et une page publique est introuvable (404).
-  Le lien public « Dons & invendus » n'apparaît que si le module est actif et qu'une édition est publiée.
+- **Modules pour vide-greniers** (`comptage-foule`) : plugin payant de boutique, géré comme les autres (la **Buvette** et **Invendus & dons**,
+  eux, sont des extensions de galerie : voir plus bas). Il n'a pas de menu en dur : l'entrée apparaît dans la catégorie « Extensions » du menu
+  de la boutique, une fois le plugin **activé** dans le portail → Plugins. Prix, essai, modes de paiement et disponibilité se règlent dans le
+  portail → Plugins → Tarifs et modalités (ou « Types de galerie » : inclus / disponible / indisponible par type). Par défaut il est
+  **réservé aux galeries de type « vide-grenier »** et **sans prix** : essai gratuit de 14 jours et souscription manuelle, aucun paiement
+  Stripe tant qu'un montant n'est pas fixé. Son code reste celui de ses pages propres (`admin/comptage/` et, pour le public, `comptage/`) ;
+  le plugin (`packs/<id>/`) ne porte que l'entrée de menu et le panneau d'activation. La garde (`includes/shop-modules.php`) ouvre ces
+  pages seulement si le plugin est activé **et** l'accès payé, en essai, offert ou inclus : sinon une page d'administration renvoie sur la
+  fiche du plugin, et une page publique est introuvable (404).
 - **Tâches planifiées** : une seule entrée dans la tâche planifiée de l'hébergeur (OVH : Hébergement → Tâches planifiées - Cron,
   langage PHP 8) lance `scripts/plugins-cron.php`. Sur un hébergement mutualisé OVH, la plus petite fréquence possible est **une fois par
   heure** (le champ Minutes est désactivé) : la tâche tourne donc à la minute choisie de chaque heure. Sur un serveur avec crontab, on
@@ -990,7 +989,7 @@ aussi « modules ». Pour ne pas les nommer de trois façons, le portail règle 
   remplace les jetons de toute la page ; ailleurs (messages JSON, e-mails, libellés), on appelle `ext_t('…')`.
   Test : `php scripts/test-vocabulary.php`.
 
-## Extensions de galerie : la Buvette (organisateur d'un vide-grenier)
+## Extensions de galerie : la Buvette et Invendus & dons (organisateur d'un vide-grenier)
 
 Les anciennes « options » d'une galerie (carte interactive, espace organisateur, file d'attente : `includes/gallery-modules.php`) sont des
 **extensions de galerie** : l'organisateur les active depuis l'onglet « Extensions » de son espace (essai gratuit, puis abonnement Stripe ou
@@ -1004,7 +1003,11 @@ code (`includes/buvette.php`, `admin/buvette/`, `buvette/`) ; `portail/galerie-b
 (accès : exploitant ou administrateur de la galerie, extension active), en plaçant `db()` sur la base de la galerie
 (`bv_enter_gallery()`), et les adresses du module sont réécrites vers la galerie (`bv_url_map()`). Côté bénévoles :
 `/galerie/<galerie>/buvette/` (règle dans `.htaccess`, `router.php`, `LocalValetDriver.php`), avec un code partagé propre à la galerie.
-Les invendus & dons et le comptage de foule suivront le même chemin.
+**Invendus & dons** (`invendus`, voir `INVENDUS_MODULE.md`) suit exactement le même chemin : `portail/galerie-invendus.php` ouvre les pages
+`admin/invendus*.php` dans l'espace de la galerie (`unsold_enter_gallery()`, adresses réécrites par `unsold_url_map()`), les données sont dans
+la base SQLite de la galerie (tables `unsold_*`, créées au premier accès par `unsold_ensure_schema()`, plus jamais dans `schema.sql`), et le
+public (visiteurs, exposants, bénévoles du point et des tournées) passe par `/galerie/<galerie>/dons/[<page>.php]`. Le comptage de foule suivra
+le même chemin.
 
 ## Retours testeurs : widget « Un retour ? », triage et relances
 

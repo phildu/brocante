@@ -62,6 +62,13 @@ function gm_defaults(): array
             'default_mode' => 'option',          // option payante : essai gratuit puis abonnement
             'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,   // aucun prix imposé : à fixer dans le portail (Tarifs des extensions de galerie)
         ],
+        'invendus' => [
+            'name' => 'Invendus & dons', 'emoji' => '🎁', 'active' => true, 'order' => 5,
+            'description' => "Zéro gaspillage : les exposants proposent ce qu'ils ne veulent pas remporter, un point de collecte (et des tournées à vélo cargo) réunit les objets, les visiteurs se servent gratuitement, puis le reliquat part vers une donnerie avec un bordereau de remise.",
+            'types' => ['vide-grenier'],
+            'default_mode' => 'option',
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
+        ],
     ];
 }
 

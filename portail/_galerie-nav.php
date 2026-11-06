@@ -22,6 +22,7 @@ if ($navG && $navMod('organisateur') && $navOn('exposants')) {
 }
 if ($navG && $navMod('attente') && $navOn('exposants')) $navBtn('galerie-attente.php', "File d'attente");
 if ($navG && $navMod('buvette')) $navBtn('galerie-buvette.php', 'Buvette');
+if ($navG && $navMod('invendus')) $navBtn('galerie-invendus.php', 'Invendus & dons');
 if ($navOn('bourse')) $navBtn('galerie-bourse.php', 'Bourse d’échanges');
 if ($navOn('messages')) {
     $navUnread = $navG ? gmsg_unread_admin((string) ($navG['slug'] ?? $navSlug)) : 0;
