@@ -4,13 +4,17 @@ require_once __DIR__ . '/../includes/functions.php';
 
 $content = get_content();
 $error = null;
+// Sans mot de passe configuré (fichier .secrets/admin_password.txt absent ou vide), l'accès reste fermé :
+// avant, un mot de passe vide était accepté et ouvrait l'administration à n'importe qui.
+$notConfigured = !admin_password_configured();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (hash_equals(ADMIN_PASSWORD, (string) ($_POST['password'] ?? ''))) {
+    if (admin_check_password((string) ($_POST['password'] ?? ''))) {
+        session_regenerate_id(true); // évite la fixation de session
         $_SESSION['is_admin'] = true;
         header('Location: /admin/dashboard.php');
         exit;
     }
-    $error = 'Mot de passe incorrect.';
+    $error = $notConfigured ? 'Connexion impossible : aucun mot de passe administrateur n\'est configuré.' : 'Mot de passe incorrect.';
 }
 ?><!DOCTYPE html>
 <html lang="fr">
@@ -41,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <h1>Administration</h1>
     <p class="lede">Connectez-vous pour gérer les contenus et le catalogue.</p>
     <?php if ($error): ?><p class="login-error"><?= h($error) ?></p><?php endif; ?>
+    <?php if ($notConfigured): ?><p class="login-error">Administrateur : créez le fichier <code>.secrets/admin_password.txt</code> sur le serveur, contenant le mot de passe sur une ligne.</p><?php endif; ?>
     <form method="post">
       <input type="password" name="password" placeholder="Mot de passe" autofocus required>
       <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center;">Se connecter</button>

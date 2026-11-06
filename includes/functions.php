@@ -1558,6 +1558,23 @@ function flash_get(): ?array
     return $f;
 }
 
+/** Comparaison en temps constant ; un mot de passe attendu vide ne correspond JAMAIS (échec par défaut). */
+function admin_password_matches(string $expected, string $given): bool
+{
+    return $expected !== '' && hash_equals($expected, $given);
+}
+
+/** Un mot de passe admin est-il configuré ? Sinon (fichier .secrets absent ou vide) personne ne peut se connecter. */
+function admin_password_configured(): bool
+{
+    return defined('ADMIN_PASSWORD') && trim((string) ADMIN_PASSWORD) !== '';
+}
+
+function admin_check_password(string $given): bool
+{
+    return admin_password_configured() && admin_password_matches((string) ADMIN_PASSWORD, $given);
+}
+
 function require_admin(): void
 {
     if (empty($_SESSION['is_admin'])) {
