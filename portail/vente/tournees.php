@@ -25,6 +25,9 @@ foreach ($selectedIds as $id) {
     if ($prospect = fv_prospect_get($id)) $selected[] = $prospect;
 }
 usort($selected, static fn (array $a, array $b): int => [$a['city'], $a['postal'], $a['address']] <=> [$b['city'], $b['postal'], $b['address']]);
+$shortest = ($_GET['ordre'] ?? '') === 'court';
+if ($shortest) $selected = fv_route_order($selected);   // plus court chemin d'après les positions déjà connues (les autres arrêts suivent)
+$ungeo = count(array_filter($selected, static fn (array $p): bool => !fv_geo_has($p)));
 
 $pool = fv_prospects_search($filters, 400);
 $poolIds = array_map(static fn (array $p): int => (int) $p['id'], $pool);
@@ -50,7 +53,23 @@ $routeQuery = static function (array $stops) use ($addressOf): string {
     return 'https://www.google.com/maps/dir/?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 };
 $routeUrl = $routeQuery($selected);
+$stopLabel = static fn (array $p): string => $p['business'] !== '' ? $p['business'] : $p['name'];
+$mapData = [
+    'csrf' => fv_csrf(),
+    'geoUrl' => 'tournee-geo.php',
+    'tiles' => 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+    'stops' => array_map(static fn (array $p, int $i): array => [
+        'id' => (int) $p['id'], 'n' => $i + 1, 'label' => $stopLabel($p), 'addr' => $addressOf($p),
+        'lat' => fv_geo_has($p) ? (float) $p['lat'] : null, 'lng' => fv_geo_has($p) ? (float) $p['lng'] : null,
+        'url' => $mapSearch($p),
+    ], $selected, array_keys($selected)),
+    'pool' => array_map(static fn (array $p): array => [
+        'id' => (int) $p['id'], 'label' => $stopLabel($p), 'addr' => $addressOf($p),
+        'lat' => fv_geo_has($p) ? (float) $p['lat'] : null, 'lng' => fv_geo_has($p) ? (float) $p['lng'] : null,
+    ], $pool),
+];
 $currentUrl = 'tournees.php?' . http_build_query(array_filter([
+    'ordre' => $shortest ? 'court' : null,
     'ids' => $selectedIds ? implode(',', $selectedIds) : null,
     'ville' => $filters['city'] ?: null,
     'zone' => $filters['zone'] ?: null,
@@ -63,6 +82,7 @@ fv_layout_start('Tournées & terrain', [
     'eyebrow' => 'Porte-à-porte',
     'desc' => 'Choisissez les commerces d’une même ville ou zone, dans l’ordre de la rue. La tournée se prépare, s’imprime et se consigne arrêt par arrêt.',
     'actions' => '<a class="fv-btn fv-btn-sm" href="prospects.php?nouveau=1">' . fv_icon('plus', 14) . ' Ajouter un commerce</a>',
+    'head' => '<link rel="stylesheet" href="/assets/lib/leaflet/leaflet.min.css">',
 ]);
 ?>
 
@@ -75,6 +95,7 @@ fv_layout_start('Tournées & terrain', [
     </div>
     <div class="fv-actions fv-no-print">
       <?php if ($routeUrl !== ''): ?><a class="fv-btn fv-btn-sm" href="<?= e($routeUrl) ?>" target="_blank" rel="noopener"><?= fv_icon('route', 14) ?> Itinéraire Google Maps</a><?php endif; ?>
+      <a class="fv-btn fv-btn-sm<?= $shortest ? ' fv-btn-primary' : '' ?>" href="<?= e($shortest ? preg_replace('/(\?|&)ordre=court(&|$)/', '$1', $currentUrl) . '#tournee' : $currentUrl . '&ordre=court#tournee') ?>" title="Réordonne les arrêts pour limiter les kilomètres, à partir du premier"><?= fv_icon('route', 14) ?> <?= $shortest ? 'Ordre par rue' : 'Ordre le plus court' ?></a>
       <button class="fv-btn fv-btn-sm" type="button" data-print="route"><?= fv_icon('print', 14) ?> Imprimer la feuille</button>
       <a class="fv-btn fv-btn-sm fv-btn-ghost" href="tournees.php<?= $filters['city'] !== '' ? '?ville=' . e(rawurlencode($filters['city'])) : '' ?>">Changer la sélection</a>
     </div>
@@ -86,6 +107,12 @@ fv_layout_start('Tournées & terrain', [
       <h1><?= e(fv_setting('marque_nom', 'Brocs')) ?> — <?= e($filters['city'] !== '' ? $filters['city'] : 'tournée du jour') ?></h1>
       <p><?= e(date('d/m/Y')) ?> · <?= count($selected) ?> arrêt<?= count($selected) > 1 ? 's' : '' ?><?= $member ? ' · ' . e($member['name']) : '' ?></p>
     </div>
+  </div>
+
+  <div class="fv-tmap-wrap fv-no-print">
+    <div class="fv-tmap" id="fv-route-map" role="img" aria-label="Carte de la tournée : arrêts numérotés dans l’ordre de passage"></div>
+    <p class="fv-hint" id="fv-route-status" aria-live="polite">Situation des arrêts sur la carte…</p>
+    <?php if ($shortest): ?><p class="fv-hint">Ordre le plus court à vol d’oiseau, à partir du premier arrêt<?= $ungeo ? ' · ' . $ungeo . ' arrêt' . ($ungeo > 1 ? 's' : '') . ' sans position placé' . ($ungeo > 1 ? 's' : '') . ' à la fin (rechargez une fois la carte affichée)' : '' ?>.</p><?php endif; ?>
   </div>
 
   <div class="fv-route-list">
@@ -164,6 +191,15 @@ fv_layout_start('Tournées & terrain', [
       </form>
     </div>
 
+    <div class="fv-card-pad fv-tmap-wrap">
+      <div class="fv-tmap" id="fv-pool-map" role="img" aria-label="Carte des commerces à visiter"></div>
+      <div class="fv-tmap-bar">
+        <span class="fv-hint" id="fv-pool-status" aria-live="polite"></span>
+        <button class="fv-btn fv-btn-sm" type="button" id="fv-pool-locate"><?= fv_icon('route', 13) ?> Situer les commerces sur la carte</button>
+        <button class="fv-btn fv-btn-sm" type="button" id="fv-pool-inview">Cocher ceux de la vue</button>
+      </div>
+    </div>
+
     <form method="get" action="tournees.php">
       <input type="hidden" name="q" value="<?= e($filters['q']) ?>">
       <input type="hidden" name="ville" value="<?= e($filters['city']) ?>">
@@ -228,4 +264,7 @@ fv_layout_start('Tournées & terrain', [
   </aside>
 </div>
 
+<script type="application/json" id="fv-tmap-data"><?= json_encode($mapData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+<script src="/assets/lib/leaflet/leaflet.min.js"></script>
+<script src="assets/tournee-carte.js?v=2"></script>
 <?php fv_layout_end(); ?>
