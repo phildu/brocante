@@ -147,6 +147,12 @@ function gallery_map_normalize(array $m, ?array $allowedShops = null, ?array $lo
     return ['center' => $lat !== null && $lng !== null ? [$lat, $lng] : null,
         'zoom' => max(1, min(20, (int) ($m['zoom'] ?? 17))),
         'bearing' => max(-180, min(180, (int) round((float) ($m['bearing'] ?? 0)))),
+        // Réglages de la stylisation IA du fond (style, niveau de simplification 1..5, consigne perso) ; revalidés à chaque génération.
+        'ai' => [
+            'style' => preg_match('/^[a-z]{1,20}$/', (string) ($m['ai']['style'] ?? '')) ? (string) $m['ai']['style'] : 'aquarelle',
+            'level' => max(1, min(5, (int) ($m['ai']['level'] ?? 3) ?: 3)),
+            'custom' => mb_substr(trim(preg_replace('/[\x00-\x1F\x7F\s]+/u', ' ', (string) ($m['ai']['custom'] ?? ''))), 0, 400),
+        ],
         'base' => in_array($m['base'] ?? '', ['sat', 'none'], true) ? (string) $m['base'] : 'osm',
         'catalog' => $catalog, 'places' => $places, 'booking' => $booking, 'costs' => $costs, 'background' => $background,
         'items' => $items];

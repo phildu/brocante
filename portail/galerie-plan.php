@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $view = json_decode((string) ($_POST['view'] ?? ''), true);
         try {
             $out = gallery_ai_map_stylize(is_array($view) ? $view : [], (string) ($_POST['base'] ?? 'osm'),
-                (string) ($_POST['style'] ?? 'aquarelle'), $gaSlug);
+                (string) ($_POST['style'] ?? 'aquarelle'), $gaSlug, (int) ($_POST['level'] ?? 3), (string) ($_POST['custom'] ?? ''));
         } catch (Throwable $e) {
             $out = ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -178,6 +178,11 @@ ga_head('Plan des commerces');
       #mapBar input[type=checkbox] { width: auto; flex: none; margin: 0; }
       #planCard.fs #mapBar select { width: 100%; max-width: 100%; }
       #mapBarBody { display: grid; gap: 8px; }
+      #aiAdv { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; }
+      #aiAdv > summary { cursor: pointer; font-weight: 600; font-size: .85rem; }
+      #aiAdv .aiform { display: grid; gap: 8px; margin-top: 8px; }
+      #aiAdv textarea { width: 100%; resize: vertical; }
+      #aiAdv input[type=range] { width: 100%; }
       #advancedTools { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; }
       #advancedTools > summary { cursor: pointer; font-weight: 600; font-size: .85rem; }
       #advancedTools[open] > .row { margin-top: 8px; }
@@ -327,6 +332,18 @@ ga_head('Plan des commerces');
         <button class="btn mini" type="button" id="aiGo" title="Capture la vue actuelle du fond IGN, la fait redessiner par l'IA, puis la pose comme fond importé calé à l'échelle. Chaque stylisation consomme un crédit IA.">Capturer et styliser</button>
         <span class="meta" id="aiMsg" role="status" style="flex:1 1 180px;min-width:0;"></span>
       </div>
+      <details id="aiAdv">
+        <summary>Personnaliser la stylisation</summary>
+        <div class="aiform">
+          <label class="f"><span>Niveau de simplification : <output id="aiLevelOut" for="aiLevel" style="font-weight:600;">3 · Équilibré</output></span>
+            <input type="range" id="aiLevel" min="1" max="5" step="1" value="3"></label>
+          <p class="tip" id="aiLevelHelp"></p>
+          <label class="f">Votre propre consigne de style (facultatif)
+            <textarea id="aiCustom" rows="3" maxlength="400" placeholder="Ex. : carte au crayon de couleur, tons pastel, traits souples, ambiance marché de Noël"></textarea></label>
+          <p class="tip">Si vous la remplissez, elle remplace le style choisi plus haut. Les rues, les bâtiments et le cadrage restent toujours respectés. Les réglages sont conservés avec le plan (pensez à l'enregistrer).</p>
+          <button class="btn mini" type="button" id="aiReset">Réinitialiser</button>
+        </div>
+      </details>
       <div class="row" id="exportRow">
         <span class="row" style="gap:6px;" title="Exporte le plan tel qu'il est à l'écran, en 300 dpi : PDF prêt à imprimer, ou PSD avec calque d'image calé pour InDesign/Photoshop.">
           Export impression
@@ -680,6 +697,22 @@ ga_head('Plan des commerces');
       // --- Fond stylisé par l'IA : la vue courante est capturée (WMS IGN), redessinée par Gemini, puis posée comme fond importé ---
       (function () {
         var btn = $('aiGo'), msg = $('aiMsg'), sel = $('aiStyle');
+        var lvl = $('aiLevel'), custom = $('aiCustom');
+        var LEVELS = [
+          ['Très fidèle', 'Garde presque tous les détails : bâtiments, arbres, marquages.'],
+          ['Détaillé', 'Garde l\'essentiel des détails, adoucit seulement les petits éléments.'],
+          ['Équilibré', 'Réglage d\'origine : style appliqué sans simplifier davantage.'],
+          ['Simplifié', 'Regroupe les petits détails ; retire voitures, arbres isolés et petites annexes.'],
+          ['Très épuré', 'Schéma minimal : grandes voies, masses de bâtiments, grandes zones vertes ou d\'eau.']
+        ];
+        function showLevel() { var n = parseInt(lvl.value, 10) || 3; $('aiLevelOut').textContent = n + ' · ' + LEVELS[n - 1][0]; $('aiLevelHelp').textContent = LEVELS[n - 1][1]; }
+        var sv = saved.ai || {};
+        if (sv.style && sel.querySelector('option[value="' + sv.style + '"]')) sel.value = sv.style;
+        lvl.value = sv.level || 3; custom.value = sv.custom || '';
+        if (sv.custom || (sv.level && sv.level !== 3)) $('aiAdv').open = true;
+        showLevel();
+        lvl.addEventListener('input', showLevel);
+        $('aiReset').addEventListener('click', function () { lvl.value = 3; custom.value = ''; showLevel(); });
         if (!data.aiMap) {
           btn.disabled = true; sel.disabled = true;
           msg.textContent = 'Clé IA absente : voir Fournisseurs IA.';
@@ -689,24 +722,25 @@ ga_head('Plan des commerces');
           var b = map.getBounds();
           var view = { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() };
           var labels = { aquarelle: 'aquarelle douce', croquis: "croquis d'architecte", retro: 'affiche rétro', bd: 'BD franco-belge' };
-          btn.disabled = true; sel.disabled = true;
+          btn.disabled = true; sel.disabled = true; lvl.disabled = true; custom.disabled = true;
           msg.textContent = 'Capture du fond et stylisation par l\'IA… (20 à 40 s)';
           var fd = new FormData();
           fd.append('csrf', CSRF); fd.append('action', 'stylize');
           fd.append('view', JSON.stringify(view));
           fd.append('base', hidden ? 'osm' : baseKind);
           fd.append('style', sel.value);
+          fd.append('level', lvl.value); fd.append('custom', custom.value.trim());
           fetch(location.pathname + location.search, { method: 'POST', body: fd, credentials: 'same-origin', headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (j) {
-              btn.disabled = false; sel.disabled = false;
+              btn.disabled = false; sel.disabled = false; lvl.disabled = false; custom.disabled = false;
               if (!j.ok) { msg.textContent = j.error || 'Stylisation impossible.'; return; }
               bg = { path: j.path, bounds: j.bounds, opacity: 1 };
               $('bgOpacity').value = 1;
               renderBg();
-              msg.textContent = 'Fond ' + (labels[j.style] || 'stylisé') + ' posé : enregistrez le plan pour le conserver.';
+              msg.textContent = 'Fond ' + (custom.value.trim() ? 'personnalisé' : (labels[j.style] || 'stylisé')) + ' (' + LEVELS[(j.level || 3) - 1][0].toLowerCase() + ') posé : enregistrez le plan pour le conserver.';
             })
-            .catch(function () { btn.disabled = false; sel.disabled = false; msg.textContent = 'Stylisation indisponible (réseau ou délai dépassé).'; });
+            .catch(function () { btn.disabled = false; sel.disabled = false; lvl.disabled = false; custom.disabled = false; msg.textContent = 'Stylisation indisponible (réseau ou délai dépassé).'; });
         });
       })();
 
@@ -1735,7 +1769,7 @@ ga_head('Plan des commerces');
       // --- Enregistrement ---
       function collectMap() {
         var c = map.getCenter();
-        return { center: [c.lat, c.lng], zoom: map.getZoom(), bearing: bearing, base: hidden ? 'none' : baseKind, catalog: catalog.filter(function (x) { return x.name && x.w >= 0.5 && x.d >= 0.5; }),
+        return { center: [c.lat, c.lng], zoom: map.getZoom(), bearing: bearing, ai: { style: $('aiStyle').value, level: parseInt($('aiLevel').value, 10) || 3, custom: $('aiCustom').value.trim() }, base: hidden ? 'none' : baseKind, catalog: catalog.filter(function (x) { return x.name && x.w >= 0.5 && x.d >= 0.5; }),
           background: bg ? { path: bg.path, bounds: bgLayer ? bgBoundsArr(bgLayer.getBounds()) : bg.bounds, opacity: bg.opacity } : null,
           items: group.getLayers().map(function (l) { var m = l._plan; return { id: m.id, kind: kindOf(l), pts: points(l), label: m.label, num: m.num, shop: m.shop, color: m.color, note: m.note, surface: m.surface, role: m.role, ztype: m.ztype, unit: m.unit, price_cents: toCents(m.price), price_pro_cents: toCents(m.pricePro), usage: m.usage, flow: m.flow, indoor: !!m.indoor, service: m.service }; }), costs: { fixed_cents: toCents($('simFixed').value), var_cents: toCents($('simVar').value), pct: num('simPct', 0), occ: [0, 1, 2].map(function (i) { return num('simOcc' + i, 0); }), adj: [0, 1, 2].map(function (i) { return num('simAdj' + i, 0); }) }, booking: { enabled: $('bkOn').checked, hold_days: parseInt($('bkDays').value, 10) || 7, intro: $('bkIntro').value } };
       }
