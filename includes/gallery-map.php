@@ -146,6 +146,7 @@ function gallery_map_normalize(array $m, ?array $allowedShops = null, ?array $lo
     if (!$items && !$catalog && !$places && $lat === null) return null;
     return ['center' => $lat !== null && $lng !== null ? [$lat, $lng] : null,
         'zoom' => max(1, min(20, (int) ($m['zoom'] ?? 17))),
+        'bearing' => max(-180, min(180, (int) round((float) ($m['bearing'] ?? 0)))),
         'base' => in_array($m['base'] ?? '', ['sat', 'none'], true) ? (string) $m['base'] : 'osm',
         'catalog' => $catalog, 'places' => $places, 'booking' => $booking, 'costs' => $costs, 'background' => $background,
         'items' => $items];
