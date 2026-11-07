@@ -46,7 +46,7 @@ foreach (gallery_list() as $ga) {
     // Repère du plan (ou centre de l'emplacement) : sert à retrouver l'adresse d'un clic.
     $spot = null;
     foreach (($ga['map']['items'] ?? []) as $it) {
-        if ((string) ($it['shop'] ?? '') !== $shopKey || in_array($it['role'] ?? '', ['zone', 'territoire'], true)) continue;
+        if ((string) ($it['shop'] ?? '') !== $shopKey || in_array($it['role'] ?? '', ['zone', 'territoire', 'secteur'], true)) continue;
         [$lat, $lng] = gallery_map_centroid($it['pts']);
         if ($spot === null || $it['kind'] === 'marker') $spot = [round($lat, 7), round($lng, 7)];
     }

@@ -756,7 +756,7 @@ portail_page_start([
       $placeSpots = [];
       foreach (($g['map']['items'] ?? []) as $it) {
           $k = (string) ($it['shop'] ?? '');
-          if ($k === '' || !isset($placeRows[$k]) || in_array($it['role'] ?? '', ['zone', 'territoire'], true)) continue;
+          if ($k === '' || !isset($placeRows[$k]) || in_array($it['role'] ?? '', ['zone', 'territoire', 'secteur'], true)) continue;
           [$plat, $plng] = gallery_map_centroid($it['pts']);
           if (!isset($placeSpots[$k]) || $it['kind'] === 'marker') $placeSpots[$k] = [round($plat, 7), round($plng, 7)];
       }

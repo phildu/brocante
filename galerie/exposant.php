@@ -523,7 +523,7 @@ $cfg = [
     }
     function popup(it) {
       var p = document.createElement('div'), h = document.createElement('strong');
-      var title = it.role === 'slot' && it.num ? 'Emplacement ' + it.num : (it.role === 'zone' || it.role === 'territoire' ? (it.label || it.ztype || 'Zone') : (it.label || 'Repère'));
+      var title = it.role === 'slot' && it.num ? 'Emplacement ' + it.num : (it.role === 'zone' || it.role === 'territoire' || it.role === 'secteur' ? (it.label || it.ztype || 'Zone') : (it.label || 'Repère'));
       h.textContent = title; p.appendChild(h);
       [it.zone, it.note].forEach(function (v) { if (v) { var n = document.createElement('div'); n.textContent = v; p.appendChild(n); } });
       return p;
@@ -562,7 +562,7 @@ $cfg = [
         (plan && plan.items ? plan.items : []).forEach(function (it) {
           var layer;
           if (it.kind === 'marker') layer = L.circleMarker(it.pts[0], { radius: 7, color: '#fff', weight: 2, fillColor: it.color, fillOpacity: 1 });
-          else if (it.kind === 'polygon') layer = L.polygon(it.pts, (it.role === 'zone' || it.role === 'territoire')
+          else if (it.kind === 'polygon') layer = L.polygon(it.pts, (it.role === 'zone' || it.role === 'territoire' || it.role === 'secteur')
             ? { color: it.color, weight: 2, dashArray: '8 6', fillColor: it.color, fillOpacity: .07 }
             : { color: it.color, weight: 2, fillColor: it.color, fillOpacity: .3 });
           else layer = L.polyline(it.pts, { color: it.color, weight: 3 });
@@ -572,7 +572,7 @@ $cfg = [
             layer.setStyle({ color: cfg.accent, fillColor: cfg.accent, weight: 4, fillOpacity: .55, opacity: 1 });
             slotLayer = layer;
           }
-          if ((it.role === 'zone' || it.role === 'territoire') && it.label && layer.getBounds && !mine) {
+          if ((it.role === 'zone' || it.role === 'territoire' || it.role === 'secteur') && it.label && layer.getBounds && !mine) {
             var bd = layer.getBounds();
             var sp = document.createElement('span');
             sp.textContent = it.ztype && it.label.toLowerCase().indexOf(it.ztype.toLowerCase()) !== 0 ? it.ztype + ' · ' + it.label : it.label;
@@ -583,7 +583,7 @@ $cfg = [
           if (it.role === 'slot' && it.num) layer.bindTooltip('Emplacement ' + it.num + (it.zone ? ' · ' + it.zone : ''), { direction: 'center' });
           else if (it.kind === 'marker' && it.label) layer.bindTooltip(it.label, { direction: 'top' });
           layer.addTo(map);
-          if (it.role === 'zone' || it.role === 'territoire') backLayers.push(layer);
+          if (it.role === 'zone' || it.role === 'territoire' || it.role === 'secteur') backLayers.push(layer);
         });
 
         if (!slotLayer && standPoint) {

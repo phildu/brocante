@@ -100,10 +100,19 @@ $min = $max = null;
 $page = 1;
 $perPage = $st['per_page'];
 $universes = [];
+$sectors = [];
+$sector = null;
 if ($gallery) {
     $data = gallery_catalogue($gallery, $origin, $testRequest !== null, $testRequest === null);
     $shops = $data['shops'];
     uasort($shops, static fn (array $a, array $b): int => [$b['featured'], $a['order']] <=> [$a['featured'], $b['order']]);
+    // Sous-zones du plan (bâtiments, halls…) : ?secteur=<identifiant> ne montre que les commerces posés dans ce secteur.
+    $sectors = gallery_map_sectors($gallery['map'] ?? null);
+    $sector = ($_GET['secteur'] ?? '') !== '' ? gallery_map_sector($gallery['map'] ?? null, strtolower((string) $_GET['secteur'])) : null;
+    if ($sector) {
+        $shops = array_intersect_key($shops, array_flip($sector['shops']));
+        $pageTitle = $sector['name'] . ' — ' . $gallery['name'];
+    }
     $q = trim((string) ($_GET['q'] ?? ''));
     $shopFilter = (string) ($_GET['commerce'] ?? '');
     $catFilter = (string) ($_GET['cat'] ?? '');
@@ -159,7 +168,8 @@ if ($gallery) {
     if ($min !== null) $activeFilters['min'] = 'À partir de ' . rtrim(rtrim(number_format($min, 2, ',', ''), '0'), ',') . ' €';
     if ($max !== null) $activeFilters['max'] = 'Jusqu\'à ' . rtrim(rtrim(number_format($max, 2, ',', ''), '0'), ',') . ' €';
 }
-$metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count($data['shops']) . ' commerces réunies au même endroit.') : 'Des commerçants réunis au même endroit.';
+$metaDescription = $sector ? ($sector['note'] !== '' ? $sector['note'] : $sector['name'] . ' : ' . count($shops) . ' ' . ($vocab['members'] ?? 'commerces') . ' dans ' . $gallery['name'] . '.')
+    : ($gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count($data['shops']) . ' commerces réunies au même endroit.') : 'Des commerçants réunis au même endroit.');
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -392,6 +402,16 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
     <?php endif; ?>
     <?php if ($ebCampaign && $ebCampaign['enabled'] && $gallery['published'] && !$preview): ?><?= eb_widget_html($gallery['slug']) ?><?php endif; ?>
 
+    <?php if ($sectors): ?>
+    <nav class="chips" aria-label="Secteurs du site" style="margin:18px 0 0;">
+      <a class="chip" href="<?= e(gal_url(['secteur' => null, 'commerce' => null])) ?>"<?= !$sector ? ' aria-current="page" style="font-weight:700;"' : '' ?>>Tout le site</a>
+      <?php foreach ($sectors as $sec): ?>
+        <a class="chip" href="<?= e(gal_url(['secteur' => $sec['slug'], 'commerce' => null])) ?>"<?= $sector && $sector['slug'] === $sec['slug'] ? ' aria-current="page" style="font-weight:700;"' : '' ?>><span aria-hidden="true" style="width:10px;height:10px;border-radius:50%;background:<?= e($sec['color']) ?>;display:inline-block;"></span><?= e($sec['name']) ?> <b><?= count($sec['shops']) ?></b></a>
+      <?php endforeach; ?>
+    </nav>
+    <?php endif; ?>
+    <?php if ($sector && $sector['note'] !== ''): ?><p class="note"><?= e($sector['note']) ?></p><?php endif; ?>
+
     <?php if ($shops): ?>
     <section aria-labelledby="h-commerces">
       <h2 id="h-commerces"><?= e($st['shops_title'] !== '' ? $st['shops_title'] : ($vocab['members_title'] ?? 'Les commerces')) ?></h2>
@@ -526,6 +546,8 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
       $slotStates = !empty($bk['enabled']) ? gb_states($gallery) : [];
       $zoneNames = [];
       foreach (($planMap['items'] ?? []) as $pi) if ($pi['role'] === 'zone') $zoneNames[$pi['id']] = gallery_zone_name($pi, gt_locations($gallery));
+      $sectorUrls = [];
+      foreach ($sectors as $sec) $sectorUrls[$sec['id']] = gal_url(['secteur' => $sec['slug'], 'commerce' => null, 'page' => null]) . '#contenu';
       foreach (($planMap['items'] ?? []) as $pi) {
           $ps = $shops[$pi['shop']] ?? null;
           $isSlot = $pi['role'] === 'slot';
@@ -536,11 +558,11 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
               'ztype' => $pi['role'] === 'zone' ? gt_location_label($gallery, (string) $pi['ztype']) : '', 'zone' => $isSlot ? ($zoneNames[$pi['zone']] ?? '') : '',
               'price' => $isSlot && $withPrices ? gallery_map_slot_price($planMap, $pi, false) : null, 'price_pro' => $isSlot && $withPrices ? gallery_map_slot_price($planMap, $pi, true) : null,
               'state' => $isSlot && !empty($bk['enabled']) ? ($pi['shop'] !== '' ? 'taken' : ($slotStates[$pi['id']] ?? 'free')) : '', 'free' => $free,
-              'shop' => $ps ? $ps['name'] : '', 'url' => $ps ? ($ps['url'] !== '' ? $ps['url'] : gal_url(['commerce' => $pi['shop']]) . '#pieces') : ''];
+              'sector' => $sectorUrls[$pi['id']] ?? '', 'shop' => $ps ? $ps['name'] : '', 'url' => $ps ? ($ps['url'] !== '' ? $ps['url'] : gal_url(['commerce' => $pi['shop']]) . '#pieces') : ''];
       }
       $planData = $carteOn && $planItems ? ['center' => $planMap['center'], 'zoom' => $planMap['zoom'], 'base' => $planMap['base'], 'items' => $planItems,
           'tiles' => ['osm' => GALLERY_MAP_TILE_PLAN, 'sat' => GALLERY_MAP_TILE_SAT],
-          'background' => $planMap['background'] ?? null,
+          'background' => $planMap['background'] ?? null, 'focus' => $sector['id'] ?? '',
           'booking' => !empty($bk['enabled']) ? ['intro' => $bk['intro'], 'endpoint' => '/galerie/exposant.php', 'slug' => $gallery['slug']] : null] : null;
     ?>
     <?php if ($planData): ?>
@@ -654,6 +676,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
         var c=it.color,o={color:c,weight:2,fillColor:c,fillOpacity:.3};
         if(it.role==='zone')o={color:c,weight:2,dashArray:'8 6',fillColor:c,fillOpacity:.07};
         if(it.role==='territoire')o={color:c,weight:2.5,dashArray:'2 6',fillColor:c,fillOpacity:.04};
+        if(it.role==='secteur')o={color:c,weight:it.id===d.focus?4:3,dashArray:'10 4',fillColor:c,fillOpacity:it.id===d.focus?.12:.06};
         if(bookMode&&it.role==='slot'&&it.state){var st={free:'#2e8b57',pending:'#e08a1e',taken:'#9a9a9a'}[it.state];o={color:st,weight:2,fillColor:st,fillOpacity:it.state==='free'?.45:.35}}
         l.setStyle(o)}
       function popup(it){
@@ -664,6 +687,7 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
         if(it.zone)add(it.zone);if(it.m2>0)add((it.m2>=100?Math.round(it.m2):it.m2)+' m²');if(it.note)add(it.note);
         if(it.role==='slot'&&it.price!=null)add('Tarif : '+eur(it.price)+(it.price_pro!=null&&it.price_pro!==it.price?' (entreprise : '+eur(it.price_pro)+')':''));
         if(it.role==='slot'&&it.state)add({free:placeWord+' libre',pending:'Demande en cours',taken:placeWord+' indisponible'}[it.state]);
+        if(it.sector){var sa=document.createElement('a');sa.href=it.sector;sa.textContent='Voir ce secteur →';sa.style.display='block';p.appendChild(sa)}
         if(it.url){var a=document.createElement('a');a.href=it.url;a.target='_blank';a.rel='noopener';a.textContent=it.shop?'Boutique '+it.shop+' ↗':'Boutique ↗';a.style.display='block';p.appendChild(a)}
         if(bookMode&&it.role==='slot'&&it.free){var bt=document.createElement('button');bt.type='button';bt.textContent='Demander cet emplacement';bt.style.cssText='margin-top:6px;padding:6px 10px;cursor:pointer;';bt.addEventListener('click',function(){openForm(it);map.closePopup()});p.appendChild(bt)}
         return p}
@@ -688,10 +712,10 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           var l;
           if(it.kind==='marker')l=L.marker(it.pts[0],{icon:L.divIcon({className:'',html:'<span style="display:block;width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45),0 2px 5px rgba(0,0,0,.35);background:'+it.color+'"></span>',iconSize:[18,18],iconAnchor:[9,9]})});
           else{l=it.kind==='polygon'?L.polygon(it.pts):L.polyline(it.pts,{color:it.color,weight:3});if(it.kind==='polygon')style(it,l)}
-          if(it.role==='zone'||it.role==='territoire'){var bd=l.getBounds(),sp=document.createElement('span');sp.style.cssText='display:inline-block;transform:translate(-50%,-100%);white-space:nowrap;font:700 11px/1.3 system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#222;background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.3);border-radius:4px;padding:2px 7px;pointer-events:none';sp.textContent=(it.role==='territoire'?'⬡ ':'')+(it.ztype&&(it.label||'').toLowerCase().indexOf(it.ztype.toLowerCase())!==0?it.ztype+' · ':'')+(it.label||'');
+          if(it.role==='zone'||it.role==='territoire'||it.role==='secteur'){var bd=l.getBounds(),sp=document.createElement('span');sp.style.cssText='display:inline-block;transform:translate(-50%,-100%);white-space:nowrap;font:700 11px/1.3 system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#222;background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.3);border-radius:4px;padding:2px 7px;pointer-events:none';sp.textContent=(it.role==='territoire'?'⬡ ':'')+(it.ztype&&(it.label||'').toLowerCase().indexOf(it.ztype.toLowerCase())!==0?it.ztype+' · ':'')+(it.label||'');
             var zl=L.marker([bd.getNorth(),bd.getCenter().lng],{icon:L.divIcon({className:'',html:sp,iconSize:[0,0]}),interactive:false,keyboard:false});layers.push({l:zl});zl.addTo(map)}
-          else if(it.role!=='territoire'){var tt=[it.num,it.label].filter(Boolean).join(' · ');if(tt){var t=document.createElement('span');t.textContent=tt;l.bindTooltip(t,it.kind==='marker'?{permanent:true,direction:'top',offset:[0,-10]}:{permanent:true,direction:'center'})}}
-          l.bindPopup(function(){return popup(it)});l.addTo(map);if((it.role==='zone'||it.role==='territoire')&&l.bringToBack)l.bringToBack();layers.push({l:l});if(it.role!=='territoire')all.push(l)});
+          else if(it.role!=='territoire'&&it.role!=='secteur'){var tt=[it.num,it.label].filter(Boolean).join(' · ');if(tt){var t=document.createElement('span');t.textContent=tt;l.bindTooltip(t,it.kind==='marker'?{permanent:true,direction:'top',offset:[0,-10]}:{permanent:true,direction:'center'})}}
+          l.bindPopup(function(){return popup(it)});l.addTo(map);if((it.role==='zone'||it.role==='territoire'||it.role==='secteur')&&l.bringToBack)l.bringToBack();layers.push({l:l});if(it.role!=='territoire'&&it.role!=='secteur')all.push(l)});
         return all}
       b.addEventListener('click',function(){b.textContent='Chargement…';
         Promise.all([load('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css','css'),load('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js','js')]).then(function(){
@@ -707,7 +731,9 @@ $metaDescription = $gallery ? ($gallery['tagline'] ?: 'Les pièces de ' . count(
           L.control.scale({metric:true,imperial:false}).addTo(map);
           if(d.background){map.createPane('planBgPane').style.zIndex=350;L.imageOverlay('/'+d.background.path,d.background.bounds,{pane:'planBgPane',opacity:d.background.opacity||.7}).addTo(map)}
           var all=render();
-          if(!d.center&&all.length)map.fitBounds(L.featureGroup(all).getBounds().pad(.2));
+          var fo=d.focus&&d.items.filter(function(it){return it.id===d.focus})[0];
+          if(fo)map.fitBounds(L.polygon(fo.pts).getBounds().pad(.15),{animate:false});
+          else if(!d.center&&all.length)map.fitBounds(L.featureGroup(all).getBounds().pad(.2));
           var bk=document.getElementById('plan-book');
           if(bk)bk.addEventListener('click',function(){bookMode=!bookMode;bk.textContent=bookMode?'Quitter le choix d\'emplacement':'Je suis exposant : choisir mon emplacement';document.getElementById('plan-legend').style.display=bookMode?'flex':'none';document.getElementById('plan-legend').hidden=!bookMode;
             d.items.forEach(function(it,i){});render();if(bookMode)document.getElementById('plan-box').scrollIntoView({behavior:'smooth',block:'center'})});
