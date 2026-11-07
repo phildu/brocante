@@ -7,7 +7,7 @@
 return [
     'name' => 'La Brocante du Petit Chalet',
     'tagline' => 'Trouvailles chinées & pièces uniques',
-    'site_url' => 'https://petitchalet.arrimage.com',
+    'site_url' => 'https://petitchalet.bricbrok.com',
     // Compte de l'administration — mot de passe à changer avant toute mise en
     // ligne réelle (ou variables d'environnement ADMIN_USER / ADMIN_PASSWORD).
     'admin_user' => 'admin',
