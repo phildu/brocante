@@ -1038,7 +1038,7 @@ ga_head('Plan des commerces');
       map.on('click', function (e) {
         if (vertexMode) { vertexApply(e.latlng); return; }
         if (!placing) { select(null); return; }
-        var angle = parseFloat($('angle').value) || 0;
+        var angle = (parseFloat($('angle').value) || 0) + bearing;     // 0 = horizontal à l'écran, même si la carte est tournée
         pushUndo(true);
         var layer = track(L.polygon(rectAround(e.latlng, placing.w, placing.d, angle)), { color: placing.color, surface: placing.id, label: '' });
         autoNum(layer); count();
@@ -1077,8 +1077,19 @@ ga_head('Plan des commerces');
       group.on('pm:enable pm:dragstart pm:rotatestart', function () { pushUndo(); });
 
       // --- Création au crayon, suppression ---
+      // Quand la carte est tournée (curseur « Rotation du fond »), Geoman trace le rectangle droit dans le repère de la carte : il apparaît incliné à l'écran.
+      // On le redresse pour que ses côtés suivent l'écran (angle 0 = horizontal), la diagonale tracée à la souris restant la même.
+      function alignRectToScreen(layer) {
+        var ps = layerLatLngs(layer).map(function (p) { return map.latLngToLayerPoint(p); });
+        if (ps.length < 4) return;
+        var t = bearing * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), A = ps[0], dx = ps[2].x - A.x, dy = ps[2].y - A.y;
+        var sx = dx * c - dy * s, sy = dx * s + dy * c;                       // diagonale vue à l'écran
+        function back(vx, vy) { return L.point(A.x + vx * c + vy * s, A.y - vx * s + vy * c); }
+        layer.setLatLngs([A, back(sx, 0), ps[2], back(0, sy)].map(function (p) { return map.layerPointToLatLng(p); }));
+      }
       map.on('pm:create', function (e) {
         var layer = e.layer;
+        if (e.shape === 'Rectangle' && bearing) alignRectToScreen(layer);
         if (e.shape === 'Marker') { layer.pm.disable(); map.pm.disableDraw(); }   // un repère à la fois : sans cela l'outil reste actif
         pushUndo(true);
         track(layer, {});
