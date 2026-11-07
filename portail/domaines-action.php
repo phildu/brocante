@@ -114,9 +114,9 @@ try {
 
     if ($action === 'sub_remove') {
         $shop = (string) ($_POST['shop'] ?? '');
-        if (!domain_sub_slug_valid($shop)) domain_portal_back('Identifiant de boutique invalide.');
+        if (!domain_sub_slug_valid($shop)) domain_portal_back('Identifiant invalide.');
         domain_sub_remove($shop);
-        domain_portal_back('Adresse en sous-domaine retirée de ' . $shop . '.', 'ok');
+        domain_portal_back('Adresse en sous-domaine retirée de ' . (domain_owner_is_gallery($shop) ? 'la galerie ' . domain_owner_gallery_slug($shop) : $shop) . '.', 'ok');
     }
 
     if ($action === 'save_hosting') {
@@ -147,9 +147,10 @@ try {
 
     if ($action === 'custom_activate' || $action === 'custom_remove' || $action === 'custom_attach_hosting') {
         $shop = strtolower(trim((string) ($_POST['shop'] ?? '')));
-        if (!domain_custom_slug_valid($shop) || !is_file(tenant_dir($shop) . '/tenant.php')) {
-            domain_portal_back('Boutique inconnue.');
+        if (!domain_custom_slug_valid($shop) || !domain_owner_exists($shop)) {
+            domain_portal_back('Boutique ou galerie inconnue.');
         }
+        $shopLabel = domain_owner_is_gallery($shop) ? 'la galerie ' . domain_owner_gallery_slug($shop) : $shop;
         if ($action === 'custom_attach_hosting') {
             try {
                 $record = domain_custom_hosting_attach($shop);
@@ -163,11 +164,11 @@ try {
         }
         if ($action === 'custom_activate') {
             $record = domain_custom_activate($shop);
-            domain_portal_back('Adresse ' . (string) ($record['domain'] ?? '') . ' mise en service pour ' . $shop . ' : la boutique répond maintenant sur ce domaine.', 'ok');
+            domain_portal_back('Adresse ' . (string) ($record['domain'] ?? '') . ' mise en service pour ' . $shopLabel . ' : la ' . domain_owner_noun($shop) . ' répond maintenant sur ce domaine.', 'ok');
         }
         $warning = domain_custom_remove($shop);
         if ($warning !== '') domain_portal_back($warning);
-        domain_portal_back('Adresse détachée de ' . $shop . (domain_custom_hosting_settings() ? ' ; les alias d’hébergement créés automatiquement ont été retirés chez OVH.' : '. Pensez à retirer l’alias d’hébergement et le certificat si le domaine ne doit plus arriver ici.'), 'ok');
+        domain_portal_back('Adresse détachée de ' . $shopLabel . (domain_custom_hosting_settings() ? ' ; les alias d’hébergement créés automatiquement ont été retirés chez OVH.' : '. Pensez à retirer l’alias d’hébergement et le certificat si le domaine ne doit plus arriver ici.'), 'ok');
     }
 
     domain_portal_back('Action inconnue.');

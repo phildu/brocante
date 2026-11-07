@@ -106,6 +106,13 @@ $shopNames = [];
 foreach (array_keys(tenant_list()) as $shopSlug) {
     $shopNames[$shopSlug] = (string) tenant_load($shopSlug)['name'];
 }
+// Galeries : leur clé est « g~<identifiant> » (includes/domain-owner.php).
+require_once PORTAIL_ROOT . '/includes/galleries.php';
+foreach (gallery_list() as $gallerySlug => $galleryItem) {
+    $shopNames[domain_owner_gallery_key((string) $gallerySlug)] = 'Galerie ' . (string) ($galleryItem['name'] ?? $gallerySlug);
+}
+$ownerRef = static fn (string $key): string => domain_owner_is_gallery($key) ? domain_owner_gallery_slug($key) : $key;
+$ownerNoun = static fn (string $key): string => domain_owner_noun($key);
 
 $owner = (array) ($purchase['owner'] ?? []);
 if (!$owner) {
@@ -376,13 +383,13 @@ if (!$owner) {
     <?php endif; ?>
 
     <section class="dmcard">
-      <h2>Domaines déjà achetés par les boutiques</h2>
+      <h2>Domaines déjà achetés par les boutiques et les galeries</h2>
       <p class="meta">Une boutique peut rattacher un domaine qu’elle possède déjà : elle prouve la propriété par un enregistrement TXT, pointe le domaine vers le serveur, puis demande la mise en service. <?php if ($hostingAuto): ?>Dès la demande de mise en service, le domaine et son « www » sont déclarés automatiquement comme alias de l’hébergement <code><?= e($hostingService) ?></code> (le certificat HTTPS est émis dans la foulée). Vérifiez que <code>https://&lt;domaine&gt;/</code> affiche la boutique avant d’activer.<?php else: ?>Avant d’activer, déclarez le domaine comme alias d’hébergement (le certificat HTTPS est alors émis) et vérifiez que <code>https://&lt;domaine&gt;/</code> affiche la boutique. Réglez le rattachement automatique plus bas pour que ce soit fait à la demande de la boutique.<?php endif; ?></p>
       <?php if (!$customDomains): ?>
         <p class="meta">Aucune boutique n’a rattaché de domaine existant pour le moment.</p>
       <?php else: ?>
         <table class="dmtable">
-          <thead><tr><th>Boutique</th><th>Adresse</th><th>État</th><th>Dernier contrôle</th><th></th></tr></thead>
+          <thead><tr><th>Boutique / galerie</th><th>Adresse</th><th>État</th><th>Dernier contrôle</th><th></th></tr></thead>
           <tbody>
             <?php foreach ($customDomains as $item): ?>
               <?php
@@ -396,7 +403,7 @@ if (!$owner) {
                 $itemWwwError = (string) ($itemHosting['www_error'] ?? '');
               ?>
               <tr>
-                <td><strong><?= e($shopNames[$itemSlug] ?? $itemSlug) ?></strong><br><span class="meta"><?= e($itemSlug) ?></span></td>
+                <td><strong><?= e($shopNames[$itemSlug] ?? $itemSlug) ?></strong><br><span class="meta"><?= e($ownerRef($itemSlug)) ?></span></td>
                 <td><code><?= e($itemDomain) ?></code></td>
                 <td><span class="pill <?= $itemState === 'active' ? 'done' : ($itemState === 'ready' ? 'sent' : '') ?>"><?= e(domain_custom_state_label($itemState)) ?></span>
                   <?php if ($itemAliases): ?><br><span class="meta">Alias d’hébergement : <?= e(implode(', ', $itemAliases)) ?><?= !empty($itemHosting['attached_at']) ? ' (' . e(date('d/m/Y à H:i', (int) $itemHosting['attached_at'])) . ')' : '' ?></span><?php endif; ?>
@@ -414,14 +421,14 @@ if (!$owner) {
                       </form>
                     <?php endif; ?>
                     <?php if ($itemState === 'ready'): ?>
-                      <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Activer <?= e($itemDomain) ?> pour la boutique <?= e($itemSlug) ?> ? Vérifiez d’abord que https://<?= e($itemDomain) ?>/ affiche bien la boutique.');">
+                      <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Activer <?= e($itemDomain) ?> pour la <?= e($ownerNoun($itemSlug)) ?> <?= e($ownerRef($itemSlug)) ?> ? Vérifiez d’abord que https://<?= e($itemDomain) ?>/ affiche bien la <?= e($ownerNoun($itemSlug)) ?>.');">
                         <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="custom_activate">
                         <input type="hidden" name="shop" value="<?= e($itemSlug) ?>">
                         <button type="submit" class="btn btn-primary small">Activer</button>
                       </form>
                     <?php endif; ?>
-                    <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Détacher <?= e($itemDomain) ?> de la boutique <?= e($itemSlug) ?> ?<?= $itemState === 'active' ? ' La boutique ne répondra plus à cette adresse ; retirez aussi l’alias d’hébergement et le certificat.' : '' ?>');">
+                    <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Détacher <?= e($itemDomain) ?> de la <?= e($ownerNoun($itemSlug)) ?> <?= e($ownerRef($itemSlug)) ?> ?<?= $itemState === 'active' ? ' La ' . $ownerNoun($itemSlug) . ' ne répondra plus à cette adresse ; retirez aussi l’alias d’hébergement et le certificat.' : '' ?>');">
                       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
                       <input type="hidden" name="action" value="custom_remove">
                       <input type="hidden" name="shop" value="<?= e($itemSlug) ?>">
@@ -489,17 +496,17 @@ if (!$owner) {
       </form>
       <?php if ($subRecords): ?>
         <table class="dmtable">
-          <thead><tr><th>Boutique</th><th>Adresse</th><th>État</th><th>Montant</th><th></th></tr></thead>
+          <thead><tr><th>Boutique / galerie</th><th>Adresse</th><th>État</th><th>Montant</th><th></th></tr></thead>
           <tbody>
             <?php foreach ($subRecords as $subItem): ?>
               <?php $subSlug = (string) $subItem['slug']; $subLabelItem = (string) $subItem['label']; ?>
               <tr>
-                <td><?= e($shopNames[$subSlug] ?? $subSlug) ?> <span class="meta">(<?= e($subSlug) ?>)</span></td>
+                <td><?= e($shopNames[$subSlug] ?? $subSlug) ?> <span class="meta">(<?= e($ownerRef($subSlug)) ?>)</span></td>
                 <td><?= e($subLabelItem . '.' . $subBaseHost) ?></td>
                 <td><?= e(domain_sub_state_label((string) ($subItem['state'] ?? ''))) ?><?= isset($subItem['livemode']) && !$subItem['livemode'] ? ' <span class="meta">(test)</span>' : '' ?></td>
                 <td><?= e($money((int) ($subItem['amount_cents'] ?? 0))) ?></td>
                 <td>
-                  <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Retirer cette adresse ? La boutique ne répondra plus à ce nom.');" style="margin:0">
+                  <form method="post" action="/portail/domaines-action.php" onsubmit="return confirm('Retirer cette adresse ? La <?= e($ownerNoun($subSlug)) ?> ne répondra plus à ce nom.');" style="margin:0">
                     <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="sub_remove">
                     <input type="hidden" name="shop" value="<?= e($subSlug) ?>">

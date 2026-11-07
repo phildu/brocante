@@ -152,6 +152,7 @@ require_once __DIR__ . '/../includes/gallery-admin.php';
 const GA_PAGES = ['galeries.php', 'galerie-tableau.php', 'galerie-prospects.php', 'galerie-compte.php', 'galerie-offre.php', 'galerie-plan.php', 'galerie-exposants.php', 'galerie-exposant.php', 'galerie-messages.php', 'galerie-attente.php', 'galerie-bourse.php', 'galerie-cni.php', 'galerie-import.php', 'galerie-assistant.php', 'galerie-promos.php', 'addons.php',
     'galerie-comptage.php',   // extension « Comptage de foule » (portail/galerie-comptage.php)
     'galerie-annulation.php',   // extension « Annulation & remboursements » (portail/galerie-annulation.php)
+    'galerie-adresse.php', 'galerie-adresse-action.php',   // adresse de la galerie : sous-domaine, domaine existant ou acheté (portail/galerie-adresse.php)
     'galerie-horaires.php',   // horaires, fermetures exceptionnelles et alerte aux visiteurs d'une galerie (portail/galerie-horaires.php)
     'galerie-invendus.php',   // extension « Invendus & dons » (portail/galerie-invendus.php)
     'galerie-buvette.php',   // extension « Buvette » (portail/galerie-buvette.php) : pages du module ouvertes dans l'espace de la galerie

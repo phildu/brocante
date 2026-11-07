@@ -10,6 +10,8 @@
 // (includes/tenant.php). Prérequis côté hébergement : un DNS « *.<domaine> » vers
 // le serveur et un alias d'hébergement générique (avec son certificat).
 
+require_once __DIR__ . '/domain-owner.php';
+
 const DOMAIN_SUB_STATES = [
     'awaiting_payment' => 'En attente de paiement',
     'active' => 'En service',
@@ -28,9 +30,10 @@ const DOMAIN_SUB_RESERVED = [
     'autoconfig', 'autodiscover', 'status', 'support', 'blog', 'shop', 'boutique', 'plateforme', 'brocs',
 ];
 
+/** Clé de propriétaire valide : identifiant de boutique, ou « g~ » + identifiant de galerie (includes/domain-owner.php). */
 function domain_sub_slug_valid(string $slug): bool
 {
-    return (bool) preg_match('/^[a-z0-9][a-z0-9_-]{0,60}$/', $slug);
+    return domain_owner_key_valid($slug);
 }
 
 function domain_sub_dir(): string
@@ -42,7 +45,7 @@ function domain_sub_dir(): string
 
 function domain_sub_file(string $slug): string
 {
-    if (!domain_sub_slug_valid($slug)) throw new InvalidArgumentException('Identifiant de boutique invalide.');
+    if (!domain_sub_slug_valid($slug)) throw new InvalidArgumentException('Identifiant invalide.');
     return domain_sub_dir() . '/' . $slug . '.json';
 }
 
@@ -172,16 +175,25 @@ function domain_sub_list(): array
     return $list;
 }
 
-/** Noms en service : nom → boutique. Consulté à chaque requête par la résolution des commerces. */
+/** Noms en service : nom → boutique. Consulté à chaque requête par la résolution des commerces (les galeries n'y figurent pas : voir domain_owner_sync). */
 function domain_sub_hosts(): array
 {
     $hosts = [];
     foreach (domain_sub_list() as $record) {
-        if (($record['state'] ?? '') !== 'active') continue;
+        if (($record['state'] ?? '') !== 'active' || domain_owner_is_gallery((string) $record['slug'])) continue;
         $label = (string) ($record['label'] ?? '');
         if ($label !== '' && domain_sub_label_problem($label) === '') $hosts[$label] = (string) $record['slug'];
     }
     return $hosts;
+}
+
+/** Adresse complète en service (nom.domaine) d'un propriétaire, ou chaîne vide. */
+function domain_sub_active_host(string $slug): string
+{
+    if (!domain_sub_slug_valid($slug)) return '';
+    $record = domain_sub_load($slug);
+    if (($record['state'] ?? '') !== 'active' || (string) ($record['label'] ?? '') === '') return '';
+    return (string) (($record['host'] ?? '') ?: $record['label'] . '.' . domain_sub_base_host());
 }
 
 function domain_sub_active_label(string $slug): string
@@ -201,7 +213,12 @@ function domain_sub_conflict(string $label, string $slug): string
         return 'Ce nom est réservé par la plateforme : choisissez-en un autre.';
     }
     if ($label !== $slug && is_file(dirname(__DIR__) . '/tenants/' . $label . '/tenant.php')) {
-        return 'Ce nom est déjà utilisé par une autre boutique.';
+        return 'Ce nom est déjà utilisé par une boutique de la plateforme.';
+    }
+    if (function_exists('gallery_domain_owner') || is_file(__DIR__ . '/galleries.php')) {
+        require_once __DIR__ . '/galleries.php';
+        $taken = gallery_domain_owner($label . '.' . domain_sub_base_host(), domain_owner_gallery_slug($slug));
+        if ($taken !== null) return 'Ce nom est déjà pris : choisissez-en un autre.';
     }
     foreach (domain_sub_list() as $record) {
         if ((string) $record['slug'] === $slug) continue;
@@ -256,9 +273,12 @@ function domain_sub_activate(string $slug, array $extra = []): array
         $d = $extra + $d;
         $d['state'] = 'active';
         $d['activated_at'] = time();
+        $d['host'] = (string) ($d['label'] ?? '') . '.' . domain_sub_base_host();
         return $d;
     });
     $label = (string) ($data['label'] ?? '');
+    domain_owner_sync($slug);
+    $noun = domain_owner_noun($slug);
     if (function_exists('saas_event')) {
         saas_event('subdomain_activated', [
             'slug' => $slug,
@@ -271,7 +291,7 @@ function domain_sub_activate(string $slug, array $extra = []): array
     $email = (string) ($data['email'] ?? '');
     if (function_exists('saas_mail') && filter_var($email, FILTER_VALIDATE_EMAIL)) {
         saas_mail($email, 'Votre adresse ' . $label . ' est en service',
-            "Bonjour,\n\nVotre boutique répond maintenant à l’adresse " . domain_sub_url($label) . "/ .\n"
+            "Bonjour,\n\nVotre " . $noun . " répond maintenant à l’adresse " . domain_sub_url($label) . "/ .\n"
             . "L’adresse historique de la plateforme continue de fonctionner.\n");
     }
     return $data;
@@ -285,7 +305,7 @@ function domain_sub_activate(string $slug, array $extra = []): array
 function domain_sub_checkout(string $slug, string $input, string $email, string $returnUrl): array
 {
     if (domain_sub_active_label($slug) !== '') {
-        throw new RuntimeException('Une adresse en sous-domaine est déjà en service pour cette boutique.');
+        throw new RuntimeException('Une adresse en sous-domaine est déjà en service pour cette ' . domain_owner_noun($slug) . '.');
     }
     $label = domain_sub_check($slug, $input);
     $amount = domain_sub_price_cents();
@@ -320,12 +340,12 @@ function domain_sub_checkout(string $slug, string $input, string $email, string 
                 'unit_amount' => $amount,
                 'product_data' => [
                     'name' => 'Adresse ' . $label . '.' . domain_sub_base_host(),
-                    'description' => 'Adresse en sous-domaine pour votre boutique',
+                    'description' => 'Adresse en sous-domaine pour votre ' . domain_owner_noun($slug),
                 ],
             ],
         ]],
         'metadata' => ['type' => 'shop_subdomain', 'shop' => $slug, 'label' => $label],
-        'success_url' => $returnUrl . '?s={CHECKOUT_SESSION_ID}',
+        'success_url' => domain_return_url($returnUrl),
         'cancel_url' => $returnUrl,
     ];
     if ($email !== '') $params['customer_email'] = $email;
@@ -409,10 +429,14 @@ function domain_sub_swap_label(string $slug, string $label, int $amountCents, st
             'stripe_session' => $sessionId,
             'at' => time(),
         ]]));
+        $previousHost = (string) (($d['host'] ?? '') ?: ($d['label'] ?? '') . '.' . domain_sub_base_host());
+        $d['previous_host'] = $previousHost;
         $d['label'] = $label;
+        $d['host'] = $label . '.' . domain_sub_base_host();
         unset($d['rename']);
         return $d;
     });
+    domain_owner_sync($slug, (string) ($data['previous_host'] ?? ''));
     if (function_exists('saas_event')) {
         $last = (array) end($data['renames']);
         saas_event('subdomain_activated', [
@@ -426,7 +450,7 @@ function domain_sub_swap_label(string $slug, string $label, int $amountCents, st
     $email = (string) ($data['email'] ?? '');
     if (function_exists('saas_mail') && filter_var($email, FILTER_VALIDATE_EMAIL)) {
         saas_mail($email, 'Votre adresse est devenue ' . $label,
-            "Bonjour,\n\nVotre boutique répond maintenant à l’adresse " . domain_sub_url($label) . "/ .\n"
+            "Bonjour,\n\nVotre " . domain_owner_noun($slug) . " répond maintenant à l’adresse " . domain_sub_url($label) . "/ .\n"
             . "L’ancien nom en sous-domaine ne fonctionne plus.\n");
     }
     return $data;
@@ -475,7 +499,7 @@ function domain_sub_rename(string $slug, string $input, string $email, string $r
             ],
         ]],
         'metadata' => ['type' => 'shop_subdomain', 'shop' => $slug, 'label' => $label, 'rename' => '1'],
-        'success_url' => $returnUrl . '?s={CHECKOUT_SESSION_ID}',
+        'success_url' => domain_return_url($returnUrl),
         'cancel_url' => $returnUrl,
     ];
     if ($email !== '') $params['customer_email'] = $email;
@@ -518,12 +542,12 @@ function domain_sub_apply_rename(array $session): array
                 }
             }
             $rename = (array) ($d['rename'] ?? []);
-            if (($d['state'] ?? '') !== 'active' || !$rename) throw new RuntimeException('Changement de nom introuvable pour cette boutique.');
+            if (($d['state'] ?? '') !== 'active' || !$rename) throw new RuntimeException('Changement de nom introuvable pour cet hébergement.');
             if ($sessionId === '' || $sessionId !== (string) ($rename['stripe_session'] ?? '')) {
                 throw new RuntimeException('Le paiement ne correspond pas à la session enregistrée pour ce changement de nom.');
             }
             if ((string) ($session['client_reference_id'] ?? '') !== 'sousdomaine:' . $slug) {
-                throw new RuntimeException('Le paiement ne référence pas cette boutique.');
+                throw new RuntimeException('Le paiement ne référence pas ce propriétaire.');
             }
             if ((string) ($meta['label'] ?? '') !== (string) ($rename['label'] ?? '')
                 || (int) ($session['amount_total'] ?? 0) !== (int) ($rename['amount_cents'] ?? -1)
@@ -551,7 +575,9 @@ function domain_sub_apply_rename(array $session): array
 function domain_sub_remove(string $slug): void
 {
     $file = domain_sub_file($slug);
+    $removedHost = domain_sub_active_host($slug);
     if (is_file($file) && !@unlink($file) && is_file($file)) throw new RuntimeException('Impossible de retirer cette adresse.');
+    domain_owner_sync($slug, $removedHost);
 }
 
 /**
@@ -571,13 +597,13 @@ function domain_sub_apply_session(array $session): array
     $already = false;
     try {
         $data = domain_sub_update($slug, static function (array $d) use ($session, $meta, $slug, &$already): array {
-            if (!$d) throw new RuntimeException('Commande d’adresse introuvable pour cette boutique.');
+            if (!$d) throw new RuntimeException('Commande d’adresse introuvable pour ce propriétaire.');
             $sessionId = (string) ($session['id'] ?? '');
             if ($sessionId === '' || $sessionId !== (string) ($d['stripe_session'] ?? '')) {
                 throw new RuntimeException('Le paiement ne correspond pas à la session enregistrée pour cette adresse.');
             }
             if ((string) ($session['client_reference_id'] ?? '') !== 'sousdomaine:' . $slug) {
-                throw new RuntimeException('Le paiement ne référence pas cette boutique.');
+                throw new RuntimeException('Le paiement ne référence pas ce propriétaire.');
             }
             if ((string) ($meta['label'] ?? '') !== (string) ($d['label'] ?? '')
                 || (int) ($session['amount_total'] ?? 0) !== (int) ($d['amount_cents'] ?? -1)

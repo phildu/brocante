@@ -8,6 +8,7 @@
 // envoyé par le déploiement). Rien n'est commandé chez OVH avant la confirmation
 // du paiement Stripe ; une session payée n'est appliquée qu'une seule fois.
 
+require_once __DIR__ . '/domain-owner.php';
 require_once __DIR__ . '/branding-services.php';
 require_once __DIR__ . '/legal.php';
 require_once __DIR__ . '/share.php';
@@ -30,9 +31,10 @@ const DOMAIN_SHOP_LEGAL_FORMS = [
     'other' => 'Autre',
 ];
 
+/** Clé de propriétaire valide : identifiant de boutique, ou « g~ » + identifiant de galerie (includes/domain-owner.php). */
 function domain_shop_slug_valid(string $slug): bool
 {
-    return (bool) preg_match('/^[a-z0-9][a-z0-9_-]{0,60}$/', $slug);
+    return domain_owner_key_valid($slug);
 }
 
 function domain_shop_dir(): string
@@ -42,7 +44,7 @@ function domain_shop_dir(): string
 
 function domain_shop_file(string $slug): string
 {
-    if (!domain_shop_slug_valid($slug)) throw new InvalidArgumentException('Identifiant de boutique invalide.');
+    if (!domain_shop_slug_valid($slug)) throw new InvalidArgumentException('Identifiant invalide.');
     return domain_shop_dir() . '/' . $slug . '.json';
 }
 
@@ -309,7 +311,7 @@ function domain_shop_checkout(string $slug, string $returnUrl = ''): array
             'domain' => $domain,
             'cart_id' => (string) ($quote['cart_id'] ?? ''),
         ],
-        'success_url' => $return . '?s={CHECKOUT_SESSION_ID}',
+        'success_url' => domain_return_url($return),
         'cancel_url' => $return,
     ]);
     $sessionId = (string) ($session['id'] ?? '');
@@ -356,13 +358,13 @@ function domain_shop_apply_session(array $session): array
                         return $d;
                     }
                 }
-                throw new RuntimeException('Commande de domaine introuvable pour cette boutique.');
+                throw new RuntimeException('Commande de domaine introuvable pour ce propriétaire.');
             }
             if ((string) ($session['id'] ?? '') === '' || (string) ($session['id'] ?? '') !== (string) ($purchase['stripe_session'] ?? '')) {
                 throw new RuntimeException('Le paiement ne correspond pas à la session enregistrée pour ce domaine.');
             }
             if ((string) ($session['client_reference_id'] ?? '') !== 'domaine:' . $slug) {
-                throw new RuntimeException('Le paiement ne référence pas cette boutique.');
+                throw new RuntimeException('Le paiement ne référence pas ce propriétaire.');
             }
             if ((string) ($meta['domain'] ?? '') !== (string) ($quote['domain'] ?? '')
                 || (int) ($session['amount_total'] ?? 0) !== (int) ($quote['amount_cents'] ?? -1)
@@ -441,7 +443,7 @@ function domain_shop_mark_review(string $slug, string $message): array
     $purchase = (array) ($data['purchase'] ?? []);
     $domain = (string) ($purchase['quote']['domain'] ?? 'inconnu');
     $body = "Le paiement de $domain est confirmé, mais OVH n’a pas confirmé la commande.\n\n"
-        . "Boutique : $slug\nPanier OVH : " . (string) ($purchase['quote']['cart_id'] ?? '')
+        . ucfirst(domain_owner_noun($slug)) . " : " . (domain_owner_is_gallery($slug) ? domain_owner_gallery_slug($slug) : $slug) . "\nPanier OVH : " . (string) ($purchase['quote']['cart_id'] ?? '')
         . "\nSession Stripe : " . (string) ($purchase['stripe_session'] ?? '') . "\nMotif : " . $message . "\n";
     $contact = (string) (saas_config()['contact'] ?? '');
     if (filter_var($contact, FILTER_VALIDATE_EMAIL)) saas_mail($contact, 'Commande de domaine à vérifier : ' . $domain, $body);
