@@ -167,6 +167,14 @@ ga_head('Plan des commerces');
       #addrLoc svg, #addrGo svg { width: 16px; height: 16px; }
       #addrMsg { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #plan.vertexing { cursor: crosshair; }
+      /* Poignées de la zone sélectionnée : clic sur un point = bouton « − », clic sur un segment = bouton « + » */
+      .plan-vh { background: transparent; border: 0; cursor: pointer; }
+      .plan-vh::after { content: ''; position: absolute; inset: 7px; box-sizing: border-box; border-radius: 50%; background: #fff; border: 2px solid #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: transform .12s ease; }
+      .plan-vh:hover::after { transform: scale(1.35); background: #dbeafe; }
+      .plan-vact { background: transparent; border: 0; }
+      .plan-vact button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; color: #fff; font: 700 20px/1 system-ui, sans-serif; display: flex; align-items: center; justify-content: center; padding: 0 0 2px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.45); }
+      .plan-vact.del button { background: #dc2626; } .plan-vact.add button { background: #16a34a; }
+      .plan-vact button:hover { filter: brightness(1.12); transform: scale(1.08); }
       .leaflet-pm-toolbar .leaflet-pm-icon-vertex-add { background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B5B5B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 19V7l7-3 4 3'/><path d='M3 19h8'/><circle cx='17' cy='16.5' r='5.2' fill='white'/><path d='M17 14v5M14.5 16.5h5'/></svg>"); }
       .leaflet-pm-toolbar .leaflet-pm-icon-vertex-del { background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B5B5B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 19V7l7-3 4 3'/><path d='M3 19h8'/><circle cx='17' cy='16.5' r='5.2' fill='white'/><path d='M14.5 16.5h5'/></svg>"); }
       #mapBar { display: grid; gap: 8px; min-width: 0; position: relative; z-index: 30; }
@@ -894,7 +902,12 @@ ga_head('Plan des commerces');
       function track(layer, meta) {
         meta.id = meta.id || uid(); meta.label = meta.label || ''; meta.num = meta.num || ''; meta.shop = meta.shop || ''; meta.note = meta.note || ''; meta.surface = meta.surface || ''; meta.color = meta.color || '#b5502e'; meta.role = meta.role || 'slot'; meta.ztype = meta.ztype || 'autre'; meta.unit = meta.unit || 'slot'; meta.price = meta.price || ''; meta.pricePro = meta.pricePro || ''; meta.usage = meta.usage || ''; meta.flow = meta.flow || ''; meta.indoor = !!meta.indoor; meta.service = meta.service || '';
         layer._plan = meta; group.addLayer(layer); look(layer); if (!loading) restack();
-        layer.on('click', function (e) { if (placing) return; L.DomEvent.stopPropagation(e); if (vertexMode) { vertexApply(e.latlng); return; } select(layer); });
+        layer.on('click', function (e) { if (placing) return; L.DomEvent.stopPropagation(e); if (vertexMode) { vertexApply(e.latlng); return; }
+          if (selected === layer && layer instanceof L.Polygon && !vertexEditing) {   // clic sur un segment de la zone déjà sélectionnée : bouton « + » à cet endroit
+            var sg = nearestSegment(layer, e.latlng);
+            if (sg.d <= 12) { showVertexAction('add', map.layerPointToLatLng(sg.pt), sg.i); return; }
+          }
+          select(layer); });
         layer.on('mouseover', function () { showLabel(layer, true); });
         layer.on('mouseout', function () { showLabel(layer, false); });
         return layer;
@@ -1019,6 +1032,7 @@ ga_head('Plan des commerces');
       document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape') return;
         if (placing) { e.__posee = true; stopPlace(); return; }
+        if (vertexActionMk) { e.__posee = true; hideVertexAction(); return; }
         if (vertexMode) { e.__posee = true; setVertexMode(null); }
       });
       map.on('click', function (e) {
@@ -1105,11 +1119,12 @@ ga_head('Plan des commerces');
         if (selected && selected !== layer) showLabel(selected, false);
         selected = layer;
         $('sel').hidden = !layer;
-        if (!layer) { setVertexMode(null); ghost.clearLayers(); return; }
+        if (!layer) { setVertexMode(null); ghost.clearLayers(); refreshVertexHandles(); return; }
         showLabel(layer, true);
         if ($('sel').getBoundingClientRect().top > window.innerHeight) $('sel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         var m = layer._plan, p = points(layer);
         var poly = layer instanceof L.Polygon;
+        refreshVertexHandles();
         $('vertexBox').hidden = !poly;
         if (!poly) setVertexMode(null);
         $('natureBox').hidden = !poly; $('selRole').value = m.role; $('ztypeBox').hidden = !isZone(layer); $('selZtype').value = m.ztype; $('priceBox').hidden = !isZone(layer) || !data.features.tarifs;
@@ -1218,27 +1233,64 @@ ga_head('Plan des commerces');
           : mode === 'del' ? 'Cliquez sur un point (coin) de la zone pour le retirer.'
           : 'Ajoutez un point sur le bord le plus proche ou retirez un coin pour ajuster la forme (3 points minimum).';
       }
+      // Opérations sur les points, partagées par les outils de la barre, les boutons de la fiche et les poignées.
+      function afterVertexOp(target, msg) {
+        hideVertexAction(); look(target); renderList(); select(target); count();
+        $('vertexMsg').textContent = msg;
+      }
+      function vertexInsert(target, segIdx, latlng) {
+        pushUndo(true);
+        var next = layerLatLngs(target).slice();
+        next.splice(segIdx + 1, 0, latlng);
+        target.setLatLngs(next);
+        afterVertexOp(target, 'Point ajouté : ' + next.length + ' points.');
+      }
+      function vertexRemove(target, idx) {
+        var pts = layerLatLngs(target);
+        if (pts.length <= 3) { vertexSay('Une zone doit garder au moins 3 points ; pour l\'ajuster autrement, découpez-la ou supprimez-la.'); hideVertexAction(); return; }
+        pushUndo(true);
+        var rest = pts.slice(); rest.splice(idx, 1);
+        target.setLatLngs(rest);
+        afterVertexOp(target, 'Point supprimé : ' + rest.length + ' points restants.');
+      }
       function vertexApply(latlng) {
         if (!vertexMode) return;
         var target = pickVertexTarget(latlng, vertexMode);
         if (!target) { vertexSay(vertexMode === 'add' ? 'Cliquez près du bord d\'une zone pour y insérer un point.' : 'Cliquez sur un point (coin) d\'une zone pour le retirer.'); return; }
-        var pts = layerLatLngs(target);
-        if (vertexMode === 'add') {
-          pushUndo(true);
-          var seg = nearestSegment(target, latlng), next = pts.slice();
-          next.splice(seg.i + 1, 0, map.layerPointToLatLng(seg.pt));
-          target.setLatLngs(next);
-          vertexSay('Point ajouté : ' + next.length + ' points.');
-        } else {
-          if (pts.length <= 3) { vertexSay('Une zone doit garder au moins 3 points ; pour l\'ajuster autrement, découpez-la ou supprimez-la.'); return; }
-          var idx = nearestVertex(target, latlng);
-          pushUndo(true);
-          var rest = pts.slice(); rest.splice(idx, 1);
-          target.setLatLngs(rest);
-          vertexSay('Point supprimé : ' + rest.length + ' points restants.');
-        }
-        look(target); renderList(); select(target); count();
+        if (vertexMode === 'add') { var seg = nearestSegment(target, latlng); vertexInsert(target, seg.i, map.layerPointToLatLng(seg.pt)); }
+        else vertexRemove(target, nearestVertex(target, latlng));
       }
+      // Poignées de la zone sélectionnée : clic sur un point → bouton « − » ; clic sur un segment → bouton « + » (le clic sur le bouton applique).
+      var vertexHandles = L.layerGroup().addTo(map), vertexActionMk = null, vertexEditing = false;
+      function hideVertexAction() { if (vertexActionMk) { map.removeLayer(vertexActionMk); vertexActionMk = null; } }
+      function showVertexAction(kind, latlng, idx) {
+        hideVertexAction();
+        var del = kind === 'del', target = selected;
+        vertexActionMk = L.marker(latlng, { pmIgnore: true, keyboard: false, zIndexOffset: 3000, icon: L.divIcon({ className: 'plan-vact ' + kind, iconSize: [30, 30], iconAnchor: [15, 42],
+          html: '<button type="button" title="' + (del ? 'Supprimer ce point' : 'Ajouter un point ici') + '" aria-label="' + (del ? 'Supprimer ce point' : 'Ajouter un point ici') + '">' + (del ? '−' : '+') + '</button>' }) }).addTo(map);
+        vertexActionMk.on('click', function (e) {
+          L.DomEvent.stop(e);
+          if (!target || target !== selected) { hideVertexAction(); return; }
+          if (del) vertexRemove(target, idx); else vertexInsert(target, idx, latlng);
+        });
+      }
+      function refreshVertexHandles() {
+        if (!vertexHandles) return;
+        vertexHandles.clearLayers(); hideVertexAction();
+        if (!selected || !(selected instanceof L.Polygon) || vertexEditing) return;
+        layerLatLngs(selected).forEach(function (ll, i) {
+          var mk = L.marker(ll, { pmIgnore: true, keyboard: false, zIndexOffset: 1000, icon: L.divIcon({ className: 'plan-vh', iconSize: [28, 28], iconAnchor: [14, 14] }) });
+          mk.on('click', function (e) {
+            L.DomEvent.stop(e);
+            if (vertexMode === 'del') { vertexRemove(selected, i); return; }
+            if (vertexMode === 'add') return;
+            if (layerLatLngs(selected).length <= 3) { vertexSay('Une zone doit garder au moins 3 points ; pour l\'ajuster autrement, découpez-la ou supprimez-la.'); return; }
+            showVertexAction('del', ll, i);
+          });
+          vertexHandles.addLayer(mk);
+        });
+      }
+      map.on('pm:globaleditmodetoggled', function (e) { vertexEditing = !!e.enabled; refreshVertexHandles(); });
       $('vertexAdd').addEventListener('click', function () { setVertexMode(vertexMode === 'add' ? null : 'add'); });
       $('vertexDel').addEventListener('click', function () { setVertexMode(vertexMode === 'del' ? null : 'del'); });
       $('vertexStop').addEventListener('click', function () { setVertexMode(null); });
