@@ -77,7 +77,7 @@ final class NotionTodoTest extends TestCase
             'priority' => 'normal',
             'message' => 'Les tarifs des packs ne se mettent pas à jour sur la page des offres.',
             'page' => '/portail/offres.php',
-            'url' => 'https://brocs.arrimage.com/portail/offres.php?boutique=demo',
+            'url' => 'https://bricbrok.com/portail/offres.php?boutique=demo',
         ], $overrides);
     }
 
@@ -116,7 +116,7 @@ final class NotionTodoTest extends TestCase
         self::assertSame(self::DATABASE, $create['body']['parent']['database_id']);
         $props = $create['body']['properties'];
         self::assertStringContainsString('fb261103-abcdef12', $props['Jalon']['title'][0]['text']['content']);
-        self::assertStringContainsString('https://brocs.arrimage.com/portail/offres.php?boutique=demo', $props['Critère de done']['rich_text'][0]['text']['content']);
+        self::assertStringContainsString('https://bricbrok.com/portail/offres.php?boutique=demo', $props['Critère de done']['rich_text'][0]['text']['content']);
         self::assertSame('Pricing', $props['Domaine']['select']['name']);
         self::assertSame('P1', $props['Priorité']['select']['name']);
         self::assertSame('À faire', $props['Statut']['status']['name']);
@@ -182,7 +182,7 @@ final class NotionTodoTest extends TestCase
         notion_todo_import($this->record(['source' => 'client', 'type' => 'idea', 'severity' => '']), $transport);
         $criterion = $transport->requests[1]['body']['properties']['Critère de done']['rich_text'][0]['text']['content'];
         self::assertStringContainsString('Retour client du', $criterion);
-        self::assertStringContainsString('https://brocs.arrimage.com/portail/offres.php?boutique=demo', $criterion);
+        self::assertStringContainsString('https://bricbrok.com/portail/offres.php?boutique=demo', $criterion);
         self::assertSame('P2', $transport->requests[1]['body']['properties']['Priorité']['select']['name']);
     }
 

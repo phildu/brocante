@@ -85,6 +85,8 @@ echo share_og_html($ogTitle, (string) ($ogDescription ?? ($siteTagline ?: $siteN
 <link rel="stylesheet" href="/assets/shop-locate.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/shop-locate.css') ?>">
 <script src="/assets/shop-locate.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/shop-locate.js') ?>" defer></script>
 <link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/ai-wait-timer.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/ai-wait-timer.js') ?>"></script>
+<script src="/assets/heic-convert.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/heic-convert.js') ?>"></script>
 <?php foreach ((array) ($pageStyles ?? []) as $pageStyle): ?><link rel="stylesheet" href="<?= h((string) $pageStyle) ?>">
 <?php endforeach; ?>
 <?php foreach ((array) ($pageScripts ?? []) as $pageScript): ?><script src="<?= h((string) $pageScript) ?>" defer></script>

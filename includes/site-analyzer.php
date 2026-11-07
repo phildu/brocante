@@ -8,7 +8,7 @@
 // l'adresse IP est vérifiée à chaque saut (pas de lecture de services internes) ; la réponse est plafonnée (1 Mo).
 
 const SITE_ANALYZER_MAX_BYTES = 1048576;
-const SITE_ANALYZER_UA = 'BrocsBot/1.0 (+https://brocs.arrimage.com; annuaire)';
+const SITE_ANALYZER_UA = 'BricbrokBot/1.0 (+https://bricbrok.com; annuaire)';
 
 /** Poste de développement (config.local.php présent, jamais déployé). */
 function site_analyzer_dev(): bool

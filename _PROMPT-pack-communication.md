@@ -19,7 +19,7 @@ Nous avons déjà analysé le projet et commencé un prototype ; **reprends ce t
 - Racine : `/Users/admin/Documents/projet/web local/brocante` — lis `README.md` (long, à jour : multi-commerces, Studio, galeries, offres IA…), `config.php`, `includes/tenant.php`, `includes/functions.php`.
 - **Multi-commerces** : un commerce = `tenants/<slug>/tenant.php` (+ `seed-data.json`), base `data/<slug>.db`, secrets `.secrets/<slug>/` (jamais déployés), assets `assets/tenants/<slug>/`. Résolution par `tenant_slug()`, `tenant_base_path()`, `app_prefix()`.
   Test local d'un commerce : `TENANT=la-fripe-a-naty php -S 127.0.0.1:8091 router.php` (portail/galeries : même commande **sans** `TENANT`, autre port).
-- **Déploiements** (OVH, FTP) : `./deploy-brocante.sh` (boutique Petit Chalet, https://brocante.arrimage.com) et `./deploy-brocante.sh --portail` (portail + **toutes** les boutiques + galeries, https://brocs.arrimage.com).
+- **Déploiements** (OVH, FTP) : `./deploy-brocante.sh` (boutique Petit Chalet, https://brocante.arrimage.com) et `./deploy-brocante.sh --portail` (portail + **toutes** les boutiques + galeries, https://bricbrok.com).
   Le script fait un `git add -A` + commit « deploy-preprod … » : après coup, on remplace ce commit par un commit du **seul code** (jamais `uploads/`, `tenants/kllklmk`, `assets/tenants/kllklmk`).
 - **Portail** (`portail/`) : gestion des boutiques, clés partagées (`portail/cles.php`), connexion sociale (`portail/social.php`, `includes/oauth.php`), offres/tarifs (`portail/offres.php`, `data/saas/tarifs.json`, `includes/ai-plans.php` pour le quota IA),
   événements (`includes/saas-events.php`), inscription/création de boutique (`includes/saas.php`, `includes/tenant-factory.php`).

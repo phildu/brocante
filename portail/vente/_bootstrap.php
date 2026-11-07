@@ -188,7 +188,7 @@ function fv_setting_defaults(): array
         'marque_nom' => 'Brocs',
         'contact_tel' => '',
         'contact_email' => '',
-        'site_url' => 'https://brocs.arrimage.com',
+        'site_url' => 'https://bricbrok.com',
         'offre_pitch' => 'Votre boutique en ligne prête en 48 h, sans commission sur vos ventes.',
         'offre_prix' => 'Découverte gratuite · Standard 19,90 €/mois · Premium 49,90 €/mois',
         'points_appel' => '2',

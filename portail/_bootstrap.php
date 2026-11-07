@@ -4,7 +4,7 @@
 // commerce, accès admin. Il écrit dans le dossier du projet :
 //  - en local (Herd, php -S, hôte .test / localhost), il est ouvert ;
 //  - en ligne (déploiement « portail » de deploy-brocante.sh, par ex.
-//    brocs.arrimage.com), il exige une connexion avec le compte de
+//    bricbrok.com), il exige une connexion avec le compte de
 //    .secrets/portail.json (créé par le script de déploiement). Sans ce
 //    fichier, il reste fermé.
 

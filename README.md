@@ -26,7 +26,7 @@ Commerces fournis :
 1. la variable d'environnement `TENANT` ;
 2. sinon le sous-domaine, s'il porte le nom d'un commerce (`naty.brocenstock.test` → `tenants/naty`) ;
 3. sinon le premier segment de l'adresse, s'il porte le nom d'un commerce
-   (`brocs.arrimage.com/naty/boutique.php` → `tenants/naty`) ;
+   (`bricbrok.com/naty/boutique.php` → `tenants/naty`) ;
 4. sinon le fichier `.tenant` à la racine (écrit sur le serveur par le déploiement) ;
 5. sinon `petit-chalet`.
 
@@ -34,8 +34,8 @@ Commerces fournis :
 
 | Adresse                                | Affiche                                                      |
 |----------------------------------------|--------------------------------------------------------------|
-| `brocs.arrimage.com`                   | le portail (redirigé vers `/portail/`, connexion exigée)     |
-| `brocs.arrimage.com/<identifiant>/`    | le commerce `tenants/<identifiant>` (aucun sous-domaine à créer chez OVH) |
+| `bricbrok.com`                   | le portail (redirigé vers `/portail/`, connexion exigée)     |
+| `bricbrok.com/<identifiant>/`    | le commerce `tenants/<identifiant>` (aucun sous-domaine à créer chez OVH) |
 | `brocante.arrimage.com`                | le Petit Chalet, déployé à part avec son propre sous-domaine |
 
 Un commerce servi sous `/<identifiant>/` voit ses liens, formulaires et
@@ -45,7 +45,7 @@ restent partagés à la racine du domaine. Son panier et sa connexion admin ont 
 propre cookie de session, limité à son chemin (`includes/session.php`). Les règles
 d'adresses sont dans le `.htaccess` ; en local sans Apache, `php -S 127.0.0.1:8000 router.php`
 les reproduit. L'adresse d'un commerce se déclare par `site_url` dans son `tenant.php`
-(`https://brocs.arrimage.com/<identifiant>` pour un commerce sous le portail ; elle sert
+(`https://bricbrok.com/<identifiant>` pour un commerce sous le portail ; elle sert
 notamment aux retours de paiement Stripe).
 
 Le Petit Chalet garde ses emplacements historiques (`brocante.db`, `.secrets/`,
@@ -63,7 +63,7 @@ Les autres commerces ont leur base dans `data/<slug>.db` et leurs clés dans
 | http://naty.brocenstock.test                | le commerce `tenants/naty`                     |
 | http://exemple-librairie.brocenstock.test   | la Librairie des Quais                         |
 | http://brocenstock.test                     | le portail (redirection, comme en ligne) |
-| http://brocenstock.test/exemple-librairie/  | la Librairie des Quais sous le domaine du portail (comme `brocs.arrimage.com/<commerce>/`) |
+| http://brocenstock.test/exemple-librairie/  | la Librairie des Quais sous le domaine du portail (comme `bricbrok.com/<commerce>/`) |
 | http://brocenstock.test/galerie/<id>/       | une galerie commerciale (`/galerie/` : la liste des galeries publiées) |
 
 Le sous-domaine est l'identifiant du commerce (nom de son dossier dans
@@ -539,7 +539,7 @@ comme la galerie. Code : `includes/prompts.php`, `admin/prompts-action.php`, `as
 
 ## Studio : l'application smartphone du commerce
 
-`studio.php` (`/<commerce>/studio.php` sous brocs.arrimage.com) est une application
+`studio.php` (`/<commerce>/studio.php` sous bricbrok.com) est une application
 **indépendante de l'administration**, installable sur l'écran d'accueil du téléphone
 (manifeste `studio-manifest.php`, icône `studio-icon.php` aux couleurs du commerce,
 `studio-sw.php` minimal, sans cache). `admin/quick-add.php` affiche un code QR vers elle.
@@ -615,7 +615,7 @@ refusé. Trois essais au plus ; sans réussite, **aucune version floutée n'est 
 sert alors la 3:2. Le repli sans IA ne subsiste que pour l'ombre portée d'un objet détouré (fond uni).
 Une 9:16 déjà ratée se refait depuis la galerie de la pièce : « ↻ Refaire la version 9:16 (IA) ».
 
-## Déployer le portail en ligne (ex. brocs.arrimage.com)
+## Déployer le portail en ligne (ex. bricbrok.com)
 
 Le mode `--portail` du script de déploiement envoie **tous les commerces et
 le portail** dans un même dossier OVH. En ligne, le portail exige une
@@ -628,7 +628,7 @@ connexion (compte défini dans `.env.deploy.portail`, stocké haché dans
    FTP_USER=…
    FTP_PASS=…
    FTP_PATH_FRONT=/www/brocs/
-   URL_FRONT=https://brocs.arrimage.com
+   URL_FRONT=https://bricbrok.com
    PORTAIL_USER=phil
    PORTAIL_PASSWORD=un-mot-de-passe-long
    ```
@@ -637,9 +637,9 @@ connexion (compte défini dans `.env.deploy.portail`, stocké haché dans
    bases du serveur ne sont plus touchées). Une base absente du serveur est
    créée automatiquement à la première visite du commerce.
 3. Dans l'espace client OVH : **Hébergement → Multisite → Ajouter un
-   domaine** pour `brocs.arrimage.com` uniquement, dossier racine `www/brocs`
+   domaine** pour `bricbrok.com` uniquement, dossier racine `www/brocs`
    (comme `www/brocante`), SSL activé. Les commerces sont servis sous
-   `brocs.arrimage.com/<identifiant>/` : aucun autre domaine à créer.
+   `bricbrok.com/<identifiant>/` : aucun autre domaine à créer.
 
 Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
 dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
@@ -752,7 +752,7 @@ Le parcours public (`/inscription/`) se fait en **trois étapes, le paiement AVA
    Les avantages des formules vitrine sont configurables depuis le portail, sans liste prédéfinie. Le formulaire affiche aussi le catalogue des plugins avec les tarifs configurés
    (achat après création), et permet de demander un devis pour un design personnalisé, l’accompagnement au setup, une formation à distance ou en présentiel, la hotline ou un chatbot.
    Ces demandes sont conservées avec l’inscription et signalées à l’exploitant à la création ; elles ne s’ajoutent pas au paiement de la formule. Le formulaire complet ne s'affiche qu'après le paiement.
-2. **Coordonnées et paiement** (`inscription/paiement.php`) : pour une formule payante avec Stripe configuré, le client saisit un nom de boutique, peut décrire son activité et sa zone, puis demander à OVH de vérifier les extensions `.fr`, `.com`, `.net` et `.shop`. Des variantes proches sont testées si le nom exact est déjà pris ; Gemini peut proposer d’autres noms adaptés au métier et à l’emplacement. Le client peut garder l’adresse incluse sous le domaine de la plateforme ou présélectionner un domaine pour l’acheter après la création. Cette présélection n’est pas une réservation : disponibilité, devis et achat seront confirmés ultérieurement avec OVH et un paiement Stripe dédié. L’adresse sans domaine personnalisé est de la forme `brocs.arrimage.com/nom-de-la-boutique` ; une migration ultérieure peut demander des redirections et affecter le référencement. Il saisit ensuite son e-mail ou continue avec Google. L'adresse e-mail vérifiée par Google est liée à la demande et sert à la connexion ultérieure à l'administration de la boutique ; le consentement est enregistré à cette étape. Le client est ensuite redirigé vers Stripe Checkout pour le paiement (abonnement mensuel ou annuel). Le retour (`inscription/merci.php`) INTERROGE Stripe pour confirmer la
+2. **Coordonnées et paiement** (`inscription/paiement.php`) : pour une formule payante avec Stripe configuré, le client saisit un nom de boutique, peut décrire son activité et sa zone, puis demander à OVH de vérifier les extensions `.fr`, `.com`, `.net` et `.shop`. Des variantes proches sont testées si le nom exact est déjà pris ; Gemini peut proposer d’autres noms adaptés au métier et à l’emplacement. Le client peut garder l’adresse incluse sous le domaine de la plateforme ou présélectionner un domaine pour l’acheter après la création. Cette présélection n’est pas une réservation : disponibilité, devis et achat seront confirmés ultérieurement avec OVH et un paiement Stripe dédié. L’adresse sans domaine personnalisé est de la forme `bricbrok.com/nom-de-la-boutique` ; une migration ultérieure peut demander des redirections et affecter le référencement. Il saisit ensuite son e-mail ou continue avec Google. L'adresse e-mail vérifiée par Google est liée à la demande et sert à la connexion ultérieure à l'administration de la boutique ; le consentement est enregistré à cette étape. Le client est ensuite redirigé vers Stripe Checkout pour le paiement (abonnement mensuel ou annuel). Le retour (`inscription/merci.php`) INTERROGE Stripe pour confirmer la
    session payée, enregistre l'e-mail fourni par Stripe, marque la demande « paid » et envoie le client à l'étape 3 ; le webhook signé (`inscription/webhook.php`, `checkout.session.completed` et
    `customer.subscription.deleted`) fait de même et envoie par e-mail le lien de création si le client a fermé la page. Formule gratuite, paiement en ligne non configuré
    ou indisponible : on passe directement à l'étape 3 (paiement « manuel » noté sur la demande et dans l'e-mail à l'exploitant).

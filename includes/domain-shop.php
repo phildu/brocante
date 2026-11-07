@@ -265,6 +265,20 @@ function domain_shop_checkout(string $slug, string $returnUrl = ''): array
 
     $contactId = (string) ($purchase['ovh_contact_id'] ?? '');
     if ($contactId === '') {
+        if (!empty($purchase['prepare_started'])) {
+            // Une tentative précédente a échoué en cours de route : le panier OVH peut être
+            // à moitié configuré. On repart d'un panier neuf (aucun paiement n'a eu lieu).
+            $fresh = branding_ovh_quote((string) ($quote['domain'] ?? ''));
+            $purchase['quote'] = $quote = $fresh;
+            domain_shop_update($slug, static function (array $d) use ($fresh): array {
+                $d['purchase']['quote'] = $fresh;
+                return $d;
+            });
+        }
+        domain_shop_update($slug, static function (array $d): array {
+            $d['purchase']['prepare_started'] = time();
+            return $d;
+        });
         $contactId = branding_ovh_prepare_domain(['email' => $email], $purchase);
         domain_shop_update($slug, static function (array $d) use ($contactId): array {
             $d['purchase']['ovh_contact_id'] = $contactId;
@@ -377,7 +391,6 @@ function domain_shop_apply_session(array $session): array
     try {
         $client = branding_ovh_client();
         $cartId = rawurlencode((string) ($purchase['quote']['cart_id'] ?? ''));
-        $client->post('/order/cart/' . $cartId . '/validate');
         $order = $client->post('/order/cart/' . $cartId . '/checkout', [
             'autoPayWithPreferredPaymentMethod' => true,
             'waiveRetractationPeriod' => true,

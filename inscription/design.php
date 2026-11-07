@@ -50,7 +50,7 @@ $activity = (array) ($req['activity_details'] ?? []);
 $activityContext = branding_activity_context($activity);
 $location = trim((string) ($req['location'] ?? ''));
 
-$rawHost = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'brocs.arrimage.com'));
+$rawHost = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'bricbrok.com'));
 $baseDomain = tenant_base_host($rawHost);
 $defaultSlug = trim(saas_slug($shopName !== '' ? $shopName : 'ma-boutique'), '-');
 if ($defaultSlug === '') $defaultSlug = 'ma-boutique';
