@@ -6,6 +6,7 @@
 // touche ni aux bases des boutiques ni aux réglages du portail.
 
 const FV_ROOT = __DIR__ . '/..' . '/..';
+require_once __DIR__ . '/_geo.php';
 const FV_SCHEMA = 1;
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -47,8 +48,19 @@ function fv_db(): PDO
         fv_schema($pdo);
     }
     if ($new) @chmod($file, 0600);
+    fv_migrate($pdo);
     fv_settings_ensure($pdo);
     return $pdo;
+}
+
+/** Colonnes ajoutées après la première version de la base (coordonnées des prospects pour la carte de tournée). */
+function fv_migrate(PDO $pdo): void
+{
+    $cols = array_column($pdo->query('PRAGMA table_info(prospects)')->fetchAll(), 'name');
+    if (!$cols) return;
+    foreach (['lat' => 'REAL', 'lng' => 'REAL', 'geo_at' => 'TEXT'] as $col => $type) {
+        if (!in_array($col, $cols, true)) $pdo->exec("ALTER TABLE prospects ADD COLUMN $col $type");
+    }
 }
 
 function fv_schema(PDO $pdo): void
@@ -89,6 +101,9 @@ CREATE TABLE IF NOT EXISTS prospects (
     notes TEXT NOT NULL DEFAULT '',
     shop_slug TEXT NOT NULL DEFAULT '',
     next_action_at TEXT,
+    lat REAL,
+    lng REAL,
+    geo_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -810,11 +825,20 @@ function fv_prospect_save(array $data, ?array $existing = null): int
     if ($existing) {
         $st = $pdo->prepare('UPDATE prospects SET name=?, business=?, kind=?, address=?, postal=?, city=?, phone=?, email=?, website=?, zone=?, source=?, status=?, priority=?, owner_id=?, notes=?, next_action_at=?, updated_at=? WHERE id=?');
         $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], fv_now(), $existing['id']]);
+        if (fv_prospect_address_line($data) !== fv_prospect_address_line($existing)) {   // adresse modifiée : à situer de nouveau sur la carte
+            $pdo->prepare('UPDATE prospects SET lat = NULL, lng = NULL, geo_at = NULL WHERE id = ?')->execute([$existing['id']]);
+        }
         return (int) $existing['id'];
     }
     $st = $pdo->prepare('INSERT INTO prospects (name, business, kind, address, postal, city, phone, email, website, zone, source, status, priority, owner_id, notes, next_action_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], fv_now(), fv_now()]);
     return (int) $pdo->lastInsertId();
+}
+
+/** Enregistre les coordonnées d'un prospect (null, null = adresse introuvable : on ne la redemande pas avant modification). */
+function fv_prospect_set_geo(int $id, ?float $lat, ?float $lng): void
+{
+    fv_db()->prepare('UPDATE prospects SET lat = ?, lng = ?, geo_at = ? WHERE id = ?')->execute([$lat, $lng, fv_now(), $id]);
 }
 
 /** Effet d'un résultat sur le prospect : [statut, prochaine action]. */
@@ -1364,7 +1388,7 @@ function fv_layout_start(string $title, array $options = []): void
 <meta name="robots" content="noindex, nofollow">
 <title><?= e($title) ?> — <?= e(fv_setting('marque_nom', 'Brocs')) ?> · Vente</title>
 <link href="/assets/fonts.css" rel="stylesheet">
-<link rel="stylesheet" href="assets/vente.css?v=6">
+<link rel="stylesheet" href="assets/vente.css?v=7">
 <?= $head ?>
 </head>
 <body class="fv-body<?= $wide ? ' fv-wide' : '' ?>">
@@ -1442,7 +1466,7 @@ function fv_public_start(string $title): void
 <meta name="robots" content="noindex, nofollow">
 <title><?= e($title) ?></title>
 <link href="/assets/fonts.css" rel="stylesheet">
-<link rel="stylesheet" href="assets/vente.css?v=6">
+<link rel="stylesheet" href="assets/vente.css?v=7">
 </head>
 <body class="fv-body fv-public">
 <main class="fv-public-wrap">
