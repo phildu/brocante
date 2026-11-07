@@ -81,7 +81,7 @@ Cible : **prod = `https://www.bricbrok.com`**, **préprod = `https://pre.bricbro
 - `.env.deploy.*.prod` visant le même serveur et dossier que la préprod → refus ;
 - `--with-db` interdit en prod (écraserait commandes et données) ; `--first-install` réservé à un seul commerce (hors `--portail` :
   les bases absentes sont créées à la première visite) ;
-- confirmation `PROD` au clavier, terminal interactif obligatoire ; `scripts/release.sh prod` exige la branche `main`.
+- confirmation `PROD` au clavier (terminal interactif), **ou** `--confirm-prod` : la confirmation est alors le clic d'approbation de l'application sur la commande exacte (règle `ask` sur `scripts/release.sh prod` dans `.claude/settings.local.json`) ; `scripts/release.sh prod` exige la branche `main`.
 - **Correctif urgent** : `--skip-preprod-check` saute seulement le contrôle « déjà en préprod ». Déployer ensuite la même
   version en préprod pour rattraper l'écart, et noter ici la date et la raison.
 

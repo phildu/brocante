@@ -9,6 +9,7 @@
 #   scripts/release.sh preprod|prod --dry-run [...]   essai à blanc : liste ce qui partirait, n'écrit rien
 # Options (transmises à deploy-brocante.sh) : --portail | --tenant <slug> | --dry-run | --first-install (prod) | --with-db (préprod)
 #   --no-backup           prod seulement : saute la sauvegarde (tout premier déploiement, aucune base encore sur le serveur)
+#   --confirm-prod        prod seulement : confirmation donnée par l'option (à n'utiliser qu'après validation humaine de la commande)
 #   --skip-preprod-check  correctif urgent en prod sans passage préalable en préprod (à justifier dans DEPLOIEMENT.md)
 #
 # Les tags sont créés en local seulement ; les pousser à la main : git push origin <tag>.
