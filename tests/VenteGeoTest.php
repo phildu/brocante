@@ -47,6 +47,21 @@ final class VenteGeoTest extends TestCase
         $this->assertEqualsCanonicalizing(array_column($stops, 'business'), array_column($ordered, 'business'));
     }
 
+    public function testRouteOrderOnWholeBaseStaysFast(): void
+    {
+        mt_srand(11);
+        $stops = [];
+        for ($i = 0; $i < 600; $i++) {
+            $stops[] = $this->stop('S' . $i, 48.0 + mt_rand(0, 5000) / 10000, 2.0 + mt_rand(0, 5000) / 10000);
+        }
+        $t = microtime(true);
+        $ordered = fv_route_order($stops);
+        $this->assertLessThan(5.0, microtime(true) - $t);
+        $this->assertCount(600, $ordered);
+        $this->assertSame('S0', $ordered[0]['business']);
+        $this->assertLessThan(fv_route_length_km($stops), fv_route_length_km($ordered));
+    }
+
     public function testRouteOrderSmallInputs(): void
     {
         $this->assertSame([], fv_route_order([]));
