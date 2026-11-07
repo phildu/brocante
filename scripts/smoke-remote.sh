@@ -58,7 +58,8 @@ case "$URL" in
 esac
 
 echo "Indexation"
-fetch "/health.php"
+# /health.php porte toujours « noindex » (c'est une sonde) : en prod, on juge l'indexation sur la page d'accueil.
+if [ "$EXPECT" = "prod" ]; then fetch "/"; else fetch "/health.php"; fi
 robots="$(header x-robots-tag)"
 if [ "$EXPECT" = "prod" ]; then
   case "$robots" in *noindex*) fail "prod en noindex ($robots)" "la prod ne serait pas référencée : vérifier .app-env" ;; *) pass "prod indexable" ;; esac
