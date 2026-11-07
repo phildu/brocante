@@ -83,6 +83,13 @@ function gm_defaults(): array
             'default_mode' => 'option',
             'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
         ],
+        'sponsors' => [
+            'name' => 'Sponsors & partenaires', 'emoji' => '🤝', 'active' => true, 'order' => 8,
+            'description' => "Présentez ceux qui soutiennent votre événement (sponsor principal, sponsors, partenaires, soutiens institutionnels, médias) : logo, lien et mot de présentation, rangés par niveau sur la page publique de la galerie. Vous masquez ou réordonnez une fiche en un clic.",
+            'types' => [],                       // tous les types de galerie
+            'default_mode' => 'included',
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 0,
+        ],
     ];
 }
 
