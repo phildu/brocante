@@ -167,6 +167,8 @@ ga_head('Plan des commerces');
       #addrLoc svg, #addrGo svg { width: 16px; height: 16px; }
       #addrMsg { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #plan.vertexing { cursor: crosshair; }
+      .leaflet-pm-toolbar .leaflet-pm-icon-vertex-add { background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B5B5B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 19V7l7-3 4 3'/><path d='M3 19h8'/><circle cx='17' cy='16.5' r='5.2' fill='white'/><path d='M17 14v5M14.5 16.5h5'/></svg>"); }
+      .leaflet-pm-toolbar .leaflet-pm-icon-vertex-del { background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B5B5B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 19V7l7-3 4 3'/><path d='M3 19h8'/><circle cx='17' cy='16.5' r='5.2' fill='white'/><path d='M14.5 16.5h5'/></svg>"); }
       #mapBar { display: grid; gap: 8px; min-width: 0; position: relative; z-index: 30; }
       #mapBar.collapsed > #mapBarBody { display: none !important; }
       #mapBar > h2 { margin: 0; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -271,7 +273,7 @@ ga_head('Plan des commerces');
         <li><strong>Cadrez le lieu</strong> : tapez l'adresse dans la recherche puis « Centrer la carte », ou « Ma position » pour utiliser la position de l'appareil (le navigateur demande l'autorisation). Choisissez le fond (plan ou satellite) ou cochez <em>Masquer le fond de carte</em> pour ne garder que votre dessin sur une grille.</li>
         <li><strong>Définissez vos surfaces</strong> dans le catalogue (ex. « Stand 3 × 2 m ») : une fois créées, un clic sur « Poser » dessine l'emplacement aux bonnes dimensions, à l'échelle de la carte (réglez l'angle pour l'aligner sur l'allée).</li>
         <li><strong>Tournez un emplacement</strong> : sélectionnez-le puis ↻ / ↺ (1°, 15°, 90° ou un angle précis), ou prenez l'outil de rotation à gauche de la carte.</li>
-        <li><strong>Dessinez à la main</strong> avec les outils à gauche de la carte : repère (entrée, caisse, toilettes), rectangle ou zone libre (halle, cour), tracé (allée). Pour ajuster une forme, sélectionnez-la puis « + Ajouter un point » (sur le bord le plus proche) ou « − Supprimer un point » (sur un coin) dans sa fiche.</li>
+        <li><strong>Dessinez à la main</strong> avec les outils à gauche de la carte : repère (entrée, caisse, toilettes), rectangle ou zone libre (halle, cour), tracé (allée). Pour ajuster une forme, utilisez les outils « Ajouter un point » (clic près d'un bord) et « Supprimer un point » (clic sur un coin) à gauche de la carte, à côté de l'édition ; ils existent aussi dans la fiche de la zone sélectionnée.</li>
         <li><strong>Numérotez</strong> : un numéro par emplacement dans sa fiche, ou « Numéroter tout » pour le faire d'un coup (de gauche à droite et de haut en bas, par exemple). Le compteur « prochain numéro » sert aussi à la pose et à la division.</li>
         <li><strong>Découpez une zone en parcelles</strong> : sélectionnez la zone (rue, hall) à 4 coins, choisissez le nombre de parcelles ou leurs dimensions, cochez « Allée au milieu » pour laisser un couloir entre deux rangées, puis « Découper ». L'aperçu donne la taille des parcelles ; chacune reçoit le numéro suivant.</li>
         <li><strong>Reliez chaque emplacement à un commerce</strong> pour que les visiteurs voient qui s'y trouve. L'adresse de la marchandise (rue, code postal, ville, stand) se règle dans « Présentation et commerces », et côté boutique dans « Mes galeries ».</li>
@@ -589,6 +591,16 @@ ga_head('Plan des commerces');
       L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(map);
       map.pm.setLang('fr');
       map.pm.addControls({ position: 'topleft', drawMarker: true, drawRectangle: true, drawPolygon: true, drawPolyline: true, drawCircle: false, drawCircleMarker: false, drawText: false, cutPolygon: false, rotateMode: true, editMode: true, dragMode: true, removalMode: true });
+      // Points d'ancrage : deux outils à côté de l'édition (ajouter / supprimer un point) ; le mode est piloté par setVertexMode().
+      ['add', 'del'].forEach(function (m) {
+        map.pm.Toolbar.createCustomControl({
+          name: m === 'add' ? 'vertexAdd' : 'vertexDel', block: 'edit',
+          title: m === 'add' ? 'Ajouter un point : cliquez près du bord d\'une zone' : 'Supprimer un point : cliquez sur un coin d\'une zone',
+          className: 'control-icon leaflet-pm-icon-vertex-' + m,
+          actions: ['finishMode'],
+          afterClick: function (e, ctx) { setVertexMode(ctx.button.toggled() ? m : null); }
+        });
+      });
       // Les contrôles Leaflet (zoom, échelle, outils Geoman) sortent du cadre tourné : ils restent droits et cliquables.
       $('planUi').appendChild(map.getContainer().querySelector('.leaflet-control-container'));
 
@@ -1142,8 +1154,24 @@ ga_head('Plan des commerces');
         pts.forEach(function (v, i) { var d = p.distanceTo(map.latLngToLayerPoint(v)); if (d < bestD) { bestD = d; best = i; } });
         return bestD <= 18 ? best : -1;
       }
+      function vertexDist(layer, latlng) {
+        var p = map.latLngToLayerPoint(latlng), d = Infinity;
+        layerLatLngs(layer).forEach(function (v) { d = Math.min(d, p.distanceTo(map.latLngToLayerPoint(v))); });
+        return d;
+      }
+      // Zone visée par le clic : la zone sélectionnée si elle est assez proche, sinon la plus proche ; sans sélection, l'outil marche quand même.
+      function pickVertexTarget(latlng, mode) {
+        var tol = mode === 'add' ? 14 : 18, best = null, bestD = Infinity;
+        function dist(l) { return mode === 'add' ? nearestSegment(l, latlng).d : vertexDist(l, latlng); }
+        if (selected instanceof L.Polygon && dist(selected) <= tol) return selected;
+        group.getLayers().forEach(function (l) { if (!(l instanceof L.Polygon)) return; var d = dist(l); if (d < bestD) { bestD = d; best = l; } });
+        if (best && bestD <= tol) return best;
+        return mode === 'add' && selected instanceof L.Polygon ? selected : null;
+      }
+      function vertexSay(t) { $('vertexMsg').textContent = t; $('count').textContent = t; }
       function setVertexMode(mode) {
         vertexMode = mode;
+        if (map.pm.Toolbar.buttons.vertexAdd) { map.pm.Toolbar.toggleButton('vertexAdd', mode === 'add', false); map.pm.Toolbar.toggleButton('vertexDel', mode === 'del', false); }
         planEl.classList.toggle('vertexing', !!mode);
         $('vertexAdd').setAttribute('aria-pressed', mode === 'add' ? 'true' : 'false');
         $('vertexDel').setAttribute('aria-pressed', mode === 'del' ? 'true' : 'false');
@@ -1157,24 +1185,25 @@ ga_head('Plan des commerces');
           : 'Ajoutez un point sur le bord le plus proche ou retirez un coin pour ajuster la forme (3 points minimum).';
       }
       function vertexApply(latlng) {
-        if (!vertexMode || !selected || !(selected instanceof L.Polygon)) { setVertexMode(null); return; }
-        var pts = layerLatLngs(selected);
+        if (!vertexMode) return;
+        var target = pickVertexTarget(latlng, vertexMode);
+        if (!target) { vertexSay(vertexMode === 'add' ? 'Cliquez près du bord d\'une zone pour y insérer un point.' : 'Cliquez sur un point (coin) d\'une zone pour le retirer.'); return; }
+        var pts = layerLatLngs(target);
         if (vertexMode === 'add') {
           pushUndo(true);
-          var seg = nearestSegment(selected, latlng), next = pts.slice();
+          var seg = nearestSegment(target, latlng), next = pts.slice();
           next.splice(seg.i + 1, 0, map.layerPointToLatLng(seg.pt));
-          selected.setLatLngs(next);
-          $('vertexMsg').textContent = 'Point ajouté : ' + next.length + ' points.';
+          target.setLatLngs(next);
+          vertexSay('Point ajouté : ' + next.length + ' points.');
         } else {
-          if (pts.length <= 3) { $('vertexMsg').textContent = 'Une zone doit garder au moins 3 points ; pour l\'ajuster autrement, découpez-la ou supprimez-la.'; return; }
-          var idx = nearestVertex(selected, latlng);
-          if (idx < 0) { $('vertexMsg').textContent = 'Cliquez sur un point (coin) de la zone pour le retirer.'; return; }
+          if (pts.length <= 3) { vertexSay('Une zone doit garder au moins 3 points ; pour l\'ajuster autrement, découpez-la ou supprimez-la.'); return; }
+          var idx = nearestVertex(target, latlng);
           pushUndo(true);
           var rest = pts.slice(); rest.splice(idx, 1);
-          selected.setLatLngs(rest);
-          $('vertexMsg').textContent = 'Point supprimé : ' + rest.length + ' points restants.';
+          target.setLatLngs(rest);
+          vertexSay('Point supprimé : ' + rest.length + ' points restants.');
         }
-        look(selected); renderList(); select(selected); count();
+        look(target); renderList(); select(target); count();
       }
       $('vertexAdd').addEventListener('click', function () { setVertexMode(vertexMode === 'add' ? null : 'add'); });
       $('vertexDel').addEventListener('click', function () { setVertexMode(vertexMode === 'del' ? null : 'del'); });
