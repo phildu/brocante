@@ -158,20 +158,46 @@ function gaim_source(array $bbox, string $base, int $width, int $height): string
     return (string) $body;
 }
 
-/** Consigne de stylisation : géométrie, orientation et cadrage intacts, aucun texte ni élément inventé. */
-function gaim_prompt(string $style, string $base): string
+/** Niveaux de simplification (1 = très fidèle … 5 = très épuré) : libellé affiché et consigne ajoutée au prompt. 3 = comportement d'origine, rien n'est ajouté. */
+function gallery_ai_map_levels(): array
+{
+    return [
+        1 => ['label' => 'Très fidèle', 'prompt' => 'Keep the drawing rich and faithful to the source: render every building, tree, path, parking marking and small structure with fine detail.'],
+        2 => ['label' => 'Détaillé', 'prompt' => 'Keep most of the detail of the source: individual buildings, trees and paths stay visible, only the tiniest clutter is softened.'],
+        3 => ['label' => 'Équilibré', 'prompt' => ''],
+        4 => ['label' => 'Simplifié', 'prompt' => 'Simplify the drawing: merge small details into calm larger shapes, and leave out parked cars, individual trees, small sheds and fine markings. Keep roads, building masses, water and green areas clearly readable.'],
+        5 => ['label' => 'Très épuré', 'prompt' => 'Simplify strongly, as a minimal diagram: keep only the main roads and paths, the main building masses and the large green and water areas as flat, calm shapes. No small details, no vehicles, no individual trees, no textures.'],
+    ];
+}
+
+/** Réglages saisis dans l'éditeur, ramenés à des valeurs sûres : ['style' => clé, 'level' => 1..5, 'custom' => texte ≤ 400 caractères]. */
+function gallery_ai_map_settings($style, $level, $custom): array
+{
+    $style = is_string($style) && isset(gallery_ai_map_styles()[$style]) ? $style : 'aquarelle';
+    $level = max(1, min(5, (int) $level ?: 3));
+    $custom = mb_substr(trim(preg_replace('/[\x00-\x1F\x7F\s]+/u', ' ', (string) $custom)), 0, 400);
+    return ['style' => $style, 'level' => $level, 'custom' => $custom];
+}
+
+/** Consigne de stylisation : géométrie, orientation et cadrage intacts, aucun texte ni élément inventé. $custom remplace le rendu du style prédéfini. */
+function gaim_prompt(string $style, string $base, int $level = 3, string $custom = ''): string
 {
     $styles = gallery_ai_map_styles();
-    $look = $styles[$style]['prompt'] ?? $styles['aquarelle']['prompt'];
+    $look = $custom !== '' ? $custom : ($styles[$style]['prompt'] ?? $styles['aquarelle']['prompt']);
+    $levelRule = gallery_ai_map_levels()[max(1, min(5, $level))]['prompt'];
     $source = $base === 'sat'
         ? "The attached image is an aerial photograph of the site. Interpret buildings, roads, paths, parking areas, trees and open ground as a drawn map."
         : "The attached image is a topographic street map of the site. Turn it into a drawn map.";
+    $keep = $levelRule !== ''
+        ? "Do not invent or displace streets, buildings or landmarks; the only elements you may leave out are the small details the simplification level asks you to drop. "
+        : "Do not add, remove or displace streets, buildings, landmarks or vehicles. ";
     return "Redraw this map view as {$look}.\n\n"
         . $source . "\n\n"
+        . ($levelRule !== '' ? $levelRule . "\n\n" : '')
         . "Keep the exact same geographic layout, orientation (north stays up), framing and scale: roads, paths, building footprints, "
         . "squares, water and green areas must stay in the same positions and proportions. Strictly top-down orthographic view, "
         . "no perspective and no 3D isometric effect. Preserve the full frame edge to edge: do not crop, zoom, rotate or shift the view. "
-        . "Do not add, remove or displace streets, buildings, landmarks or vehicles. Remove all text, labels, letters, numbers, icons, "
+        . $keep . "Remove all text, labels, letters, numbers, icons, "
         . "map symbols, legends and watermarks. No border. The result is used as a clean background behind vector markers, "
         . "so keep the whole image evenly readable and free of dark empty areas.";
 }
@@ -261,15 +287,16 @@ function gaim_save(string $bytes, string $slug): string
  * Capture la vue, la fait styliser et enregistre le fond. -> ['ok'=>true, 'path', 'bounds', 'ratio', 'style'].
  * Lève InvalidArgumentException / RuntimeException avec un message affichable.
  */
-function gallery_ai_map_stylize(array $view, string $base, string $style, string $slug): array
+function gallery_ai_map_stylize(array $view, string $base, string $style, string $slug, int $level = 3, string $custom = ''): array
 {
     if (!gallery_ai_map_available()) throw new RuntimeException("La clé IA du portail n'est pas configurée (Fournisseurs IA).");
     if (!in_array($base, ['osm', 'sat'], true)) $base = 'osm';
-    if (!isset(gallery_ai_map_styles()[$style])) $style = 'aquarelle';
+    $set = gallery_ai_map_settings($style, $level, $custom);
+    $style = $set['style'];
     $box = gaim_view_box($view);
     $source = gaim_source($box['bbox'], $base, $box['width'], $box['height']);
-    $bytes = gaim_generate($source, gaim_prompt($style, $base), $box['ratio']);
+    $bytes = gaim_generate($source, gaim_prompt($style, $base, $set['level'], $set['custom']), $box['ratio']);
     $path = gaim_save($bytes, $slug);
     banner_ai_usage_log('galerie-plan', $slug, 1, GAIM_MODEL);
-    return ['ok' => true, 'path' => $path, 'bounds' => $box['bounds'], 'ratio' => $box['ratio'], 'style' => $style];
+    return ['ok' => true, 'path' => $path, 'bounds' => $box['bounds'], 'ratio' => $box['ratio'], 'style' => $style, 'level' => $set['level']];
 }
