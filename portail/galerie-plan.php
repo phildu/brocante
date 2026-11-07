@@ -156,23 +156,25 @@ ga_head('Plan des commerces');
       #planTitle { display: flex; align-items: center; gap: 9px; margin: 0; padding-left: 34px; min-width: 0; }
       #planTitle svg { width: 22px; height: 22px; flex: none; margin-left: -34px; color: var(--accent); }
       .plan-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+      .plan-actions .btn.icon { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+      #count { margin: 0 4px 0 0; font-size: .8rem; max-width: min(34vw, 380px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #planCard.fs #count { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
       .btn.icon { width: 38px; height: 38px; padding: 0; flex: none; }
       .btn.icon svg { width: 18px; height: 18px; }
       .btn.icon[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
-      #addrBar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; margin: 0 0 8px; }
+      #addrBar { display: block; margin: 0 0 8px; }
       #addrRow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
-      #addrBar.collapsed #addrRow { display: none; }
       #addrLoc svg, #addrGo svg { width: 16px; height: 16px; }
-      #addrToggle { justify-self: end; }
-      #addrToggle svg { width: 16px; height: 16px; flex: none; transition: transform .18s ease; }
-      #addrBar.collapsed #addrToggle svg { transform: rotate(-90deg); }
-      #addrBar.collapsed #addrToggle { width: auto; max-width: 100%; padding: 0 10px; }
-      #addrEcho { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
-      #addrBar.collapsed #addrEcho { display: inline-block; }
       #addrMsg { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #plan.vertexing { cursor: crosshair; }
       #mapBar { display: grid; gap: 8px; min-width: 0; position: relative; z-index: 30; }
       #mapBar.collapsed > #mapBarBody { display: none !important; }
+      #mapBar > h2 { margin: 0; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      #mapBar > h2::after { content: '▾'; font-size: 1.35rem; line-height: 1; opacity: .75; flex: none; transition: transform .18s ease; }
+      #mapBar.collapsed > h2::after { transform: rotate(-90deg); }
+      #planCard.fs #fsSide > #mapBar { overflow-x: auto; }
+      #mapBar input[type=checkbox] { width: auto; flex: none; margin: 0; }
+      #planCard.fs #mapBar select { width: 100%; max-width: 100%; }
       #mapBarBody { display: grid; gap: 8px; }
       #advancedTools { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; }
       #advancedTools > summary { cursor: pointer; font-weight: 600; font-size: .85rem; }
@@ -240,9 +242,8 @@ ga_head('Plan des commerces');
       #planCard.fs #fsTitleBar h2 { margin: 0; color: #fff; font-size: 1.05rem; text-shadow: 0 1px 3px rgba(0,0,0,.55); }
       #planCard.fs #fsTitleBar .btn { pointer-events: auto; }
       #planCard.fs #addrBar { position: absolute; top: 56px; left: 56px; right: 384px; z-index: 1200; width: auto; margin: 0; background: var(--panel); padding: 6px 8px; border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); }
-      #planCard.fs #mapBar { position: absolute; top: 112px; left: 56px; right: 384px; z-index: 1200; width: auto; background: var(--panel); padding: 8px 10px; border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); }
       #planCard.fs #fsSide { position: absolute; top: 58px; right: 12px; bottom: 12px; width: 360px; z-index: 1250; overflow: auto; display: grid; grid-auto-rows: max-content; gap: 10px; align-content: start; }
-      #planCard.fs #fsSide > .gcard, #planCard.fs #fsSide > #saveBar, #planCard.fs #fsSide > #sel { background: var(--panel); border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); padding: 10px 12px; margin: 0; }
+      #planCard.fs #fsSide > .gcard, #planCard.fs #fsSide > #mapBar, #planCard.fs #fsSide > #sel { background: var(--panel); border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,.22); padding: 10px 12px; margin: 0; }
       #planCard.fs #fsSide .gcard { min-width: 0; overflow-x: auto; }
       /* Blocs repliables : les quatre cartes de gestion (hors de #planCard en page normale, dans #fsSide en plein écran) */
       #catCard > h2, #numCard > h2, #bookCard > h2, #zoneCard > h2 { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -250,8 +251,6 @@ ga_head('Plan des commerces');
       #catCard.collapsed > h2::after, #numCard.collapsed > h2::after, #bookCard.collapsed > h2::after, #zoneCard.collapsed > h2::after { content: '▾'; transform: rotate(-90deg); }
       #catCard.collapsed > :not(h2), #numCard.collapsed > :not(h2), #bookCard.collapsed > :not(h2), #zoneCard.collapsed > :not(h2) { display: none !important; }
       #planCard.fs #fsSide .gcard > h2 { margin: 0; font-size: 1rem; }
-      #saveBar #count { margin: 0 0 0 auto; }
-      #planCard.fs #saveBar { position: sticky; top: 0; z-index: 3; }
       #planCard.fs #fsSide > #sel { width: auto; max-height: none; grid-template-columns: 1fr; overflow: visible; }
       /* le catalogue de surfaces passe en fiches empilées : plus rien ne déborde sur la carte */
       #fsSide table.t, #fsSide table.t tbody { display: block; width: 100%; } #fsSide table.t thead { display: none; }
@@ -262,7 +261,6 @@ ga_head('Plan des commerces');
       #fsSide .listplan table.t { display: table; } #fsSide .listplan table.t tbody { display: table-row-group; } #fsSide .listplan table.t thead { display: table-header-group; }
       @media (max-width: 900px) {
         #planCard.fs #addrBar { left: 8px; right: 8px; }
-        #planCard.fs #mapBar { left: 8px; right: 8px; }
         #planCard.fs #fsSide { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 44vh; }
       }
     </style>
@@ -293,11 +291,14 @@ ga_head('Plan des commerces');
           <button class="btn icon" type="button" id="addrGo" title="Centrer la carte sur la recherche" aria-label="Centrer la carte sur la recherche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
           <span class="meta" id="addrMsg" role="status"></span>
         </div>
-        <button class="btn icon" type="button" id="addrToggle" aria-pressed="true" aria-expanded="true" aria-controls="addrRow" title="Replier ou déplier la recherche d'adresse" aria-label="Adresse et localisation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span id="addrEcho"><?= e($addrDefault !== '' ? $addrDefault : 'Adresse du lieu') ?></span></button>
       </div>
       <div class="row" id="fsTitleBar">
         <h2 id="planTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z"/><path d="M9 4v13M15 6.5v13"/></svg>Plan d'implantation</h2>
         <div class="plan-actions" role="toolbar" aria-label="Actions du plan">
+          <p class="meta" id="count" role="status"></p>
+          <button class="btn btn-primary icon" type="submit" form="saveForm" title="Enregistrer le plan" aria-label="Enregistrer le plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg></button>
+          <button class="btn icon" type="button" id="undoBtn" disabled title="Annuler la dernière modification du plan (Ctrl+Z)" aria-label="Annuler la dernière modification"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+          <a class="btn icon" href="<?= e($publicUrl) ?>" target="_blank" rel="noopener" title="Voir sur la page publique" aria-label="Voir sur la page publique"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
           <button class="btn icon" type="button" id="mapBarToggle" aria-pressed="true" aria-controls="mapBarBody" title="Afficher ou masquer les outils de la carte (fond, rotation)" aria-label="Outils de la carte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg></button>
           <button class="btn icon" type="button" id="fsOpen" title="Agrandir le plan en plein écran" aria-label="Plein écran"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
           <button class="btn btn-primary icon" type="button" id="fsClose" hidden title="Fermer le plein écran" aria-label="Fermer le plein écran"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
@@ -305,6 +306,7 @@ ga_head('Plan des commerces');
       </div>
       <div id="fsLayout"><div id="fsSide" hidden></div><div id="fsMain">
       <div id="mapBar">
+      <h2 id="mapBarTitle" role="button" tabindex="0" aria-controls="mapBarBody">Fond de carte et export</h2>
       <div id="mapBarBody">
       <div class="row">
         <label class="row" style="gap:6px;">Fond de carte
@@ -346,7 +348,7 @@ ga_head('Plan des commerces');
           <span class="meta" id="bgMsg" role="status"></span>
         </div>
         <div class="row">
-          <label class="row" style="gap:6px;" title="Fait pivoter la carte et le dessin autour du centre : pratique pour aligner une allée ou une rue à l'écran. Le bouton Nord rétablit l'orientation ; la rotation n'est pas enregistrée avec le plan.">
+          <label class="row" style="gap:6px;" title="Fait pivoter la carte et le dessin autour du centre : pratique pour aligner une allée ou une rue à l'écran. Le bouton Nord rétablit l'orientation ; la rotation est enregistrée avec le plan.">
             Rotation du fond
             <input type="range" id="bearing" min="-180" max="180" step="1" value="0" style="flex:1 1 160px;min-width:120px;max-width:280px;">
             <output id="bearingOut" for="bearing" style="min-width:44px;text-align:right;font-variant-numeric:tabular-nums;">0°</output>
@@ -358,13 +360,6 @@ ga_head('Plan des commerces');
       </div>
       <div id="planWrap"><div id="plan" aria-label="Carte du plan d'implantation"></div><div id="planUi"></div>
 
-      </div>
-
-      <div class="row" id="saveBar">
-        <button class="btn btn-primary" type="submit" form="saveForm">Enregistrer le plan</button>
-        <button class="btn" type="button" id="undoBtn" disabled title="Annuler la dernière modification du plan (Ctrl+Z)">↩ Annuler</button>
-        <a class="btn" href="<?= e($publicUrl) ?>" target="_blank" rel="noopener">Voir sur la page publique ↗</a>
-        <p class="meta" id="count" role="status"></p>
       </div>
 
       <div class="plan-grid" id="sel" hidden>
@@ -739,6 +734,7 @@ ga_head('Plan des commerces');
       }
       $('bearing').addEventListener('input', function () { setBearing(parseInt(this.value, 10) || 0); });
       $('bearingReset').addEventListener('click', function () { setBearing(0); });
+      if (saved.bearing) setBearing(saved.bearing);
 
       // --- Éléments du plan ---
       var group = L.featureGroup().addTo(map), selected = null, placing = null, loading = true;
@@ -1619,7 +1615,6 @@ ga_head('Plan des commerces');
         });
       }
       var addrEl = $('addr'), addrList = $('addrList'), addrItems = [], addrActive = -1, addrTimer = null, addrSeq = 0;
-      function addrEcho(t) { $('addrEcho').textContent = (t || '').trim() || 'Adresse du lieu'; }
       function addrClose() {
         addrList.hidden = true; addrEl.setAttribute('aria-expanded', 'false'); addrEl.removeAttribute('aria-activedescendant');
         addrItems = []; addrActive = -1;
@@ -1649,7 +1644,6 @@ ga_head('Plan des commerces');
       function addrGoTo(it) {
         if (!it) return;
         addrEl.value = it.label;
-        addrEcho(it.label);
         addrClose();
         $('addrMsg').textContent = it.label.slice(0, 70) + (it.ctx ? ' · ' + it.ctx : '');
         map.setView([it.lat, it.lon], Math.max(map.getZoom(), 18));
@@ -1699,7 +1693,7 @@ ga_head('Plan des commerces');
           reverseAddr(lat, lon).then(function (it) {
             btn.disabled = false;
             if (!it) { $('addrMsg').textContent = 'Position trouvée mais adresse introuvable : saisissez-la à la main, la carte est déjà centrée.'; return; }
-            addrEl.value = it.label; addrEcho(it.label);
+            addrEl.value = it.label;
             $('addrMsg').textContent = 'Position du navigateur : ' + it.label + (it.ctx ? ' · ' + it.ctx : '');
           });
         }, function (err) {
@@ -1712,7 +1706,7 @@ ga_head('Plan des commerces');
       // --- Enregistrement ---
       function collectMap() {
         var c = map.getCenter();
-        return { center: [c.lat, c.lng], zoom: map.getZoom(), base: hidden ? 'none' : baseKind, catalog: catalog.filter(function (x) { return x.name && x.w >= 0.5 && x.d >= 0.5; }),
+        return { center: [c.lat, c.lng], zoom: map.getZoom(), bearing: bearing, base: hidden ? 'none' : baseKind, catalog: catalog.filter(function (x) { return x.name && x.w >= 0.5 && x.d >= 0.5; }),
           background: bg ? { path: bg.path, bounds: bgLayer ? bgBoundsArr(bgLayer.getBounds()) : bg.bounds, opacity: bg.opacity } : null,
           items: group.getLayers().map(function (l) { var m = l._plan; return { id: m.id, kind: kindOf(l), pts: points(l), label: m.label, num: m.num, shop: m.shop, color: m.color, note: m.note, surface: m.surface, role: m.role, ztype: m.ztype, unit: m.unit, price_cents: toCents(m.price), price_pro_cents: toCents(m.pricePro), usage: m.usage, flow: m.flow, indoor: !!m.indoor, service: m.service }; }), costs: { fixed_cents: toCents($('simFixed').value), var_cents: toCents($('simVar').value), pct: num('simPct', 0), occ: [0, 1, 2].map(function (i) { return num('simOcc' + i, 0); }), adj: [0, 1, 2].map(function (i) { return num('simAdj' + i, 0); }) }, booking: { enabled: $('bkOn').checked, hold_days: parseInt($('bkDays').value, 10) || 7, intro: $('bkIntro').value } };
       }
@@ -1789,31 +1783,24 @@ ga_head('Plan des commerces');
       function setMapBarCollapsed(on) {
         mapBarEl.classList.toggle('collapsed', on);
         mapBarToggle.setAttribute('aria-pressed', on ? 'false' : 'true');
+        $('mapBarTitle').setAttribute('aria-expanded', on ? 'false' : 'true');
         collapseState.mapBar = on; persistCollapse();
         afterLayout();
       }
-      mapBarToggle.addEventListener('click', function () { setMapBarCollapsed(!mapBarEl.classList.contains('collapsed')); });
+      function toggleMapBar() { setMapBarCollapsed(!mapBarEl.classList.contains('collapsed')); }
+      mapBarToggle.addEventListener('click', toggleMapBar);
+      $('mapBarTitle').addEventListener('click', toggleMapBar);
+      $('mapBarTitle').addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMapBar(); } });
       setMapBarCollapsed(!!collapseState.mapBar);
-      var addrBarEl = $('addrBar'), addrToggle = $('addrToggle');
-      function setAddrCollapsed(on) {
-        addrBarEl.classList.toggle('collapsed', on);
-        addrToggle.setAttribute('aria-pressed', on ? 'false' : 'true');
-        addrToggle.setAttribute('aria-expanded', on ? 'false' : 'true');
-        addrToggle.title = on ? "Déplier la recherche d'adresse et la localisation" : "Replier la recherche d'adresse";
-        collapseState.addr = on; persistCollapse();
-        afterLayout();
-      }
-      addrToggle.addEventListener('click', function () { setAddrCollapsed(!addrBarEl.classList.contains('collapsed')); });
-      setAddrCollapsed(!!collapseState.addr);
       function fsPanels(on) {
         if (on) {
-          fsSide.appendChild($('saveBar'));
+          fsSide.appendChild($('mapBar'));
           fsCards.forEach(function (id) { fsSide.appendChild($(id)); });
           fsSide.appendChild($('sel'));
         } else {
           var form = $('saveForm');
           fsCards.forEach(function (id) { form.parentNode.insertBefore($(id), form); });
-          $('fsMain').appendChild($('saveBar'));
+          $('fsMain').insertBefore($('mapBar'), $('planWrap'));
           $('fsMain').appendChild($('sel'));
         }
       }
@@ -1852,7 +1839,6 @@ ga_head('Plan des commerces');
       // --- Recherche d'adresse : saisie au clavier ou au clic, découverte des lieux au fil de la frappe ---
       addrEl.addEventListener('input', function () {
         var q = addrEl.value.trim(), seq = ++addrSeq;
-        addrEcho(q);
         clearTimeout(addrTimer);
         if (!addrList.hidden) addrClose();
         if (q.length < 2) return;
