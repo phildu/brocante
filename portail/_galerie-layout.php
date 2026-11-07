@@ -15,6 +15,15 @@ if (!$gaGallery) {
     header('Location: /portail/galeries.php');
     exit;
 }
+// Administrateur d'une galerie : le slug figure aussi dans l'adresse (?g=), comme pour l'exploitant, pour qu'un lien de page soit
+// partageable. Seule la lecture est redirigée (les envois de formulaire gardent leur adresse) ; le slug du compte l'emporte
+// toujours sur ?g=, la sécurité est inchangée.
+if ($limited && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && strtolower((string) ($_GET['g'] ?? '')) !== $gaSlug) {
+    $gaQuery = $_GET;
+    $gaQuery['g'] = $gaSlug;
+    header('Location: ' . strtok((string) ($_SERVER['REQUEST_URI'] ?? '/portail/'), '?') . '?' . http_build_query($gaQuery), true, 302);
+    exit;
+}
 $gaOrigin = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
 /** Début de page (jusqu'à la barre de navigation). */
