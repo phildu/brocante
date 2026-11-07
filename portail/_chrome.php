@@ -397,5 +397,7 @@ function portail_page_start(array $opts = []): void
 </dialog>
 <script type="application/json" id="psearch-data"><?= json_encode(portail_palette_data(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 <script src="/portail/admin.js?v=2" defer></script>
+<script src="/assets/ai-wait-timer.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/ai-wait-timer.js') ?>"></script>
+<script src="/assets/heic-convert.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/heic-convert.js') ?>"></script>
 <?php
 }

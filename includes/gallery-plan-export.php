@@ -103,7 +103,7 @@ function gpx_wms(array $bbox, string $base, int $width, int $height): ?string
     ]);
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 25, CURLOPT_CONNECTTIMEOUT => 8,
-        CURLOPT_USERAGENT => 'Brocs-galerie/1.0 (+https://brocs.arrimage.com)', CURLOPT_FOLLOWLOCATION => true]);
+        CURLOPT_USERAGENT => 'Bricbrok-galerie/1.0 (+https://bricbrok.com)', CURLOPT_FOLLOWLOCATION => true]);
     $body = curl_exec($ch);
     $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $type = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);

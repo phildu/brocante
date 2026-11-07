@@ -137,13 +137,13 @@ function td_seed_tasks(): array
     return [
         [
             'title' => 'Brancher le webhook Stripe de chaque boutique',
-            'detail' => "L'URL exacte est affichée dans Administration → Réglages → Stripe de chaque boutique : ‹adresse de la boutique›/stripe-webhook.php (la boutique du portail : brocs.arrimage.com/la-fripe-a-naty/stripe-webhook.php ; le Petit Chalet : brocante.arrimage.com/stripe-webhook.php). Dans Stripe → Développeurs → Webhooks, ajouter cette URL, choisir les événements checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed, checkout.session.expired, charge.refunded et charge.dispute.created/updated/closed, puis coller le whsec_… reçu dans les réglages de la boutique. Le bandeau doit passer à « actif ». Sans ce secret, une commande payée n'est pas enregistrée côté boutique.",
+            'detail' => "L'URL exacte est affichée dans Administration → Réglages → Stripe de chaque boutique : ‹adresse de la boutique›/stripe-webhook.php (la boutique du portail : bricbrok.com/la-fripe-a-naty/stripe-webhook.php ; le Petit Chalet : brocante.arrimage.com/stripe-webhook.php). Dans Stripe → Développeurs → Webhooks, ajouter cette URL, choisir les événements checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed, checkout.session.expired, charge.refunded et charge.dispute.created/updated/closed, puis coller le whsec_… reçu dans les réglages de la boutique. Le bandeau doit passer à « actif ». Sans ce secret, une commande payée n'est pas enregistrée côté boutique.",
             'category' => 'paiement',
             'priority' => 1,
         ],
         [
             'title' => 'Faire un paiement de test de bout en bout',
-            'detail' => "Avec les clés de test (sk_test_… / pk_test_…) sur une boutique de test : ajouter une pièce au panier, payer par carte 4242 4242 4242 4242 (date future, CVC quelconque), choisir livraison ou retrait, puis vérifier l'e-mail de confirmation, la commande « payée » dans Administration → Commandes, le stock décrémenté et le webhook reçu. Rembourser ensuite depuis Stripe et vérifier que la commande passe « remboursée ». Le parcours commande est déployé sur brocs.arrimage.com ; la recette réelle reste à faire. Les tests automatiques locaux passent (PHPUnit 12 tests, e2e S2 6/6).",
+            'detail' => "Avec les clés de test (sk_test_… / pk_test_…) sur une boutique de test : ajouter une pièce au panier, payer par carte 4242 4242 4242 4242 (date future, CVC quelconque), choisir livraison ou retrait, puis vérifier l'e-mail de confirmation, la commande « payée » dans Administration → Commandes, le stock décrémenté et le webhook reçu. Rembourser ensuite depuis Stripe et vérifier que la commande passe « remboursée ». Le parcours commande est déployé sur bricbrok.com ; la recette réelle reste à faire. Les tests automatiques locaux passent (PHPUnit 12 tests, e2e S2 6/6).",
             'category' => 'paiement',
             'priority' => 1,
         ],

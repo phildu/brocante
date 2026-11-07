@@ -7,7 +7,7 @@
 # Usage :
 #   DEPLOY_SSH=user@ssh.cluster0xx.hosting.ovh.net scripts/deploy-ssh.sh [--apply] [base]
 #   DEPLOY_PATH=/www/brocs/ (chemin distant, barre finale comprise)
-#   DEPLOY_URL=https://brocs.arrimage.com/ (contrôles après envoi)
+#   DEPLOY_URL=https://bricbrok.com/ (contrôles après envoi)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cfg['return_hosts'] = array_values(array_filter(array_map(static fn ($h) => strtolower(preg_replace('#^https?://|/.*$#i', '', trim($h))), preg_split('/[\s,]+/', (string) ($_POST['return_hosts'] ?? ''), -1, PREG_SPLIT_NO_EMPTY))));
         if (oauth_is_dev()) $cfg['dev_base'] = rtrim(trim((string) ($_POST['dev_base'] ?? '')), '/');
         $bad = '';
-        if ($cfg['callback_origin'] !== '' && !preg_match('#^https?://[A-Za-z0-9.-]+(:\d+)?$#', $cfg['callback_origin'])) $bad = "Adresse centrale non valide : un domaine complet sans chemin, par exemple https://brocs.arrimage.com";
+        if ($cfg['callback_origin'] !== '' && !preg_match('#^https?://[A-Za-z0-9.-]+(:\d+)?$#', $cfg['callback_origin'])) $bad = "Adresse centrale non valide : un domaine complet sans chemin, par exemple https://bricbrok.com";
         foreach (OAUTH_PROVIDERS as $k => $_) {
             $p = &$cfg['providers'][$k];
             $p['enabled'] = !empty($_POST['enabled'][$k]);

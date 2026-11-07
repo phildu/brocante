@@ -300,7 +300,7 @@ $social = $req ? oauth_buttons_html('signup', [
     'address_lng' => $owner['address_lng'],
 ], false, ['google']) : '';
 $isPayable = $req && saas_req_payable($req);
-$rawHost = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'brocs.arrimage.com'));
+$rawHost = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'bricbrok.com'));
 $baseDomain = tenant_base_host($rawHost);
 $defaultSlug = trim(saas_slug($shopName !== '' ? $shopName : 'ma-boutique'), '-');
 if ($defaultSlug === '') $defaultSlug = 'ma-boutique';
@@ -489,7 +489,7 @@ saas_page_start(($shopWord === 'stand' ? 'Mon stand' : 'Ma boutique') . ' — ' 
       <?php elseif (($domainChoice['method'] ?? '') === 'platform'): ?>
         <div class="notice" role="status">Vous avez choisi l’adresse incluse. Un changement vers un domaine personnalisé plus tard peut nécessiter des redirections et un travail SEO pour préserver le référencement.</div>
       <?php endif; ?>
-      <p class="oauth-note">Sans domaine personnalisé, votre boutique sera disponible sous l’adresse du portail, par exemple brocs.arrimage.com/nom-de-la-boutique. Une migration ultérieure peut demander des redirections et affecter temporairement le référencement.</p>
+      <p class="oauth-note">Sans domaine personnalisé, votre boutique sera disponible sous l’adresse du portail, par exemple bricbrok.com/nom-de-la-boutique. Une migration ultérieure peut demander des redirections et affecter temporairement le référencement.</p>
     </section>
     <form class="form-card" method="post" action="/inscription/configurateur.php" novalidate>
       <input type="hidden" name="csrf" value="<?= $escape($_SESSION['saas_csrf']) ?>">
