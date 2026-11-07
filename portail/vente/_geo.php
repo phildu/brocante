@@ -22,7 +22,7 @@ function fv_geo_has(array $p): bool
 }
 
 /**
- * Ordre de passage le plus court (plus proche voisin, puis améliorations 2-opt) à partir du premier arrêt.
+ * Ordre de passage le plus court (plus proche voisin, puis améliorations 2-opt jusqu'à 250 arrêts) à partir du premier arrêt.
  * Les arrêts sans coordonnées gardent leur ordre d'origine et sont placés à la fin.
  *
  * @param array<int,array> $stops arrêts (clés lat, lng)
@@ -54,8 +54,9 @@ function fv_route_order(array $stops): array
         array_splice($left, $best, 1);
     }
 
-    // 2-opt, premier arrêt fixe (le point de départ ne bouge pas), parcours ouvert.
-    $improved = true;
+    // 2-opt, premier arrêt fixe (le point de départ ne bouge pas), parcours ouvert. Au-delà de 250 arrêts, le plus proche voisin suffit
+    // (le 2-opt coûterait trop de calcul sur toute la base).
+    $improved = $n <= 250;
     $guard = 0;
     while ($improved && $guard++ < 50) {
         $improved = false;

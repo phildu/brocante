@@ -65,9 +65,12 @@
         pts.push(ll);
         if (prev) dist += km(prev, s);
         prev = s;
-        L.marker(ll, {
-          icon: L.divIcon({ className: 'fv-pin', html: '<span>' + s.n + '</span>', iconSize: [28, 28], iconAnchor: [14, 14] })
-        }).bindPopup('<b>' + esc(s.label) + '</b><br>' + esc(s.addr) + '<br><a href="' + esc(s.url) + '" target="_blank" rel="noopener">Y aller</a>').addTo(routeLayer);
+        var popup = '<b>' + s.n + '. ' + esc(s.label) + '</b><br>' + esc(s.addr) + '<br><a href="' + esc(s.url) + '" target="_blank" rel="noopener">Y aller</a>';
+        // Toute la base : des points simples (des centaines de pastilles numérotées ne se liraient plus)
+        var marker = data.stops.length > 150
+          ? L.circleMarker(ll, { radius: 5, weight: 1.5, color: '#17384f', fillColor: '#cf5b34', fillOpacity: .9 })
+          : L.marker(ll, { icon: L.divIcon({ className: 'fv-pin', html: '<span>' + s.n + '</span>', iconSize: [28, 28], iconAnchor: [14, 14] }) });
+        marker.bindPopup(popup).addTo(routeLayer);
       });
       if (pts.length > 1) L.polyline(pts, { color: '#cf5b34', weight: 3, opacity: .8, dashArray: '6 6' }).addTo(routeLayer);
       if (pts.length && fit) routeMap.fitBounds(L.latLngBounds(pts), { padding: [30, 30], maxZoom: 17 });
@@ -80,7 +83,13 @@
     drawRoute(true);
     var pending = data.stops.filter(function (s) { return !has(s); }).length;
     if (pending && status) status.textContent = 'Situation de ' + pending + ' adresse' + (pending > 1 ? 's' : '') + '…';
-    locate(data.stops, function (item, ok) { if (ok) onPoolLocated(item); drawRoute(true); }, function () { drawRoute(true); });
+    var located = 0;
+    locate(data.stops, function (item, ok) {
+      if (ok) onPoolLocated(item);
+      located++;
+      if (status) status.textContent = 'Situation des adresses : ' + located + ' / ' + pending + '…';
+      if (located % 25 === 0) drawRoute(located === 25);   // le tracé se complète par paquets, la carte se cadre une fois les premiers points connus
+    }, function () { drawRoute(true); });
   }
 
   /* ── Carte de sélection ── */
@@ -121,11 +130,12 @@
     onPoolLocated = function (stop) {
       data.pool.forEach(function (item) {
         if (item.id !== stop.id || has(item)) return;
+        var first = !Object.keys(markers).length;
         item.lat = stop.lat;
         item.lng = stop.lng;
         addMarker(item);
+        if (first) fitPool();
       });
-      fitPool();
       summary();
     };
     data.pool.forEach(function (item) {

@@ -20,16 +20,23 @@ if (is_string($idsParam)) $idsParam = explode(',', $idsParam);
 $selectedIds = array_values(array_unique(array_filter(array_map('intval', (array) $idsParam))));
 $selectedIds = array_slice($selectedIds, 0, 60);
 
+$allBase = isset($_GET['tout']);   // « toute la base » : tous les commerces avec adresse correspondant aux filtres, sans cocher
+$matches = fv_prospects_search($filters, 2000);
 $selected = [];
-foreach ($selectedIds as $id) {
-    if ($prospect = fv_prospect_get($id)) $selected[] = $prospect;
+if ($allBase) {
+    $selected = $matches;
+    $selectedIds = [];
+} else {
+    foreach ($selectedIds as $id) {
+        if ($prospect = fv_prospect_get($id)) $selected[] = $prospect;
+    }
 }
 usort($selected, static fn (array $a, array $b): int => [$a['city'], $a['postal'], $a['address']] <=> [$b['city'], $b['postal'], $b['address']]);
 $shortest = ($_GET['ordre'] ?? '') === 'court';
 if ($shortest) $selected = fv_route_order($selected);   // plus court chemin d'après les positions déjà connues (les autres arrêts suivent)
 $ungeo = count(array_filter($selected, static fn (array $p): bool => !fv_geo_has($p)));
 
-$pool = fv_prospects_search($filters, 400);
+$pool = array_slice($matches, 0, 400);   // la liste à cocher et la carte de sélection se limitent aux 400 premières fiches
 $poolIds = array_map(static fn (array $p): int => (int) $p['id'], $pool);
 $zones = fv_zones();
 
@@ -76,6 +83,8 @@ $currentUrl = 'tournees.php?' . http_build_query(array_filter([
     'due' => $filters['due'] ?: null,
     'owner' => $filters['owner_id'] ?: null,
     'tous' => isset($_GET['tous']) ? 1 : null,
+    'tout' => $allBase ? 1 : null,
+    'q' => $filters['q'] ?: null,
 ]));
 
 fv_layout_start('Tournées & terrain', [
@@ -90,8 +99,8 @@ fv_layout_start('Tournées & terrain', [
 <section class="fv-card fv-route-card" id="tournee">
   <div class="fv-card-head">
     <div>
-      <h2>Tournée du <?= e(date('d/m/Y')) ?> <small class="fv-sub"><?= count($selected) ?> arrêt<?= count($selected) > 1 ? 's' : '' ?></small></h2>
-      <p>Ordre proposé par ville, code postal puis rue. Ajustez à pied selon le terrain.</p>
+      <h2>Tournée du <?= e(date('d/m/Y')) ?> <small class="fv-sub"><?= count($selected) ?> arrêt<?= count($selected) > 1 ? 's' : '' ?><?= $allBase ? ' · toute la base' . ($filters['city'] . $filters['zone'] . $filters['q'] !== '' ? ' filtrée' : '') : '' ?></small></h2>
+      <p>Ordre proposé par ville, code postal puis rue. Ajustez à pied selon le terrain.<?= $allBase && count($matches) >= 2000 ? ' Les 2 000 premières fiches seulement : filtrez par ville ou zone pour affiner.' : '' ?></p>
     </div>
     <div class="fv-actions fv-no-print">
       <?php if ($routeUrl !== ''): ?><a class="fv-btn fv-btn-sm" href="<?= e($routeUrl) ?>" target="_blank" rel="noopener"><?= fv_icon('route', 14) ?> Itinéraire Google Maps</a><?php endif; ?>
@@ -162,7 +171,7 @@ fv_layout_start('Tournées & terrain', [
 <div class="fv-grid fv-grid-side fv-no-print">
   <section class="fv-card">
     <div class="fv-card-head">
-      <div><h2>Sélectionner les arrêts</h2><p><?= count($pool) ?> fiche<?= count($pool) > 1 ? 's' : '' ?> avec une adresse. Cochez puis préparez la tournée.</p></div>
+      <div><h2>Sélectionner les arrêts</h2><p><?= count($matches) ?> fiche<?= count($matches) > 1 ? 's' : '' ?> avec une adresse<?= count($matches) > count($pool) ? ' (les ' . count($pool) . ' premières sont listées)' : '' ?>. Cochez puis préparez la tournée, ou prenez toute la base.</p></div>
       <button class="fv-btn fv-btn-sm" type="button" data-select-all>Tout cocher</button>
     </div>
 
@@ -235,6 +244,7 @@ fv_layout_start('Tournées & terrain', [
 
       <div class="fv-route-bar">
         <span class="fv-hint" data-select-count hidden></span>
+        <?php if ($matches): ?><button class="fv-btn" type="submit" name="tout" value="1" title="Prend tous les commerces avec adresse correspondant aux filtres, sans les cocher"><?= fv_icon('route', 15) ?> Toute la base (<?= count($matches) ?>)</button><?php endif; ?>
         <button class="fv-btn fv-btn-primary" type="submit"><?= fv_icon('route', 15) ?> Préparer la tournée</button>
       </div>
     </form>
@@ -266,5 +276,5 @@ fv_layout_start('Tournées & terrain', [
 
 <script type="application/json" id="fv-tmap-data"><?= json_encode($mapData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 <script src="/assets/lib/leaflet/leaflet.min.js"></script>
-<script src="assets/tournee-carte.js?v=2"></script>
+<script src="assets/tournee-carte.js?v=3"></script>
 <?php fv_layout_end(); ?>
