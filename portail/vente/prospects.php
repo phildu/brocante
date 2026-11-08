@@ -71,6 +71,9 @@ if ($viewId > 0 && !$editing && !$isNew) {
               <div><dt>Propriétaire</dt><dd><?= e($prospect['owner_name'] ?? 'Direction') ?></dd></div>
               <div><dt>Prochaine action</dt><dd><?= e(fv_date($prospect['next_action_at'])) ?> · priorité <?= (int) $prospect['priority'] ?>/3</dd></div>
               <div><dt>Créé le</dt><dd><?= e(fv_datetime($prospect['created_at'])) ?></dd></div>
+              <?php foreach (fv_custom_fields_of($prospect) as $cfLabel => $cfValue): ?>
+                <div><dt><?= e($cfLabel) ?></dt><dd><?= preg_match('#^https?://\S+$#i', $cfValue) ? '<a href="' . e($cfValue) . '" target="_blank" rel="noopener noreferrer">' . e(preg_replace('#^https?://(www\.)?#i', '', rtrim($cfValue, '/'))) . '</a>' : e($cfValue) ?></dd></div>
+              <?php endforeach; ?>
               <?php if ($prospect['shop_slug'] !== ''): ?><div><dt>Boutique</dt><dd><code><?= e($prospect['shop_slug']) ?></code></dd></div><?php endif; ?>
             </dl>
             <?php if ($prospect['notes'] !== ''): ?><div class="fv-note"><?= nl2br(e($prospect['notes'])) ?></div><?php endif; ?>
@@ -186,6 +189,7 @@ $form = [
     'owner_id' => $editing['owner_id'] ?? ($member['id'] ?? 0),
     'notes' => $editing['notes'] ?? '',
     'next_action_at' => $editing['next_action_at'] ?? '',
+    'custom_fields' => fv_custom_fields_of($editing),
 ];
 $showForm = $isNew || $editing !== null;
 $defaultOwner = (int) ($member['id'] ?? 0);
@@ -270,6 +274,16 @@ fv_layout_start('Prospects', [
         <?php else: ?>
           <input type="hidden" name="owner_id" value="<?= $defaultOwner ?>">
         <?php endif; ?>
+        <div class="fv-field full">
+          <span>Champs personnalisés <small style="font-weight:400;">(emplacement, Instagram, Facebook… vide = supprimé)</small></span>
+          <?php $cfRows = $form['custom_fields']; $cfRows[''] = ''; $cfRows[' '] = ''; $cfi = 0; ?>
+          <?php foreach ($cfRows as $cfLabel => $cfValue): $cfLabel = trim((string) $cfLabel); ?>
+            <div style="display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:8px;margin-top:6px;">
+              <input name="custom_fields[<?= $cfi ?>][label]" maxlength="60" value="<?= e($cfLabel) ?>" placeholder="Intitulé (ex. Emplacement)" aria-label="Intitulé du champ">
+              <input name="custom_fields[<?= $cfi ?>][value]" maxlength="500" value="<?= e($cfValue) ?>" placeholder="Valeur" aria-label="Valeur du champ">
+            </div>
+          <?php $cfi++; endforeach; ?>
+        </div>
         <label class="fv-field full">Notes
           <textarea name="notes" rows="3" placeholder="Contexte, besoins, objections, prochain angle…"><?= e($form['notes']) ?></textarea>
         </label>
