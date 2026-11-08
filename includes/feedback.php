@@ -767,6 +767,11 @@ function feedback_mail(string $to, string $subject, string $body): bool
     }
     $name = str_replace(['"', "\r", "\n"], '', feedback_platform_name());
     $headers = "From: $name <$from>\r\nContent-Type: text/plain; charset=UTF-8\r\nMIME-Version: 1.0";
+    require_once __DIR__ . '/portal-mailer.php';
+    if (!$local && portal_mailer_dispatch("$name <$from>", $to, '=?UTF-8?B?' . base64_encode($subject) . '?=',
+        ['Content-Type: text/plain; charset=UTF-8', 'MIME-Version: 1.0'], $body) === true) {
+        return true;
+    }
     $sent = function_exists('mail') && @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers);
     return $sent || $local;
 }

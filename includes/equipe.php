@@ -614,6 +614,11 @@ function eq_mail(string $to, string $subject, string $body): bool
     }
     $from = 'noreply@' . (!$local ? preg_replace('/^[^.]+\.(?=[^.]+\.[^.]+$)/', '', $host) : 'localhost.localdomain');
     $headers = "From: Équipe Brocs <$from>\r\nContent-Type: text/plain; charset=UTF-8\r\nMIME-Version: 1.0";
+    require_once __DIR__ . '/portal-mailer.php';
+    if (!$local && portal_mailer_dispatch("Équipe Brocs <$from>", $to, '=?UTF-8?B?' . base64_encode($subject) . '?=',
+        ['Content-Type: text/plain; charset=UTF-8', 'MIME-Version: 1.0'], $body) === true) {
+        return true;
+    }
     return function_exists('mail') && @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers);
 }
 
