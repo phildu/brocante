@@ -7,6 +7,10 @@ RewriteEngine On
 # /<identifiant>/ ; un déploiement à un seul commerce affiche toujours la boutique.
 DirectoryIndex index.php
 
+# Moteurs de recherche : /robots.txt est produit par robots.php (fermé tant que includes/indexation.php vaut false). La règle passe
+# avant tout fichier robots.txt statique, y compris sous le domaine propre d'un commerce.
+RewriteRule ^robots\.txt$ robots.php [L]
+
 # Galeries commerciales (page publique, sans connexion) : /galerie/ et /galerie/<identifiant>/ — voir galerie/index.php.
 RewriteRule ^galerie/?$ galerie/index.php [L]
 # Connexion à l'administration d'UNE galerie : /galerie/<identifiant>/admin (galerie/admin.php sans identifiant reste la connexion générique).

@@ -16,12 +16,24 @@ Document de travail (jamais envoyé en ligne). Rien ne se déploie sans commande
 | `APP_ENV` | `local` (présence de `config.local.php`) | `preprod` (`.app-env` déposé par le script) | `prod` (`.app-env` déposé par le script) |
 | Données | bases `*.db` locales, jetables | bases propres à la préprod | **données réelles** : jamais écrasées |
 | Paiements | clés de test | clés de **test** uniquement | clés **live**, saisies sur le serveur |
-| Moteurs de recherche | `noindex` | `noindex` + `robots.txt` « Disallow: / » | indexable |
+| Moteurs de recherche | `noindex` | `noindex` + `robots.txt` « Disallow: / » | **fermé** (`noindex` + `Disallow: /`) tant que `includes/indexation.php` vaut `false` ; indexable après le « go indexation » |
 | Accès de déploiement | — | `.env.deploy.portail` (ou `.env.deploy.<slug>`) | `.env.deploy.portail.prod` (ou `.env.deploy.<slug>.prod`) |
 | Dossier serveur | — | `/www/pre-bricbrok/` (aujourd'hui encore `/www/brocs/`, voir « Noms des dossiers ») | `/www/bricbrok/` (différent de la préprod : le script refuse le même) |
 
 Un serveur sans `.app-env` est traité comme **préprod** (jamais comme prod) : `includes/app-env.php`.
 `/health.php` annonce l'environnement (`"env":"prod"`) ; les contrôles s'en servent pour détecter un mauvais dossier.
+
+## Moteurs de recherche : fermé jusqu'au « go indexation »
+
+La prod est **fermée aux robots** par défaut : chaque page PHP envoie `X-Robots-Tag: noindex, nofollow` et `/robots.txt`
+(servi par `robots.php`, réécriture du `.htaccess`) répond `Disallow: /`. L'interrupteur est `includes/indexation.php`
+(`return false;`, versionné). Local et préprod restent fermés dans tous les cas.
+
+- **Ouvrir** (uniquement sur « go indexation » de l'utilisateur) : passer `includes/indexation.php` à `return true;`, PR, puis
+  préprod → prod comme d'habitude. Le test `testCommittedSwitchIsClosed` doit alors être adapté dans la même PR.
+- **Refermer** : remettre `return false;` et redéployer. Une page déjà indexée n'est retirée de Google qu'après un nouveau
+  passage du robot ; `Disallow: /` l'empêche de voir le `noindex` : pour désindexer vite, utiliser la Search Console.
+- Vérifier : `curl -sI https://www.bricbrok.com/ | grep -i x-robots` et `curl -s https://www.bricbrok.com/robots.txt`.
 
 ## Noms des dossiers
 
