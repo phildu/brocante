@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/addons.php';
 require_once __DIR__ . '/../includes/plugins.php';
 require_once __DIR__ . '/../includes/appearance.php';
 require_once __DIR__ . '/../includes/legal.php';
+require_once __DIR__ . '/../includes/impact.php';
 require_admin();
 ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
 
@@ -16,6 +17,7 @@ $shopName = $content['site_name'] ?: tenant('name');
 $tabs = [
     'resume' => 'Résumé',
     'ventes' => 'Ventes',
+    'impact' => 'Impact CO₂ & eau',
     'visites' => 'Visites',
     'ia' => 'Consommation IA',
     'modules' => ext_t('{Exts} & essais'),
@@ -42,6 +44,16 @@ $recentOrders = $pdo->query('SELECT * FROM orders ORDER BY created_at DESC LIMIT
 $prepareOrders = $pdo->query("SELECT * FROM orders WHERE status = 'paid' AND fulfillment_status = 'a_preparer' ORDER BY created_at ASC LIMIT 8")->fetchAll();
 $onlineProducts = (int) $pdo->query('SELECT COUNT(*) FROM products WHERE is_hidden = 0 AND (stock > 0 OR keep_when_sold = 1)')->fetchColumn();
 $totalProducts = (int) $pdo->query('SELECT COUNT(*) FROM products')->fetchColumn();
+
+// ── Impact CO₂ & eau (période choisie sur l'onglet, depuis le début ailleurs) ─
+$impactPeriods = [0 => 'Depuis le début', 365 => '12 mois', 90 => '90 jours', 30 => '30 jours'];
+$impactDays = $tab === 'impact' && isset($impactPeriods[(int) ($_GET['p'] ?? 0)]) ? (int) $_GET['p'] : 0;
+try {
+    $impact = impact_report($impactDays);
+} catch (Throwable $e) {
+    error_log('impact_report: ' . $e->getMessage());
+    $impact = null;
+}
 
 // ── Visites (module « Tableau de bord », mesure sans cookie) ────────────────
 $visits = null;
@@ -200,6 +212,13 @@ $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'
           <div class="s"><?= $aiQuota ? h(ai_format_eur($aiQuota['month_spent'])) . ' consommés ce mois' : ($aiBalance ? 'solde déclaré' : 'consommé ce mois') ?></div>
         </div>
         <?php endif; ?>
+        <?php if ($impact): ?>
+        <a class="dash-kpi" href="/admin/dashboard.php?s=impact" style="text-decoration:none;color:inherit;">
+          <div class="k">CO₂ évité</div>
+          <div class="v"><?= h(impact_fmt_co2($impact['total']['co2'])) ?></div>
+          <div class="s"><?= h(impact_fmt_water($impact['total']['water'])) ?> d’eau économisés · <?= (int) $impact['total']['pieces'] ?> pièce<?= $impact['total']['pieces'] > 1 ? 's' : '' ?> remise<?= $impact['total']['pieces'] > 1 ? 's' : '' ?> en circulation</div>
+        </a>
+        <?php endif; ?>
         <div class="dash-kpi">
           <div class="k">Pièces en ligne</div>
           <div class="v"><?= (int) $onlineProducts ?></div>
@@ -332,6 +351,57 @@ $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'
         <?php endif; ?>
         <p class="dash-note" style="margin:12px 0 0;">Les paniers en cours sont des paiements commencés mais non terminés : ils ne comptent pas dans le chiffre d’affaires.</p>
       </div>
+
+    <?php elseif ($tab === 'impact'): ?>
+      <p class="dash-note" style="margin:0 0 14px;">
+        <?php foreach ($impactPeriods as $d => $label): ?>
+          <a class="dash-tag<?= $impactDays === $d ? ' is-live' : '' ?>" href="/admin/dashboard.php?s=impact&amp;p=<?= (int) $d ?>" style="text-decoration:none;"><?= h($label) ?></a>
+        <?php endforeach; ?>
+      </p>
+      <?php if (!$impact): ?>
+        <div class="dash-empty">Le bilan n’a pas pu être calculé pour l’instant.</div>
+      <?php else: ?>
+        <div class="dash-kpis">
+          <div class="dash-kpi"><div class="k">CO₂ évité</div><div class="v"><?= h(impact_fmt_co2($impact['total']['co2'])) ?></div><div class="s">≈ <?= h(number_format($impact['km'], 0, ',', ' ')) ?> km en voiture</div></div>
+          <div class="dash-kpi"><div class="k">Eau économisée</div><div class="v"><?= h(impact_fmt_water($impact['total']['water'])) ?></div><div class="s">≈ <?= h(number_format($impact['showers'], 0, ',', ' ')) ?> douches</div></div>
+          <div class="dash-kpi"><div class="k">Pièces remises en circulation</div><div class="v"><?= (int) $impact['total']['pieces'] ?></div><div class="s">vendues sur la période</div></div>
+          <div class="dash-kpi"><div class="k">Coût numérique (IA)</div><div class="v"><?= h(impact_fmt_co2($impact['digital']['co2'])) ?></div><div class="s"><?= (int) $impact['digital']['calls'] ?> appel<?= $impact['digital']['calls'] > 1 ? 's' : '' ?> · <?= h(impact_fmt_water($impact['digital']['water'])) ?> d’eau</div></div>
+        </div>
+
+        <div class="dash-grid">
+          <?php foreach ($impact['groups'] as $g): ?>
+            <div class="dash-card">
+              <h2><?= h($g['label']) ?> <span class="dash-tag"><?= h(impact_fmt_co2($g['total']['co2'])) ?></span></h2>
+              <table class="dash-table">
+                <thead><tr><th>Canal</th><th class="num">Pièces</th><th class="num">CO₂ évité</th><th class="num">Eau</th></tr></thead>
+                <tbody>
+                  <?php foreach ($g['rows'] as $channel => $row): ?>
+                    <tr><td><?= h(impact_channel_label((string) $channel)) ?></td><td class="num"><?= (int) $row['pieces'] ?></td><td class="num"><?= h(impact_fmt_co2($row['co2'])) ?></td><td class="num"><?= h(impact_fmt_water($row['water'])) ?></td></tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php endforeach; ?>
+          <?php if ($impact['families']): ?>
+            <div class="dash-card">
+              <h2>Par famille d’objets</h2>
+              <table class="dash-table">
+                <thead><tr><th>Famille</th><th class="num">Pièces</th><th class="num">CO₂ évité</th><th class="num">Eau</th></tr></thead>
+                <tbody>
+                  <?php foreach ($impact['families'] as $family => $row): ?>
+                    <tr><td><?= h(impact_profiles()[$family]['label'] ?? $family) ?></td><td class="num"><?= (int) $row['pieces'] ?></td><td class="num"><?= h(impact_fmt_co2($row['co2'])) ?></td><td class="num"><?= h(impact_fmt_water($row['water'])) ?></td></tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php endif; ?>
+        </div>
+        <?php if ($impact['total']['pieces'] === 0): ?>
+          <p class="dash-empty" style="margin-top:16px;">Aucune vente enregistrée sur la période : le compteur démarre dès qu’une pièce est vendue (commande du site, « Vendue via… » dans le catalogue, caisse ou ventes de boutique saisies).</p>
+        <?php endif; ?>
+        <p class="dash-note" style="margin:16px 0 0;">Bilan net : <strong><?= h(impact_fmt_co2($impact['net']['co2'])) ?></strong> de CO₂ et <strong><?= h(impact_fmt_water($impact['net']['water'])) ?></strong> d’eau, une fois retiré l’usage de l’IA.
+          <strong>Ordres de grandeur, pas une mesure</strong> : chaque pièce vendue d’occasion est supposée éviter la fabrication d’une pièce neuve (90 % de son impact), estimée d’après son poids et sa famille d’objets (ADEME Base Empreinte, Water Footprint Network). L’hébergement, les trajets des clients et l’emballage ne sont pas comptés. Une pièce vendue en ligne n’est comptée qu’une fois ; les ventes de boutique saisies à la main sont comptées au poids moyen du catalogue.</p>
+      <?php endif; ?>
 
     <?php elseif ($tab === 'visites'): ?>
       <?php if ($visits): ?>
