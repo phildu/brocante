@@ -153,7 +153,7 @@ $renderFields = static function (array $a, string $prefix) {
       <?php if ($nonStaffExport): ?>
         <a class="btn-small" href="/admin/accounts-action.php?export=1<?= in_array($role, ['client', 'prospect'], true) ? '&amp;role=' . h($role) : '' ?>">Exporter les contacts (CSV)</a>
       <?php endif; ?>
-      <a class="btn-small" href="/admin/contacts-import.php" title="Fichier CSV, carnet vCard ou CRM (HubSpot, Brevo, Mailchimp, Pipedrive)">Importer des contacts</a>
+      <a class="btn-small" href="/admin/contacts-import.php" title="Clients : fichier CSV, carnet vCard ou CRM (HubSpot, Brevo, Mailchimp, Pipedrive). Les prospects : extension Force de vente">Importer des contacts</a>
       <a class="btn btn-primary" href="/admin/accounts.php?add=1<?= $role ? '&amp;role=' . h($role) : '' ?>#ajout">Ajouter un compte</a>
     </div>
 

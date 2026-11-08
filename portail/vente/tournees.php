@@ -88,7 +88,7 @@ $currentUrl = 'tournees.php?' . http_build_query(array_filter([
 ]));
 
 fv_layout_start('Tournées & terrain', [
-    'eyebrow' => fv_is_gallery() ? 'Force de vente · tournée' : 'Porte-à-porte',
+    'eyebrow' => fv_is_scoped() ? 'Force de vente · tournée' : 'Porte-à-porte',
     'desc' => 'Choisissez les commerces d’une même ville ou zone, dans l’ordre de la rue. La tournée se prépare, s’imprime et se consigne arrêt par arrêt.',
     'actions' => '<a class="fv-btn fv-btn-sm" href="prospects.php?nouveau=1">' . fv_icon('plus', 14) . ' Ajouter un commerce</a>',
     'head' => '<link rel="stylesheet" href="/assets/lib/leaflet/leaflet.min.css">',
@@ -251,7 +251,7 @@ fv_layout_start('Tournées & terrain', [
   </section>
 
   <aside class="fv-grid" style="gap:14px;">
-    <?php if (!fv_is_gallery()): ?>
+    <?php if (!fv_is_scoped()): ?>
     <section class="fv-card">
       <div class="fv-card-head"><div><h2>Le bon réflexe</h2></div></div>
       <div class="fv-card-body fv-script">

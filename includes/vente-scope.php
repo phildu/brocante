@@ -1,10 +1,11 @@
 <?php
 
-// Extension « Force de vente » : un carnet de prospects par propriétaire (portail, galerie ; boutique à venir).
+// Extension « Force de vente » : un carnet de prospects par propriétaire (portail, galerie, boutique).
 //
 // Le moteur (portail/vente/_bootstrap.php, fonctions fv_*) est le même partout. Ce fichier dit DANS QUEL carnet il travaille :
 //   - portail : data/vente/vente.db (équipe commerciale de la plateforme, inchangé) ;
-//   - galerie : data/vente/galeries/<identifiant>.db, un carnet séparé par galerie, jamais partagé avec une autre.
+//   - galerie : data/vente/galeries/<identifiant>.db, un carnet séparé par galerie, jamais partagé avec une autre ;
+//   - boutique : data/vente/boutiques/<identifiant>.db, un carnet par boutique (pages admin/vente/*.php, extension packs/force-de-vente).
 // Le carnet d'une galerie est servi à /galerie/<identifiant>/vente/<page>.php (réécrit vers portail/vente/<page>.php?g=<identifiant>, voir
 // .htaccess, router.php, LocalValetDriver.php). Il est activé comme les autres extensions de galerie (module « vente »,
 // includes/gallery-modules.php).
@@ -12,6 +13,8 @@
 // Reprise des prospects d'avant l'extension : data/galeries/<identifiant>.prospects.json est copié une fois dans le carnet (sauvegarde
 // du fichier à côté, jamais supprimé ni modifié). Ensuite le carnet fait foi : ga_prospects() le relit, et un lien de désinscription déjà
 // envoyé dans un e-mail continue de fonctionner (colonne legacy_id).
+// Boutique : les comptes « prospect » de la boutique sont COPIÉS dans le carnet (la table accounts n'est pas modifiée : un prospect qui
+// commande devient client comme avant).
 
 require_once __DIR__ . '/galleries.php';
 require_once __DIR__ . '/gallery-admin.php';
@@ -54,6 +57,11 @@ function vs_scope(): array
 {
     static $scope = null;
     if ($scope !== null) return $scope;
+    if (defined('FV_SCOPE_BOUTIQUE')) {
+        // Carnet de la boutique courante (admin/vente/*.php : includes/functions.php et require_admin() sont déjà passés).
+        $name = trim((string) (function_exists('get_content') ? (get_content()['site_name'] ?? '') : ''));
+        return $scope = ['type' => 'boutique', 'slug' => tenant_slug(), 'name' => $name !== '' ? $name : tenant_slug(), 'gallery' => null];
+    }
     $slug = strtolower((string) ($_GET['g'] ?? ''));
     if ($slug === '') return $scope = ['type' => 'portail', 'slug' => '', 'gallery' => null];
     $gallery = gallery_slug_valid($slug) ? gallery_load($slug) : null;
@@ -81,6 +89,68 @@ function vs_gallery_access(string $slug, bool $operator): bool
     if ($operator) return true;
     $admin = ga_current();
     return $admin !== null && in_array($slug, $admin['slugs'], true);
+}
+
+// ── Carnet d'une boutique ───────────────────────────────────────────────────
+
+const VS_BOUTIQUE_PLUGIN = 'force-de-vente';
+
+function vs_boutique_db_file(string $slug): string
+{
+    return preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', $slug) ? vs_data_dir() . '/boutiques/' . $slug . '.db' : '';
+}
+
+/** L'administrateur de la boutique est-il connecté ? (les pages admin/vente/*.php appellent require_admin() avant le moteur) */
+function vs_boutique_access(): bool
+{
+    return function_exists('admin_role') && admin_role() === 'admin';
+}
+
+/** L'extension est-elle activée pour la boutique courante (plugin actif et accès : essai, abonnement ou offert) ? */
+function vs_boutique_enabled(): bool
+{
+    require_once __DIR__ . '/plugins.php';
+    require_once __DIR__ . '/addons.php';
+    return plugin_shop_status(VS_BOUTIQUE_PLUGIN) === 'ready' && addon_is_entitled(VS_BOUTIQUE_PLUGIN);
+}
+
+/**
+ * Copie les comptes « prospect » de la boutique dans le carnet (une seule fois ; rejouable sans doublon grâce à legacy_id « compte:<n°> »).
+ * La table accounts n'est jamais modifiée. -> nombre de prospects copiés.
+ */
+function vs_boutique_migrate(PDO $carnet, PDO $shop): int
+{
+    if ($carnet->query("SELECT 1 FROM settings WHERE name = 'migration_comptes'")->fetchColumn() !== false) return 0;
+    $has = $shop->query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'accounts'")->fetchColumn();
+    $rows = $has ? $shop->query("SELECT * FROM accounts WHERE role = 'prospect' ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) : [];
+    $added = 0;
+    $carnet->beginTransaction();
+    try {
+        $known = $carnet->prepare('SELECT 1 FROM prospects WHERE legacy_id = ? LIMIT 1');
+        $ins = $carnet->prepare('INSERT INTO prospects (name, business, phone, email, source, status, notes, custom_fields, legacy_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+        foreach ($rows as $a) {
+            $legacy = 'compte:' . (int) $a['id'];
+            $known->execute([$legacy]);
+            if ($known->fetchColumn() !== false) continue;
+            $custom = [];
+            $raw = json_decode((string) ($a['custom_fields'] ?? ''), true);
+            foreach ((is_array($raw) ? $raw : []) as $f) {
+                if (is_array($f) && trim((string) ($f['label'] ?? '')) !== '' && trim((string) ($f['value'] ?? '')) !== '') $custom[mb_substr(trim((string) $f['label']), 0, 60)] = mb_substr(trim((string) $f['value']), 0, 500);
+            }
+            $name = mb_substr(trim((string) $a['name']), 0, 120);
+            $email = mb_substr(mb_strtolower(trim((string) $a['email'])), 0, 190);
+            $created = (string) ($a['created_at'] ?: date('Y-m-d H:i:s'));
+            $ins->execute([$name, $name === '' ? mb_substr($email, 0, 160) : '', mb_substr((string) $a['phone'], 0, 40), $email, 'autre', 'a_contacter',
+                mb_substr((string) $a['notes'], 0, 4000), json_encode($custom, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $legacy, $created, (string) ($a['updated_at'] ?: $created)]);
+            $added++;
+        }
+        $carnet->prepare("INSERT INTO settings (name, value) VALUES ('migration_comptes', ?)")->execute([json_encode(['at' => date('c'), 'prospects' => $added])]);
+        $carnet->commit();
+    } catch (Throwable $e) {
+        if ($carnet->inTransaction()) $carnet->rollBack();
+        throw $e;
+    }
+    return $added;
 }
 
 // ── Base du carnet d'une galerie ────────────────────────────────────────────
