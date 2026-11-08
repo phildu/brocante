@@ -58,7 +58,7 @@ function fv_migrate(PDO $pdo): void
 {
     $cols = array_column($pdo->query('PRAGMA table_info(prospects)')->fetchAll(), 'name');
     if (!$cols) return;
-    foreach (['lat' => 'REAL', 'lng' => 'REAL', 'geo_at' => 'TEXT'] as $col => $type) {
+    foreach (['lat' => 'REAL', 'lng' => 'REAL', 'geo_at' => 'TEXT', 'custom_fields' => "TEXT NOT NULL DEFAULT '{}'"] as $col => $type) {
         if (!in_array($col, $cols, true)) $pdo->exec("ALTER TABLE prospects ADD COLUMN $col $type");
     }
 }
@@ -778,6 +778,31 @@ function fv_member_commission(array $member, int $shops, int $amountCents, int $
 
 // ── Prospects et activités ───────────────────────────────────────────────────
 
+/** Champs personnalisés d'un prospect (emplacement, Instagram…) : intitulé => valeur. Accepte un tableau intitulé => valeur ou une liste [label, value]. */
+function fv_custom_fields_normalize($fields): array
+{
+    if (!is_array($fields)) return [];
+    $out = [];
+    foreach ($fields as $label => $field) {
+        if (is_array($field)) {
+            $label = $field['label'] ?? $label;
+            $field = $field['value'] ?? '';
+        }
+        if (!is_scalar($label) || !is_scalar($field)) continue;
+        $label = fv_text($label, 60);
+        $value = fv_text($field, 500);
+        if ($label !== '' && $value !== '') $out[$label] = $value;
+        if (count($out) >= 30) break;
+    }
+    return $out;
+}
+
+function fv_custom_fields_of(?array $prospect): array
+{
+    $d = json_decode((string) ($prospect['custom_fields'] ?? ''), true);
+    return fv_custom_fields_normalize(is_array($d) ? $d : []);
+}
+
 function fv_prospect_from_input(array $input, ?array $existing = null): array
 {
     $name = fv_text($input['name'] ?? '', 120);
@@ -816,6 +841,7 @@ function fv_prospect_from_input(array $input, ?array $existing = null): array
         'owner_id' => $owner,
         'notes' => fv_paragraph($input['notes'] ?? '', 4000),
         'next_action_at' => $next !== '' ? $next : null,
+        'custom_fields' => array_key_exists('custom_fields', $input) ? fv_custom_fields_normalize($input['custom_fields']) : fv_custom_fields_of($existing),
     ];
 }
 
@@ -823,15 +849,15 @@ function fv_prospect_save(array $data, ?array $existing = null): int
 {
     $pdo = fv_db();
     if ($existing) {
-        $st = $pdo->prepare('UPDATE prospects SET name=?, business=?, kind=?, address=?, postal=?, city=?, phone=?, email=?, website=?, zone=?, source=?, status=?, priority=?, owner_id=?, notes=?, next_action_at=?, updated_at=? WHERE id=?');
-        $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], fv_now(), $existing['id']]);
+        $st = $pdo->prepare('UPDATE prospects SET name=?, business=?, kind=?, address=?, postal=?, city=?, phone=?, email=?, website=?, zone=?, source=?, status=?, priority=?, owner_id=?, notes=?, next_action_at=?, custom_fields=?, updated_at=? WHERE id=?');
+        $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], json_encode($data['custom_fields'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), fv_now(), $existing['id']]);
         if (fv_prospect_address_line($data) !== fv_prospect_address_line($existing)) {   // adresse modifiée : à situer de nouveau sur la carte
             $pdo->prepare('UPDATE prospects SET lat = NULL, lng = NULL, geo_at = NULL WHERE id = ?')->execute([$existing['id']]);
         }
         return (int) $existing['id'];
     }
-    $st = $pdo->prepare('INSERT INTO prospects (name, business, kind, address, postal, city, phone, email, website, zone, source, status, priority, owner_id, notes, next_action_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], fv_now(), fv_now()]);
+    $st = $pdo->prepare('INSERT INTO prospects (name, business, kind, address, postal, city, phone, email, website, zone, source, status, priority, owner_id, notes, next_action_at, custom_fields, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], json_encode($data['custom_fields'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), fv_now(), fv_now()]);
     return (int) $pdo->lastInsertId();
 }
 

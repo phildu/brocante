@@ -52,9 +52,8 @@ $shape = static function (array $c, array $post = []): array {
     if ($data['city'] === '') $data['city'] = (string) ($post['default_city'] ?? '');
     if ($data['postal'] === '') $data['postal'] = (string) ($post['default_postal'] ?? '');
     if ($data['zone'] === '') $data['zone'] = (string) ($post['default_zone'] ?? '');
-    $lines = $c['note'] !== '' ? [$c['note']] : [];
-    foreach ($custom as $label => $value) $lines[] = $label . ' : ' . $value;
-    $data['notes'] = implode("\n", $lines);
+    $data['notes'] = $c['note'];
+    $data['custom_fields'] = $custom;      // le reste (emplacement, Instagram, horaires, SIRET…) devient des champs de la fiche
     return $data;
 };
 
@@ -93,7 +92,7 @@ $body = ci_page([
             $data = fv_prospect_from_input([
                 'business' => $d['business'], 'name' => $d['name'], 'kind' => $d['kind'], 'address' => $d['address'], 'postal' => $d['postal'], 'city' => $d['city'],
                 'zone' => $d['zone'], 'website' => $d['website'], 'phone' => $phoneLabel($d['phone']), 'email' => $d['email'], 'source' => 'autre',
-                'notes' => trim($d['notes'] . "\n" . $stamp), 'owner_id' => $owner,
+                'notes' => trim($d['notes'] . "\n" . $stamp), 'owner_id' => $owner, 'custom_fields' => $d['custom_fields'],
             ]);
             $id = fv_prospect_save($data);
         } catch (Throwable $e) {
@@ -120,7 +119,10 @@ $body = ci_page([
         foreach ($new as $field => $value) {
             if ($value !== '' && trim((string) $cur[$field]) === '') { $set[] = $field . ' = ?'; $params[] = mb_substr($value, 0, 200); }
         }
-        if (!$set) return false;
+        $have = fv_custom_fields_of($cur);      // champs personnalisés : ajoute les absents, ne change pas ceux déjà remplis
+        $merged = $have + $d['custom_fields'];
+        if (!$set && $merged === $have) return false;
+        if ($merged !== $have) { $set[] = 'custom_fields = ?'; $params[] = json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); }
         $params[] = fv_now();
         $params[] = (int) $cur['id'];
         fv_db()->prepare('UPDATE prospects SET ' . implode(', ', $set) . ', updated_at = ? WHERE id = ?')->execute($params);
