@@ -13,7 +13,7 @@
   var el = {
     form: $('[data-ta-filters]'), q: $('[name="q"]'), ville: $('[name="ville"]'), rue: $('[name="rue"]'),
     statut: $('[name="statut"]'), zone: $('[name="zone"]'), cat: $('[name="cat"]'), prio: $('[name="prio"]'),
-    owner: $('[name="owner"]'), due: $('[name="due"]'), gps: $('[name="gps"]'), tous: $('[name="tous"]'), only: $('[name="only"]'),
+    owner: $('[name="owner"]'), due: $('[name="due"]'), gps: $('[name="gps"]'), ouvert: $('[name="ouvert"]'), heure: $('[name="heure"]'), hinc: $('[name="hinc"]'), tous: $('[name="tous"]'), only: $('[name="only"]'),
     sort: $('[name="sort"]'), body: $('[data-ta-body]'), table: $('[data-ta-table]'), scroll: $('[data-ta-scroll]'),
     count: $('[data-ta-count]'), msg: $('[data-ta-msg]'), pager: $('[data-ta-pager]'), prev: $('[data-ta-prev]'), next: $('[data-ta-next]'), page: $('[data-ta-page]'),
     add: $('[data-ta-add]'), addN: $('[data-ta-add-n]'), all: $('[data-ta-all]'), allN: $('[data-ta-all-n]'),
@@ -22,7 +22,7 @@
     filters: $('[data-ta-details]')
   };
 
-  var rows = [], byId = {}, statuses = {}, statusOrder = {}, owners = {}, hasOwners = false, max = 500, today = '', week = '';
+  var rows = [], byId = {}, statuses = {}, statusOrder = {}, owners = {}, hasOwners = false, max = 500, today = '', week = '', now = { d: 1, m: 0 };
   var selected = {};            // id => true (survit aux filtres et aux pages)
   var filtered = [], page = 0, loaded = false, loading = false, opener = null;
   var sort = { key: 'c', dir: 1 };
@@ -51,7 +51,8 @@
     return {
       q: el.q.value.trim(), ville: el.ville.value.trim(), rue: el.rue.value.trim(), statut: el.statut.value, zone: el.zone.value,
       cat: el.cat.value, prio: parseInt(el.prio.value, 10) || 0, owner: el.owner ? parseInt(el.owner.value, 10) || 0 : 0,
-      due: el.due.value, gps: el.gps.value, tous: el.tous.checked
+      due: el.due.value, gps: el.gps.value, tous: el.tous.checked,
+      ouvert: el.ouvert.value, heure: el.heure.value, hinc: el.hinc.checked
     };
   }
   function prepare(r) {
@@ -60,6 +61,17 @@
     r._s = fold(r.s);
     r._k = fold(r.k);
     return r;
+  }
+  /* Horaires : w = 7 listes de créneaux [début, fin] en minutes (lundi d'abord) ; fin > 1440 = déborde sur le lendemain. Même règle que fv_hours_open (PHP). */
+  function openAt(w, d, m) {
+    var today = w[d - 1] || [], before = w[(d + 5) % 7] || [], i;
+    if (m === null) {
+      for (i = 0; i < before.length; i++) if (before[i][1] > 1440) return true;
+      return today.length > 0;
+    }
+    for (i = 0; i < today.length; i++) if (m >= today[i][0] && m < today[i][1]) return true;
+    for (i = 0; i < before.length; i++) if (before[i][1] > 1440 && m < before[i][1] - 1440) return true;
+    return false;
   }
   function matcher(f) {
     var words = fold(f.q).split(/\s+/).filter(Boolean), ville = fold(f.ville), rue = fold(f.rue), cat = fold(f.cat);
@@ -78,6 +90,11 @@
       if (f.due === 'none' && r.d) return false;
       if (f.gps === 'oui' && !r.g) return false;
       if (f.gps === 'non' && r.g) return false;
+      if (f.ouvert) {
+        if (!r.w) return f.hinc;                                  // horaires absents ou illisibles
+        if (f.ouvert === 'now') return openAt(r.w, now.d, now.m);
+        return openAt(r.w, parseInt(f.ouvert, 10), f.heure ? parseInt(f.heure.slice(0, 2), 10) * 60 + parseInt(f.heure.slice(3, 5), 10) : null);
+      }
       return true;
     };
   }
@@ -87,6 +104,11 @@
     if (f.prio) out.push('prio=' + f.prio);
     if (f.owner) out.push('owner=' + f.owner);
     if (f.tous) out.push('tous=1');
+    if (f.ouvert) {
+      out.push('ouvert=' + f.ouvert);
+      if (f.heure && f.ouvert !== 'now') out.push('heure=' + encodeURIComponent(f.heure));
+      if (f.hinc) out.push('hinc=1');
+    }
     return out;
   }
 
@@ -130,7 +152,8 @@
       html.push(
         '<tr data-id="' + r.id + '" class="fv-ta-row' + (on ? ' is-on' : '') + '">' +
         '<td class="c-check"><input type="checkbox" data-ta-item value="' + r.id + '"' + (on ? ' checked' : '') + ' aria-label="Inclure ' + esc(r.b) + '"></td>' +
-        '<td class="c-main"><b>' + esc(r.b) + '</b><span class="sub">' + esc([r.n, r.k].filter(Boolean).join(' · ')) + '</span></td>' +
+        '<td class="c-main"><b>' + esc(r.b) + '</b><span class="sub">' + esc([r.n, r.k].filter(Boolean).join(' · ')) + '</span>' +
+        (r.h ? '<span class="sub fv-ta-hours" title="' + esc(r.h) + '">Horaires : ' + esc(r.h.length > 60 ? r.h.slice(0, 57) + '…' : r.h) + (r.w ? '' : ' (non lus)') + '</span>' : '') + '</td>' +
         '<td class="c-city">' + esc(r.c || '—') + '</td>' +
         '<td class="c-street">' + esc(r.a || '—') + '</td>' +
         '<td class="c-status"><span class="fv-badge" data-s="' + esc(r.st) + '">' + esc(statuses[r.st] || r.st) + '</span></td>' +
@@ -201,7 +224,7 @@
     rows.forEach(function (r) { byId[r.id] = r; });
     statuses = data.statuses || {};
     Object.keys(statuses).forEach(function (k, i) { statusOrder[k] = i; });
-    today = data.today; week = data.week; max = data.max || 500;
+    today = data.today; week = data.week; now = data.now || now; max = data.max || 500;
     (data.owners || []).forEach(function (o) { owners[o.id] = o.name; });
     hasOwners = (data.owners || []).length > 0;
     dlg.classList.toggle('has-owners', hasOwners);
@@ -281,6 +304,10 @@
     }
   });
   el.form.addEventListener('change', function (event) {
+    if (event.target === el.ouvert) {
+      el.heure.disabled = !el.ouvert.value || el.ouvert.value === 'now';
+      if (el.heure.disabled) el.heure.value = '';
+    }
     if (event.target === el.sort) { sort.key = el.sort.value; again(); return; }
     again();
   });
@@ -295,6 +322,7 @@
   });
   el.reset.addEventListener('click', function () {
     el.form.reset();
+    el.heure.disabled = true;
     el.sort.value = 'c'; sort = { key: 'c', dir: 1 };
     refreshStreets();
     again();
