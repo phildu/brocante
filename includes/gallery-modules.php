@@ -76,6 +76,13 @@ function gm_defaults(): array
             'default_mode' => 'option',
             'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,
         ],
+        'vente' => [
+            'name' => 'Force de vente', 'emoji' => '🧭', 'active' => true, 'order' => 8,
+            'description' => "Votre carnet de prospects : fiches et champs personnalisés, import d'un fichier Excel, CSV ou base SQLite, tournée sur carte, journal des échanges et messages de recrutement avec désinscription. Un carnet à vous, séparé des autres galeries.",
+            'types' => [],                       // tous les types
+            'default_mode' => 'option',          // option payante ; les galeries qui ont déjà des prospects gardent leur accès
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 14,   // aucun prix imposé : à fixer dans le portail (Tarifs des extensions de galerie)
+        ],
         'annulation' => [
             'name' => 'Annulation & remboursements', 'emoji' => '🌧️', 'active' => true, 'order' => 7,
             'description' => "Annulez l'événement (vide-grenier, puces, marché de Noël, marché de producteurs ; météo, force majeure, décision de l'organisateur) : demandes fermées, annonce publique, exposants prévenus par e-mail et remboursés en totalité ou en partie, avec un registre des virements, un montant ajustable par exposant et l'export CSV.",
@@ -216,6 +223,10 @@ function gm_state(array $gallery, string $key): array
             if (!$enabled) $status = 'canceled';
         } elseif ($key === 'carte' && !$entry && !empty($gallery['map']['items'])) {
             // Plan déjà dessiné avant le passage de la carte en option payante : on conserve l'accès.
+            $status = 'complimentary';
+            $enabled = true;
+        } elseif ($key === 'vente' && !$entry && (require_once __DIR__ . '/vente-scope.php') && vs_gallery_legacy_count((string) ($gallery['slug'] ?? '')) > 0) {
+            // Liste de prospects tenue avant l'extension « Force de vente » : la galerie la garde, avec l'accès offert.
             $status = 'complimentary';
             $enabled = true;
         } else {

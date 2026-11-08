@@ -9,7 +9,7 @@ require_once FV_ROOT . '/includes/contacts-import-ui.php';
 $ctx = fv_current();
 $members = $ctx['manager'] ? fv_members_list(true) : [];
 $roles = [];
-if ($ctx['manager']) {
+if ($ctx['manager'] && !fv_is_gallery()) {      // carnet d'une galerie : pas d'équipe, donc pas d'attribution
     $roles['0'] = 'Direction';
     foreach ($members as $m) $roles[(string) (int) $m['id']] = (string) $m['name'];
 }
@@ -77,7 +77,7 @@ $body = ci_page([
     'url' => 'prospects-import.php', 'back_url' => 'prospects.php', 'back_label' => 'Voir les prospects',
     'csrf_html' => '<input type="hidden" name="csrf" value="' . e(fv_csrf()) . '">',
     'csrf_check' => static function (): void { fv_csrf_check(); },
-    'noun' => 'votre carnet de prospects', 'require_email' => false, 'allow_custom_fields' => true, 'auto_custom' => true, 'allow_no_contact' => true,
+    'noun' => fv_is_gallery() ? 'le carnet de prospects de la galerie' : 'votre carnet de prospects', 'require_email' => false, 'allow_custom_fields' => true, 'auto_custom' => true, 'allow_no_contact' => true,
     'roles' => $roles, 'role_label' => 'Attribuer les fiches à',
     'import_html' => '<p class="hint">Valeurs appliquées aux lignes qui n’en ont pas (facultatif) :</p><div class="ci-cols" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">'
         . '<label>Ville par défaut<input type="text" name="default_city" maxlength="90" placeholder="ex. Lyon"></label>'
@@ -86,7 +86,7 @@ $body = ci_page([
     'exists' => $find,
     'create' => static function (array $c, array $o) use (&$byEmail, &$byPhone, &$byPlace, $shape, $phoneLabel, $norm, $street, $ctx): bool {
         $d = $shape($c, (array) ($o['post'] ?? []));
-        $owner = $ctx['manager'] ? (int) ($o['role'] ?? 0) : fv_effective_member_id();
+        $owner = $ctx['manager'] && !fv_is_gallery() ? (int) ($o['role'] ?? 0) : fv_effective_member_id();
         $stamp = '[' . $o['source'] . ', ' . date('d/m/Y') . ']';
         try {
             $data = fv_prospect_from_input([

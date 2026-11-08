@@ -1530,12 +1530,20 @@ Portail → Galeries commerciales → *Gérer* → **Publication** → « Nom de
 
 Ce que le site ne fait pas : l'enregistrement DNS et le certificat HTTPS. Faites pointer le domaine vers ce serveur (enregistrement `A`/`AAAA`, ou `CNAME` vers l'hébergement) puis activez le certificat (Let's Encrypt chez l'hébergeur, ou certificat du proxy) avant d'annoncer l'adresse. En local : `curl -H 'Host: galerie-exemple.fr' http://127.0.0.1:8123/`. Les exports JSON n'emportent pas le domaine (risque de collision) ; un import dans une galerie existante conserve le sien.
 
+## Force de vente : extension indépendante
+
+Le moteur de `portail/vente/` sert plusieurs **carnets de prospects séparés** (`includes/vente-scope.php`) : celui du portail (équipe commerciale de la plateforme, `data/vente/vente.db`, inchangé) et, par galerie, un carnet à elle (`data/vente/galeries/<id>.db`, jamais partagé). Un carnet de galerie est servi à `/galerie/<id>/vente/` (prospects, import Excel/CSV/SQLite, tournée sur carte, journal des échanges, messages de recrutement avec désinscription) ; l'équipe, les codes, les récompenses, les sondages, etc. restent propres au portail.
+
+- **Activation** : module de galerie « Force de vente » (`vente`, `includes/gallery-modules.php`) : mode par type de galerie, essai, prix et accès offert réglés comme les autres extensions. Une galerie qui avait déjà une liste de prospects garde l'accès (offert).
+- **Reprise sans perte** : à la première ouverture, `data/galeries/<id>.prospects.json` est copié dans le carnet (sauvegarde `.bak-AAAAMMJJ-HHMMSS` à côté, fichier jamais modifié ni supprimé, reprise rejouable sans doublon). Ensuite le carnet fait foi : `ga_prospects()` le relit (assistant, tableau de bord, recherche) et un lien de désinscription déjà envoyé reste valable (`legacy_id`).
+- **À venir** : carnet des boutiques (comptes « prospect » reprise dans l'extension).
+
 ## Import de prospects et de clients
 
 Deux entrées, un même moteur (`includes/contacts-import.php`, écrans dans `includes/contacts-import-ui.php`) :
 
 - **Boutique** : Administration → Comptes → « Importer des contacts » (`admin/contacts-import.php`, administrateurs seulement). Les contacts deviennent des fiches **prospects** ou **clients** (au choix) avec leur téléphone, leur société et leur origine dans les notes ; source « Import (fichier ou CRM) ». Une fiche exige une adresse e-mail : les lignes sans e-mail sont écartées avec leur motif.
-- **Galerie** : Prospects → « Importer des contacts » (`portail/galerie-import.php`). Les contacts rejoignent la liste des commerces à recruter (le téléphone est maintenant conservé) ; un contact sans e-mail mais avec téléphone est accepté.
+- **Galerie** : extension **Force de vente** → « Importer un fichier » (`/galerie/<id>/vente/prospects-import.php` ; l'ancienne adresse `portail/galerie-import.php` y renvoie). Les contacts rejoignent le carnet de la galerie ; un contact sans e-mail mais avec téléphone est accepté.
 
 **Sources** : fichiers **CSV** (séparateur `;` `,` tabulation ou `|` détecté, UTF-8 ou Windows-1252 d'Excel), **Excel `.xls` / `.xlsx`** (première feuille) et carnet **vCard** `.vcf` (export des contacts d'un téléphone), ou lecture directe de **HubSpot**, **Brevo**, **Mailchimp** et **Pipedrive** avec leur clé API. Fichiers jusqu'à 10 Mo, 5 000 contacts et 200 colonnes. Zoho CRM, Google Contacts, Outlook, Odoo et Salesforce passent par leur export CSV : leurs en-têtes sont reconnus (« Modèle reconnu » dans l'aperçu), les colonnes peuvent aussi être choisies à la main.
 

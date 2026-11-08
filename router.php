@@ -80,6 +80,15 @@ if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/dons(?:/|/(point|proposer|suivi|
     return true;
 }
 
+// Force de vente d'une galerie : /galerie/<identifiant>/vente/[<page>.php] → portail/vente/ (même règle que dans le .htaccess).
+if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/vente(?:/|/(prospects|prospect-action|prospects-import|tournees|tournee-geo|activite-action)\.php)?$#', $path, $m)) {
+    $_GET['g'] = $m[1];
+    $script = '/portail/vente/' . (($m[2] ?? '') === '' ? 'prospects' : $m[2]) . '.php';
+    $_SERVER['SCRIPT_NAME'] = $script;
+    require __DIR__ . $script;
+    return true;
+}
+
 // Galeries commerciales : /galerie/ et /galerie/<identifiant>/ (même règle que dans le .htaccess).
 if (preg_match('#^/galerie(?:/([a-z0-9][a-z0-9-]*))?/?$#', $path, $m)) {
     $_GET['g'] = $m[1] ?? '';

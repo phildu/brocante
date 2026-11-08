@@ -59,6 +59,20 @@ try {
             fv_flash('Prospect supprimé avec son historique.');
             fv_redirect($back);
 
+        case 'envoyer':      // message de recrutement d'une galerie (relances encadrées, désinscription obligatoire)
+            if (!fv_is_gallery()) {
+                fv_flash('Action inconnue.', 'error');
+                fv_redirect($back);
+            }
+            $id = (int) ($_POST['id'] ?? 0);
+            if (!$id || !fv_prospect_get($id)) {
+                fv_flash('Ce prospect n’existe pas.', 'error');
+                fv_redirect($back);
+            }
+            $err = vs_gallery_send($pdo, fv_scope()['gallery'], $id, (string) ($_POST['subject'] ?? ''), (string) ($_POST['body'] ?? ''));
+            fv_flash($err ?? 'Message envoyé.', $err ? 'error' : 'ok');
+            fv_redirect($back);
+
         case 'importer':
             $raw = (string) ($_POST['csv'] ?? '');
             $lines = preg_split('/\R/', $raw) ?: [];
