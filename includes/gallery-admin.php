@@ -384,9 +384,14 @@ function ga_signup_remind(string $slug, string $requestId): ?string
 
 const GA_PROSPECT_STATUS = ['nouveau' => 'À contacter', 'contacte' => 'Contacté', 'relance' => 'Relancé', 'inscrit' => 'Inscrit', 'refus' => 'Refus'];
 
+/**
+ * Commerces à recruter. Depuis l'extension « Force de vente » (includes/vente-scope.php), la liste vit dans le carnet de la galerie
+ * (data/vente/galeries/<identifiant>.db) ; tant que le fichier JSON d'origine n'a pas été repris, c'est lui qui est lu. Format inchangé.
+ */
 function ga_prospects(string $slug): array
 {
-    return ga_read($slug, 'prospects', []);
+    require_once __DIR__ . '/vente-scope.php';
+    return vs_gallery_migrated($slug) ? vs_gallery_prospects_legacy_shape($slug) : ga_read($slug, 'prospects', []);
 }
 
 function ga_prospect_custom_fields_normalize(array $fields): array
@@ -406,63 +411,7 @@ function ga_prospect_custom_fields_normalize(array $fields): array
     return $out;
 }
 
-const GA_PROSPECT_MAX = 5000;
-
-/** Fiche prospect prête à être enregistrée. */
-function ga_prospect_row(string $name, string $email, string $note, string $phone, array $customFields): array
-{
-    return ['id' => bin2hex(random_bytes(6)), 'name' => mb_substr(trim($name), 0, 100), 'email' => mb_strtolower(trim($email)), 'phone' => mb_substr(preg_replace('/[^0-9+ ().-]/', '', $phone), 0, 30), 'note' => mb_substr(trim($note), 0, 400),
-        'custom_fields' => ga_prospect_custom_fields_normalize($customFields), 'status' => 'nouveau', 'created' => time(), 'contacts' => [], 'optout' => false];
-}
-
-/**
- * Ajoute plusieurs prospects en une seule écriture (import d'un fichier). Chaque élément : [name, email, note, phone, custom_fields]. Les adresses
- * déjà présentes et les fiches sans nom sont ignorées. -> [nombre ajouté, message d'erreur ou null].
- */
-function ga_prospects_add_many(string $slug, array $items): array
-{
-    $list = ga_prospects($slug);
-    $emails = [];
-    foreach ($list as $p) if (($p['email'] ?? '') !== '') $emails[$p['email']] = true;
-    $added = 0;
-    foreach ($items as [$name, $email, $note, $phone, $custom]) {
-        $email = mb_strtolower(trim((string) $email));
-        if (trim((string) $name) === '' || ($email !== '' && (!filter_var($email, FILTER_VALIDATE_EMAIL) || isset($emails[$email]))) || count($list) >= GA_PROSPECT_MAX) continue;
-        $list[] = ga_prospect_row((string) $name, $email, (string) $note, (string) $phone, (array) $custom);
-        if ($email !== '') $emails[$email] = true;
-        $added++;
-    }
-    if ($added === 0) return [0, null];
-    return ga_write($slug, 'prospects', $list) ? [$added, null] : [0, "Impossible d'enregistrer la liste."];
-}
-
-function ga_prospect_add(string $slug, string $name, string $email, string $note, string $phone = '', array $customFields = []): ?string
-{
-    $email = mb_strtolower(trim($email));
-    $name = mb_substr(trim($name), 0, 100);
-    if ($name === '') return 'Indiquez le nom du commerce.';
-    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) return 'Adresse e-mail invalide.';
-    $list = ga_prospects($slug);
-    if ($email !== '') foreach ($list as $p) if ($p['email'] === $email) return 'Cette adresse est déjà dans la liste.';
-    if (count($list) >= GA_PROSPECT_MAX) return number_format(GA_PROSPECT_MAX, 0, ',', ' ') . ' prospects au plus.';
-    $list[] = ga_prospect_row($name, $email, $note, $phone, $customFields);
-    return ga_write($slug, 'prospects', $list) ? null : "Impossible d'enregistrer la liste.";
-}
-
-function ga_prospect_update(string $slug, string $id, array $in): ?string
-{
-    $list = ga_prospects($slug);
-    foreach ($list as $k => $p) {
-        if ($p['id'] !== $id) continue;
-        if (isset($in['status']) && isset(GA_PROSPECT_STATUS[$in['status']])) $list[$k]['status'] = $in['status'];
-        if (isset($in['note'])) $list[$k]['note'] = mb_substr(trim((string) $in['note']), 0, 400);
-        if (isset($in['phone']) && empty($p['phone'])) $list[$k]['phone'] = mb_substr(preg_replace('/[^0-9+ ().-]/', '', (string) $in['phone']), 0, 30);   // complète seulement un numéro absent
-        if (isset($in['custom_fields']) && is_array($in['custom_fields'])) $list[$k]['custom_fields'] = ga_prospect_custom_fields_normalize($in['custom_fields']);
-        if (!empty($in['delete'])) unset($list[$k]);
-        return ga_write($slug, 'prospects', array_values($list)) ? null : "Impossible d'enregistrer la liste.";
-    }
-    return 'Prospect introuvable.';
-}
+// L'ajout, la modification, l'import et l'envoi de messages passent par l'extension « Force de vente » (includes/vente-scope.php).
 
 /** Modèle de message de recrutement (variables {nom}, {galerie}, {lien}, {desinscription}). */
 function ga_prospect_template(array $gallery): array
@@ -471,33 +420,6 @@ function ga_prospect_template(array $gallery): array
         'subject' => 'Rejoignez « ' . $gallery['name'] . ' »',
         'body' => "Bonjour {nom},\n\nJe m'occupe de « {galerie} », une galerie qui réunit plusieurs commerces sur une page commune. Votre boutique y aurait toute sa place.\n\nPour en savoir plus et vous inscrire : {lien}\n\nBien cordialement,\n{galerie}\n\n—\nPour ne plus recevoir de message de notre part : {desinscription}\n",
     ];
-}
-
-/** Envoie le message de recrutement. -> message d'erreur ou null. Un prospect n'est pas relancé plus de 3 fois, ni deux fois en 3 jours, ni après désinscription. */
-function ga_prospect_send(string $slug, string $id, string $subject, string $body): ?string
-{
-    $gallery = gallery_load($slug);
-    $list = ga_prospects($slug);
-    if (!$gallery) return 'Galerie introuvable.';
-    $subject = mb_substr(trim($subject), 0, 150);
-    $body = trim($body);
-    if ($subject === '' || mb_strlen($body) < 20) return 'Rédigez un objet et un message.';
-    if (!str_contains($body, '{desinscription}')) return 'Le message doit contenir {desinscription} : le lien pour ne plus être contacté est obligatoire.';
-    foreach ($list as $k => $p) {
-        if ($p['id'] !== $id) continue;
-        if ($p['email'] === '') return 'Ce prospect n\'a pas d\'adresse e-mail.';
-        if (!empty($p['optout'])) return 'Ce prospect a demandé à ne plus être contacté.';
-        $sent = (array) ($p['contacts'] ?? []);
-        if (count($sent) >= GA_RELANCE_MAX + 1) return 'Déjà ' . (GA_RELANCE_MAX + 1) . ' messages envoyés : il n\'est plus relancé.';
-        if ($sent && time() - max($sent) < GA_RELANCE_DELAY) return 'Un message a déjà été envoyé il y a moins de 3 jours.';
-        $text = strtr($body, ['{nom}' => $p['name'], '{galerie}' => $gallery['name'], '{lien}' => gallery_public_url($gallery), '{desinscription}' => ga_optout_url($slug, 'prospect', $p['id'])]);
-        if (!ga_mail($p['email'], $subject, $text)) return "L'e-mail n'a pas pu partir.";
-        $list[$k]['contacts'][] = time();
-        if ($list[$k]['status'] === 'nouveau') $list[$k]['status'] = 'contacte'; elseif ($list[$k]['status'] === 'contacte') $list[$k]['status'] = 'relance';
-        ga_write($slug, 'prospects', $list);
-        return null;
-    }
-    return 'Prospect introuvable.';
 }
 
 // ── Prospects 3/3 : visiteurs abonnés à la galerie (double confirmation) ────────────────────────────────────────────────────
@@ -556,7 +478,9 @@ function ga_stop(string $slug, string $kind, string $id, string $token): bool
         $subs = array_values(array_filter(ga_subs($slug), static fn ($s) => $s['id'] !== $id));
         return ga_write($slug, 'subs', $subs);
     }
-    $list = ga_prospects($slug);
+    require_once __DIR__ . '/vente-scope.php';
+    if (vs_gallery_migrated($slug)) return vs_gallery_optout($slug, $id);
+    $list = ga_read($slug, 'prospects', []);      // carnet pas encore créé : le fichier d'origine sera repris tel quel
     foreach ($list as $k => $p) if ($p['id'] === $id) { $list[$k]['optout'] = true; return ga_write($slug, 'prospects', $list); }
     return false;
 }
