@@ -168,6 +168,7 @@ function portail_nav_groups(): array
             ['href' => '/portail/api.php', 'label' => 'API & réseaux', 'icon' => 'key'],
             ['href' => '/portail/domaines.php', 'label' => 'Noms de domaine', 'icon' => 'at'],
             ['href' => '/portail/nouveau.php', 'label' => 'Nouveau commerce', 'icon' => 'plus'],
+            ['href' => '/portail/echange.php', 'label' => 'Échange prod / préprod', 'icon' => 'upload'],
         ], !empty($portailLocal) ? [[
             // Les fichiers data/*-outbox.log n'existent qu'en local : pas d'entrée en ligne.
             'href' => '/portail/journal-local.php', 'label' => 'Boîte locale', 'icon' => 'inbox',
