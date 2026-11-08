@@ -16,6 +16,7 @@
 //   save     → corrections du vendeur et publication éventuelle
 //   jobs     → liste « Mes pièces » de l'application smartphone (studio.php)
 //   get      → une pièce, pour la relire ; discard → la jeter avant relecture
+//   pack     → pack d'annonce (vraies photos + texte Vinted / Leboncoin) d'après la relecture en cours
 // Réponses JSON : {ok: true, ...} ou {ok: false, error: "..."}.
 
 require_once __DIR__ . '/../includes/session.php';
@@ -358,6 +359,19 @@ switch ($action) {
             'description' => $product['description'], 'materials' => (string) $product['materials'], 'colors' => (string) ($product['colors'] ?? ''), 'brand' => (string) ($product['brand'] ?? ''), 'distributor' => (string) ($product['distributor'] ?? ''), 'etat' => (string) ($product['etat'] ?? ''), 'etat_label' => $condition[0] ?? '', 'nature' => (string) ($product['nature'] ?? ''), 'sous_categorie' => (string) ($product['sous_categorie'] ?? ''), 'badge' => $product['badge'], 'weight_grams' => (int) $product['weight_grams'], 'size_text' => (string) ($product['size_text'] ?? ''), 'barcode' => (string) ($product['barcode'] ?? ''),
             'hidden' => (bool) $product['is_hidden'],
         ], 'photos' => $photos, 'status' => $job['status'] ?? 'reviewed', 'note' => $job['note'] ?? '']);
+    }
+
+    case 'pack': {
+        $product = resale_pack_product(quick_add_product(), $_POST);
+        $texts = [];
+        foreach (resale_pack_platforms() as $key => $platform) {
+            $texts[$key] = ['label' => $platform['label']] + resale_pack_text($product, $key) + ['plain' => resale_pack_plain($product, $key)];
+        }
+        $photos = [];
+        foreach (resale_pack_photos($product['ref']) as $i => $p) {
+            $photos[] = ['path' => $p['path'], 'label' => $p['label'], 'name' => resale_pack_photo_name($i + 1, $p['label'], $p['path'])];
+        }
+        quick_add_reply(['ok' => true, 'texts' => $texts, 'photos' => $photos, 'zip' => class_exists('ZipArchive')]);
     }
 
     case 'discard': {
