@@ -40,14 +40,9 @@
     sheet: null,
     failed: [],
     generationDone: false,
-    stream: null,
-    cameraError: '',
-    cameraClosed: false,
     video: null,
     videoFrames: [],
-    videoMode: '',
-    videoRecorder: null,
-    videoTimer: null
+    videoMode: ''
   };
   try {
     state.audio = localStorage.getItem('sa-audio') !== '0';
@@ -308,7 +303,7 @@
     }
     if (title) title.textContent = group ? "La photo de l'ensemble" : firstTexts.title;
     if (dropTitle) dropTitle.textContent = group ? "Prenez la photo de l'ensemble" : firstTexts.dropTitle;
-    if (dropHelp && !state.cameraError) {
+    if (dropHelp) {
       dropHelp.textContent = group
         ? 'Tous les produits visibles, bien séparés les uns des autres, avec une marge. Pas de flash.'
         : firstTexts.dropHelp;
@@ -562,8 +557,6 @@
     $('sa-first-caption').textContent = caption || "Photo d'ensemble";
     $('sa-first-preview').hidden = false;
     $('sa-first-drop').hidden = true;
-    $('sa-first-live').hidden = true;
-    $('sa-first-drop').classList.remove('is-camera-open');
   }
 
   function firstPhoto(file) {
@@ -574,110 +567,16 @@
     });
   }
 
-  // ── Caméra live (repli sur l'appareil photo natif ou la galerie) ────────
-  function cameraSupported() {
-    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-  }
-  function ensureStream() {
-    if (state.stream) return Promise.resolve(true);
-    if (!cameraSupported()) return Promise.resolve(false);
-    return new Promise(function (resolve) {
-      var settled = false;
-      // Certains navigateurs laissent la demande en attente : on rend la main pour proposer la galerie.
-      var timer = setTimeout(function () {
-        if (settled) return;
-        settled = true;
-        state.cameraError = 'Caméra indisponible : utilisez la galerie.';
-        resolve(false);
-      }, 10000);
-      navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      }).then(function (stream) {
-        clearTimeout(timer);
-        if (settled) {
-          stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) {} });
-          return;
-        }
-        settled = true;
-        state.stream = stream;
-        state.cameraError = '';
-        resolve(true);
-      }).catch(function (err) {
-        clearTimeout(timer);
-        if (settled) return;
-        settled = true;
-        state.cameraError = err && err.name === 'NotAllowedError'
-          ? 'Caméra refusée : autorisez-la dans le navigateur, ou utilisez la galerie.'
-          : 'Caméra indisponible : utilisez la galerie.';
-        resolve(false);
-      });
-    });
-  }
-  function attachStream(video) {
-    if (!video || !state.stream) return;
-    if (video.srcObject !== state.stream) video.srcObject = state.stream;
-    var playing = video.play();
-    if (playing && playing.catch) playing.catch(function () {});
-  }
-  function stopLiveCam() {
-    if (state.stream) {
-      state.stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) {} });
-      state.stream = null;
-    }
-    ['sa-first-video', 'sa-live-video', 'sa-video-preview'].forEach(function (id) {
-      var v = $(id);
-      if (v) v.srcObject = null;
-    });
-    $('sa-first-live').hidden = true;
-    $('sa-live').hidden = true;
-    $('sa-shot-stage').classList.remove('is-live');
-    var drop = $('sa-first-drop');
-    if (drop) drop.classList.remove('is-camera-open');
-  }
-  function captureFromVideo(video) {
-    return new Promise(function (resolve) {
-      var w = video && video.videoWidth, h = video && video.videoHeight;
-      if (!w || !h) { resolve(null); return; }
-      var c = document.createElement('canvas');
-      c.width = w; c.height = h;
-      c.getContext('2d').drawImage(video, 0, 0, w, h);
-      c.toBlob(function (blob) { resolve(blob); }, 'image/jpeg', 0.9);
-    });
-  }
-
-  /** Téléphone ou tablette : l'appareil photo de l'appareil (réglages standard) plutôt qu'une fenêtre dans la page. */
-  function preferNativeCamera() {
-    try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; }
-  }
-  function openFirstCam() {
-    if (!cameraSupported() || preferNativeCamera()) { $('sa-cam-first').click(); return; }
-    ensureStream().then(function (ok) {
-      if (!ok) {
-        var help = document.querySelector('#sa-first-drop .sa-drop-help');
-        if (help) help.textContent = state.cameraError;
-        return;
-      }
-      $('sa-first-live').hidden = false;
-      $('sa-first-preview').hidden = true;
-      $('sa-first-drop').classList.add('is-camera-open');
-      attachStream($('sa-first-video'));
-    });
-  }
-  function openShotCam() {
-    if (!cameraSupported()) { $('sa-shot-cam').click(); return; }
-    ensureStream().then(function (ok) {
-      if (!ok) {
-        $('sa-shot-quality').hidden = false;
-        $('sa-shot-quality').textContent = state.cameraError;
-        return;
-      }
-      state.cameraClosed = false;
-      $('sa-live').hidden = false;
-      $('sa-shot-empty').hidden = true;
-      $('sa-shot-stage').classList.add('is-live');
-      attachStream($('sa-live-video'));
-    });
+  // ── Appareil photo : toujours l'application native de l'appareil ─────────
+  // Jamais de caméra intégrée à la page : l'application native garde tous ses réglages (focale, caméra avant ou
+  // arrière, mode nuit, HDR, flash…). Les champs « capture » n'imposent aucune caméra : l'appareil propose la sienne
+  // et on peut en changer dans l'application. Sur ordinateur, le navigateur ouvre le sélecteur de fichiers.
+  function openFirstCam() { $('sa-cam-first').click(); }
+  function openShotCam() { $('sa-shot-cam').click(); }
+  /** Rouvre l'appareil photo pour la vue en cours si elle n'a pas encore de photo (appelé depuis un geste de l'utilisateur). */
+  function openShotCamIfNeeded() {
+    var s = currentShot();
+    if (s && !s.blob) openShotCam();
   }
 
   $('sa-take-first').addEventListener('click', function () { openFirstCam(); });
@@ -686,22 +585,6 @@
   $('sa-first-lib-again').addEventListener('click', function () { $('sa-lib-first').click(); });
   $('sa-cam-first').addEventListener('change', function () { if (this.files && this.files[0]) firstPhoto(this.files[0]); this.value = ''; });
   $('sa-lib-first').addEventListener('change', function () { if (this.files && this.files[0]) firstPhoto(this.files[0]); this.value = ''; });
-  $('sa-first-capture').addEventListener('click', function () {
-    captureFromVideo($('sa-first-video')).then(function (blob) {
-      if (blob) firstPhoto(blob);
-      else if ($('sa-first-live') && !$('sa-first-live').hidden) {
-        var help = document.querySelector('#sa-first-drop .sa-drop-help');
-        if (help) help.textContent = 'La caméra démarre encore : patientez une seconde, puis reprenez.';
-      }
-    });
-  });
-  $('sa-first-close').addEventListener('click', function () {
-    stopLiveCam();
-    $('sa-first-live').hidden = true;
-    if (state.photo) $('sa-first-preview').hidden = false;
-    else $('sa-first-drop').hidden = false;
-  });
-  window.addEventListener('pagehide', stopLiveCam);
 
   function analysisLoading(text) {
     var box = $('sa-analysis');
@@ -1182,7 +1065,6 @@
     if (!window.confirm('Arrêter la séance ? Les photos déjà prises sont conservées.')) return;
     stopSpeaking();
     stopVoiceRecognition();
-    stopLiveCam();
     if (state.shots.some(function (s) { return s.blob; })) {
       renderFinish();
       showPanel('finish');
@@ -1220,10 +1102,10 @@
     var programKey = p.key || p.title;
     if (state.shots.length && state.shotsProgramKey === programKey) {
       showPanel('shots');
-      if (!state.stream && !state.cameraClosed) openShotCam();
       renderShot();
       renderThumbs();
       announceShot();
+      openShotCamIfNeeded();
       return;
     }
     if (state.shots.some(function (s) { return s.blob; })) {
@@ -1240,8 +1122,8 @@
     renderShot();
     renderThumbs();
     showPanel('shots');
-    openShotCam();
     announceShot();
+    openShotCam();
   }
 
   function currentShot() { return state.shots[state.current]; }
@@ -1256,15 +1138,12 @@
 
     var stage = $('sa-shot-stage');
     var img = $('sa-shot-img');
-    var live = $('sa-live');
     if (s.blob) {
       if (s.url) URL.revokeObjectURL(s.url);
       s.url = URL.createObjectURL(s.blob);
       img.src = s.url;
       img.alt = s.label;
       img.hidden = false;
-      live.hidden = true;
-      stage.classList.remove('is-live');
       $('sa-shot-empty').hidden = true;
       stage.classList.add('has-photo');
       renderShotQuality(s.quality);
@@ -1279,16 +1158,7 @@
       $('sa-shot-correct').hidden = true;
       $('sa-shot-enhance').hidden = true;
       $('sa-shot-skip').hidden = s.required;
-      if (state.stream && !state.cameraClosed) {
-        live.hidden = false;
-        $('sa-shot-empty').hidden = true;
-        stage.classList.add('is-live');
-        attachStream($('sa-live-video'));
-      } else {
-        live.hidden = true;
-        stage.classList.remove('is-live');
-        $('sa-shot-empty').hidden = false;
-      }
+      $('sa-shot-empty').hidden = false;
     }
 
     var taken = state.shots.filter(function (x) { return x.blob; }).length;
@@ -1454,20 +1324,6 @@
   $('sa-shot-again').addEventListener('click', function () { openShotCam(); });
   $('sa-shot-correct').addEventListener('click', autoCorrectShot);
   $('sa-shot-enhance').addEventListener('click', enhanceShot);
-  $('sa-live-capture').addEventListener('click', function () {
-    captureFromVideo($('sa-live-video')).then(function (blob) {
-      if (blob) captureShot(blob);
-      else {
-        $('sa-shot-quality').hidden = false;
-        $('sa-shot-quality').textContent = 'La caméra démarre encore : patientez une seconde, puis reprenez.';
-      }
-    });
-  });
-  $('sa-live-close').addEventListener('click', function () {
-    state.cameraClosed = true;
-    stopLiveCam();
-    renderShot();
-  });
   $('sa-shot-cam').addEventListener('change', function () { if (this.files && this.files[0]) captureShot(this.files[0]); this.value = ''; });
   $('sa-shot-lib').addEventListener('change', function () { if (this.files && this.files[0]) captureShot(this.files[0]); this.value = ''; });
 
@@ -1475,12 +1331,14 @@
     if (state.current >= state.shots.length - 1) { finishShooting(); return; }
     state.current++;
     renderShot(); renderThumbs(); announceShot();
+    openShotCamIfNeeded();
   });
   $('sa-shot-skip').addEventListener('click', function () {
     if (currentShot().required) return;
     if (state.current >= state.shots.length - 1) { finishShooting(); return; }
     state.current++;
     renderShot(); renderThumbs(); announceShot();
+    openShotCamIfNeeded();
   });
 
   function renderThumbs() {
@@ -1555,8 +1413,8 @@
     var base = rotate
       ? "Posez l'objet sur un plateau ou une feuille, puis faites-le tourner lentement sur lui-même. Gardez le téléphone fixe."
       : "Gardez l'objet immobile et tournez autour de lui, à la même distance, sans changer de hauteur.";
-    if (frame) base += ' Prenez une image à chaque quart de tour : la vidéo sera assemblée à la fin.';
-    else base += ' Enregistrez 10 à 20 secondes, puis arrêtez.';
+    if (frame) base += " Prenez une photo à chaque quart de tour avec l'appareil photo : la vidéo sera assemblée à la fin.";
+    else base += " L'appareil photo s'ouvre : filmez 10 à 20 secondes, puis validez la vidéo.";
     return base;
   }
 
@@ -1577,10 +1435,6 @@
   }
 
   function chooseVideoMode(mode) {
-    if (state.videoRecorder && state.videoRecorder.state === 'recording') {
-      $('sa-video-status').textContent = 'Arrêtez l\'enregistrement avant de changer de mode.';
-      return;
-    }
     state.videoMode = mode;
     state.video = null;
     state.videoFrames = [];
@@ -1591,74 +1445,37 @@
     $('sa-video-help').textContent = videoHelp(mode);
     $('sa-video-stage').hidden = false;
     $('sa-video-start').hidden = !/-continuous$/.test(mode);
+    $('sa-video-start').textContent = '● Filmer';
     $('sa-video-frame').hidden = !/-frame$/.test(mode);
     $('sa-video-finish').hidden = true;
-    $('sa-video-stop').hidden = true;
-    $('sa-video-status').textContent = 'Ouverture de la caméra…';
-    ensureStream().then(function (ok) {
-      if (!ok) { $('sa-video-status').textContent = state.cameraError; return; }
-      attachStream($('sa-video-preview'));
-      $('sa-video-status').textContent = /-continuous$/.test(mode) ? 'Prêt : lancez l\'enregistrement.' : 'Prenez la première image.';
-    });
+    $('sa-video-status').textContent = /-continuous$/.test(mode)
+      ? "Touchez « Filmer » : l'appareil photo de l'appareil s'ouvre."
+      : "Touchez « Prendre une image » : l'appareil photo de l'appareil s'ouvre.";
     if (state.audio) speak(videoHelp(mode));
   }
 
-  function startVideoRecording() {
-    if (!state.stream) {
-      ensureStream().then(function (ok) {
-        if (ok) startVideoRecording();
-        else $('sa-video-status').textContent = state.cameraError;
-      });
-      return;
-    }
-    if (!window.MediaRecorder) {
-      $('sa-video-status').textContent = 'La vidéo n\'est pas disponible dans ce navigateur.';
-      return;
-    }
-    var mime = pickVideoMime();
-    var chunks = [];
-    var recorder;
-    try {
-      recorder = new MediaRecorder(state.stream, mime ? { mimeType: mime } : undefined);
-    } catch (e) {
-      $('sa-video-status').textContent = 'La vidéo n\'est pas disponible dans ce navigateur.';
-      return;
-    }
-    state.videoRecorder = recorder;
-    recorder.ondataavailable = function (event) { if (event.data && event.data.size) chunks.push(event.data); };
-    recorder.onstop = function () {
-      var blob = new Blob(chunks, { type: recorder.mimeType || mime || 'video/webm' });
-      state.video = { blob: blob, mode: state.videoMode };
-      var result = $('sa-video-result');
-      if (result.src) URL.revokeObjectURL(result.src);
-      result.src = URL.createObjectURL(blob);
-      result.hidden = false;
-      $('sa-video-status').textContent = 'Vidéo prête (' + Math.max(1, Math.round(blob.size / 1024)) + ' Ko). Vous pouvez la revoir, refaire une prise, ou continuer.';
-      $('sa-video-start').hidden = false;
-      $('sa-video-stop').hidden = true;
-      if (state.videoTimer) { clearTimeout(state.videoTimer); state.videoTimer = null; }
-      if (state.audio) speak('Vidéo prête. Rejouez-la si besoin, ou continuez avec la fiche.');
-    };
-    state.videoRecorder.start();
-    $('sa-video-start').hidden = true;
-    $('sa-video-stop').hidden = false;
-    $('sa-video-status').textContent = 'Enregistrement… 20 secondes au plus.';
-    state.videoTimer = setTimeout(function () {
-      if (state.videoRecorder && state.videoRecorder.state === 'recording') state.videoRecorder.stop();
-    }, 20000);
+  /** Vidéo continue : l'application caméra native filme (focale, stabilisation, caméra au choix) et rend le fichier. */
+  function startVideoRecording() { $('sa-video-cam').click(); }
+
+  function videoTaken(file) {
+    if (!file) return;
+    state.video = { blob: file, mode: state.videoMode };
+    var result = $('sa-video-result');
+    if (result.src) URL.revokeObjectURL(result.src);
+    result.src = URL.createObjectURL(file);
+    result.hidden = false;
+    var mb = Math.max(0.1, Math.round(file.size / 104857.6) / 10);
+    $('sa-video-status').textContent = 'Vidéo prête (' + mb.toString().replace('.', ',') + ' Mo). Vous pouvez la revoir, refaire une prise, ou continuer.';
+    $('sa-video-start').textContent = '● Refaire la vidéo';
+    if (state.audio) speak('Vidéo prête. Rejouez-la si besoin, ou continuez avec la fiche.');
   }
 
-  function stopVideoRecording() {
-    if (state.videoRecorder && state.videoRecorder.state === 'recording') state.videoRecorder.stop();
-  }
+  /** Image par image : chaque image est une photo de l'application native, réduite avant d'être gardée. */
+  function captureVideoFrame() { $('sa-video-frame-cam').click(); }
 
-  function captureVideoFrame() {
-    if (!state.stream) {
-      ensureStream().then(function (ok) { if (ok) captureVideoFrame(); else $('sa-video-status').textContent = state.cameraError; });
-      return;
-    }
-    captureFromVideo($('sa-video-preview')).then(function (blob) {
-      if (!blob) { $('sa-video-status').textContent = 'La caméra démarre encore : patientez une seconde.'; return; }
+  function videoFrameTaken(file) {
+    if (!file) return;
+    shrink(file, 960, 0.85).then(function (blob) {
       state.videoFrames.push(blob);
       $('sa-video-status').textContent = state.videoFrames.length + ' image(s) prise(s). Terminez quand le tour est complet.';
       $('sa-video-finish').hidden = state.videoFrames.length < 2;
@@ -1716,9 +1533,6 @@
   }
 
   function closeVideo() {
-    stopVideoRecording();
-    if (state.videoTimer) { clearTimeout(state.videoTimer); state.videoTimer = null; }
-    stopLiveCam();
     $('sa-video-stage').hidden = true;
   }
 
@@ -1726,7 +1540,8 @@
     b.addEventListener('click', function () { chooseVideoMode(this.dataset.videoMode); });
   });
   $('sa-video-start').addEventListener('click', startVideoRecording);
-  $('sa-video-stop').addEventListener('click', stopVideoRecording);
+  $('sa-video-cam').addEventListener('change', function () { if (this.files && this.files[0]) videoTaken(this.files[0]); this.value = ''; });
+  $('sa-video-frame-cam').addEventListener('change', function () { if (this.files && this.files[0]) videoFrameTaken(this.files[0]); this.value = ''; });
   $('sa-video-frame').addEventListener('click', captureVideoFrame);
   $('sa-video-finish').addEventListener('click', finishVideoFrames);
   $('sa-video-close').addEventListener('click', closeVideo);
@@ -1775,7 +1590,6 @@
 
   function resetArticle() {
     stopSpeaking();
-    stopLiveCam();
     if (state.photoUrl) URL.revokeObjectURL(state.photoUrl);
     state.shots.forEach(function (s) { if (s.url) URL.revokeObjectURL(s.url); });
     state.photo = null;
@@ -1796,13 +1610,11 @@
     state.sheet = null;
     state.failed = [];
     state.generationDone = false;
-    state.cameraClosed = false;
     state.video = null;
     state.videoFrames = [];
     state.videoMode = '';
     $('sa-first-preview').hidden = true;
     $('sa-first-drop').hidden = false;
-    $('sa-first-live').hidden = true;
     $('sa-first-img').removeAttribute('src');
     $('sa-analysis').textContent = '';
     $('sa-analysis').hidden = true;
@@ -1832,11 +1644,11 @@
   }
 
   $('sa-resume-shots').addEventListener('click', function () {
-    if (!state.stream && !state.cameraClosed) openShotCam();
     renderShot();
     renderThumbs();
     showPanel('shots');
     announceShot();
+    openShotCamIfNeeded();
   });
   $('sa-restart').addEventListener('click', function () { resetArticle(); });
   $('sa-generate').addEventListener('click', generate);
@@ -1867,7 +1679,6 @@
     });
     if (!mainSet) { window.alert('Aucune photo à envoyer.'); return; }
 
-    stopLiveCam();
     document.querySelectorAll('#sa-gen-list li').forEach(function (li) {
       li.dataset.state = '';
       li.hidden = batch && ['detoure', 'sheet', 'ambiance', 'angles', 'recto', 'verso'].indexOf(li.dataset.step) >= 0;
@@ -1900,7 +1711,8 @@
   }
 
   function videoExt(blob) {
-    return blob && /mp4/.test(blob.type || '') ? 'mp4' : 'webm';
+    var type = (blob && blob.type) || '';
+    return /quicktime/.test(type) ? 'mov' : (/mp4/.test(type) ? 'mp4' : 'webm');
   }
 
   /** Envoi de la vidéo par morceaux, dans l'ordre, comme le parcours « Nouvelle pièce ». */

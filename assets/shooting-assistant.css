@@ -38,7 +38,7 @@
 
 .sa-panel[hidden], .sa-preview[hidden], .sa-analysis[hidden], .sa-quality[hidden], .sa-shot-empty[hidden], #sa-shot-img[hidden], .sa-actions [hidden] { display: none !important; }
 .sa-panel { display: flex; flex-direction: column; gap: 14px; }
-.sa-setup[hidden], .sa-session[hidden], .sa-draft[hidden], .sa-live[hidden], .sa-video-stage[hidden], .sa-video-result[hidden], .sa-batch[hidden], .sa-shot-tools [hidden], .sa-video-actions [hidden], .sa-live-bar [hidden], .sa-preview-actions [hidden] { display: none !important; }
+.sa-setup[hidden], .sa-session[hidden], .sa-draft[hidden], .sa-video-stage[hidden], .sa-video-result[hidden], .sa-batch[hidden], .sa-shot-tools [hidden], .sa-video-actions [hidden], .sa-preview-actions [hidden] { display: none !important; }
 
 .sa-card { display: flex; flex-direction: column; gap: 14px; padding: 18px; background: var(--surface); border: 1px solid var(--line); }
 .sa-card h2 { font-size: 1.3rem; margin: 0; }
@@ -70,15 +70,6 @@
 .sa-preview-actions { display: flex; gap: 6px; flex: none; }
 
 /* Caméra live : aperçu, déclencheur, fermeture. */
-.sa-live { display: flex; flex-direction: column; background: #111; border: 1px solid var(--line); overflow: hidden; }
-.sa-live video { display: block; width: 100%; max-height: 70vh; object-fit: contain; background: #111; }
-.sa-live-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; background: var(--surface); border-top: 1px solid var(--line); }
-.sa-live-bar .btn { flex: 1 1 140px; justify-content: center; }
-.sa-drop.is-camera-open { padding: 10px 12px; border-style: solid; border-color: var(--accent); }
-.sa-drop.is-camera-open .sa-drop-icon,
-.sa-drop.is-camera-open .sa-drop-title,
-.sa-drop.is-camera-open .sa-drop-actions { display: none; }
-.sa-drop.is-camera-open .sa-drop-help { margin: 0; }
 
 .sa-analysis { display: flex; flex-direction: column; gap: 12px; }
 .sa-analysis.is-loading { color: var(--ink-soft); font-size: 0.9rem; }
@@ -165,8 +156,6 @@
 
 .sa-shot-stage { position: relative; min-height: 260px; display: flex; align-items: center; justify-content: center; background: var(--bg); border: 2px dashed var(--line); overflow: hidden; }
 .sa-shot-stage.has-photo { border-style: solid; }
-.sa-shot-stage.is-live { border-style: solid; border-color: var(--accent); align-items: stretch; }
-.sa-shot-stage.is-live .sa-live { width: 100%; border: 0; }
 .sa-shot-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 26px 16px; text-align: center; }
 .sa-shot-empty .sa-drop-actions { justify-content: center; }
 .sa-shot-stage img { width: 100%; max-height: 460px; object-fit: contain; display: block; }
@@ -280,7 +269,6 @@
   .sa-actions-row .btn { flex-basis: 100%; }
   .sa-two { grid-template-columns: 1fr; }
   .sa-video-modes { grid-template-columns: 1fr; }
-  .sa-live video { max-height: 58vh; }
 }
 
 /* Mobile : pas de stepper (le fil des étapes prend de la place et n'apporte rien sur un petit écran). */
@@ -321,7 +309,6 @@
 .sa-asking .sa-draft,
 .sa-asking .sa-audio-proposal,
 .sa-asking .sa-drop,
-.sa-asking .sa-live-first,
 .sa-asking .sa-preview,
 .sa-asking .sa-analysis { display: none !important; }
 .sa-intro-mute { padding: 4px 2px; }

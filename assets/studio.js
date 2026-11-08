@@ -79,7 +79,6 @@
     document.querySelectorAll('.st-tabs [data-go]').forEach(function (b) {
       if (b.dataset.go === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
-    if (name !== 'batch') stopCamera(); else resumeCameraIfShooting();
     if (name === 'pieces') { loadList(); if (window.studioRunVariants) window.studioRunVariants(); }
     var nextUrl = new URL(location.href);
     nextUrl.searchParams.delete('tab');
@@ -186,32 +185,10 @@
   }
 
   // ── Lot : prise de vue ────────────────────────────────────────────────────
-  var stream = null;
-  var video = $('sb-video');
-  var screens = ['sb-shoot', 'sb-review', 'sb-run'];
-  function showScreen(id) {
-    screens.forEach(function (s) { $(s).hidden = s !== id; });
-    if (id !== 'sb-shoot') stopCamera();
-    window.scrollTo(0, 0);
-  }
-
-  function startCamera() {
-    if (stream) return Promise.resolve();
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('unsupported'));
-    return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false })
-      .then(function (s) { stream = s; video.srcObject = s; return video.play(); });
-  }
-  function stopCamera() {
-    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-    video.srcObject = null;
-  }
-  function resumeCameraIfShooting() {
-    if (!$('sb-camera').hidden && !$('sb-shoot').hidden) startCamera().catch(function () {});
-  }
+  // Appareil photo : toujours l'application native de l'appareil (focale, caméra avant ou arrière, mode nuit, HDR…).
+  // Aucune caméra n'est ouverte dans la page ; le navigateur rend la photo ou la vidéo prise.
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { stopCamera(); return; }
-    if (currentTab === 'batch') resumeCameraIfShooting();
-    if (running) keepAwake(true);
+    if (!document.hidden && running) keepAwake(true);
   });
 
   function showCameraUI(on) {
@@ -288,9 +265,7 @@
     var piece = pieces[pieces.length - 1];
     var imgs = piece.filter(function (x) { return !x.measure; }).map(function (x, i) { return { blob: x.blob, label: 'Photo ' + (i + 1) }; });
     var qa = document.querySelector('.qa');
-    stopCamera();
     window.studioMeasure({ images: imgs, ai: !!(qa && qa.dataset.ai === '1') }).then(function (r) {
-      resumeCameraIfShooting();
       if (!r) return;
       meta(piece).size = r.text;
       // Photo prise pour l'occasion : gardée avec la pièce (masquée dans la boutique), jamais comptée comme une vue.
@@ -318,17 +293,10 @@
       if (typed) applyScan(piece, typed);
       return;
     }
-    stopCamera();   // le scanner ouvre sa propre caméra
     window.barcodeScanCamera(function (code) { applyScan(piece, code); }, function () { toast('Caméra du scanner inaccessible : saisissez le code.'); var t = prompt('Saisissez le code-barres, l\'ISBN ou l\'adresse du QR :'); if (t) applyScan(piece, t); }, function () { resumeCameraIfShooting(); });
   });
 
-  // Vidéo de la pièce : enregistrée par le viseur (MediaRecorder), sinon par l'appareil du téléphone.
-  var recorder = null, recChunks = [], recTimer = null, recStart = 0;
-  var REC_MAX = 20; // secondes
-  function recMime() {
-    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
-    return ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0] || '';
-  }
+  // Vidéo de la pièce : filmée avec l'application caméra de l'appareil (focale, stabilisation, caméra au choix).
   function setPieceVideo(piece, blob, seconds) {
     dropVideo(piece);
     var m = meta(piece), id = nextId++;
@@ -337,32 +305,7 @@
     renderShoot();
     toast('Vidéo enregistrée.');
   }
-  function stopRecording() {
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-  }
-  $('sb-rec').addEventListener('click', function () {
-    var piece = pieces[pieces.length - 1], btn = this;
-    if (recorder && recorder.state === 'recording') { stopRecording(); return; }
-    var mime = recMime();
-    if (!stream || !mime) { $('sb-video-file').click(); return; }
-    recChunks = [];
-    try { recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 }); } catch (e) { $('sb-video-file').click(); return; }
-    recorder.ondataavailable = function (e) { if (e.data && e.data.size) recChunks.push(e.data); };
-    recorder.onstop = function () {
-      clearInterval(recTimer); btn.classList.remove('is-rec'); btn.querySelector('span').textContent = 'Vidéo';
-      var secs = Math.round((Date.now() - recStart) / 1000);
-      var blob = new Blob(recChunks, { type: mime.split(';')[0] });
-      recorder = null;
-      if (blob.size && secs >= 1) setPieceVideo(piece, blob, secs);
-    };
-    recorder.start(1000); recStart = Date.now();
-    btn.classList.add('is-rec');
-    recTimer = setInterval(function () {
-      var secs = Math.round((Date.now() - recStart) / 1000);
-      btn.querySelector('span').textContent = '■ ' + secs + ' s';
-      if (secs >= REC_MAX) stopRecording();
-    }, 500);
-  });
+  $('sb-rec').addEventListener('click', function () { $('sb-video-file').click(); });
   $('sb-video-file').addEventListener('change', function () {
     var f = this.files && this.files[0]; this.value = '';
     if (!f) return;
@@ -371,39 +314,25 @@
   });
 
   $('sb-start').addEventListener('click', function () {
-    var btn = this; btn.disabled = true;
-    startCamera().then(function () { showCameraUI(true); })
-      .catch(function () {
-        // Pas d'accès à la caméra (refusé, page non sécurisée) : on retombe sur l'appareil photo du téléphone.
-        toast('Caméra indisponible : utilisez la galerie ou l\'appareil photo du téléphone.');
-        $('sb-gallery').setAttribute('capture', 'environment');
-        showCameraUI(true);
-        $('sb-camera').classList.add('no-live');
-      })
-      .then(function () { btn.disabled = false; });
+    showCameraUI(true);
+    $('sb-native-cam').click();
   });
 
-  $('sb-shutter').addEventListener('click', function () {
-    if (!stream || !video.videoWidth) { $('sb-gallery').click(); return; }
-    var w = video.videoWidth, h = video.videoHeight, scale = Math.min(1, 1600 / Math.max(w, h));
-    var canvas = document.createElement('canvas');
-    canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-    var flash = $('sb-flash'); flash.classList.remove('is-on'); void flash.offsetWidth; flash.classList.add('is-on');
-    if (navigator.vibrate) navigator.vibrate(12);
-    canvas.toBlob(function (blob) { if (blob) addShot(blob); }, 'image/jpeg', 0.85);
-  });
+  // L'obturateur ouvre l'appareil photo de l'appareil, qui rend la photo prise.
+  $('sb-shutter').addEventListener('click', function () { $('sb-native-cam').click(); });
 
-  $('sb-gallery').addEventListener('change', function () {
-    var files = Array.prototype.slice.call(this.files).filter(function (f) { return /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic)$/i.test(f.name); });
-    this.value = '';
+  function addPickedFiles(input) {
+    var files = Array.prototype.slice.call(input.files).filter(function (f) { return /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic)$/i.test(f.name); });
+    input.value = '';
     if (!files.length) return;
     if ($('sb-camera').hidden) showCameraUI(true);
     // Les photos sont ajoutées dans l'ordre ; le découpage en pièces se fait à la relecture.
     files.reduce(function (p, f) {
       return p.then(function () { return shrink(f).then(function (blob) { var last = pieces[pieces.length - 1]; if (last.length >= pieceMax(last)) { var np = []; meta(np).kind = meta(last).kind === 'objet' ? 'objet' : meta(last).kind; pieces.push(np); } addShot(blob); }); });
     }, Promise.resolve());
-  });
+  }
+  $('sb-gallery').addEventListener('change', function () { addPickedFiles(this); });
+  $('sb-native-cam').addEventListener('change', function () { addPickedFiles(this); });
 
   $('sb-next').addEventListener('click', nextPiece);
   $('sb-done').addEventListener('click', function () { tidy(); renderReview(); showScreen('sb-review'); });
@@ -480,7 +409,7 @@
   $('sb-back').addEventListener('click', function () {
     tidy();
     if (pieces[pieces.length - 1].length) pieces.push([]);
-    showScreen('sb-shoot'); showCameraUI(true); resumeCameraIfShooting();
+    showScreen('sb-shoot'); showCameraUI(true);
   });
 
   // ── Traitement d'une pièce (toutes les étapes IA) ─────────────────────────
@@ -647,7 +576,7 @@
   $('sb-again').addEventListener('click', function () {
     $('sb-stop').textContent = 'Arrêter après la pièce en cours';
     $('sb-notes').value = '';
-    showScreen('sb-shoot'); showCameraUI(true); resumeCameraIfShooting();
+    showScreen('sb-shoot'); showCameraUI(true);
   });
 
   // ── Mes pièces ────────────────────────────────────────────────────────────

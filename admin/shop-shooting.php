@@ -317,7 +317,7 @@ $requestStatus = static function (string $status): string {
           <button type="button" class="btn btn-ghost ss-listen" id="ss-shot-coach">🔊 Écouter le conseil</button>
         </div>
 
-        <input type="file" accept="image/*" capture="environment" id="ss-shot-cam" hidden>
+        <input type="file" accept="image/*" capture id="ss-shot-cam" hidden>
         <input type="file" accept="image/*" id="ss-shot-lib" hidden>
 
         <div class="ss-shot-stage" id="ss-shot-stage">
