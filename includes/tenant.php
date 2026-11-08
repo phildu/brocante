@@ -1,5 +1,10 @@
 <?php
 
+// Cartouche d'environnement (LOCAL / PRÉPROD / PRODUCTION) : tenant.php est chargé par tous les points
+// d'entrée (boutique, portail, accueil, galeries, annuaire), contrairement à config.php. Idempotent.
+require_once __DIR__ . '/app-env.php';
+app_env_enable_badge();
+
 // Marque blanche : tout ce qui est propre à un commerce (nom, logo, couleurs,
 // catégories, textes, prompts IA, base, URL…) vit dans tenants/<slug>/tenant.php.
 //
