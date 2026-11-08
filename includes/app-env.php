@@ -80,6 +80,8 @@ function app_robots_txt(bool $open): string
  */
 function app_env_send_headers(): void
 {
-    if (PHP_SAPI === 'cli' || app_indexation_open() || headers_sent()) return;
+    static $sent = false;
+    if ($sent || PHP_SAPI === 'cli' || app_indexation_open() || headers_sent()) return;
+    $sent = true;
     header('X-Robots-Tag: noindex, nofollow', false);
 }

@@ -14,6 +14,10 @@
 //   6. petit-chalet (comportement historique).
 
 const TENANT_DEFAULT = 'petit-chalet';
+// Moteurs de recherche : ce fichier est chargé par toutes les pages, y compris les pages publiques qui n'incluent pas config.php
+// (accueil, galeries, annuaire) ; le noindex y est donc posé aussi (sans doublon : voir app_env_send_headers()).
+require_once __DIR__ . '/app-env.php';
+app_env_send_headers();
 require_once __DIR__ . '/edge-proxy.php'; // hôte et IP réels derrière Cloudflare, avant toute lecture de HTTP_HOST
 require_once __DIR__ . '/business-presence.php';
 require_once __DIR__ . '/domain-custom.php';
