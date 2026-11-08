@@ -27,6 +27,7 @@ final class VenteScopeTest extends TestCase
         $this->dir = (string) getenv('VENTE_DATA_DIR');
         foreach (glob(galleries_dir() . '/*') ?: [] as $f) @unlink($f);
         foreach (glob($this->dir . '/galeries/*') ?: [] as $f) @unlink($f);
+        foreach (glob($this->dir . '/boutiques/*') ?: [] as $f) @unlink($f);
     }
 
     private function legacy(string $slug, array $list): void
@@ -36,7 +37,7 @@ final class VenteScopeTest extends TestCase
 
     private function carnet(string $slug): PDO
     {
-        $file = vs_gallery_db_file($slug);
+        $file = str_starts_with($slug, 'boutique') ? vs_boutique_db_file($slug) : vs_gallery_db_file($slug);
         @mkdir(dirname($file), 0775, true);
         $pdo = new PDO('sqlite:' . $file, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
         fv_schema($pdo);
@@ -177,5 +178,41 @@ final class VenteScopeTest extends TestCase
         self::assertSame('complimentary', gm_state($withList, 'vente')['status']);
         self::assertFalse(gm_enabled($without, 'vente'));
         self::assertNotNull(gm_module('vente'));
+    }
+
+    public function testBoutiqueCarnetCopiesProspectAccountsWithoutTouchingThem(): void
+    {
+        $shop = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+        $shop->exec("CREATE TABLE accounts (id INTEGER PRIMARY KEY, role TEXT, name TEXT, email TEXT, phone TEXT, notes TEXT, custom_fields TEXT, created_at TEXT, updated_at TEXT)");
+        $shop->exec("INSERT INTO accounts VALUES
+            (1, 'prospect', 'Camille Durand', 'Camille@Exemple.test', '06 11 22 33 44', 'vu au marché', '{\"insta\":{\"label\":\"Instagram\",\"value\":\"@camille\"}}', '2026-01-05 10:00:00', '2026-01-06 10:00:00'),
+            (2, 'prospect', '', 'anonyme@exemple.test', '', '', '{}', '2026-02-01 09:00:00', '2026-02-01 09:00:00'),
+            (3, 'client', 'Déjà client', 'client@exemple.test', '', '', '{}', '2026-01-01 08:00:00', '2026-01-01 08:00:00'),
+            (4, 'admin', 'Gérante', 'gerante@exemple.test', '', '', '{}', '2026-01-01 08:00:00', '2026-01-01 08:00:00')");
+        $before = $shop->query('SELECT * FROM accounts ORDER BY id')->fetchAll();
+
+        $pdo = $this->carnet('boutique-test');
+        self::assertSame(2, vs_boutique_migrate($pdo, $shop));
+        self::assertSame(0, vs_boutique_migrate($pdo, $shop), 'rejouable sans doublon');
+        $rows = $pdo->query('SELECT * FROM prospects ORDER BY id')->fetchAll();
+        self::assertCount(2, $rows);
+        self::assertSame('Camille Durand', $rows[0]['name']);
+        self::assertSame('camille@exemple.test', $rows[0]['email']);
+        self::assertSame('compte:1', $rows[0]['legacy_id']);
+        self::assertSame(['Instagram' => '@camille'], json_decode($rows[0]['custom_fields'], true));
+        self::assertSame('2026-01-05 10:00:00', $rows[0]['created_at']);
+        self::assertSame('anonyme@exemple.test', $rows[1]['business']);       // sans nom : l'adresse sert de titre à la fiche
+        self::assertSame($before, $shop->query('SELECT * FROM accounts ORDER BY id')->fetchAll(), 'les comptes ne sont pas modifiés');
+
+        // Une boutique sans table de comptes obtient simplement un carnet vide.
+        $empty = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        self::assertSame(0, vs_boutique_migrate($this->carnet('boutique-vide'), $empty));
+    }
+
+    public function testBoutiqueCarnetFileIsPerShop(): void
+    {
+        self::assertStringEndsWith('/boutiques/la-fripe.db', vs_boutique_db_file('la-fripe'));
+        self::assertNotSame(vs_boutique_db_file('boutique-a'), vs_boutique_db_file('boutique-b'));
+        self::assertSame('', vs_boutique_db_file('../x'));
     }
 }

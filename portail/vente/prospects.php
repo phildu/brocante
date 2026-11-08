@@ -3,7 +3,7 @@ require __DIR__ . '/_bootstrap.php';
 fv_require_auth();
 
 $ctx = fv_current();
-$gal = fv_is_gallery();      // carnet d'une galerie (extension « Force de vente ») : pas d'appels, de mailing ni de pitch de la plateforme
+$gal = fv_is_scoped();      // carnet d'une galerie ou d'une boutique (extension « Force de vente ») : pas d'appels, de mailing ni de pitch de la plateforme
 $member = $ctx['member'];
 $pdo = fv_db();
 $filters = [
@@ -156,7 +156,7 @@ if ($viewId > 0 && !$editing && !$isNew) {
           </div>
         </section>
 
-        <?php if ($gal): ?>
+        <?php if (fv_is_gallery()): ?>
         <?php
           $sentCount = 0;
           foreach ($timeline as $a) if ($a['kind'] === 'email' && str_starts_with((string) $a['notes'], VS_SENT_NOTE)) $sentCount++;
@@ -183,7 +183,7 @@ if ($viewId > 0 && !$editing && !$isNew) {
             <?php endif; ?>
           </div>
         </section>
-        <?php else: ?>
+        <?php elseif (!$gal): ?>
         <section class="fv-card">
           <div class="fv-card-head"><div><h2>Passer à l’action</h2></div></div>
           <div class="fv-card-body">

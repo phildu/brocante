@@ -1,0 +1,13 @@
+{
+  "id": "force-de-vente",
+  "name": "Force de vente",
+  "version": "1.0.0",
+  "description": "{Ext} payant{e} (essai gratuit) : votre carnet de prospects à vous, séparé des autres boutiques — fiches et champs personnalisés, import d'un fichier Excel, CSV ou base SQLite, tournée sur carte et journal des échanges. Les comptes « prospect » existants y sont repris.",
+  "table_prefix": "fvs_",
+  "pages": [
+    { "id": "index", "label": "Force de vente", "icon": "puzzle", "file": "pages/index.php", "roles": ["admin"] }
+  ],
+  "api": [
+    { "id": "access", "file": "api/access.php", "methods": ["GET", "POST"], "roles": ["admin"] }
+  ]
+}
