@@ -53,4 +53,25 @@ final class AppEnvTest extends TestCase
         self::assertSame('preprod', app_env_resolve('', false));
         self::assertSame('preprod', app_env_resolve('n-importe-quoi', false));
     }
+    public function testBadgeShownInLocalAndPreprodForEveryone(): void
+    {
+        self::assertStringContainsString('LOCAL', app_env_badge_html('local', false));
+        self::assertStringContainsString('PRÉPROD', app_env_badge_html('preprod', false));
+    }
+
+    public function testBadgeInProdOnlyForAdmins(): void
+    {
+        self::assertSame('', app_env_badge_html('prod', false));
+        self::assertStringContainsString('PRODUCTION', app_env_badge_html('prod', true));
+    }
+
+    public function testBadgeInsertedBeforeLastBodyTagOnly(): void
+    {
+        $badge = app_env_badge_html('preprod', false);
+        $out = app_env_badge_inject('<html><body>a</body></html>', $badge);
+        self::assertSame(1, substr_count($out, 'app-env-badge" aria-hidden'));
+        self::assertLessThan(strpos($out, '</body>'), strpos($out, 'app-env-badge'));
+        self::assertSame('{"ok":true}', app_env_badge_inject('{"ok":true}', $badge));
+        self::assertSame('<p>extrait</p>', app_env_badge_inject('<p>extrait</p>', $badge));
+    }
 }

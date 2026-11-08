@@ -85,3 +85,57 @@ function app_env_send_headers(): void
     $sent = true;
     header('X-Robots-Tag: noindex, nofollow', false);
 }
+
+/**
+ * Cartouche d'environnement : petite étiquette de couleur en haut à gauche de chaque page
+ * HTML, pour savoir d'un coup d'œil si l'on est en local (bleu), en préprod (orange) ou en
+ * prod (rouge). En prod, seuls les administrateurs connectés la voient : les visiteurs
+ * n'en voient jamais. Pure et testable : app_env_badge_html() ne lit rien d'autre que ses arguments.
+ */
+function app_env_badge_html(string $env, bool $isAdmin): string
+{
+    if ($env === 'prod' && !$isAdmin) return '';
+    [$label, $bg, $fg] = match ($env) {
+        'local'   => ['LOCAL', '#2563eb', '#ffffff'],
+        'preprod' => ['PRÉPROD', '#f59e0b', '#1f1300'],
+        'prod'    => ['PRODUCTION', '#dc2626', '#ffffff'],
+        default   => ['', '', ''],
+    };
+    if ($label === '') return '';
+    return '<div id="app-env-badge" aria-hidden="true" style="position:fixed;top:0;left:0;z-index:2147483000;'
+        . 'background:' . $bg . ';color:' . $fg . ';font:700 11px/1 system-ui,-apple-system,Segoe UI,sans-serif;'
+        . 'letter-spacing:.08em;padding:5px 10px 5px 8px;border-radius:0 0 8px 0;'
+        . 'box-shadow:0 1px 4px rgba(0,0,0,.35);pointer-events:none;user-select:none">' . $label . '</div>'
+        . '<style>@media print{#app-env-badge{display:none!important}}</style>';
+}
+
+/** Insère le cartouche avant le dernier </body> ; la page est rendue telle quelle si elle n'en a pas. */
+function app_env_badge_inject(string $html, string $badge): string
+{
+    if ($badge === '') return $html;
+    $pos = strripos($html, '</body>');
+    if ($pos === false) return $html;
+    return substr($html, 0, $pos) . $badge . substr($html, $pos);
+}
+
+/** Rappel du tampon de sortie : n'agit que sur les réponses HTML (ni JSON, ni fichiers, ni extraits sans </body>). */
+function app_env_badge_output(string $html): string
+{
+    if ($html === '') return $html;
+    foreach (headers_list() as $header) {
+        if (stripos($header, 'Content-Type:') === 0 && stripos($header, 'text/html') === false) {
+            return $html;
+        }
+    }
+    $isAdmin = session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['is_admin']);
+    return app_env_badge_inject($html, app_env_badge_html(app_env(), $isAdmin));
+}
+
+/** Active le cartouche (appelée par config.php). Sans effet en ligne de commande. */
+function app_env_enable_badge(): void
+{
+    static $done = false;
+    if ($done || PHP_SAPI === 'cli') return;
+    $done = true;
+    ob_start('app_env_badge_output');
+}
