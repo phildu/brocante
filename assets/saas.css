@@ -20,6 +20,7 @@ img { max-width: 100%; }
 .site-head { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; flex-wrap: wrap; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 1.3rem; text-decoration: none; }
+.brand-logo { height: 38px; width: auto; max-width: 150px; object-fit: contain; display: block; }
 .mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: 1.1rem; }
 .site-head nav { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .site-head nav a { text-decoration: none; padding: 8px 12px; border-radius: 10px; font-weight: 500; }

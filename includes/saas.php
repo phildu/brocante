@@ -99,6 +99,42 @@ function saas_banner_delete(string $path): void
     if (preg_match('#^uploads/saas/[a-z0-9][a-z0-9._-]*$#', $path)) @unlink(dirname(__DIR__) . '/' . $path);
 }
 
+/** Enregistre le logo de la plateforme (JPEG, PNG ou WebP, transparence conservée) dans uploads/saas/ ; rend le chemin relatif. */
+function saas_logo_store(array $file, int $maxSide = 600): string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new InvalidArgumentException(in_array($file['error'] ?? 0, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) ? 'Le logo est trop lourd pour le serveur.' : "Le logo n'a pas pu être envoyé.");
+    }
+    $info = @getimagesize((string) $file['tmp_name']);
+    if (!$info || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) {
+        throw new InvalidArgumentException('Logo non reconnu : JPEG, PNG ou WebP.');
+    }
+    if ((int) ($file['size'] ?? 0) > 5 * 1024 * 1024) throw new InvalidArgumentException('Le logo dépasse 5 Mo.');
+    $src = match ($info[2]) { IMAGETYPE_JPEG => @imagecreatefromjpeg((string) $file['tmp_name']), IMAGETYPE_PNG => @imagecreatefrompng((string) $file['tmp_name']), default => @imagecreatefromwebp((string) $file['tmp_name']) };
+    if (!$src) throw new InvalidArgumentException('Le logo est illisible.');
+    [$w, $h] = [imagesx($src), imagesy($src)];
+    $scale = min(1, $maxSide / max($w, $h));
+    $dst = imagecreatetruecolor(max(1, (int) round($w * $scale)), max(1, (int) round($h * $scale)));
+    imagealphablending($dst, false);
+    imagesavealpha($dst, true);
+    imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 0, 0, 0, 127));
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, imagesx($dst), imagesy($dst), $w, $h);
+    $dir = dirname(__DIR__) . '/uploads/saas';
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) throw new InvalidArgumentException('Dossier uploads/saas/ non inscriptible.');
+    $name = 'logo-' . bin2hex(random_bytes(4)) . '.png';
+    if (!imagepng($dst, "$dir/$name", 7)) throw new InvalidArgumentException("Le logo n'a pas pu être enregistré.");
+    return 'uploads/saas/' . $name;
+}
+
+/** Pastille de marque : le logo de la plateforme s'il existe, sinon l'initiale du nom. */
+function saas_brand_mark(array $cfg): string
+{
+    if (($cfg['logo'] ?? '') !== '') {
+        return '<img class="brand-logo" src="/' . saas_e($cfg['logo']) . '" alt="">';
+    }
+    return '<span class="mark" aria-hidden="true">' . saas_e(mb_strtoupper(mb_substr($cfg['name'], 0, 1))) . '</span>';
+}
+
 /** Réglages de la plateforme, valeurs par défaut comprises. */
 function saas_config(): array
 {
@@ -123,6 +159,7 @@ function saas_config(): array
         'name' => mb_substr(trim((string) ($saved['name'] ?? '')) ?: 'Brocs', 0, 40),
         'tagline' => mb_substr(trim((string) ($saved['tagline'] ?? '')) ?: 'Votre boutique en ligne, seule ou réunie avec d\'autres commerçants.', 0, 160),
         'contact' => filter_var((string) ($saved['contact'] ?? ''), FILTER_VALIDATE_EMAIL) ?: '',
+        'logo' => preg_match('#^uploads/saas/logo-[a-z0-9]+\.(?:png|jpg|webp)$#', (string) ($saved['logo'] ?? '')) ? (string) $saved['logo'] : '',
         'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', $accent) ? strtolower($accent) : '#b5502e',
         // Adresse IP du serveur indiquée aux boutiques qui rattachent un domaine
         // déjà acheté (enregistrement A). Vide : celle du serveur est proposée.
@@ -1200,7 +1237,7 @@ function saas_page_start(string $title, string $description, string $active = ''
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
 <header class="site-head"><div class="wrap bar">
-  <a class="brand" href="/"><span class="mark" aria-hidden="true"><?= saas_e(mb_strtoupper(mb_substr($cfg['name'], 0, 1))) ?></span><?= saas_e($cfg['name']) ?></a>
+  <a class="brand" href="/"><?= saas_brand_mark($cfg) ?><?= saas_e($cfg['name']) ?></a>
   <nav aria-label="Navigation principale">
     <?php foreach ($nav as $k => [$href, $label]): ?><a href="<?= $href ?>"<?= $active === $k ? ' aria-current="page"' : '' ?>><?= $label ?></a><?php endforeach; ?>
     <a href="/#connexion">Se connecter</a>
