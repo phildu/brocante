@@ -344,6 +344,21 @@ final class ExchangeTest extends TestCase
         self::assertFalse($g['published']);
     }
 
+    public function testGalleryHoursTravelWithoutTheAlertLog(): void
+    {
+        $this->makeGallery('rue-des-arts');
+        require_once __DIR__ . '/../includes/gallery-hours.php';
+        gh_save('rue-des-arts', null, [], 'Fermé le 25 décembre');
+        $e = exchange_gallery_export('rue-des-arts');
+        self::assertSame('Fermé le 25 décembre', $e['package']['hours']['notice']);
+        self::assertArrayNotHasKey('alerts', $e['package']['hours']);
+
+        $e['package']['hours']['notice'] = 'Ouvert tous les jours';
+        $r = exchange_gallery_import($e['package']);
+        self::assertSame([], array_filter($r['warnings'], static fn ($w) => str_contains($w, 'horaires')));
+        self::assertSame('Ouvert tous les jours', gh_read('rue-des-arts')['notice']);
+    }
+
     public function testGalleryImportWarnsAboutMissingLocalMembers(): void
     {
         $r = exchange_gallery_import(['slug' => 'avec-membres', 'name' => 'X', 'data' => ['name' => 'X', 'members' => [['type' => 'local', 'slug' => 'boutique-inexistante-xyz']]]]);

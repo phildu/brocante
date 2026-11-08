@@ -141,6 +141,10 @@ Les galeries (`data/galeries/`) et les bases des boutiques ne sont jamais envoy�
   L'option *Miroir* (supprimer les fiches absentes du paquet) est faite pour copier la prod vers la préprod, pas l'inverse.
 - Une galerie créée par l'import est **hors ligne** : la publier, régler ses options payantes, ses administrateurs et son adresse sur la cible.
 - Journal : `data/logs/echange.log` (qui a importé quoi, jamais de mot de passe). Code : `includes/exchange.php`, `portail/echange.php`.
+- **Suivre les évolutions du projet** : une nouvelle colonne d'une table qui voyage est reprise automatiquement (ajoutée à la base cible au besoin).
+  Une nouvelle table, clé de boutique ou de galerie, réglage ou fichier annexe de galerie, lui, doit être *décidé* : `tests/ExchangeGuardTest.php`
+  fait échouer la CI tant que `php scripts/exchange-baseline.php` n'a pas été relancé (et l'élément ajouté aux listes de `includes/exchange.php`
+  s'il doit voyager). Horaires de galerie (`.hours.json`) : inclus.
 - Secrets : jamais dans git (`.env.deploy.*`, `.secrets/`, `config.local.php` sont ignorés et exclus du déploiement). Les clés de chaque
   environnement se saisissent depuis son administration ; les clés **Stripe ne sont jamais partagées** entre commerces.
 

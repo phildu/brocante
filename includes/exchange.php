@@ -7,7 +7,7 @@
  *
  *   manifest.json           format, environnement d'origine, liste des éléments et des fichiers (empreinte SHA-1)
  *   shops/<identifiant>.json    boutique : réglages de présentation + tables de contenu (fiches, photos, bandeaux, livraison…)
- *   galleries/<identifiant>.json galerie : présentation, plan, membres, événement
+ *   galleries/<identifiant>.json galerie : présentation, plan, membres, événement, horaires
  *   files/<chemin>          images et vidéos citées par les éléments ci-dessus (uploads/…, assets/tenants/<boutique>/…)
  *
  * Ce qui voyage, c'est le CONTENU. Ne voyagent jamais : commandes, clients, comptes, visites, mots de passe, clés de paiement
@@ -35,6 +35,9 @@ const EXCHANGE_SHOP_CONFIG_KEYS = ['name', 'tagline', 'presence_mode', 'logo', '
 
 /** Réglages d'une galerie qui voyagent. */
 const EXCHANGE_GALLERY_KEYS = ['name', 'tagline', 'description', 'presence_mode', 'accent', 'style', 'app_icons', 'members', 'type', 'event', 'map', 'promos'];
+
+/** Fichiers annexes d'une galerie (data/galeries/<id>…) qui voyagent : les horaires. Les autres (inscriptions, attente, messages, fidélité, journal, base) restent sur place. */
+const EXCHANGE_GALLERY_FILES_CARRIED = ['.hours.json'];
 
 /** Tables de contenu d'une boutique, dans l'ordre d'écriture. */
 const EXCHANGE_SHOP_TABLES = ['content', 'products', 'product_photos', 'hero_slides', 'slideshow_slides', 'page_banners', 'media_library', 'shipping_carriers', 'shipping_rates', 'cart_discounts', 'settings'];
@@ -542,6 +545,11 @@ function exchange_gallery_export(string $slug): array
     $gallery = gallery_load($slug);
     if (!$gallery) throw new RuntimeException("Galerie introuvable : $slug");
     $package = ['kind' => 'gallery', 'slug' => $slug, 'name' => (string) $gallery['name'], 'data' => array_intersect_key($gallery, array_flip(EXCHANGE_GALLERY_KEYS))];
+    // Horaires et fermetures (sans le journal des alertes envoyées aux visiteurs).
+    if (is_file(galleries_dir() . '/' . $slug . '.hours.json')) {
+        require_once __DIR__ . '/gallery-hours.php';
+        $package['hours'] = array_diff_key(gh_read($slug), ['alerts' => 1]);
+    }
     $files = $missing = [];
     foreach (exchange_scan_paths($package) as $path) {
         if (is_file(exchange_root() . '/' . $path)) $files[] = $path; else $missing[] = $path;
@@ -569,6 +577,15 @@ function exchange_gallery_import(array $package): array
     if (!gallery_save($merged)) throw new RuntimeException("Écriture de la galerie impossible (droits sur data/galeries).");
 
     $warnings = [];
+    if (!empty($package['hours']) && is_array($package['hours'])) {
+        require_once __DIR__ . '/gallery-hours.php';
+        $hoursFile = galleries_dir() . '/' . $slug . '.hours.json';
+        if (is_file($hoursFile)) copy($hoursFile, $hoursFile . '.bak-' . date('Ymd-His'));
+        $h = $package['hours'];
+        if (!gh_save($slug, is_array($h['schedule'] ?? null) ? $h['schedule'] : null, (array) ($h['closures'] ?? []), (string) ($h['notice'] ?? ''))) {
+            $warnings[] = 'horaires non enregistrés (droits sur data/galeries)';
+        }
+    }
     foreach ((array) ($merged['members'] ?? []) as $member) {
         if (($member['type'] ?? '') === 'local' && !is_file(tenant_dir((string) $member['slug']) . '/tenant.php')) {
             $warnings[] = 'membre « ' . $member['slug'] . ' » : cette boutique n\'existe pas sur cet environnement (importez-la aussi)';
