@@ -194,6 +194,7 @@ fv_layout_start('Prospects', [
     'eyebrow' => 'Terrain · ' . $total . ' fiche' . ($total > 1 ? 's' : ''),
     'desc' => 'Le carnet de bord de la prospection : coordonnées, statut, prochaine action et historique. Chaque fiche est reliée aux appels, visites, mailings et codes.',
     'actions' => '<a class="fv-btn fv-btn-sm" href="prospects.php?export=1&amp;' . e(http_build_query(array_filter($filters))) . '">' . fv_icon('download', 14) . ' CSV</a>'
+        . '<a class="fv-btn fv-btn-sm" href="prospects-import.php">' . fv_icon('plus', 14) . ' Importer un fichier</a>'
         . '<a class="fv-btn fv-btn-sm fv-btn-primary" href="prospects.php?nouveau=1">' . fv_icon('plus', 14) . ' Nouveau prospect</a>',
 ]);
 ?>
@@ -356,7 +357,7 @@ fv_layout_start('Prospects', [
   </div>
 
   <details class="fv-card-pad" style="border-top:1px solid var(--fv-line);">
-    <summary style="cursor:pointer;font-weight:600;font-size:.86rem;">Importer des prospects (copier-coller CSV)</summary>
+    <summary style="cursor:pointer;font-weight:600;font-size:.86rem;">Importer des prospects (copier-coller CSV) — ou <a href="prospects-import.php">depuis un fichier Excel, CSV ou base SQLite</a></summary>
     <form class="fv-form" method="post" action="prospect-action.php" style="margin-top:12px;">
       <input type="hidden" name="csrf" value="<?= e(fv_csrf()) ?>">
       <input type="hidden" name="action" value="importer">
