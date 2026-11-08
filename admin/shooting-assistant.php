@@ -213,6 +213,7 @@ $dataJson = json_encode([
           <span class="sa-badge" id="sa-shot-badge"></span>
           <h2 id="sa-shot-title"></h2>
           <p id="sa-shot-tip"></p>
+          <p class="sa-shot-notice" id="sa-shot-notice" role="status" hidden></p>
           <div class="sa-shot-tools">
             <button type="button" class="btn-small sa-listen" id="sa-shot-audio">🔊 Écouter le conseil</button>
             <button type="button" class="btn-small" id="sa-shot-audio-off">🔇 Couper la voix</button>

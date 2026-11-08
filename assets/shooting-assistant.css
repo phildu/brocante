@@ -312,3 +312,7 @@
 .sa-asking .sa-preview,
 .sa-asking .sa-analysis { display: none !important; }
 .sa-intro-mute { padding: 4px 2px; }
+
+/* Photo d'ensemble gardée comme première vue : on passe directement à la suivante. */
+.sa-shot-notice { margin: 0; padding: 8px 12px; background: var(--bg); border-left: 3px solid var(--sage); font-size: 0.86rem; color: var(--ink); }
+.sa-shot-notice[hidden] { display: none !important; }

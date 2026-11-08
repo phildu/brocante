@@ -31,6 +31,8 @@
     audioAnswered: false,
     introMuted: false,
     typeAdding: null,
+    adoptedPhoto: null,
+    notice: null,
     mode: 'single',
     typeValidated: false,
     draft: [],
@@ -110,7 +112,10 @@
         b.type = 'button';
         b.dataset.type = entry[0];
         b.setAttribute('aria-pressed', String(state.manual === entry[0]));
-        b.addEventListener('click', function () { setManualType(entry[0]); });
+        b.addEventListener('click', function () {
+          setManualType(entry[0]);
+          if (id === 'sa-types') openFirstCamIfNeeded();
+        });
         box.appendChild(b);
       });
     });
@@ -199,6 +204,7 @@
 
   function pickType(key) {
     setManualType(key);
+    openFirstCamIfNeeded();
     $('sa-type-input').value = key === 'auto' ? '' : typeLabel(key);
     typeMessage(key === 'auto' ? "Type automatique : l'IA reconnaîtra la pièce." : 'Type retenu : ' + typeLabel(key) + '.');
   }
@@ -572,6 +578,10 @@
   // arrière, mode nuit, HDR, flash…). Les champs « capture » n'imposent aucune caméra : l'appareil propose la sienne
   // et on peut en changer dans l'application. Sur ordinateur, le navigateur ouvre le sélecteur de fichiers.
   function openFirstCam() { $('sa-cam-first').click(); }
+  /** Choisir un type ouvre directement l'appareil photo, tant qu'il n'y a pas de photo d'ensemble (geste de l'utilisateur). */
+  function openFirstCamIfNeeded() {
+    if (!state.photo && !state.typeAdding) openFirstCam();
+  }
   function openShotCam() { $('sa-shot-cam').click(); }
   /** Rouvre l'appareil photo pour la vue en cours si elle n'a pas encore de photo (appelé depuis un geste de l'utilisateur). */
   function openShotCamIfNeeded() {
@@ -1097,10 +1107,38 @@
   $('sa-audio-first-play').addEventListener('click', function () { playIntro(); });
 
   // ── Shooting guidé ───────────────────────────────────────────────────────
+  /**
+   * La photo d'ensemble, si elle est bonne, devient la première vue du programme (Face, Recto, Vue d'ensemble… :
+   * c'est toujours une vue générale) : on garde la photo et on passe directement à la suivante.
+   */
+  function adoptFirstPhoto() {
+    var first = state.shots[0];
+    if (!first || !state.photo) return;
+    // Photo d'ensemble reprise depuis : l'ancienne n'est plus la bonne.
+    if (first.fromFirst && state.adoptedPhoto !== state.photo) { first.blob = null; first.quality = null; first.fromFirst = false; }
+    if (first.blob) return;
+    var good = !!(state.analysis && state.analysis.ready);
+    if (!good) {
+      state.notice = { index: 0, text: "La photo d'ensemble n'était pas assez nette ou bien cadrée : reprenons « " + first.label + ' ».' };
+      return;
+    }
+    first.blob = state.photo;
+    first.fromFirst = true;
+    first.quality = null;
+    state.adoptedPhoto = state.photo;
+    localQuality(state.photo).then(function (q) { first.quality = q; });
+    if (state.current === 0) {
+      var next = state.shots.findIndex(function (x) { return !x.blob; });
+      state.current = next >= 0 ? next : state.shots.length - 1;
+    }
+    state.notice = { index: state.current, text: "Photo d'ensemble gardée comme « " + first.label + ' ». Passons à la vue suivante.' };
+  }
+
   function beginShots() {
     var p = state.program || programFor();
     var programKey = p.key || p.title;
     if (state.shots.length && state.shotsProgramKey === programKey) {
+      adoptFirstPhoto();
       showPanel('shots');
       renderShot();
       renderThumbs();
@@ -1119,11 +1157,13 @@
     });
     state.shotsProgramKey = programKey;
     state.current = 0;
+    state.notice = null;
+    adoptFirstPhoto();
     renderShot();
     renderThumbs();
     showPanel('shots');
     announceShot();
-    openShotCam();
+    openShotCamIfNeeded();
   }
 
   function currentShot() { return state.shots[state.current]; }
@@ -1135,6 +1175,10 @@
     $('sa-shot-badge').textContent = 'Vue ' + (state.current + 1) + ' / ' + total + (s.required ? ' · obligatoire' : ' · facultatif');
     $('sa-shot-title').textContent = s.label;
     $('sa-shot-tip').textContent = s.tip;
+    var notice = $('sa-shot-notice');
+    var showNotice = !!(state.notice && state.notice.index === state.current && !s.blob);
+    notice.hidden = !showNotice;
+    notice.textContent = showNotice ? state.notice.text : '';
 
     var stage = $('sa-shot-stage');
     var img = $('sa-shot-img');
@@ -1602,6 +1646,8 @@
     state.shots = [];
     state.shotsProgramKey = '';
     state.current = 0;
+    state.adoptedPhoto = null;
+    state.notice = null;
     state.keepAll = false;
     state.typeValidated = false;
     state.draft = [];
@@ -2646,7 +2692,9 @@
   }
   function announceShot() {
     var s = currentShot();
-    if (s && state.audio) speak(shotSpeech(s, state.current, state.shots.length));
+    if (!s || !state.audio) return;
+    var lead = state.notice && state.notice.index === state.current && !s.blob ? state.notice.text + ' ' : '';
+    speak(lead + shotSpeech(s, state.current, state.shots.length));
   }
   function qualitySpeech(q, s) {
     if (!q) return '';
