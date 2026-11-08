@@ -406,6 +406,36 @@ function ga_prospect_custom_fields_normalize(array $fields): array
     return $out;
 }
 
+const GA_PROSPECT_MAX = 5000;
+
+/** Fiche prospect prête à être enregistrée. */
+function ga_prospect_row(string $name, string $email, string $note, string $phone, array $customFields): array
+{
+    return ['id' => bin2hex(random_bytes(6)), 'name' => mb_substr(trim($name), 0, 100), 'email' => mb_strtolower(trim($email)), 'phone' => mb_substr(preg_replace('/[^0-9+ ().-]/', '', $phone), 0, 30), 'note' => mb_substr(trim($note), 0, 400),
+        'custom_fields' => ga_prospect_custom_fields_normalize($customFields), 'status' => 'nouveau', 'created' => time(), 'contacts' => [], 'optout' => false];
+}
+
+/**
+ * Ajoute plusieurs prospects en une seule écriture (import d'un fichier). Chaque élément : [name, email, note, phone, custom_fields]. Les adresses
+ * déjà présentes et les fiches sans nom sont ignorées. -> [nombre ajouté, message d'erreur ou null].
+ */
+function ga_prospects_add_many(string $slug, array $items): array
+{
+    $list = ga_prospects($slug);
+    $emails = [];
+    foreach ($list as $p) if (($p['email'] ?? '') !== '') $emails[$p['email']] = true;
+    $added = 0;
+    foreach ($items as [$name, $email, $note, $phone, $custom]) {
+        $email = mb_strtolower(trim((string) $email));
+        if (trim((string) $name) === '' || ($email !== '' && (!filter_var($email, FILTER_VALIDATE_EMAIL) || isset($emails[$email]))) || count($list) >= GA_PROSPECT_MAX) continue;
+        $list[] = ga_prospect_row((string) $name, $email, (string) $note, (string) $phone, (array) $custom);
+        if ($email !== '') $emails[$email] = true;
+        $added++;
+    }
+    if ($added === 0) return [0, null];
+    return ga_write($slug, 'prospects', $list) ? [$added, null] : [0, "Impossible d'enregistrer la liste."];
+}
+
 function ga_prospect_add(string $slug, string $name, string $email, string $note, string $phone = '', array $customFields = []): ?string
 {
     $email = mb_strtolower(trim($email));
@@ -414,9 +444,8 @@ function ga_prospect_add(string $slug, string $name, string $email, string $note
     if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) return 'Adresse e-mail invalide.';
     $list = ga_prospects($slug);
     if ($email !== '') foreach ($list as $p) if ($p['email'] === $email) return 'Cette adresse est déjà dans la liste.';
-    if (count($list) >= 2000) return '2 000 prospects au plus.';
-    $list[] = ['id' => bin2hex(random_bytes(6)), 'name' => $name, 'email' => $email, 'phone' => mb_substr(preg_replace('/[^0-9+ ().-]/', '', $phone), 0, 30), 'note' => mb_substr(trim($note), 0, 400),
-        'custom_fields' => ga_prospect_custom_fields_normalize($customFields), 'status' => 'nouveau', 'created' => time(), 'contacts' => [], 'optout' => false];
+    if (count($list) >= GA_PROSPECT_MAX) return number_format(GA_PROSPECT_MAX, 0, ',', ' ') . ' prospects au plus.';
+    $list[] = ga_prospect_row($name, $email, $note, $phone, $customFields);
     return ga_write($slug, 'prospects', $list) ? null : "Impossible d'enregistrer la liste.";
 }
 

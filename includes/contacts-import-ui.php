@@ -36,15 +36,16 @@ function ci_page(array $cfg): string
             if ($act === 'file') {
                 $f = $_FILES['file'] ?? null;
                 if (!$f || ($f['error'] ?? 4) !== UPLOAD_ERR_OK || !is_uploaded_file((string) ($f['tmp_name'] ?? ''))) {
-                    throw new InvalidArgumentException('Choisissez un fichier .csv, .vcf, .xls ou .xlsx.');
+                    throw new InvalidArgumentException('Choisissez un fichier .csv, .vcf, .xls, .xlsx ou .db.');
                 }
                 if (($f['size'] ?? 0) > CI_MAX_BYTES) throw new InvalidArgumentException('Fichier trop volumineux (10 Mo au plus).');
                 $filename = basename((string) ($f['name'] ?? ''));
                 $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-                if (!in_array($extension, ['csv', 'txt', 'vcf', 'xls', 'xlsx'], true)) {
-                    throw new InvalidArgumentException('Format non pris en charge : choisissez un fichier CSV, VCF, XLS ou XLSX.');
+                if (!in_array($extension, ['csv', 'txt', 'vcf', 'xls', 'xlsx', 'db', 'sqlite', 'sqlite3'], true)) {
+                    throw new InvalidArgumentException('Format non pris en charge : choisissez un fichier CSV, VCF, XLS, XLSX ou base SQLite (.db).');
                 }
-                $text = in_array($extension, ['xls', 'xlsx'], true) ? '' : ci_decode((string) file_get_contents($f['tmp_name']));
+                $binary = in_array($extension, ['xls', 'xlsx', 'db', 'sqlite', 'sqlite3'], true);
+                $text = $binary ? '' : ci_decode((string) file_get_contents($f['tmp_name']));
                 $isVcf = (bool) preg_match('/BEGIN:VCARD/i', $text);
                 if ($isVcf) {
                     $contacts = ci_contacts_from_vcf($text);
@@ -52,9 +53,9 @@ function ci_page(array $cfg): string
                 } else {
                     [$headers, $rows] = in_array($extension, ['xls', 'xlsx'], true)
                         ? ci_parse_spreadsheet((string) $f['tmp_name'])
-                        : ci_parse_csv($text);
+                        : (in_array($extension, ['db', 'sqlite', 'sqlite3'], true) ? ci_parse_sqlite((string) $f['tmp_name']) : ci_parse_csv($text));
                     if (!$headers || !$rows) throw new InvalidArgumentException('Fichier vide ou illisible : vérifiez que la première ligne contient les noms des colonnes.');
-                    [$map, $preset] = ci_guess_mapping($headers);
+                    [$map, $preset] = ci_guess_mapping($headers, !empty($cfg['auto_custom']) && !empty($cfg['allow_custom_fields']));
                     $stash = ['kind' => 'csv', 'source' => 'Fichier · ' . mb_substr($filename, 0, 60), 'headers' => $headers, 'rows' => array_slice($rows, 0, CI_MAX_ROWS), 'map' => $map, 'preset' => $preset];
                 }
                 if (empty($stash['contacts']) && $stash['kind'] === 'vcf') throw new InvalidArgumentException('Aucun contact dans ce carnet.');
@@ -105,8 +106,9 @@ function ci_page(array $cfg): string
                 if (empty($_POST['consent'])) { $error = "Cochez la confirmation : vous devez avoir le droit de contacter ces personnes."; goto preview; }
                 $contacts = ci_import_contacts($st, $cfg);
                 $role = isset($cfg['roles'][(string) ($_POST['role'] ?? '')]) ? (string) $_POST['role'] : (string) array_key_first($cfg['roles'] ?? ['' => '']);
-                $opts = ['role' => $role, 'source' => (string) $st['source']];
+                $opts = ['role' => $role, 'source' => (string) $st['source'], 'post' => $_POST];
                 $res = ci_apply($contacts, ['exists' => $cfg['exists'], 'create' => static fn ($c) => $cfg['create']($c, $opts), 'complete' => $cfg['complete']], !empty($_POST['complete']));
+                if (isset($cfg['finish'])) $cfg['finish']();      // écriture groupée (une seule pour tout le lot)
                 ci_forget($id);
                 return ci_result_html($res, $cfg, $h);
             }
@@ -138,8 +140,8 @@ function ci_page(array $cfg): string
       <div class="ci-cols">
         <form class="ci-card" method="post" enctype="multipart/form-data"><?= $cfg['csrf_html'] ?><input type="hidden" name="act" value="file">
           <h2>1. Un fichier</h2>
-          <p class="hint">CSV, carnet d'adresses <strong>.vcf</strong>, ou classeur Excel <strong>.xls/.xlsx</strong>. Les colonnes reconnues sont proposées automatiquement ; vous pouvez les faire correspondre ou créer un champ personnalisé (ex. site web).</p>
-          <label>Fichier (10 Mo, 5 000 contacts et 200 colonnes au plus)<input type="file" name="file" accept=".csv,.txt,.vcf,.xls,.xlsx,text/csv,text/vcard,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label>
+          <p class="hint">CSV, carnet d'adresses <strong>.vcf</strong>, classeur Excel <strong>.xls/.xlsx</strong> ou base SQLite <strong>.db</strong>. Les colonnes reconnues sont proposées automatiquement ; vous pouvez les faire correspondre ou créer un champ personnalisé (ex. site web).</p>
+          <label>Fichier (10 Mo, 5 000 contacts et 200 colonnes au plus)<input type="file" name="file" accept=".csv,.txt,.vcf,.xls,.xlsx,.db,.sqlite,.sqlite3,text/csv,text/vcard,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label>
           <p><button class="btn btn-primary" type="submit">Analyser le fichier</button> <a href="<?= $h($self(['modele' => '1'])) ?>">Télécharger un modèle CSV</a></p>
         </form>
         <form class="ci-card" method="post" autocomplete="off"><?= $cfg['csrf_html'] ?><input type="hidden" name="act" value="crm">
@@ -167,6 +169,9 @@ function ci_import_contacts(array $st, array $cfg): array
 {
     $contacts = $st['kind'] === 'csv' ? ci_contacts_from_rows($st['rows'], $st['map']) : $st['contacts'];
     if (!empty($cfg['require_email'])) foreach ($contacts as $k => $c) if ($c['skip'] === '' && $c['email'] === '') $contacts[$k]['skip'] = 'e-mail requis (une fiche a une adresse e-mail)';
+    if (!empty($cfg['allow_no_contact'])) {      // carnet de prospection : un commerce sans e-mail ni téléphone reste visitable (adresse, tournée)
+        foreach ($contacts as $k => $c) if ($c['skip'] === 'ni e-mail ni téléphone' && ($c['company'] !== '' || $c['name'] !== '')) $contacts[$k]['skip'] = '';
+    }
     return $contacts;
 }
 
@@ -235,6 +240,7 @@ function ci_preview_html(array $st, string $id, array $cfg, callable $h, string 
         <?php if (!empty($cfg['roles'])): ?>
           <label><?= $h($cfg['role_label'] ?? 'Ajouter comme') ?><select name="role"><?php foreach ($cfg['roles'] as $rv => $rl): ?><option value="<?= $h($rv) ?>"><?= $h($rl) ?></option><?php endforeach; ?></select></label>
         <?php endif; ?>
+        <?= (string) ($cfg['import_html'] ?? '') ?>
         <label style="font-weight:400;display:flex;gap:8px;align-items:flex-start;"><input type="checkbox" name="complete" value="1" checked style="width:auto;margin-top:3px;"> <span>Compléter les fiches déjà présentes (nom ou téléphone manquants) sans rien écraser</span></label>
         <label style="font-weight:400;display:flex;gap:8px;align-items:flex-start;"><input type="checkbox" name="consent" value="1" style="width:auto;margin-top:3px;" required> <span>Je confirme avoir le droit de contacter ces personnes (leur accord ou une relation commerciale existante), et que chacune pourra se désinscrire à tout moment.</span></label>
         <p><button class="btn btn-primary" type="submit"<?= $newN + $existN === 0 ? ' disabled' : '' ?>>Importer <?= (int) $newN ?> contact<?= $newN > 1 ? 's' : '' ?></button>
