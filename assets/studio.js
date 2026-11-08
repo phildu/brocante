@@ -783,6 +783,7 @@
   function openSheet(ref) {
     sheetRef = ref;
     $('sr-error').hidden = true;
+    $('sp').open = false; pack = null;
     api({ action: 'get', ref: ref }).then(function (res) {
       if (!res.ok) { toast(res.error || 'Pièce introuvable.'); return; }
       var p = res.product;
@@ -807,6 +808,80 @@
       dlg.querySelector('.sr-body').scrollTop = 0;
     });
   }
+  // ── Pack d'annonce (Vinted, Leboncoin) ────────────────────────────────────
+  // Texte et photos prêts pour une mise en ligne à la main : les valeurs de la relecture (même non enregistrées) servent de base.
+  var pack = null, packPlatform = 'vinted', packFiles = null;
+  function packFields() {
+    return { name: $('sr-name').value, price: $('sr-price').value, weight_grams: $('sr-weight').value || '0', cat: $('sr-cat').value, description: $('sr-desc').value, materials: $('sr-materials').value, colors: $('sr-colors').value, brand: $('sr-brand').value, etat: $('sr-etat').value, size_text: $('sr-size').value };
+  }
+  function copyText(text, label) {
+    var done = function () { toast((label || 'Texte') + ' copié.'); };
+    var fallback = function () {
+      var t = el('textarea'); t.value = text; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); done(); } catch (e) { toast('Copie impossible : sélectionnez le texte à la main.'); }
+      t.remove();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+  }
+  function renderPack() {
+    if (!pack) return;
+    var t = pack.texts[packPlatform];
+    $('sp-title').value = t.title; $('sp-price').value = t.price; $('sp-cond').value = t.condition; $('sp-desc').value = t.description;
+    var max = packPlatform === 'vinted' ? [100, 2000] : [70, 4000];
+    $('sp-title-count').textContent = t.title.length + ' / ' + max[0];
+    $('sp-desc-count').textContent = t.description.length + ' / ' + max[1];
+    document.querySelectorAll('#sp-tabs [data-platform]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.platform === packPlatform)); });
+    $('sp-status').hidden = true; $('sp-text').hidden = false;
+  }
+  function loadPack() {
+    pack = null; packFiles = null;
+    $('sp-text').hidden = true; $('sp-photos-box').hidden = true;
+    $('sp-status').hidden = false; $('sp-status').textContent = 'Chargement…';
+    var fd = new FormData(); var f = packFields();
+    fd.append('action', 'pack'); fd.append('ref', sheetRef);
+    Object.keys(f).forEach(function (k) { fd.append(k, f[k]); });
+    api(fd).then(function (res) {
+      if (!res.ok) { $('sp-status').textContent = res.network ? 'Connexion perdue : réessayez.' : (res.error || 'Pack impossible.'); return; }
+      pack = res; renderPack();
+      var box = $('sp-photos'); box.textContent = '';
+      res.photos.forEach(function (ph, i) {
+        var a = el('a'); a.href = '/' + ph.path; a.download = ph.name; a.setAttribute('aria-label', 'Enregistrer ' + ph.label);
+        var img = el('img'); img.src = '/' + ph.path; img.alt = ph.label; img.loading = 'lazy';
+        a.appendChild(img); a.appendChild(el('span', '', String(i + 1))); box.appendChild(a);
+      });
+      $('sp-photos-title').textContent = res.photos.length ? plural(res.photos.length, 'photo du shooting', 'photos du shooting') + ' (la principale en premier)' : 'Aucune photo du shooting sur cette pièce';
+      $('sp-photos-box').hidden = false;
+      $('sp-zip').hidden = !res.zip || !res.photos.length;
+      $('sp-share').hidden = !res.photos.length || !navigator.share || !navigator.canShare;
+    });
+  }
+  $('sp').addEventListener('toggle', function () { if (this.open && sheetRef) loadPack(); });
+  document.querySelectorAll('#sp-tabs [data-platform]').forEach(function (b) { b.addEventListener('click', function () { packPlatform = b.dataset.platform; renderPack(); }); });
+  document.querySelectorAll('#sp [data-copy]').forEach(function (b) {
+    b.addEventListener('click', function () { var f = $(b.dataset.copy); copyText(f.value, f.id === 'sp-desc' ? 'Description' : 'Texte'); });
+  });
+  $('sp-copy-all').addEventListener('click', function () { if (pack) copyText(pack.texts[packPlatform].plain, 'Annonce'); });
+  $('sp-share').addEventListener('click', function () {
+    if (!pack || !pack.photos.length) return;
+    var btn = this, label = btn.textContent; btn.disabled = true; btn.textContent = 'Préparation des photos…';
+    (packFiles ? Promise.resolve(packFiles) : Promise.all(pack.photos.map(function (ph) {
+      return fetch('/' + ph.path, { credentials: 'same-origin' }).then(function (r) { return r.blob(); }).then(function (b) { return new File([b], ph.name, { type: b.type || 'image/jpeg' }); });
+    }))).then(function (files) {
+      packFiles = files;
+      var data = { files: files, title: pack.texts[packPlatform].title };
+      if (!navigator.canShare(data)) { toast('Ce téléphone ne peut pas partager ces photos : touchez-les une à une.'); return; }
+      return navigator.share(data).catch(function () {});
+    }).catch(function () { toast('Photos indisponibles : vérifiez la connexion.'); })
+      .then(function () { btn.disabled = false; btn.textContent = label; });
+  });
+  $('sp-zip').addEventListener('click', function () {
+    if (!sheetRef) return;
+    var form = el('form'); form.method = 'post'; form.action = '/admin/studio-pack.php'; form.hidden = true;
+    var f = packFields(); f.ref = sheetRef;
+    Object.keys(f).forEach(function (k) { var i = el('input'); i.type = 'hidden'; i.name = k; i.value = f[k]; form.appendChild(i); });
+    document.body.appendChild(form); form.submit(); form.remove();
+  });
+
   $('sr-measure').addEventListener('click', function () {
     if (!window.studioMeasure) return;
     var qa = document.querySelector('.qa');

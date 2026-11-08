@@ -6,6 +6,7 @@ require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/connect.php';
 require_once __DIR__ . '/capture.php';
 require_once __DIR__ . '/studio.php';
+require_once __DIR__ . '/resale-pack.php';
 require_once __DIR__ . '/prompts.php';
 require_once __DIR__ . '/universes.php';
 require_once __DIR__ . '/comparables.php';
