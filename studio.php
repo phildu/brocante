@@ -194,10 +194,6 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
               <button type="button" data-kind="media" aria-pressed="false">📚 Média</button>
             </div>
             <p class="sb-guide" id="sb-guide"></p>
-            <div class="sb-view">
-              <video id="sb-video" playsinline muted autoplay></video>
-              <div class="sb-flash" id="sb-flash"></div>
-            </div>
             <div class="sb-chips" id="sb-chips" aria-live="polite"></div>
             <div class="sb-strip" id="sb-strip" aria-label="Photos de la pièce en cours"></div>
             <div class="sb-extras">
@@ -205,7 +201,8 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
               <button type="button" class="sb-extra" id="sb-detail" aria-pressed="false"><?= $ico('<circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2M11 8.5v5M8.5 11h5"/>') ?><span>Gros plan</span></button>
               <button type="button" class="sb-extra" id="sb-measure"><?= $ico('<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>') ?><span>Mesure</span></button>
               <button type="button" class="sb-extra" id="sb-rec"><?= $ico('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>') ?><span>Vidéo</span></button>
-              <input type="file" id="sb-video-file" accept="video/*" capture="environment" hidden>
+              <input type="file" id="sb-video-file" accept="video/*" capture hidden>
+              <input type="file" id="sb-native-cam" accept="image/*" capture hidden>
             </div>
             <div class="sb-controls">
               <label class="sb-side" for="sb-gallery" aria-label="Ajouter depuis la galerie"><?= $ico('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>') ?><span>Galerie</span></label>

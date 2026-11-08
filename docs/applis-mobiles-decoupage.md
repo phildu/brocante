@@ -70,7 +70,7 @@ les quatre applications s'en servent :
 
 | Module | Contenu actuel | Servira à |
 |--------|----------------|-----------|
-| `camera` | `ensureStream`, capture, caméra native `capture=environment` | Studio, Caisse (scan code-barres), Vide-grenier (scan QR) |
+| `camera` | Appareil photo et caméra **natifs** de l'appareil (champs `capture`, aucune caméra intégrée à la page). Seuls les lecteurs de code (code-barres, QR) gardent un aperçu en direct, car lire un code l'exige | Studio ; Caisse et Vide-grenier pour la lecture de codes |
 | `voice` | `speak`, `listenMode`, validation vocale | Studio, Caisse (saisie mains libres) |
 | `upload` | `post`, `shrink`, envoi vidéo par morceaux | Studio |
 | `queue` | *à créer* : file d'envoi hors ligne | Studio, Caisse |
