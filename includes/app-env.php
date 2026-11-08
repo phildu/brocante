@@ -127,7 +127,8 @@ function app_env_badge_output(string $html): string
             return $html;
         }
     }
-    $isAdmin = session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['is_admin']);
+    $isAdmin = session_status() === PHP_SESSION_ACTIVE
+        && (!empty($_SESSION['is_admin']) || !empty($_SESSION['portail_user']) || !empty($_SESSION['gallery_admin']));
     return app_env_badge_inject($html, app_env_badge_html(app_env(), $isAdmin));
 }
 
