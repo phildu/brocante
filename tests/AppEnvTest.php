@@ -26,6 +26,27 @@ final class AppEnvTest extends TestCase
         self::assertSame('local', app_env_resolve('', true));
     }
 
+    public function testIndexationNeedsProdAndOpenSwitch(): void
+    {
+        self::assertTrue(app_indexation_allowed('prod', true));
+        self::assertFalse(app_indexation_allowed('prod', false));
+        self::assertFalse(app_indexation_allowed('preprod', true));
+        self::assertFalse(app_indexation_allowed('local', true));
+    }
+
+    public function testCommittedSwitchIsClosed(): void
+    {
+        // Garde-fou : l'ouverture à l'indexation ne se commite que sur le « go » de l'utilisateur.
+        self::assertFalse(require __DIR__ . '/../includes/indexation.php');
+    }
+
+    public function testRobotsTxt(): void
+    {
+        self::assertSame("User-agent: *\nDisallow: /\n", app_robots_txt(false));
+        self::assertStringNotContainsString("Disallow: /\n", app_robots_txt(true));
+        self::assertStringContainsString('Disallow: /admin/', app_robots_txt(true));
+    }
+
     public function testUndeclaredServerIsNeverProd(): void
     {
         self::assertSame('preprod', app_env_resolve(null, false));

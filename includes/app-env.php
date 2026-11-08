@@ -50,11 +50,36 @@ function app_is_prod(): bool
 }
 
 /**
- * Hors production, le site ne doit jamais être indexé par les moteurs de recherche.
- * (Les fichiers statiques sont couverts par le robots.txt que le déploiement dépose en préprod.)
+ * Indexation autorisée ? Seulement en production ET quand l'interrupteur includes/indexation.php vaut true (« go » de
+ * l'utilisateur). Pure (testable) : l'environnement et l'état de l'interrupteur sont passés en paramètres.
+ */
+function app_indexation_allowed(string $env, bool $switchOpen): bool
+{
+    return $env === 'prod' && $switchOpen;
+}
+
+/** État réel : environnement courant + interrupteur versionné (includes/indexation.php, fermé par défaut). */
+function app_indexation_open(): bool
+{
+    $file = __DIR__ . '/indexation.php';
+    $switch = is_file($file) && (include $file) === true;
+    return app_indexation_allowed(app_env(), $switch);
+}
+
+/** Contenu de /robots.txt : tout interdit tant que l'indexation n'est pas ouverte, sinon seules les zones privées le sont. */
+function app_robots_txt(bool $open): string
+{
+    if (!$open) return "User-agent: *\nDisallow: /\n";
+    return "User-agent: *\nDisallow: /admin/\nDisallow: /portail/\nDisallow: /api/\n";
+}
+
+/**
+ * Le site ne doit être indexé par les moteurs de recherche qu'en production après le « go » de l'utilisateur ;
+ * partout ailleurs (et en production tant que l'interrupteur est fermé), chaque page PHP porte noindex.
+ * (Les fichiers statiques sont couverts par /robots.txt, servi par robots.php.)
  */
 function app_env_send_headers(): void
 {
-    if (PHP_SAPI === 'cli' || app_is_prod() || headers_sent()) return;
+    if (PHP_SAPI === 'cli' || app_indexation_open() || headers_sent()) return;
     header('X-Robots-Tag: noindex, nofollow', false);
 }
