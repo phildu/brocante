@@ -62,10 +62,17 @@ echo "Indexation"
 if [ "$EXPECT" = "prod" ]; then fetch "/"; else fetch "/health.php"; fi
 robots="$(header x-robots-tag)"
 if [ "$EXPECT" = "prod" ]; then
-  case "$robots" in *noindex*) fail "prod en noindex ($robots)" "la prod ne serait pas référencée : vérifier .app-env" ;; *) pass "prod indexable" ;; esac
+  # La prod est fermée aux robots tant que includes/indexation.php vaut false (« go indexation » de l'utilisateur pour l'ouvrir).
+  OPEN="$(php -r 'echo (include $argv[1]) === true ? "open" : "closed";' "$(cd "$(dirname "$0")/.." && pwd)/includes/indexation.php" 2>/dev/null || echo closed)"
   fetch "/robots.txt"
-  if [ "$STATUS" = "200" ] && grep -qiE '^Disallow:[[:space:]]*/[[:space:]]*$' "$TMP/b"; then
-    fail "robots.txt de la prod interdit tout" "robots.txt de préprod resté en place ? le supprimer ou le remplacer"
+  if [ "$OPEN" = "open" ]; then
+    case "$robots" in *noindex*) fail "prod en noindex ($robots)" "la prod ne serait pas référencée : vérifier .app-env" ;; *) pass "prod indexable" ;; esac
+    if [ "$STATUS" = "200" ] && grep -qiE '^Disallow:[[:space:]]*/[[:space:]]*$' "$TMP/b"; then
+      fail "robots.txt de la prod interdit tout" "robots.txt de préprod resté en place ? le supprimer ou le remplacer"
+    fi
+  else
+    case "$robots" in *noindex*) pass "prod fermée aux robots : X-Robots-Tag noindex" ;; *) fail "prod indexable alors que l'indexation est fermée" "includes/indexation.php non pris en compte ?" ;; esac
+    if [ "$STATUS" = "200" ] && grep -qiE '^Disallow:[[:space:]]*/[[:space:]]*$' "$TMP/b"; then pass "robots.txt : Disallow /"; else fail "robots.txt de la prod n'interdit pas tout" "robots.php non servi ? (cache Cloudflare : jusqu'à 4 h)"; fi
   fi
 else
   case "$robots" in *noindex*) pass "X-Robots-Tag: noindex" ;; *) fail "pas de noindex hors production" "includes/app-env.php non pris en compte ?" ;; esac
