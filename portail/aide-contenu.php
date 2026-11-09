@@ -34,6 +34,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
+/** Champs complets d'un tutoriel (création, ou tutoriel ajouté dans le portail) : lignes d'étapes et d'erreurs, extensibles sans rechargement. */
+function ac_tutorial_fields(array $row, array $roles): void
+{
+    $steps = array_values((array) ($row['etapes'] ?? []));
+    $errors = array_values((array) ($row['erreurs'] ?? []));
+    // Toujours une ligne vide de plus que l'existant (3 étapes et 1 erreur au minimum), pour continuer sans JavaScript.
+    $stepRows = max(3, count($steps) + 1);
+    $errorRows = max(1, count($errors) + 1);
+    while (count($steps) < $stepRows) $steps[] = [];
+    while (count($errors) < $errorRows) $errors[] = [];
+    ?>
+    <label class="field">Titre<input type="text" name="titre" maxlength="200" required value="<?= e($row['titre'] ?? '') ?>"></label>
+    <label class="field">Résumé (une ou deux phrases)<textarea name="resume" maxlength="600" required><?= e($row['resume'] ?? '') ?></textarea></label>
+    <label class="field">Pour qui<select name="role"><?php foreach ($roles as $rk => $rl): ?><option value="<?= e($rk) ?>"<?= ($row['role'] ?? 'tous') === $rk ? ' selected' : '' ?>><?= e($rl) ?></option><?php endforeach; ?></select></label>
+    <label class="field">Avant de commencer (un prérequis par ligne)<textarea name="prerequis" maxlength="2400"><?= e(implode("\n", (array) ($row['prerequis'] ?? []))) ?></textarea></label>
+    <label class="field">Page concernée (adresse du site, facultatif, ex. /portail/galeries.php)<input type="text" name="url_cible" maxlength="200" value="<?= e($row['url_cible'] ?? '') ?>"></label>
+    <label class="field">Mots-clés (séparés par des virgules, pour la recherche)<input type="text" name="mots_cles" maxlength="400" value="<?= e(implode(', ', (array) ($row['mots_cles'] ?? []))) ?>"></label>
+    <fieldset class="ac-rows" data-rows="etapes"><legend>Étapes</legend>
+      <?php foreach ($steps as $n => $st): ?>
+        <div class="ac-step" data-row>
+          <strong>Étape <span data-num><?= $n + 1 ?></span></strong>
+          <label class="field">Titre<input type="text" name="etapes[<?= $n ?>][titre]" maxlength="160" value="<?= e($st['titre'] ?? '') ?>"></label>
+          <label class="field">Texte<textarea name="etapes[<?= $n ?>][texte]" maxlength="1500"><?= e($st['texte'] ?? '') ?></textarea></label>
+          <label class="field">Ce que l’on doit voir à l’écran (facultatif)<input type="text" name="etapes[<?= $n ?>][a_voir]" maxlength="300" value="<?= e($st['a_voir'] ?? '') ?>"></label>
+          <label class="field">Lien « Ouvrir cette page » (facultatif)<input type="text" name="etapes[<?= $n ?>][lien]" maxlength="200" value="<?= e($st['lien'] ?? '') ?>"></label>
+        </div>
+      <?php endforeach; ?>
+      <button type="button" class="btn" data-add-row>+ Ajouter une étape</button>
+    </fieldset>
+    <fieldset class="ac-rows" data-rows="erreurs"><legend>Erreurs fréquentes (facultatif)</legend>
+      <?php foreach ($errors as $n => $er): ?>
+        <div class="ac-step" data-row>
+          <label class="field">Symptôme<input type="text" name="erreurs[<?= $n ?>][symptome]" maxlength="300" value="<?= e($er['symptome'] ?? '') ?>"></label>
+          <label class="field">Cause<input type="text" name="erreurs[<?= $n ?>][cause]" maxlength="300" value="<?= e($er['cause'] ?? '') ?>"></label>
+          <label class="field">Solution<input type="text" name="erreurs[<?= $n ?>][solution]" maxlength="500" value="<?= e($er['solution'] ?? '') ?>"></label>
+        </div>
+      <?php endforeach; ?>
+      <button type="button" class="btn" data-add-row>+ Ajouter une erreur</button>
+    </fieldset>
+    <?php
+}
+
 $rows = aide_edit_rows($type);
 $flash = portail_flash();
 $roles = ['vendeur' => 'Vendeur', 'organisateur' => 'Organisateur', 'visiteur' => 'Visiteur', 'commune' => 'Commune', 'tous' => 'Général'];
@@ -72,6 +114,8 @@ $pageTitle = 'Contenu de l’aide';
   .ac-tag { font-size: .7rem; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); white-space: nowrap; }
   .ac-tag.is-changed { border-color: var(--accent); color: var(--accent); }
   .ac-step { border-left: 3px solid var(--line); padding-left: 12px; display: grid; gap: 8px; }
+  .ac-rows { border: 1px solid var(--line); border-radius: var(--radius, 10px); padding: 10px 12px; display: grid; gap: 12px; }
+  .ac-rows legend { font-weight: 600; padding: 0 6px; }
   .ac-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .ac-add { margin: 14px 0 6px; }
   .ac-add > summary { cursor: pointer; font-weight: 600; }
@@ -94,14 +138,15 @@ $pageTitle = 'Contenu de l’aide';
   <p class="hint"><?= count($rows) ?> fiche<?= count($rows) > 1 ? 's' : '' ?> · <?= $counts['changed'] ?> corrigée<?= $counts['changed'] > 1 ? 's' : '' ?> · <?= $counts['hidden'] ?> cachée<?= $counts['hidden'] > 1 ? 's' : '' ?> · <?= $counts['added'] ?> ajoutée<?= $counts['added'] > 1 ? 's' : '' ?>
     · <a href="/aide/" target="_blank" rel="noopener">Ouvrir le centre d’aide</a></p>
 
-  <?php if ($type !== 'tutoriels'): ?>
   <details class="ac-item ac-add">
-    <summary><strong><?= $type === 'faq' ? '+ Ajouter une question' : '+ Ajouter un terme' ?></strong></summary>
+    <summary><strong><?= $type === 'faq' ? '+ Ajouter une question' : ($type === 'tutoriels' ? '+ Créer un tutoriel' : '+ Ajouter un terme') ?></strong></summary>
     <form method="post" action="/portail/aide-contenu.php?s=<?= e($type) ?>">
       <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
       <input type="hidden" name="type" value="<?= e($type) ?>">
       <input type="hidden" name="action" value="add">
-      <?php if ($type === 'faq'): ?>
+      <?php if ($type === 'tutoriels'): ?>
+        <?php ac_tutorial_fields([], $roles); ?>
+      <?php elseif ($type === 'faq'): ?>
         <label class="field">Question<input type="text" name="question" maxlength="200" required></label>
         <label class="field">Réponse<textarea name="reponse" maxlength="2000" required></textarea></label>
         <label class="field">Pour qui<select name="role"><?php foreach ($roles as $rk => $rl): ?><option value="<?= e($rk) ?>"<?= $rk === 'tous' ? ' selected' : '' ?>><?= e($rl) ?></option><?php endforeach; ?></select></label>
@@ -111,10 +156,9 @@ $pageTitle = 'Contenu de l’aide';
         <label class="field">Définition<textarea name="definition" maxlength="1000" required></textarea></label>
         <label class="field">Exemple (facultatif)<textarea name="exemple" maxlength="500"></textarea></label>
       <?php endif; ?>
-      <div class="ac-actions"><button class="btn btn-primary" type="submit">Ajouter</button></div>
+      <div class="ac-actions"><button class="btn btn-primary" type="submit"><?= $type === 'tutoriels' ? 'Créer le tutoriel' : 'Ajouter' ?></button></div>
     </form>
   </details>
-  <?php endif; ?>
 
   <div class="ac-tools"><input type="search" id="ac-filter" placeholder="Filtrer les fiches…" aria-label="Filtrer les fiches"></div>
 
@@ -142,6 +186,8 @@ $pageTitle = 'Contenu de l’aide';
           <p style="margin:0;"><strong><?= e($row['terme'] ?? '') ?></strong></p>
           <label class="field">Définition<textarea name="definition" maxlength="1000" required><?= e($row['definition'] ?? '') ?></textarea></label>
           <label class="field">Exemple (facultatif)<textarea name="exemple" maxlength="500"><?= e($row['exemple'] ?? '') ?></textarea></label>
+        <?php elseif ($r['added']): ?>
+          <?php ac_tutorial_fields($row, $roles); ?>
         <?php else: ?>
           <label class="field">Titre<input type="text" name="titre" maxlength="200" required value="<?= e($row['titre'] ?? '') ?>"></label>
           <label class="field">Résumé<textarea name="resume" maxlength="600" required><?= e($row['resume'] ?? '') ?></textarea></label>
@@ -179,6 +225,22 @@ $pageTitle = 'Contenu de l’aide';
   input.addEventListener('input', function () {
     var q = strip(input.value.trim());
     items.forEach(function (el, i) { el.hidden = q !== '' && texts[i].indexOf(q) === -1; });
+  });
+  // Lignes extensibles (étapes, erreurs fréquentes) : « + Ajouter » clone la dernière ligne, vide, et renumérote.
+  document.querySelectorAll('[data-rows]').forEach(function (box) {
+    var kind = box.getAttribute('data-rows');
+    box.querySelector('[data-add-row]').addEventListener('click', function () {
+      var rows = box.querySelectorAll('[data-row]');
+      var copy = rows[rows.length - 1].cloneNode(true);
+      var n = rows.length;
+      copy.querySelectorAll('input, textarea').forEach(function (f) {
+        f.value = '';
+        f.name = f.name.replace(/\[\d+\]/, '[' + n + ']');
+      });
+      var num = copy.querySelector('[data-num]'); if (num) num.textContent = n + 1;
+      box.insertBefore(copy, this);
+      var first = copy.querySelector('input'); if (first) first.focus();
+    });
   });
   if (location.hash) { var t = document.querySelector(location.hash); if (t && t.tagName === 'DETAILS') t.open = true; }
 })();

@@ -145,4 +145,64 @@ final class AideEditionTest extends TestCase
         $titres = array_column(aide_import_faq(), 'titre');
         self::assertContains('Zorglub ?', $titres);
     }
+    private function tutorialInput(array $over = []): array
+    {
+        return array_merge([
+            'titre' => 'Publier une annonce', 'resume' => 'Mettre une annonce en ligne en trois clics.', 'role' => 'vendeur',
+            'prerequis' => "Une boutique ouverte\n\n  Une photo  ", 'url_cible' => '/admin/index.php?s=pieces', 'mots_cles' => 'annonce, publier',
+            'etapes' => [
+                0 => ['titre' => 'Ouvrir l’administration', 'texte' => 'Allez sur /admin/.', 'a_voir' => 'Le tableau de bord', 'lien' => '/admin/'],
+                1 => ['titre' => '', 'texte' => '', 'a_voir' => '', 'lien' => ''],
+                2 => ['titre' => 'Publier', 'texte' => 'Cliquez sur Publier.', 'a_voir' => '', 'lien' => 'https://evil.example/'],
+            ],
+            'erreurs' => [0 => ['symptome' => 'Rien ne s’affiche', 'cause' => '', 'solution' => 'Rechargez la page.'], 1 => ['symptome' => '', 'cause' => '', 'solution' => '']],
+        ], $over);
+    }
+
+    private function tutorial(string $slug): ?array
+    {
+        foreach (aide_import_tutoriels() as $row) {
+            if ($row['slug'] === $slug) return $row;
+        }
+        return null;
+    }
+
+    public function testCreateTutorialAppearsWithStepsAndErrors(): void
+    {
+        self::assertNull(aide_edit_add('tutoriels', $this->tutorialInput()));
+        $t = $this->tutorial('perso-publier-une-annonce');
+        self::assertNotNull($t);
+        self::assertSame('vendeur', $t['role']);
+        self::assertSame(['Une boutique ouverte', 'Une photo'], $t['prerequis']);
+        self::assertCount(2, $t['etapes']);
+        self::assertSame('/admin/', $t['etapes'][0]['lien']);
+        self::assertSame('Le tableau de bord', $t['etapes'][0]['ecran']);
+        self::assertSame('', $t['etapes'][1]['lien'], 'un lien externe est refusé');
+        self::assertCount(1, $t['erreurs']);
+        self::assertSame('/admin/index.php?s=pieces', $t['url_cible']);
+        self::assertContains('perso-publier-une-annonce', array_column(aide_import_tutoriels(), 'slug'));
+    }
+
+    public function testCreateTutorialNeedsAStepAndCompleteRows(): void
+    {
+        self::assertSame('Ajoutez au moins une étape.', aide_edit_add('tutoriels', $this->tutorialInput(['etapes' => [['titre' => '', 'texte' => '']]])));
+        self::assertSame('L’étape 1 a besoin d’un titre et d’un texte.', aide_edit_add('tutoriels', $this->tutorialInput(['etapes' => [['titre' => 'Seul', 'texte' => '']]])));
+        self::assertSame('L’erreur fréquente 1 a besoin d’un symptôme et d’une solution.', aide_edit_add('tutoriels', $this->tutorialInput(['erreurs' => [['symptome' => 'x', 'solution' => '']]])));
+        self::assertSame('Le titre est vide.', aide_edit_add('tutoriels', $this->tutorialInput(['titre' => ' '])));
+        self::assertFileDoesNotExist($this->file);
+    }
+
+    public function testCreatedTutorialSlugsAreUniqueAndEditable(): void
+    {
+        aide_edit_add('tutoriels', $this->tutorialInput());
+        aide_edit_add('tutoriels', $this->tutorialInput());
+        self::assertSame(['perso-publier-une-annonce', 'perso-publier-une-annonce-2'], array_column(aide_edit_load()['tutoriels']['ajouts'], 'slug'));
+        self::assertNull(aide_edit_update('tutoriels', 'perso-publier-une-annonce-2', $this->tutorialInput(['titre' => 'Titre revu', 'etapes' => [['titre' => 'Seule étape', 'texte' => 'Voilà.']]])));
+        $t = $this->tutorial('perso-publier-une-annonce-2');
+        self::assertSame('Titre revu', $t['titre']);
+        self::assertCount(1, $t['etapes']);
+        self::assertNull(aide_edit_delete_added('tutoriels', 'perso-publier-une-annonce-2'));
+        self::assertNull($this->tutorial('perso-publier-une-annonce-2'));
+        self::assertNotNull($this->tutorial('perso-publier-une-annonce'));
+    }
 }

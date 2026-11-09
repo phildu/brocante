@@ -8,7 +8,7 @@
  *
  * Pour chaque type (faq, glossaire, tutoriels) le fichier d'édition garde :
  *   modifs  : clé de la fiche => champs corrigés (seuls ceux qui diffèrent de la base),
- *   ajouts  : fiches créées dans le portail (FAQ et glossaire),
+ *   ajouts  : fiches créées dans le portail (questions, termes du glossaire, tutoriels),
  *   masques : clés des fiches de la base cachées du centre d'aide.
  *
  * Ce fichier ne dépend d'aucun autre : il peut être chargé par n'importe quelle page.
@@ -141,9 +141,10 @@ function aide_edit_merge(array $row, array $modif): array
 }
 
 /** Champs saisis, nettoyés. -> [champs, erreur]. Pour un tutoriel, $base sert à borner les étapes. */
-function aide_edit_clean_fields(string $type, array $in, array $base = []): array
+function aide_edit_clean_fields(string $type, array $in, array $base = [], bool $full = false): array
 {
     $role = in_array($in['role'] ?? '', AIDE_EDIT_ROLES, true) ? (string) $in['role'] : 'tous';
+    if ($type === 'tutoriels' && $full) return aide_edit_clean_tutorial($in, $role);
     if ($type === 'faq') {
         $f = ['question' => aide_edit_clean($in['question'] ?? '', 200), 'reponse' => aide_edit_clean($in['reponse'] ?? '', 2000, true), 'role' => $role,
             'mots_cles' => aide_edit_keywords($in['mots_cles'] ?? '')];
@@ -166,6 +167,68 @@ function aide_edit_clean_fields(string $type, array $in, array $base = []): arra
         $texte = aide_edit_clean($s['texte'] ?? '', 1500, true);
         if ($titre === '' || $texte === '') return [[], 'L’étape ' . ($i + 1) . ' ne peut pas avoir un titre ou un texte vide.'];
         $f['etapes'][$i] = ['titre' => $titre, 'texte' => $texte];
+    }
+    return [$f, null];
+}
+
+/** Adresse interne d'une page du site (« /portail/… ») ; toute autre forme est ignorée. */
+function aide_edit_clean_path(mixed $value): string
+{
+    $p = aide_edit_clean($value, 200);
+    return preg_match('#^/[a-z0-9][a-z0-9/._?=&%-]*$#i', $p) ? $p : '';
+}
+
+/** Lignes d'un champ « une par ligne » (prérequis) : vides ignorées, 12 au plus. */
+function aide_edit_lines(mixed $value, int $max = 300): array
+{
+    $out = [];
+    foreach (explode("\n", str_replace("\r", '', is_scalar($value) ? (string) $value : '')) as $line) {
+        $l = aide_edit_clean($line, $max);
+        if ($l !== '') $out[] = $l;
+        if (count($out) >= 12) break;
+    }
+    return $out;
+}
+
+/**
+ * Tutoriel complet (création, ou fiche ajoutée dans le portail) : prérequis, étapes (titre, texte, écran à voir, lien), erreurs fréquentes.
+ * Les lignes vides sont ignorées ; une ligne à moitié remplie est refusée. -> [champs, erreur].
+ */
+function aide_edit_clean_tutorial(array $in, string $role): array
+{
+    $f = ['titre' => aide_edit_clean($in['titre'] ?? '', 200), 'resume' => aide_edit_clean($in['resume'] ?? '', 600, true), 'role' => $role,
+        'prerequis' => aide_edit_lines($in['prerequis'] ?? ''), 'url_cible' => aide_edit_clean_path($in['url_cible'] ?? ''),
+        'mots_cles' => aide_edit_keywords($in['mots_cles'] ?? ''), 'etapes' => [], 'erreurs' => []];
+    if ($f['titre'] === '') return [[], 'Le titre est vide.'];
+    if ($f['resume'] === '') return [[], 'Le résumé est vide.'];
+    $n = 0;
+    foreach (array_values((array) ($in['etapes'] ?? [])) as $s) {
+        if (!is_array($s)) continue;
+        $titre = aide_edit_clean($s['titre'] ?? '', 160);
+        $texte = aide_edit_clean($s['texte'] ?? '', 1500, true);
+        $ecran = aide_edit_clean($s['a_voir'] ?? '', 300);
+        $lien = aide_edit_clean_path($s['lien'] ?? '');
+        if ($titre === '' && $texte === '' && $ecran === '' && trim((string) ($s['lien'] ?? '')) === '') continue;
+        $n++;
+        if ($titre === '' || $texte === '') return [[], 'L’étape ' . $n . ' a besoin d’un titre et d’un texte.'];
+        $step = ['titre' => $titre, 'texte' => $texte];
+        if ($ecran !== '') $step['a_voir'] = $ecran;
+        if ($lien !== '') $step['lien'] = $lien;
+        $f['etapes'][] = $step;
+        if ($n >= 20) break;
+    }
+    if (!$f['etapes']) return [[], 'Ajoutez au moins une étape.'];
+    $n = 0;
+    foreach (array_values((array) ($in['erreurs'] ?? [])) as $s) {
+        if (!is_array($s)) continue;
+        $symptome = aide_edit_clean($s['symptome'] ?? '', 300);
+        $cause = aide_edit_clean($s['cause'] ?? '', 300);
+        $solution = aide_edit_clean($s['solution'] ?? '', 500);
+        if ($symptome === '' && $cause === '' && $solution === '') continue;
+        $n++;
+        if ($symptome === '' || $solution === '') return [[], 'L’erreur fréquente ' . $n . ' a besoin d’un symptôme et d’une solution.'];
+        $f['erreurs'][] = ['symptome' => $symptome, 'cause' => $cause, 'solution' => $solution];
+        if ($n >= 10) break;
     }
     return [$f, null];
 }
@@ -227,7 +290,7 @@ function aide_edit_update(string $type, string $key, array $input): ?string
     }
     foreach ($all[$type]['ajouts'] as $i => $row) {
         if ((string) ($row[$keyField] ?? '') !== $key) continue;
-        [$fields, $err] = aide_edit_clean_fields($type, $input);
+        [$fields, $err] = aide_edit_clean_fields($type, $input, [], true);
         if ($err !== null) return $err;
         $all[$type]['ajouts'][$i] = array_merge($row, $fields, [$keyField => $key]);
         return aide_edit_save($all);
@@ -256,14 +319,21 @@ function aide_edit_hide(string $type, string $key, bool $hide): ?string
     return aide_edit_save($all);
 }
 
-/** Crée une fiche (FAQ ou glossaire). -> message d'erreur ou null. */
+/** Crée une fiche (question, terme du glossaire ou tutoriel). -> message d'erreur ou null. */
 function aide_edit_add(string $type, array $input): ?string
 {
-    if ($type !== 'faq' && $type !== 'glossaire') return 'On ne crée ici que des questions ou des termes du glossaire.';
-    [$fields, $err] = aide_edit_clean_fields($type, $input);
+    if (!isset(AIDE_EDIT_TYPES[$type])) return 'Type de fiche inconnu.';
+    [$fields, $err] = aide_edit_clean_fields($type, $input, [], true);
     if ($err !== null) return $err;
     $all = aide_edit_load();
-    if ($type === 'faq') {
+    if ($type === 'tutoriels') {
+        $base = 'perso-' . (mb_substr(aide_edit_slug($fields['titre']), 0, 50) ?: 'tutoriel');
+        $taken = array_merge(array_column(aide_edit_base('tutoriels'), 'slug'), array_column($all['tutoriels']['ajouts'], 'slug'));
+        $slug = $base;
+        for ($n = 2; in_array($slug, $taken, true); $n++) $slug = $base . '-' . $n;
+        $all['tutoriels']['ajouts'][] = array_merge(['slug' => $slug], $fields,
+            ['duree_lecture_min' => max(1, count($fields['etapes'])), 'difficulte' => 'facile', 'captures' => [], 'video' => '']);
+    } elseif ($type === 'faq') {
         $base = 'perso-' . (mb_substr(aide_edit_slug($fields['question']), 0, 50) ?: 'question');
         $taken = array_merge(array_column(aide_edit_base('faq'), 'id'), array_column($all['faq']['ajouts'], 'id'));
         $id = $base;
