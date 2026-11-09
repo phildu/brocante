@@ -22,9 +22,24 @@ $zones = fv_zones();
 
 if (isset($_GET['export'])) {
     $rows = fv_prospects_search($filters, 2000);
-    $csv = [['Commerce', 'Contact', 'Activité', 'Téléphone', 'E-mail', 'Adresse', 'Code postal', 'Ville', 'Zone', 'Source', 'Statut', 'Priorité', 'Prochaine action', 'Propriétaire', 'Notes']];
+    // Colonnes du commerce et des réseaux : de quoi alimenter l'audit (scripts/audit-prospects.php) sans ressaisie.
+    $custom = static function (array $p, array $labels): string {
+        foreach (fv_custom_fields_of($p) as $label => $value) {
+            if (in_array(mb_strtolower(trim((string) $label)), $labels, true)) return trim((string) $value);
+        }
+        return '';
+    };
+    $csv = [['Commerce', 'Contact', 'Activité', 'Téléphone', 'E-mail', 'Site web', 'Facebook', 'Instagram', 'TikTok', 'YouTube', 'LinkedIn', 'Fiche Google', 'Adresse', 'Code postal', 'Ville', 'Zone', 'Source', 'Statut', 'Statut (code)', 'Priorité', 'Prochaine action', 'Propriétaire', 'Notes']];
     foreach ($rows as $p) {
-        $csv[] = [$p['business'], $p['name'], $p['kind'], $p['phone'], $p['email'], $p['address'], $p['postal'], $p['city'], $p['zone'], fv_source_label($p['source']), fv_status_label($p['status']), $p['priority'], $p['next_action_at'] ?? '', $p['owner_name'] ?? '', str_replace("\n", ' ', $p['notes'])];
+        $csv[] = [
+            $p['business'], $p['name'], $p['kind'], $p['phone'], $p['email'],
+            (string) $p['website'] !== '' ? $p['website'] : $custom($p, ['site web', 'site', 'site internet', 'website']),
+            $custom($p, ['facebook', 'page facebook']), $custom($p, ['instagram', 'compte instagram']), $custom($p, ['tiktok']),
+            $custom($p, ['youtube', 'chaîne youtube', 'chaine youtube']), $custom($p, ['linkedin']),
+            $custom($p, ['fiche google', 'google', 'google business', 'google maps']),
+            $p['address'], $p['postal'], $p['city'], $p['zone'], fv_source_label($p['source']),
+            fv_status_label($p['status']), $p['status'], $p['priority'], $p['next_action_at'] ?? '', $p['owner_name'] ?? '', str_replace("\n", ' ', $p['notes']),
+        ];
     }
     fv_csv_download('prospects-' . date('Y-m-d') . '.csv', $csv);
 }
