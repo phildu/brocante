@@ -57,7 +57,7 @@ function admin_menu_default_order(): array
         'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
         'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal', 'impression'],
         'boutique' => ['presence', 'galeries', 'apparence', 'social', 'domaine'],
-        'reglages' => ['ia', 'sms', 'notifications', 'plugins', 'menu', 'sync', 'reglages-general', 'reglages-pages', 'reglages-paiement', 'profil'],
+        'reglages' => ['ia', 'sms', 'notifications', 'plugins', 'mcp', 'menu', 'sync', 'reglages-general', 'reglages-pages', 'reglages-paiement', 'profil'],
         'extensions' => [],
     ];
 }
@@ -177,6 +177,7 @@ function admin_menu_core_items(): array
         'media' => ['/admin/media.php', 'Médiathèque', 'folder'],
         'shipping' => ['/admin/shipping.php', 'Frais de port', 'truck'],
         'remises' => ['/admin/discounts.php', 'Remises du panier', 'receipt'],
+        'mcp' => ['/admin/mcp.php', 'Accès MCP (assistant IA)', 'cloud'],
         'legal' => ['/admin/legal.php', 'Pages légales (CGV…)', 'receipt'],
         'apparence' => ['/admin/appearance.php', 'Apparence', 'palette'],
         'domaine' => ['/admin/domaine.php', 'Nom de domaine', 'cloud'],
