@@ -159,6 +159,7 @@ function portail_nav_groups(): array
             ['href' => '/portail/services-devis.php', 'label' => 'Prestations sur devis', 'icon' => 'briefcase'],
             ['href' => '/portail/earlybird.php', 'label' => 'Pionniers', 'icon' => 'sparkles'],
             ['href' => '/portail/commissions.php', 'label' => 'Commissions', 'icon' => 'percent'],
+            ['href' => '/portail/impact.php', 'label' => 'Impact CO₂ & eau', 'icon' => 'globe'],
             ['href' => '/portail/ia.php', 'label' => 'Coûts IA', 'icon' => 'sparkles'],
             ['href' => '/portail/ia-fournisseurs.php', 'label' => 'Fournisseurs IA', 'icon' => 'plug'],
             ['href' => '/portail/addons.php', 'label' => ext_t('Tarifs des {exts}'), 'icon' => 'receipt'],
