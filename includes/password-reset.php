@@ -40,12 +40,12 @@ function password_reset_target(string $login): ?array
     if ($login === '') return null;
     // Compte de l'équipe : identifiant ou e-mail, avec ou sans mot de passe (un compte créé par connexion sociale peut en choisir un).
     $stmt = db()->prepare("SELECT id, email, phone, name FROM accounts WHERE (email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE)
-        AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND email != '' LIMIT 1");
+        AND role IN ('admin', 'community_manager', 'photographe', 'vendeur') AND is_active = 1 AND email != '' LIMIT 1");
     $stmt->execute([$login, $login]);
     $row = $stmt->fetch();
     if (!$row) {
         $byName = db()->prepare("SELECT id, email, phone, name FROM accounts WHERE name = ? COLLATE NOCASE AND name != ''
-            AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND email != '' LIMIT 2");
+            AND role IN ('admin', 'community_manager', 'photographe', 'vendeur') AND is_active = 1 AND email != '' LIMIT 2");
         $byName->execute([$login]);
         $rows = $byName->fetchAll();
         $row = count($rows) === 1 ? $rows[0] : null;
@@ -75,7 +75,7 @@ function password_reset_set_target(array $target, string $password): void
     if (mb_strlen($password) > 200) throw new InvalidArgumentException('Mot de passe trop long.');
     $hash = password_hash($password, PASSWORD_DEFAULT);
     if (($target['account_id'] ?? null) !== null) {
-        $upd = db()->prepare("UPDATE accounts SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1");
+        $upd = db()->prepare("UPDATE accounts SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role IN ('admin', 'community_manager', 'photographe', 'vendeur') AND is_active = 1");
         $upd->execute([$hash, (int) $target['account_id']]);
         if (!$upd->rowCount()) throw new InvalidArgumentException('Ce compte n\'existe plus ou est désactivé.');
     } else {

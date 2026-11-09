@@ -2,6 +2,7 @@
 // Reçus d'achat et journal des ventes : règles métier du module « Reçus & journal des ventes ».
 defined('PLUGIN_RUNTIME') || exit;
 require_once dirname(__DIR__, 3) . '/includes/addons.php';
+require_once dirname(__DIR__, 3) . '/includes/pos-express.php';   // mode d'encaissement d'une vente (espèces, carte, en ligne)
 
 const RC_MODULE = 'recus-compta';
 
@@ -19,7 +20,7 @@ function rc_defaults(): array
     return [
         'seller_name' => '', 'seller_address' => '', 'seller_siret' => '', 'seller_vat' => '', 'seller_email' => '',
         'regime' => 'marge', 'vat_rate' => '20', 'email_auto' => '1', 'footer' => '',
-        'acc_bank' => '512000', 'acc_sales' => '707000', 'acc_shipping' => '708500', 'acc_vat' => '445710', 'journal' => 'VE',
+        'acc_bank' => '512000', 'acc_cash' => '531000', 'acc_sales' => '707000', 'acc_shipping' => '708500', 'acc_vat' => '445710', 'journal' => 'VE',
     ];
 }
 
@@ -43,7 +44,7 @@ function rc_settings_save(array $in): void
         if ($k === 'regime' && !isset(rc_regimes()[$v])) $v = 'marge';
         if ($k === 'vat_rate') $v = (string) max(0, min(30, (float) str_replace(',', '.', $v)));
         if ($k === 'email_auto') $v = $v === '1' ? '1' : '0';
-        if (in_array($k, ['acc_bank', 'acc_sales', 'acc_shipping', 'acc_vat'], true)) $v = preg_replace('/[^0-9A-Za-z]/', '', $v) ?: $def[$k];
+        if (in_array($k, ['acc_bank', 'acc_cash', 'acc_sales', 'acc_shipping', 'acc_vat'], true)) $v = preg_replace('/[^0-9A-Za-z]/', '', $v) ?: $def[$k];
         if ($k === 'journal') $v = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $v) ?: $def[$k]);
         $st->execute([$k, mb_substr($v, 0, 400)]);
     }
@@ -238,13 +239,16 @@ function rc_csv_cell(string $v): string
 function rc_journal_csv(string $from, string $to): string
 {
     $s = rc_settings();
-    $out = "\xEF\xBB\xBF" . implode(';', array_map('rc_csv_cell', ['Date', 'N° pièce', 'Commande', 'Client (e-mail)', 'Désignation', 'Total HT', 'TVA', 'Total TTC', 'dont livraison', 'Régime', 'Paiement Stripe'])) . "\r\n";
+    $out = "\xEF\xBB\xBF" . implode(';', array_map('rc_csv_cell', ['Date', 'N° pièce', 'Commande', 'Client (e-mail)', 'Désignation', 'Total HT', 'TVA', 'Total TTC', 'dont livraison', 'Régime', 'Paiement Stripe', 'Mode de paiement', 'Vendeur', 'Prix négocié'])) . "\r\n";
     foreach (rc_orders($from, $to) as $o) {
         $x = rc_split($o, $s);
         $names = implode(' + ', array_map(static fn ($l) => ($l['name'] ?? '') . ((int) ($l['qty'] ?? 1) > 1 ? ' ×' . (int) $l['qty'] : ''), json_decode((string) $o['items'], true) ?: []));
         $f = static fn (int $c) => number_format($c / 100, 2, ',', '');
         $out .= implode(';', array_map('rc_csv_cell', [date('d/m/Y', strtotime((string) $o['created_at'])), $o['number'] ?: 'CMD-' . $o['id'], (string) $o['id'], (string) $o['email'], $names,
-            $f($x['ht']), $f($x['vat']), $f($x['total']), $f($x['ship']), rc_regimes()[$s['regime']], (string) $o['stripe_session_id']])) . "\r\n";
+            $f($x['ht']), $f($x['vat']), $f($x['total']), $f($x['ship']), rc_regimes()[$s['regime']],
+            // Une vente en caisse n'a pas de paiement Stripe : espèces et carte sont distinguées par le mode de paiement.
+            pos_pay_mode($o) === 'en_ligne' ? (string) $o['stripe_session_id'] : '', pos_pay_mode_label(pos_pay_mode($o)),
+            (string) ($o['sold_by'] ?? ''), !empty($o['price_negotiated']) ? 'Oui' : ''])) . "\r\n";
     }
     return $out;
 }
@@ -267,7 +271,9 @@ function rc_fec(string $from, string $to): string
         $row = function (string $acc, string $accLib, int $debit, int $credit) use ($s, $n, $d, $piece, $lib, $m, $clean, &$out): void {
             $out .= implode("\t", [$s['journal'], 'Journal des ventes', $n, $d, $acc, $clean($accLib), '', '', $piece, $d, $lib, $m($debit), $m($credit), '', '', $d, '', '']) . "\r\n";
         };
-        $row($s['acc_bank'], 'Banque (encaissements en ligne)', $x['total'], 0);
+        // Espèces encaissées en caisse : compte de caisse ; carte et paiements en ligne : banque.
+        if (pos_pay_mode($o) === 'especes') $row($s['acc_cash'], 'Caisse (encaissements en espèces)', $x['total'], 0);
+        else $row($s['acc_bank'], 'Banque (encaissements en ligne)', $x['total'], 0);
         if ($x['goods_net'] > 0) $row($s['acc_sales'], 'Ventes de marchandises', 0, $x['goods_net']);
         if ($x['ship_net'] > 0) $row($s['acc_shipping'], 'Port et frais accessoires facturés', 0, $x['ship_net']);
         if ($x['vat'] > 0) $row($s['acc_vat'], 'TVA collectée', 0, $x['vat']);

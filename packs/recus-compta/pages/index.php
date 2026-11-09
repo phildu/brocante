@@ -9,7 +9,7 @@ $fields = [
     'seller_name' => ['Nom du vendeur', 'text'], 'seller_address' => ['Adresse', 'text'], 'seller_siret' => ['SIRET', 'text'],
     'seller_vat' => ['N° de TVA (si assujetti)', 'text'], 'footer' => ['Mention libre en bas du reçu', 'text'],
 ];
-$accounts = ['journal' => 'Code journal', 'acc_bank' => 'Compte banque', 'acc_sales' => 'Compte ventes', 'acc_shipping' => 'Compte port', 'acc_vat' => 'Compte TVA collectée'];
+$accounts = ['journal' => 'Code journal', 'acc_bank' => 'Compte banque', 'acc_cash' => 'Compte caisse (espèces)', 'acc_sales' => 'Compte ventes', 'acc_shipping' => 'Compte port', 'acc_vat' => 'Compte TVA collectée'];
 ?>
 <div class="rc-page" id="rc-page" style="display:grid;gap:16px;max-width:900px;"
      data-api-settings="<?= h($pluginApi('settings')) ?>" data-api-receipts="<?= h($pluginApi('receipts')) ?>"

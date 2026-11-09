@@ -1,6 +1,8 @@
 <?php
 // Caisse du Studio : lecture d'un QR code (billet de retrait, reçu, pièce) et vente directe en boutique (espèces ou carte via Stripe).
 
+require_once __DIR__ . '/pos-express.php';
+
 const POS_MAX_LINES = 20;
 const POS_MAX_CENTS = 10000000;
 
@@ -24,7 +26,7 @@ function pos_product_json(array $p): array
     return [
         'ref' => $p['ref'], 'name' => $p['name'], 'stock' => (int) $p['stock'],
         'price' => (string) effective_price($p), 'price_cents' => price_to_cents((string) effective_price($p)),
-        'fixed' => is_fixed_price(effective_price($p)) && !preg_match('/\d\s*[-–—]\s*\d/u', (string) effective_price($p)),
+        'fixed' => pos_catalog_cents($p) !== null,
         'free' => product_free_qty($p) >= 1, 'photo' => !empty($p['photo']) ? '/' . ltrim((string) $p['photo'], '/') : '',
     ];
 }
@@ -85,11 +87,18 @@ function pos_lines(array $items): array
         $seen[$ref] = true;
         if (!in_stock($p)) return [[], '« ' . $p['name'] . ' » n\'est plus en stock.'];
         if (product_free_qty($p) < 1) return [[], '« ' . $p['name'] . ' » est réservée ou en cours de paiement par un autre client (scannez son billet).'];
+        // Prix du catalogue s'il est unique ; sinon (vide, 0 €, fourchette, sur devis, pièce express) il est convenu sur place et doit être saisi.
+        $catalog = pos_catalog_cents($p);
         $cents = $it['price_cents'] ?? null;
-        if ($cents === null || $cents === '') $cents = price_to_cents((string) effective_price($p));
+        if ($cents === null || $cents === '') $cents = $catalog;
+        if ($cents === null) return [[], 'Indiquez le prix convenu pour « ' . $p['name'] . ' ».'];
         $cents = (int) $cents;
         if ($cents < 0 || $cents > POS_MAX_CENTS) return [[], 'Prix invalide pour « ' . $p['name'] . ' ».'];
-        $lines[] = ['ref' => $p['ref'], 'name' => $p['name'], 'qty' => 1, 'unit_cents' => $cents];
+        if ($cents === 0 && $catalog === null) return [[], 'Indiquez le prix convenu pour « ' . $p['name'] . ' » : une vente à 0 € n\'a pas de sens au journal.'];
+        $line = ['ref' => $p['ref'], 'name' => $p['name'], 'qty' => 1, 'unit_cents' => $cents];
+        if ($catalog === null || $cents !== $catalog) $line['negotiated'] = true;   // prix non fixé à l'avance, ou différent de l'étiquette
+        if (($p['badge'] ?? '') === POS_EXPRESS_BADGE) $line['express'] = true;      // pièce hors catalogue, photographiée en caisse
+        $lines[] = $line;
     }
     return [$lines, null];
 }
@@ -130,11 +139,13 @@ function pos_release_pending(array $items): void
 }
 
 /** Crée la commande en attente. -> id. */
-function pos_create_order(array $lines, string $sessionId, string $method): int
+function pos_create_order(array $lines, string $sessionId, string $method, ?array $account = null): int
 {
     $total = array_sum(array_map(static fn ($l) => $l['unit_cents'] * $l['qty'], $lines));
-    db()->prepare("INSERT INTO orders (stripe_session_id, amount_total, status, items, shipping_method) VALUES (?, ?, 'pending', ?, ?)")
-        ->execute([$sessionId, $total, json_encode($lines, JSON_UNESCAPED_UNICODE), 'Vente en boutique — ' . $method]);
+    [$soldBy, $soldById, $notify] = pos_seller_fields($account);
+    $negotiated = array_filter($lines, static fn ($l) => !empty($l['negotiated'])) ? 1 : 0;
+    db()->prepare("INSERT INTO orders (stripe_session_id, amount_total, status, items, shipping_method, sold_by, sold_by_id, price_negotiated, notify_manager) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)")
+        ->execute([$sessionId, $total, json_encode($lines, JSON_UNESCAPED_UNICODE), 'Vente en boutique — ' . $method, $soldBy, $soldById, $negotiated, $notify]);
     return (int) db()->lastInsertId();
 }
 
@@ -151,6 +162,10 @@ function pos_finalize(int $orderId, array $session): bool
         db()->prepare("UPDATE products SET sold_channel = 'stand', sold_at = COALESCE(sold_at, CURRENT_TIMESTAMP) WHERE ref = ? AND stock <= 0 AND (sold_channel IS NULL OR sold_channel = '')")->execute([$l['ref']]);
     }
     db()->prepare("UPDATE orders SET fulfillment_status = 'livree' WHERE id = ? AND status = 'paid' AND shipping_method LIKE 'Vente en boutique%'")->execute([$orderId]);
+    if ($changed || $order['status'] === 'paid') {
+        pos_express_sold($order);        // pièce hors catalogue : le prix convenu devient le prix de sa fiche
+        pos_notify_manager($orderId);    // autre vendeur que le gérant : un message, une seule fois par vente
+    }
     return $changed;
 }
 

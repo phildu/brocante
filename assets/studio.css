@@ -288,6 +288,10 @@ body.studio { --tabbar-h: 62px; margin: 0; background: var(--bg); color: var(--i
 .pos-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .pos-row input[type="text"] { flex: 1 1 140px; min-width: 0; padding: 12px; border: 1px solid var(--line); background: var(--bg); font: inherit; }
 .pos-card input[type="email"] { padding: 12px; border: 1px solid var(--line); background: var(--bg); font: inherit; width: 100%; box-sizing: border-box; }
+.pos-result input[type="text"], .pos-result input[type="number"], .pos-result textarea { padding: 12px; border: 1px solid var(--line); background: var(--bg); font: inherit; width: 100%; box-sizing: border-box; }
+.pos-express-photo { width: 100%; max-height: 240px; object-fit: cover; border-radius: 10px; }
+.pos-expert { border: 1px dashed var(--line); padding: 10px; display: grid; gap: 8px; }
+.pos-expert p { margin: 0; }
 .pos-msg { margin: 0; font-size: 0.9rem; min-height: 1.2em; }
 .pos-msg.is-bad, .pos-bad { color: #a4361b; font-weight: 600; margin: 0; }
 .pos-ok { color: #1e6b3a; font-weight: 600; margin: 0; }
