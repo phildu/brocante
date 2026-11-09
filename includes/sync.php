@@ -201,6 +201,22 @@ function sync_push_product(array $target, string $ref, string $mode): array
 
 /* ---------- Côté réception (admin/sync-receive.php) ---------- */
 
+/** Message d'erreur si le contenu du fichier ne correspond pas à son extension (script déguisé en image…), sinon null. */
+function sync_file_content_error(string $file, string $ext): ?string
+{
+    $lower = strtolower($ext);
+    if (in_array($lower, ['mp4', 'webm', 'mov', 'm4v'], true)) {
+        $mime = (string) (new finfo(FILEINFO_MIME_TYPE))->file($file);
+        if (!str_starts_with($mime, 'video/') && $mime !== 'application/octet-stream') return 'Vidéo non reconnue.';
+    } elseif ($lower === 'svg') {
+        $svg = (string) file_get_contents($file);
+        if (preg_match('/<script|on\w+\s*=|javascript:/i', $svg)) return 'SVG refusé (contient du script).';
+    } elseif (!@getimagesize($file)) {
+        return 'Image non reconnue.';
+    }
+    return null;
+}
+
 /** Fichier reçu : vérifié puis rangé sous le même chemin, ou un nom voisin si ce chemin est déjà pris par un autre fichier. */
 function sync_receive_file(string $path, string $sha1, ?array $upload): array
 {
@@ -229,16 +245,7 @@ function sync_receive_file(string $path, string $sha1, ?array $upload): array
     if (sha1_file($upload['tmp_name']) !== $sha1) return ['ok' => false, 'error' => 'Fichier abîmé pendant l\'envoi.'];
 
     // Contenu cohérent avec l'extension (pas de script déguisé en image).
-    $lower = strtolower($ext);
-    if (in_array($lower, ['mp4', 'webm', 'mov', 'm4v'], true)) {
-        $mime = (string) (new finfo(FILEINFO_MIME_TYPE))->file($upload['tmp_name']);
-        if (!str_starts_with($mime, 'video/') && $mime !== 'application/octet-stream') return ['ok' => false, 'error' => 'Vidéo non reconnue.'];
-    } elseif ($lower === 'svg') {
-        $svg = (string) file_get_contents($upload['tmp_name']);
-        if (preg_match('/<script|on\w+\s*=|javascript:/i', $svg)) return ['ok' => false, 'error' => 'SVG refusé (contient du script).'];
-    } elseif (!@getimagesize($upload['tmp_name'])) {
-        return ['ok' => false, 'error' => 'Image non reconnue.'];
-    }
+    if (($contentError = sync_file_content_error($upload['tmp_name'], $ext)) !== null) return ['ok' => false, 'error' => $contentError];
 
     // Chemin occupé par un autre fichier : nom voisin, jamais d'écrasement.
     if (file_exists($abs)) {

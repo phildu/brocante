@@ -1405,6 +1405,12 @@ et non commités qui partent en ligne ; le commit du seul code se fait à la mai
 prototype), `admin/plugin-mediatheque.php`, `.plugin_enabled` ni les fichiers de travail `_*.md` (que le `.htaccess` refuse
 aussi de servir).
 
+## Échanger boutiques et galeries entre prod, préprod et local
+
+Portail → **Échange prod / préprod** : exporter des boutiques et des galeries dans un paquet `.zip`, l'importer sur un autre environnement
+(dans les deux sens), après un aperçu. Fiches, photos, apparence et plans voyagent ; commandes, clients, mots de passe, clés et abonnements
+jamais. Détail et garde-fous : [DEPLOIEMENT.md](DEPLOIEMENT.md) (« Échange de boutiques et de galeries »).
+
 ## Envoyer des pièces du Mac vers la préprod
 
 Administration → **Envoyer en préprod** : les pièces créées en local partent

@@ -131,8 +131,32 @@ Cible : **prod = `https://www.bricbrok.com`**, **préprod = `https://pre.bricbro
 
 ## Données et secrets
 
-- Les données ne circulent que **prod → préprod** (jamais l'inverse), et seulement après anonymisation des données personnelles (RGPD).
+- Les **données personnelles** (commandes, clients, comptes, pièces d'identité, inscriptions) ne circulent jamais entre environnements.
+  Le **contenu** (boutiques et galeries) circule dans les deux sens par le portail → *Échange prod / préprod* (voir ci-dessous).
 - Local → préprod : contenu de test via Administration → *Envoyer en préprod* ; `--with-db` en préprod uniquement.
+
+### Échange de boutiques et de galeries (prod ↔ préprod ↔ local)
+
+Les galeries (`data/galeries/`) et les bases des boutiques ne sont jamais envoyées par le déploiement : on les copie par un paquet `.zip`.
+
+1. Portail de l'environnement **source** → *Échange prod / préprod* → cocher boutiques et galeries → *Télécharger le paquet*.
+2. Portail de l'environnement **cible** → même page → envoyer le `.zip` : un **aperçu** s'affiche (rien n'est modifié), on choisit les éléments.
+   En production, taper `PROD` pour confirmer. Le résultat s'affiche une fois ; une boutique créée reçoit un mot de passe d'administration neuf.
+
+- **Voyage** : réglages de présentation (nom, couleurs, textes, catégories, logo), fiches, photos et vidéos, bandeaux, diaporamas, livraison,
+  remises du panier, horaires, apparence ; pour une galerie : présentation, plan, membres, événement, promotions.
+- **Ne voyage jamais** : commandes, clients, comptes, mots de passe, clés (Stripe, IA, SMS…), coordonnées bancaires, `site_url` et domaines,
+  abonnements et options payantes, administrateurs de galerie, pièces d'identité, inscriptions, listes d'attente, base de la buvette.
+- **Sans perte par défaut** : les fiches sont ajoutées ou mises à jour par numéro, rien n'est supprimé ; le stock et l'état de vente de la cible sont
+  conservés ; un fichier existant n'est jamais écrasé (le nouveau reçoit un nom voisin). La base d'une boutique existante est sauvegardée avant
+  l'import (`data/backups/<base>-echange-<horodatage>.db`), son `tenant.php` aussi (`.bak-…`), une galerie existante aussi (`.json.bak-…`).
+  L'option *Miroir* (supprimer les fiches absentes du paquet) est faite pour copier la prod vers la préprod, pas l'inverse.
+- Une galerie créée par l'import est **hors ligne** : la publier, régler ses options payantes, ses administrateurs et son adresse sur la cible.
+- Journal : `data/logs/echange.log` (qui a importé quoi, jamais de mot de passe). Code : `includes/exchange.php`, `portail/echange.php`.
+- **Suivre les évolutions du projet** : une nouvelle colonne d'une table qui voyage est reprise automatiquement (ajoutée à la base cible au besoin).
+  Une nouvelle table, clé de boutique ou de galerie, réglage ou fichier annexe de galerie, lui, doit être *décidé* : `tests/ExchangeGuardTest.php`
+  fait échouer la CI tant que `php scripts/exchange-baseline.php` n'a pas été relancé (et l'élément ajouté aux listes de `includes/exchange.php`
+  s'il doit voyager). Horaires de galerie (`.hours.json`) : inclus.
 - Secrets : jamais dans git (`.env.deploy.*`, `.secrets/`, `config.local.php` sont ignorés et exclus du déploiement). Les clés de chaque
   environnement se saisissent depuis son administration ; les clés **Stripe ne sont jamais partagées** entre commerces.
 

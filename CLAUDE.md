@@ -25,6 +25,21 @@ Complète `../CLAUDE.md` (règles du dossier « web local »). Détail du circui
 Adresses : préprod `https://pre.bricbrok.com`, prod `https://www.bricbrok.com`. Ne jamais lire ni afficher les identifiants
 FTP ou les journaux qui les contiennent (`.env.deploy.*`) ; supprimer les journaux de déploiement bruts après lecture.
 
+## Échange boutiques / galeries entre environnements (à tenir à jour à chaque évolution)
+
+Le portail → « Échange prod / préprod » (`includes/exchange.php`) copie boutiques et galeries entre prod, préprod et local. Il ne transporte
+que ce qui est listé (liste blanche) : tout ajout au projet est donc **absent de l'échange tant qu'on ne l'y met pas**. Quand ton travail
+ajoute une table SQL, une clé de `tenant.php`, une clé de galerie (`gallery_normalize()`), un réglage de la table `settings` ou un fichier
+annexe de galerie (`data/galeries/<id>.xxx`) :
+
+1. Décider s'il voyage (contenu de présentation : oui ; commandes, clients, comptes, secrets, abonnements, données personnelles : jamais).
+2. S'il voyage : l'ajouter à la constante de `includes/exchange.php` (`EXCHANGE_SHOP_TABLES`, `EXCHANGE_SHOP_CONFIG_KEYS`, `EXCHANGE_GALLERY_KEYS`,
+   `EXCHANGE_SETTINGS_ALLOWED`, `EXCHANGE_GALLERY_FILES_CARRIED`) ; un fichier annexe de galerie demande aussi de l'écrire dans
+   `exchange_gallery_export()` / `exchange_gallery_import()`.
+3. Dans tous les cas : `php scripts/exchange-baseline.php`, puis commiter `tests/fixtures/exchange-baseline.json`.
+   `tests/ExchangeGuardTest.php` fait échouer la CI sinon. Une nouvelle colonne d'une table qui voyage n'exige rien : elle est reprise toute seule.
+4. Si le format du paquet change de façon incompatible, incrémenter `EXCHANGE_FORMAT`.
+
 ## Préférences de l'utilisateur
 
 Réponses en français, courtes et sans jargon ; pas de terminal à lui demander quand une action peut passer par l'application.
