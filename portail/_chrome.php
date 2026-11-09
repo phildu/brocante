@@ -35,6 +35,7 @@ function portail_chrome_icons(): array
         'upload' => '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
         'close' => '<path d="M6 6l12 12M18 6 6 18"/>',
         'external' => '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+        'help' => '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.8"/><path d="M12 17h.01"/>',
         'compass' => '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5.5-5.5 2 2-5.5z"/>',
         'target' => '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
         'briefcase' => '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 12h18M10 12v3h4v-3"/>',
@@ -168,6 +169,7 @@ function portail_nav_groups(): array
             ['href' => '/portail/api.php', 'label' => 'API & réseaux', 'icon' => 'key'],
             ['href' => '/portail/domaines.php', 'label' => 'Noms de domaine', 'icon' => 'at'],
             ['href' => '/portail/nouveau.php', 'label' => 'Nouveau commerce', 'icon' => 'plus'],
+            ['href' => '/aide/', 'label' => "Centre d'aide", 'icon' => 'help'],
         ], !empty($portailLocal) ? [[
             // Les fichiers data/*-outbox.log n'existent qu'en local : pas d'entrée en ligne.
             'href' => '/portail/journal-local.php', 'label' => 'Boîte locale', 'icon' => 'inbox',
