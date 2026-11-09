@@ -265,6 +265,202 @@ final class FeedbackTest extends TestCase
         [$headers, $rows] = feedback_csv(feedback_all());
         self::assertSame('Identifiant', $headers[0]);
         self::assertCount(1, $rows);
-        self::assertSame('Un CSV doit reprendre ce retour.', $rows[0][10]);
+        self::assertSame('Administration boutique', $rows[0][2]);
+        self::assertSame('Un CSV doit reprendre ce retour.', $rows[0][11]);
+    }
+
+    public function testSurfacesDefaultsKeepExistingBehaviourAndPortailIsOffByDefault(): void
+    {
+        $s = feedback_settings_normalize([]);
+        self::assertSame(['admin' => true, 'front' => true, 'portail' => false], $s['surfaces']);
+        // Des réglages enregistrés avant la distinction des espaces gardent le widget back end et front end.
+        self::assertTrue(feedback_widget_enabled('demo', 'admin'));
+        self::assertTrue(feedback_widget_enabled('demo', 'front'));
+        self::assertFalse(feedback_portail_widget_enabled());
+    }
+
+    public function testEachSurfaceHasItsOwnSwitchAndTheMasterSwitchCutsAll(): void
+    {
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => false, 'portail' => true]] + $this->baseSettings());
+        self::assertTrue(feedback_widget_enabled('demo', 'admin'));
+        self::assertFalse(feedback_widget_enabled('demo', 'front'));
+        self::assertTrue(feedback_portail_widget_enabled());
+        self::assertFalse(feedback_widget_enabled('demo', 'portail'), 'Le portail ne passe pas par la liste des boutiques.');
+
+        feedback_settings_save(['widget' => false, 'surfaces' => ['admin' => true, 'front' => true, 'portail' => true]] + $this->baseSettings());
+        self::assertFalse(feedback_widget_enabled('demo', 'admin'));
+        self::assertFalse(feedback_portail_widget_enabled());
+    }
+
+    public function testBackAndFrontRecordsCarryTheirSurface(): void
+    {
+        $team = $this->add('Retour envoyé depuis le back office.');
+        $client = feedback_add([
+            'shop' => 'demo', 'audience' => 'customer', 'email' => 'client@example.test',
+            'type' => 'other', 'message' => 'Retour envoyé depuis le site public.',
+        ], null, 'Client');
+        self::assertSame('admin', $team['surface']);
+        self::assertSame('front', $client['surface']);
+        self::assertSame([$client['id']], array_column(feedback_list(['surface' => 'front']), 'id'));
+        self::assertSame([$team['id']], array_column(feedback_list(['surface' => 'admin']), 'id'));
+    }
+
+    public function testFrontSubmissionRefusedWhenFrontSwitchIsOff(): void
+    {
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => false, 'portail' => false]] + $this->baseSettings());
+        $this->expectException(InvalidArgumentException::class);
+        feedback_add([
+            'shop' => 'demo', 'audience' => 'customer', 'email' => 'client@example.test',
+            'type' => 'bug', 'message' => 'Le site public est désactivé pour les retours.',
+        ], null, 'Client');
+    }
+
+    public function testRecordsWithoutSurfaceAreDerivedFromTheirSource(): void
+    {
+        self::assertSame('front', feedback_record_normalize(['id' => 'x', 'source' => 'client'])['surface']);
+        self::assertSame('admin', feedback_record_normalize(['id' => 'x', 'source' => 'equipe'])['surface']);
+    }
+
+    public function testPortailFeedbackNeedsItsSwitchAndHasNoShop(): void
+    {
+        $in = ['surface' => 'portail', 'type' => 'idea', 'message' => 'Une idée pour le tableau du portail.'];
+        try {
+            feedback_add($in, null, 'Exploitant');
+            self::fail('Le portail est fermé par défaut.');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringContainsString('portail', $e->getMessage());
+        }
+
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => true, 'portail' => true]] + $this->baseSettings());
+        $f = feedback_add($in + ['gallery' => 'rue-des-arts'], null, 'Exploitant');
+        self::assertSame('portail', $f['surface']);
+        self::assertSame('', $f['shop']);
+        self::assertSame('Portail', $f['shop_name']);
+        self::assertSame('rue-des-arts', $f['gallery']);
+        self::assertSame('equipe', $f['source']);
+    }
+
+    public function testPortailRecordsAreScopedAndTrackUnreadReplies(): void
+    {
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => true, 'portail' => true]] + $this->baseSettings());
+        $shop = $this->add('Un retour de boutique qui ne doit pas apparaître au portail.');
+        $all = feedback_add(['surface' => 'portail', 'type' => 'bug', 'message' => 'Retour portail de l\'exploitant sans galerie.'], null, 'Exploitant');
+        $mine = feedback_add(['surface' => 'portail', 'gallery' => 'rue-des-arts', 'type' => 'bug', 'message' => 'Retour portail de la galerie Rue des Arts.'], null, 'Admin galerie');
+        feedback_add(['surface' => 'portail', 'gallery' => 'autre-galerie', 'type' => 'bug', 'message' => 'Retour portail d\'une autre galerie.'], null, 'Autre');
+
+        self::assertCount(3, feedback_portail_records());
+        self::assertNotContains($shop['id'], array_column(feedback_portail_records(), 'id'));
+        self::assertSame([$mine['id']], array_column(feedback_portail_records('rue-des-arts'), 'id'));
+
+        feedback_reply($mine['id'], 'Merci, corrigé.', 'Exploitant', 'admin@example.test');
+        self::assertSame(1, feedback_portail_unread('rue-des-arts'));
+        self::assertSame(0, feedback_portail_unread('autre-galerie'));
+        feedback_mark_portail_seen('rue-des-arts');
+        self::assertSame(0, feedback_portail_unread('rue-des-arts'));
+        self::assertSame(0, feedback_portail_unread());
+        self::assertContains($all['id'], array_column(feedback_list(['surface' => 'portail']), 'id'));
+    }
+
+    public function testPortailFeedbackIsExcludedFromShopParticipation(): void
+    {
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => true, 'portail' => true]] + $this->baseSettings());
+        feedback_add(['surface' => 'portail', 'type' => 'other', 'message' => 'Retour portail hors participation.'], null, 'Exploitant');
+        self::assertSame(0, feedback_stats()['active_shops_30']);
+        self::assertSame(['demo'], array_column(feedback_participation(), 'shop'));
+    }
+
+    public function testSettingsNormalizeRolesAndOverrides(): void
+    {
+        $s = feedback_settings_normalize([
+            'roles' => ['vendeur' => false, 'inconnu' => false],
+            'overrides' => [
+                'shops' => ['Demo' => ['admin' => '0', 'front' => '', 'portail' => '1'], 'pas un slug' => ['admin' => '1']],
+                'galleries' => ['rue-des-arts' => ['portail' => '1', 'admin' => 'peut-etre']],
+            ],
+        ]);
+        self::assertFalse($s['roles']['vendeur']);
+        self::assertTrue($s['roles']['admin'], 'Un rôle non mentionné reste actif.');
+        self::assertArrayNotHasKey('inconnu', $s['roles']);
+        self::assertSame(['demo' => ['admin' => false]], $s['overrides']['shops'], "Le portail n'est pas réglable par boutique ; « hérite » n'est pas stocké.");
+        self::assertSame(['rue-des-arts' => ['portail' => true]], $s['overrides']['galleries']);
+    }
+
+    public function testShopOverrideBeatsGalleryOverrideBeatsGeneralSetting(): void
+    {
+        // Aucune galerie locale dans ce test : l'exception de boutique prend le pas sur le général.
+        feedback_settings_save(['overrides' => ['shops' => ['demo' => ['front' => false]], 'galleries' => []]] + $this->baseSettings());
+        self::assertTrue(feedback_widget_enabled('demo', 'admin'));
+        self::assertFalse(feedback_widget_enabled('demo', 'front'));
+        feedback_settings_save(['surfaces' => ['admin' => false, 'front' => false, 'portail' => false],
+            'overrides' => ['shops' => ['demo' => ['admin' => true]], 'galleries' => []]] + $this->baseSettings());
+        self::assertTrue(feedback_widget_enabled('demo', 'admin'), "L'exception de la boutique rouvre un espace coupé en général.");
+        self::assertFalse(feedback_widget_enabled('demo', 'front'));
+    }
+
+    public function testShopOverrideDoesNotBypassTesterCoverage(): void
+    {
+        feedback_settings_save(['overrides' => ['shops' => ['autre' => ['admin' => true]], 'galleries' => []]] + $this->baseSettings());
+        self::assertFalse(feedback_widget_enabled('autre', 'admin'));
+    }
+
+    public function testRoleSwitchesCutTheWidgetForThatRoleOnly(): void
+    {
+        feedback_settings_save(['roles' => ['vendeur' => false, 'client' => false, 'galerie' => false]] + $this->baseSettings());
+        self::assertTrue(feedback_widget_enabled('demo', 'admin', 'admin'));
+        self::assertFalse(feedback_widget_enabled('demo', 'admin', 'vendeur'));
+        self::assertFalse(feedback_widget_enabled('demo', 'front', 'client'));
+        self::assertFalse(feedback_widget_enabled('demo', 'front', 'admin'), "Un rôle d'administration n'ouvre pas le site public.");
+        self::assertTrue(feedback_widget_enabled('demo', 'front'), 'Sans rôle, seul l’espace compte.');
+
+        $in = ['shop' => 'demo', 'type' => 'bug', 'message' => 'Retour d\'un vendeur à la caisse.', 'email' => 'v@example.test'];
+        try {
+            feedback_add($in + ['role' => 'vendeur'], 7, 'Vendeur');
+            self::fail('Le rôle vendeur est coupé.');
+        } catch (InvalidArgumentException $e) {
+            self::assertCount(0, feedback_all());
+        }
+        self::assertSame('admin', feedback_add($in + ['role' => 'admin'], 7, 'Gérant')['surface']);
+    }
+
+    public function testPortailRolesAndGalleryOverride(): void
+    {
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => true, 'portail' => true],
+            'roles' => ['galerie' => false]] + $this->baseSettings());
+        self::assertTrue(feedback_portail_widget_enabled('', true), 'Exploitant : actif.');
+        self::assertFalse(feedback_portail_widget_enabled('rue-des-arts', true), 'Rôle « administrateur de galerie » coupé.');
+        self::assertTrue(feedback_portail_widget_enabled('rue-des-arts', false));
+
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => true, 'portail' => false],
+            'overrides' => ['shops' => [], 'galleries' => ['rue-des-arts' => ['portail' => true]]]] + $this->baseSettings());
+        self::assertTrue(feedback_portail_widget_enabled('rue-des-arts', true), 'La galerie ouvre le portail pour ses administrateurs.');
+        self::assertFalse(feedback_portail_widget_enabled('', true), "L'exploitant suit le réglage général.");
+        self::assertFalse(feedback_portail_widget_enabled('autre-galerie', true));
+    }
+
+    public function testGalleryOverrideAppliesToItsMembersAndShopOverrideWins(): void
+    {
+        $previous = getenv('BROCANTE_GALLERIES_DIR');
+        $dir = sys_get_temp_dir() . '/fbk-galleries-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        putenv('BROCANTE_GALLERIES_DIR=' . $dir);
+        try {
+            file_put_contents($dir . '/rue-des-arts.json', json_encode([
+                'name' => 'Rue des Arts', 'members' => [['type' => 'local', 'slug' => 'demo']],
+            ]));
+            feedback_settings_save(['overrides' => ['shops' => [], 'galleries' => ['rue-des-arts' => ['front' => false, 'admin' => false]]]] + $this->baseSettings());
+            self::assertFalse(feedback_widget_enabled('demo', 'front'), 'La galerie coupe le site public de ses membres.');
+            self::assertFalse(feedback_widget_enabled('demo', 'admin'));
+
+            feedback_settings_save(['overrides' => [
+                'shops' => ['demo' => ['admin' => true]],
+                'galleries' => ['rue-des-arts' => ['front' => false, 'admin' => false]],
+            ]] + $this->baseSettings());
+            self::assertTrue(feedback_widget_enabled('demo', 'admin'), "L'exception de la boutique l'emporte sur celle de sa galerie.");
+            self::assertFalse(feedback_widget_enabled('demo', 'front'));
+        } finally {
+            putenv($previous === false ? 'BROCANTE_GALLERIES_DIR' : 'BROCANTE_GALLERIES_DIR=' . $previous);
+            foreach (glob($dir . '/*') ?: [] as $f) @unlink($f);
+            @rmdir($dir);
+        }
     }
 }

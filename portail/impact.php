@@ -58,7 +58,7 @@ $all = $bilan['all'];
       <div class="kpi"><div class="k">CO₂ évité</div><div class="v"><?= e(impact_fmt_co2($all['total']['co2'])) ?></div><div class="s">≈ <?= e(number_format($all['km'], 0, ',', ' ')) ?> km en voiture</div></div>
       <div class="kpi"><div class="k">Eau économisée</div><div class="v"><?= e(impact_fmt_water($all['total']['water'])) ?></div><div class="s">≈ <?= e(number_format($all['showers'], 0, ',', ' ')) ?> douches</div></div>
       <div class="kpi"><div class="k">Pièces remises en circulation</div><div class="v"><?= (int) $all['total']['pieces'] ?></div><div class="s"><?= count(array_filter($bilan['shops'], static fn (array $s): bool => isset($s['report']))) ?> boutique(s) lue(s)</div></div>
-      <div class="kpi"><div class="k">Coût numérique (IA)</div><div class="v"><?= e(impact_fmt_co2($all['digital']['co2'])) ?></div><div class="s"><?= (int) $all['digital']['calls'] ?> appel(s) · <?= e(impact_fmt_water($all['digital']['water'])) ?> d’eau</div></div>
+      <div class="kpi"><div class="k">Production numérique</div><div class="v"><?= e(impact_fmt_co2($all['digital']['co2'] + $all['code']['co2'])) ?></div><div class="s">IA + code · <?= e(impact_fmt_water($all['digital']['water'] + $all['code']['water'])) ?> d’eau</div></div>
     </div>
 
     <div class="grid2">
@@ -76,6 +76,20 @@ $all = $bilan['all'];
         </section>
       <?php endforeach; ?>
     </div>
+
+    <section class="gcard">
+      <h2>Ce qui a déjà été produit (coût du projet)</h2>
+      <table class="t">
+        <thead><tr><th>Production</th><th class="num">Quantité</th><th class="num">CO₂</th><th class="num">Eau</th></tr></thead>
+        <tbody>
+          <tr><td>Code du projet</td><td class="num"><?= number_format($all['code']['lines'], 0, ',', ' ') ?> lignes · <?= (int) $all['code']['files'] ?> fichiers</td><td class="num"><?= e(impact_fmt_co2($all['code']['co2'])) ?></td><td class="num"><?= e(impact_fmt_water($all['code']['water'])) ?></td></tr>
+          <?php foreach ($all['digital']['by_kind'] as $kind => $row): ?>
+            <tr><td><?= e(impact_ai_kinds()[$kind]['label'] ?? $kind) ?></td><td class="num"><?= (int) $row['calls'] ?></td><td class="num"><?= e(impact_fmt_co2($row['co2'])) ?></td><td class="num"><?= e(impact_fmt_water($row['water'])) ?></td></tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <p class="note">Le code est compté une fois pour toute la plateforme (estimation d’après le nombre de lignes). Textes, images, vidéos et détourages viennent de la consommation d’IA de chaque boutique, sur la période choisie.</p>
+    </section>
 
     <section class="gcard">
       <h2>Par boutique</h2>
@@ -110,7 +124,7 @@ $all = $bilan['all'];
       </section>
     <?php endif; ?>
 
-    <p class="note">Bilan net : <strong><?= e(impact_fmt_co2($all['net']['co2'])) ?></strong> de CO₂ et <strong><?= e(impact_fmt_water($all['net']['water'])) ?></strong> d’eau, une fois retiré l’usage de l’IA.
+    <p class="note">Bilan net : <strong><?= e(impact_fmt_co2($all['net']['co2'])) ?></strong> de CO₂ et <strong><?= e(impact_fmt_water($all['net']['water'])) ?></strong> d’eau, une fois retirée la production numérique (IA et code).
       <strong>Ordres de grandeur, pas une mesure</strong> : chaque pièce vendue d’occasion est supposée éviter 90 % de l’impact d’une pièce neuve, estimée d’après son poids et sa famille d’objets. L’hébergement, les trajets des clients et l’emballage ne sont pas comptés. Seules les boutiques de ce serveur sont lues.</p>
   </div>
 </div>

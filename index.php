@@ -166,6 +166,20 @@ if ($view = shop_view('home')) {
 
 <?= rec_for_you_section_html(array_merge(array_column($promo, 'ref'), array_column($featured, 'ref'))) ?>
 
+<?php
+require_once __DIR__ . '/includes/impact.php';
+$impactBand = impact_public_enabled() ? impact_public_summary() : null;
+if ($impactBand && $impactBand['pieces'] > 0): ?>
+<section class="tight" id="impact">
+  <div class="wrap" style="text-align:center;">
+    <p class="eyebrow">Seconde main</p>
+    <h2 style="font-size:1.6rem;margin:10px 0 8px;"><?= (int) $impactBand['pieces'] ?> pièce<?= $impactBand['pieces'] > 1 ? 's' : '' ?> ont trouvé une nouvelle maison</h2>
+    <p class="lede" style="max-width:640px;margin:0 auto;">Une pièce revendue est une pièce qu’on n’a pas besoin de fabriquer : environ <strong><?= h(impact_fmt_co2($impactBand['co2'])) ?> de CO₂</strong> et <strong><?= h(impact_fmt_water($impactBand['water'])) ?> d’eau</strong> évités.</p>
+    <p style="font-size:.78rem;opacity:.7;margin:8px 0 0;">Estimation d’après le poids et le type d’objet.</p>
+  </div>
+</section>
+<?php endif; ?>
+
 <?php if ($followPhotos): ?>
 <section class="follow tight">
   <div class="wrap">

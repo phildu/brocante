@@ -1,8 +1,9 @@
 <?php
 // Retours des testeurs : boîte de triage, réponses par e-mail, relances et
 // pilotage du programme (boutiques et galeries testeuses, widget).
-// Les retours arrivent par le widget de l'administration des boutiques
-// (admin/feedback-api.php, voir includes/feedback.php). Export CSV.
+// Les retours arrivent par le widget de l'administration des boutiques, du site
+// public (client connecté) et du portail (admin/feedback-api.php,
+// portail/retour-api.php, voir includes/feedback.php). Export CSV.
 
 require __DIR__ . '/_bootstrap.php';
 ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
@@ -21,8 +22,12 @@ $filters = [
     'q' => feedback_clean_text($_GET['q'] ?? '', 80),
     'jours' => in_array((int) ($_GET['jours'] ?? 0), [0, 7, 30, 90], true) ? (int) ($_GET['jours'] ?? 0) : 0,
     'module' => preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', (string) ($_GET['module'] ?? '')) ? (string) $_GET['module'] : '',
+    'surface' => in_array($_GET['espace'] ?? '', FEEDBACK_SURFACES, true) ? (string) $_GET['espace'] : '',
 ];
-$backQuery = http_build_query(array_filter($filters, static fn ($v): bool => $v !== '' && $v !== 0), '', '&');
+$queryParams = $filters;
+$queryParams['espace'] = $queryParams['surface'];   // le paramètre d'adresse s'appelle « espace »
+unset($queryParams['surface']);
+$backQuery = http_build_query(array_filter($queryParams, static fn ($v): bool => $v !== '' && $v !== 0), '', '&');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -37,6 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'widget' => !empty($_POST['widget']),
                 'open_to_all' => !empty($_POST['open_to_all']),
                 'include_beta_testers' => !empty($_POST['include_beta_testers']),
+                'surfaces' => array_combine(FEEDBACK_SURFACES, array_map(
+                    static fn (string $surface): bool => !empty($_POST['surfaces'][$surface]), FEEDBACK_SURFACES)),
+                'roles' => array_combine(array_keys(FEEDBACK_ROLES), array_map(
+                    static fn (string $role): bool => !empty($_POST['roles'][$role]), array_keys(FEEDBACK_ROLES))),
+                // Exceptions : « » = hérite, « 1 » = oui, « 0 » = non (feedback_settings_normalize ne garde que oui / non).
+                'overrides' => is_array($_POST['overrides'] ?? null) ? $_POST['overrides'] : [],
                 'testers' => [
                     'shops' => is_array($testers['shops'] ?? null) ? $testers['shops'] : [],
                     'galleries' => is_array($testers['galleries'] ?? null) ? $testers['galleries'] : [],
@@ -85,10 +96,12 @@ $flash = portail_flash();
 $shops = feedback_tenant_list();
 $galleries = feedback_gallery_list();
 $testerShops = feedback_tester_shops($settings);
+$overrideCount = 0;
+foreach ($settings['overrides'] as $byKind) foreach ($byKind as $values) $overrideCount += count($values);
 $focusRecord = $focus !== '' ? feedback_find($focus) : null;
 $shopChoices = [];
 foreach ($shops as $slug => $cfg) $shopChoices[$slug] = (string) ($cfg['name'] ?? $slug);
-foreach ($all as $f) $shopChoices[$f['shop']] = $f['shop_name'] !== '' ? $f['shop_name'] : $f['shop'];
+foreach ($all as $f) if ($f['shop'] !== '') $shopChoices[$f['shop']] = $f['shop_name'] !== '' ? $f['shop_name'] : $f['shop'];
 ksort($shopChoices);
 
 if (($_GET['export'] ?? '') === 'csv') {
@@ -245,12 +258,16 @@ if (function_exists('saas_config')) {
         <h2 style="margin:0;">Programme testeurs</h2>
         <span class="fb-chip"><?= (int) feedback_program_shop_count($settings) ?> boutique(s)</span>
         <?php if ($settings['open_to_all']): ?><span class="fb-chip" data-tone="doing">Widget ouvert à tous</span><?php endif; ?>
+        <?php foreach (FEEDBACK_SURFACES as $surface): ?><span class="fb-chip"<?= !empty($settings['surfaces'][$surface]) && !empty($settings['widget']) ? ' data-tone="ok"' : '' ?>><?= e(FEEDBACK_SURFACE_LABELS[$surface]) ?> : <?= !empty($settings['surfaces'][$surface]) && !empty($settings['widget']) ? 'actif' : 'coupé' ?></span><?php endforeach; ?>
         <span class="muted" style="font-size:.78rem;margin-left:auto;">depuis le <?= e($day((int) $settings['since'])) ?> · <?= (int) $testerEmailCount ?> adresse(s) e-mail</span>
       </summary>
       <form method="post" style="display:grid;gap:12px;">
         <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="settings"><input type="hidden" name="back" value="<?= e($backQuery) ?>">
         <div class="fb-checks" style="max-height:none;">
-          <label class="fb-toggle"><input type="checkbox" name="widget" value="1"<?= !empty($settings['widget']) ? ' checked' : '' ?>><span><strong>Afficher le widget « Un retour ? »</strong><br><span class="muted">Dans l’administration des boutiques couvertes.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="widget" value="1"<?= !empty($settings['widget']) ? ' checked' : '' ?>><span><strong>Afficher le widget « Un retour ? »</strong><br><span class="muted">Interrupteur général : décoché, le widget disparaît partout, quels que soient les espaces ci-dessous.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="surfaces[admin]" value="1"<?= !empty($settings['surfaces']['admin']) ? ' checked' : '' ?>><span><strong>Administration des boutiques (back end)</strong><br><span class="muted">Pour les commerçants connectés à l’administration d’une boutique couverte.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="surfaces[front]" value="1"<?= !empty($settings['surfaces']['front']) ? ' checked' : '' ?>><span><strong>Site public des boutiques (front end)</strong><br><span class="muted">Pour les clients connectés à une boutique couverte.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="surfaces[portail]" value="1"<?= !empty($settings['surfaces']['portail']) ? ' checked' : '' ?>><span><strong>Portail</strong><br><span class="muted">Sur toutes les pages du portail, pour l’exploitant et les administrateurs de galerie (indépendant de la liste des boutiques).</span></span></label>
           <label class="fb-toggle"><input type="checkbox" name="open_to_all" value="1"<?= !empty($settings['open_to_all']) ? ' checked' : '' ?>><span><strong>Ouvrir à toutes les boutiques</strong><br><span class="muted">Le widget apparaît même hors programme testeurs.</span></span></label>
           <label class="fb-toggle"><input type="checkbox" name="include_beta_testers" value="1"<?= !empty($settings['include_beta_testers']) ? ' checked' : '' ?>><span><strong>Inclure les testeurs {des exts} « En test »</strong><br><span class="muted">Boutiques et galeries déjà déclarées dans Tarifs {des exts}.</span></span></label>
         </div>
@@ -262,6 +279,47 @@ if (function_exists('saas_config')) {
             <input type="number" name="reply_days" min="1" max="90" value="<?= (int) $settings['reply_days'] ?>">
           </label>
         </div>
+        <fieldset>
+          <legend>Rôles concernés — décochez un rôle pour lui retirer le bouton « Un retour ? »</legend>
+          <?php foreach (FEEDBACK_SURFACE_LABELS as $surfaceKey => $surfaceLabel): ?>
+            <p class="muted" style="margin:8px 0 2px;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;"><?= e($surfaceLabel) ?></p>
+            <div class="fb-checks" style="max-height:none;">
+              <?php foreach (FEEDBACK_ROLES as $roleKey => $role): if ($role['surface'] !== $surfaceKey) continue; ?>
+                <label><input type="checkbox" name="roles[<?= e($roleKey) ?>]" value="1"<?= !empty($settings['roles'][$roleKey]) ? ' checked' : '' ?>><?= e($role['label']) ?></label>
+              <?php endforeach; ?>
+            </div>
+          <?php endforeach; ?>
+          <p class="muted" style="margin:6px 0 0;font-size:.8rem;">Un rôle décoché ne voit plus le bouton, même si l’espace est actif. Le propriétaire d’une boutique est « Administrateur de la boutique ».</p>
+        </fieldset>
+        <fieldset>
+          <legend>Exceptions par galerie et par boutique (<?= $overrideCount ?>)</legend>
+          <p class="muted" style="margin:0 0 8px;font-size:.8rem;">« Comme le réglage général » : rien à faire. Une boutique prend d’abord sa propre exception, puis celle de sa galerie. Une boutique doit toujours être testeuse (liste ci-dessous) pour voir le widget.</p>
+          <div class="scroll">
+            <table class="t">
+              <thead><tr><th>Galerie / boutique</th><th>Administration</th><th>Site public</th><th>Portail</th></tr></thead>
+              <tbody>
+                <?php foreach ($galleries as $slug => $gallery): ?>
+                  <tr>
+                    <td><strong><?= e((string) $gallery['name']) ?></strong> <span class="muted">galerie · <?= e((string) $slug) ?></span></td>
+                    <?php foreach (['admin', 'front', 'portail'] as $surface): $v = $settings['overrides']['galleries'][$slug][$surface] ?? null; ?>
+                      <td><select name="overrides[galleries][<?= e((string) $slug) ?>][<?= $surface ?>]"><option value="">Comme le général</option><option value="1"<?= $v === true ? ' selected' : '' ?>>Oui</option><option value="0"<?= $v === false ? ' selected' : '' ?>>Non</option></select></td>
+                    <?php endforeach; ?>
+                  </tr>
+                <?php endforeach; ?>
+                <?php foreach ($shops as $slug => $cfg): ?>
+                  <tr>
+                    <td><?= e((string) ($cfg['name'] ?? $slug)) ?> <span class="muted">boutique · <?= e((string) $slug) ?></span></td>
+                    <?php foreach (['admin', 'front'] as $surface): $v = $settings['overrides']['shops'][$slug][$surface] ?? null; ?>
+                      <td><select name="overrides[shops][<?= e((string) $slug) ?>][<?= $surface ?>]"><option value="">Comme le général</option><option value="1"<?= $v === true ? ' selected' : '' ?>>Oui</option><option value="0"<?= $v === false ? ' selected' : '' ?>>Non</option></select></td>
+                    <?php endforeach; ?>
+                    <td class="muted">—</td>
+                  </tr>
+                <?php endforeach; ?>
+                <?php if (!$galleries && !$shops): ?><tr><td colspan="4" class="muted">Aucune galerie ni boutique sur ce serveur.</td></tr><?php endif; ?>
+              </tbody>
+            </table>
+          </div>
+        </fieldset>
         <fieldset>
           <legend>Boutiques testeuses (<?= count($settings['testers']['shops']) ?>)</legend>
           <div class="fb-checks">
@@ -290,6 +348,7 @@ if (function_exists('saas_config')) {
       <form class="fb-toolbar" method="get">
         <label>Statut<select name="statut"><?php foreach ($statusChoices as $key => $label): ?><option value="<?= e($key) ?>"<?= $filters['statut'] === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
         <label>Type<select name="type"><option value="">Tous</option><?php foreach (FEEDBACK_TYPE_LABELS as $key => $label): ?><option value="<?= e($key) ?>"<?= $filters['type'] === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
+        <label>Espace<select name="espace"><option value="">Tous</option><?php foreach (FEEDBACK_SURFACE_LABELS as $key => $label): ?><option value="<?= e($key) ?>"<?= $filters['surface'] === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
         <label>Boutique<select name="shop"><option value="">Toutes</option><?php foreach ($shopChoices as $slug => $name): ?><option value="<?= e((string) $slug) ?>"<?= $filters['shop'] === (string) $slug ? ' selected' : '' ?>><?= e($name) ?></option><?php endforeach; ?></select></label>
         <label>Période<select name="jours"><?php foreach ([0 => 'Tout', 7 => '7 jours', 30 => '30 jours', 90 => '90 jours'] as $d => $label): ?><option value="<?= $d ?>"<?= $filters['jours'] === $d ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
         <label>Recherche<input type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="message, boutique, e-mail…"></label>
@@ -311,8 +370,9 @@ if (function_exists('saas_config')) {
               <span class="fb-chip" data-tone="<?= e($statusTone($f['status'])) ?>"><?= e(FEEDBACK_STATUS_LABELS[$f['status']] ?? $f['status']) ?></span>
               <?php if (in_array($f['priority'], ['high', 'urgent'], true)): ?><span class="fb-chip fb-chip--prio" data-prio="<?= e($f['priority']) ?>"><?= e(FEEDBACK_PRIORITY_LABELS[$f['priority']] ?? $f['priority']) ?></span><?php endif; ?>
               <?php if (!empty($f['attachment'])): ?><span class="fb-chip">Capture</span><?php endif; ?>
-              <?php if (($f['source'] ?? 'equipe') === 'client'): ?><span class="fb-chip">Client</span><?php endif; ?>
-              <span class="fb-summary-shop"><?= e($f['shop_name']) ?></span>
+              <span class="fb-chip" data-surface="<?= e($f['surface']) ?>"><?= e(FEEDBACK_SURFACE_LABELS[$f['surface']] ?? $f['surface']) ?></span>
+              <?php if ($f['surface'] !== 'portail'): ?><span class="fb-summary-shop"><?= e($f['shop_name']) ?></span>
+              <?php elseif ($f['gallery'] !== ''): ?><span class="fb-summary-shop">galerie <?= e($f['gallery']) ?></span><?php endif; ?>
               <?php if ($f['account'] !== ''): ?><span class="muted">· <?= e($f['account']) ?></span><?php endif; ?>
               <span class="fb-summary-date"><?= e($dt((string) $f['at'])) ?></span>
             </span>

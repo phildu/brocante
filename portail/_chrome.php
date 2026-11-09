@@ -169,8 +169,10 @@ function portail_nav_groups(): array
         ['label' => 'Plateforme', 'items' => array_merge([
             ['href' => '/portail/api.php', 'label' => 'API & réseaux', 'icon' => 'key'],
             ['href' => '/portail/domaines.php', 'label' => 'Noms de domaine', 'icon' => 'at'],
+            ['href' => '/portail/identite.php', 'label' => 'Logo & favicon', 'icon' => 'gallery'],
             ['href' => '/portail/nouveau.php', 'label' => 'Nouveau commerce', 'icon' => 'plus'],
             ['href' => '/portail/echange.php', 'label' => 'Échange prod / préprod', 'icon' => 'upload'],
+            ['href' => '/portail/aide-contenu.php', 'label' => "Contenu de l'aide", 'icon' => 'help'],
             ['href' => '/aide/', 'label' => "Centre d'aide", 'icon' => 'help'],
         ], !empty($portailLocal) ? [[
             // Les fichiers data/*-outbox.log n'existent qu'en local : pas d'entrée en ligne.
@@ -282,6 +284,7 @@ function portail_gallery_brand(): ?array
 
 function portail_page_start(array $opts = []): void
 {
+    require_once PORTAIL_ROOT . '/includes/saas.php';   // logo du menu : images de marque du portail
     $title = (string) ($opts['title'] ?? 'Administration');
     $eyebrow = (string) ($opts['eyebrow'] ?? '');
     $desc = (string) ($opts['desc'] ?? '');
@@ -311,8 +314,8 @@ function portail_page_start(array $opts = []): void
 <?php endif; ?>
 <aside class="pnav" id="pnav" aria-label="Navigation de l'administration">
   <a class="pnav-brand" href="<?= $limited ? '/portail/galerie-tableau.php' : '/portail/' ?>"<?= $brand ? ' title="' . e($brand['name']) . '"' : '' ?>>
-    <span class="pnav-mark<?= $brand ? ' is-gallery' : '' ?>"><?php if ($brand && $brand['logo'] !== ''): ?><img src="/<?= e($brand['logo']) ?>" alt=""><?php else: ?><?= portail_icon($limited ? 'gallery' : 'store', 20) ?><?php endif; ?></span>
-    <span class="pnav-brand-text"><b><?= e($brand['name'] ?? 'brocs') ?></b><small><?= $limited ? 'Espace galerie' : 'Administration' ?></small></span>
+    <span class="pnav-mark<?= $brand ? ' is-gallery' : (!$limited ? ' is-logo' : '') ?>"><?php if ($brand && $brand['logo'] !== ''): ?><img src="/<?= e($brand['logo']) ?>" alt=""><?php elseif (!$brand && !$limited): ?><img src="/<?= e(saas_brand_image(saas_config(), 'square')) ?>" alt="" width="30" height="30"><?php else: ?><?= portail_icon($limited ? 'gallery' : 'store', 20) ?><?php endif; ?></span>
+    <span class="pnav-brand-text"><b><?= e($brand['name'] ?? 'bricbrok') ?></b><small><?= $limited ? 'Espace galerie' : 'Administration' ?></small></span>
   </a>
 
   <div class="pnav-scroll">
@@ -404,4 +407,11 @@ function portail_page_start(array $opts = []): void
 <script src="/assets/ai-wait-timer.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/ai-wait-timer.js') ?>"></script>
 <script src="/assets/heic-convert.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/heic-convert.js') ?>"></script>
 <?php
+    // Widget « Un retour ? » du portail (réglage : Retours testeurs → Programme testeurs → Portail).
+    try {
+        if (!function_exists('feedback_portail_widget_html')) require_once PORTAIL_ROOT . '/includes/feedback.php';
+        echo feedback_portail_widget_html(csrf_token(), $limited ? (string) GA_LIMITED : '');
+    } catch (Throwable $error) {
+        // Le widget ne doit jamais empêcher d'afficher une page du portail.
+    }
 }

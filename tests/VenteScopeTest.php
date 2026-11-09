@@ -24,6 +24,11 @@ final class VenteScopeTest extends TestCase
 
     protected function setUp(): void
     {
+        // Un autre fichier de tests peut avoir changé ou retiré ces variables entre-temps (ordre de la suite complète) : on les remet.
+        $tmp = sys_get_temp_dir() . '/vente-scope-test-' . getmypid();
+        @mkdir($tmp . '/galeries', 0775, true);
+        putenv('BROCANTE_GALLERIES_DIR=' . $tmp . '/galeries');
+        putenv('VENTE_DATA_DIR=' . $tmp . '/vente');
         $this->dir = (string) getenv('VENTE_DATA_DIR');
         // Un test précédent (GallerySponsorsTest) peut avoir supprimé le dossier des galeries : on le recrée plutôt que de dépendre de l'ordre d'exécution.
         if (!is_dir(galleries_dir())) @mkdir(galleries_dir(), 0777, true);

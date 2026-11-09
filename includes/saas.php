@@ -126,11 +126,66 @@ function saas_logo_store(array $file, int $maxSide = 600): string
     return 'uploads/saas/' . $name;
 }
 
+/**
+ * Images de marque du portail : trois déclinaisons du logo (mêmes que celles d'une boutique, LOGO_VARIANTS) et le favicon,
+ * réglés dans Portail → Logo & favicon et enregistrés dans uploads/saas/ ; chemin relatif à la racine web.
+ */
+const SAAS_BRAND_PATH = '#^uploads/saas/(?:logo-portail-(?:horizontal|vertical|square)|favicon-portail)-[a-f0-9]{8}\.(?:png|jpg|webp|svg|ico)$#';
+
+/** Images d'origine (étal bricbrok), utilisées tant qu'aucune image n'est téléversée. */
+const SAAS_BRAND_DEFAULTS = [
+    'horizontal' => 'assets/bricbrok/bricbrok-etal-horizontal.svg',
+    'vertical' => 'assets/bricbrok/bricbrok-etal-vertical.svg',
+    'square' => 'assets/bricbrok/bricbrok-etal-icone.svg',
+    'favicon' => 'assets/bricbrok/bricbrok-etal-favicon.svg',
+];
+
+/** Enregistre une image de marque du portail (« horizontal », « vertical », « square » ou « favicon ») ; rend le chemin relatif. */
+function saas_brand_store(string $kind, array $file): string
+{
+    require_once __DIR__ . '/appearance.php';
+    return logo_store_upload($kind, $file, 'portail', 'saas', $kind === 'favicon' ? ['png', 'svg', 'ico'] : []);
+}
+
+/** Supprime une image de marque du portail (uniquement celles que saas_brand_store() a écrites). */
+function saas_brand_delete(string $path): void
+{
+    if (preg_match(SAAS_BRAND_PATH, $path)) @unlink(dirname(__DIR__) . '/' . $path);
+}
+
+/**
+ * Image à utiliser pour une déclinaison : celle du portail, sinon (horizontal) l'ancien logo unique, sinon le carré pour le vertical,
+ * sinon — avec $withDefault — l'image d'origine bricbrok. '' si rien et sans image d'origine.
+ */
+function saas_brand_image(array $cfg, string $kind, bool $withDefault = true): string
+{
+    $logos = (array) ($cfg['logos'] ?? []);
+    $legacy = (string) ($cfg['logo'] ?? '');
+    $path = match ($kind) {
+        'horizontal' => ($logos['horizontal'] ?? '') ?: $legacy,
+        'vertical' => ($logos['vertical'] ?? '') ?: ($logos['square'] ?? '') ?: $legacy,
+        'favicon' => ($cfg['favicon'] ?? '') ?: ($logos['square'] ?? ''),
+        default => ($logos['square'] ?? '') ?: $legacy,
+    };
+    if ($path === '' && $withDefault) $path = SAAS_BRAND_DEFAULTS[$kind] ?? '';
+    return $path;
+}
+
+/** Balise <link rel="icon"> du portail : son favicon, sinon son logo carré, sinon l'icône d'origine. */
+function saas_favicon_html(?array $cfg = null): string
+{
+    $path = saas_brand_image($cfg ?? saas_config(), 'favicon');
+    if ($path === '') return '';
+    $type = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) { 'svg' => 'image/svg+xml', 'ico' => 'image/x-icon', 'jpg' => 'image/jpeg', 'webp' => 'image/webp', default => 'image/png' };
+    return '<link rel="icon" type="' . $type . '" href="/' . saas_e($path) . '">' . "\n";
+}
+
 /** Pastille de marque : le logo de la plateforme s'il existe, sinon l'initiale du nom. */
 function saas_brand_mark(array $cfg): string
 {
-    if (($cfg['logo'] ?? '') !== '') {
-        return '<img class="brand-logo" src="/' . saas_e($cfg['logo']) . '" alt="">';
+    $logo = saas_brand_image($cfg, 'square', false);
+    if ($logo !== '') {
+        return '<img class="brand-logo" src="/' . saas_e($logo) . '" alt="">';
     }
     return '<span class="mark" aria-hidden="true">' . saas_e(mb_strtoupper(mb_substr($cfg['name'], 0, 1))) . '</span>';
 }
@@ -160,6 +215,10 @@ function saas_config(): array
         'tagline' => mb_substr(trim((string) ($saved['tagline'] ?? '')) ?: 'Votre boutique en ligne, seule ou réunie avec d\'autres commerçants.', 0, 160),
         'contact' => filter_var((string) ($saved['contact'] ?? ''), FILTER_VALIDATE_EMAIL) ?: '',
         'logo' => preg_match('#^uploads/saas/logo-[a-z0-9]+\.(?:png|jpg|webp)$#', (string) ($saved['logo'] ?? '')) ? (string) $saved['logo'] : '',
+        // Logo en trois déclinaisons et favicon du portail (voir SAAS_BRAND_PATH) ; 'logo' est l'ancien logo unique, gardé comme repli.
+        'logos' => array_filter(array_map(static fn ($v) => preg_match(SAAS_BRAND_PATH, (string) $v) ? (string) $v : '',
+            array_intersect_key((array) ($saved['logos'] ?? []), array_flip(['horizontal', 'vertical', 'square'])))),
+        'favicon' => preg_match(SAAS_BRAND_PATH, (string) ($saved['favicon'] ?? '')) ? (string) $saved['favicon'] : '',
         'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', $accent) ? strtolower($accent) : '#b5502e',
         // Adresse IP du serveur indiquée aux boutiques qui rattachent un domaine
         // déjà acheté (enregistrement A). Vide : celle du serveur est proposée.
@@ -1228,6 +1287,7 @@ function saas_page_start(string $title, string $description, string $active = ''
 <meta name="description" content="<?= saas_e($description) ?>">
 <meta property="og:title" content="<?= saas_e($title) ?>">
 <meta property="og:description" content="<?= saas_e($description) ?>">
+<?= saas_favicon_html($cfg) ?>
 <link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/assets/saas.css">
 <link rel="stylesheet" href="/assets/oauth.css">
@@ -1240,7 +1300,7 @@ function saas_page_start(string $title, string $description, string $active = ''
   <a class="brand" href="/"><?= saas_brand_mark($cfg) ?><?= saas_e($cfg['name']) ?></a>
   <nav aria-label="Navigation principale">
     <?php foreach ($nav as $k => [$href, $label]): ?><a href="<?= $href ?>"<?= $active === $k ? ' aria-current="page"' : '' ?>><?= $label ?></a><?php endforeach; ?>
-    <a href="/#connexion">Se connecter</a>
+    <a href="/connexion.php" rel="nofollow">Se connecter</a>
     <a class="cta" href="/inscription/"<?= $active === 'inscription' ? ' aria-current="page"' : '' ?><?= cta_attrs('site_header_cta') ?>><?= saas_e(cta_label('site_header_cta')) ?></a>
   </nav>
 </div></header>

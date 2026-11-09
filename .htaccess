@@ -11,6 +11,9 @@ DirectoryIndex index.php
 # avant tout fichier robots.txt statique, y compris sous le domaine propre d'un commerce.
 RewriteRule ^robots\.txt$ robots.php [L]
 
+# Icône d'onglet par défaut : /favicon.ico (navigateurs qui le réclament sans <link rel="icon">) → favicon.php (icône du portail, ou logo carré du commerce).
+RewriteRule ^favicon\.ico$ favicon.php [L]
+
 # Galeries commerciales (page publique, sans connexion) : /galerie/ et /galerie/<identifiant>/ — voir galerie/index.php.
 RewriteRule ^galerie/?$ galerie/index.php [L]
 # Connexion à l'administration d'UNE galerie : /galerie/<identifiant>/admin (galerie/admin.php sans identifiant reste la connexion générique).
@@ -33,6 +36,12 @@ RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/?$ galerie/index.php?g=$1 [L,QSA]
 # Agents externes des plugins (ex. agent de rendu vidéo) : /api/… → plugin-agent.php, aussi sous /<commerce>/api/… (après la
 # réécriture du commerce ci-dessous, la règle s'applique au second passage). La route du plugin authentifie l'agent (jeton).
 RewriteRule ^api/([a-z0-9/-]+)$ plugin-agent.php?agent_path=$1 [L,QSA]
+
+# Serveur MCP : documents de découverte OAuth. Racine : /.well-known/oauth-protected-resource[/<commerce>/mcp.php] et
+# /.well-known/oauth-authorization-server[/<commerce>] ; sous un commerce : /<commerce>/.well-known/(oauth-authorization-server|openid-configuration).
+RewriteRule ^\.well-known/oauth-protected-resource(?:/([a-z0-9][a-z0-9_-]*)/mcp\.php)?$ mcp-oauth-meta.php?doc=resource&t=$1 [L,QSA]
+RewriteRule ^\.well-known/(?:oauth-authorization-server|openid-configuration)(?:/([a-z0-9][a-z0-9_-]*))?$ mcp-oauth-meta.php?doc=server&t=$1 [L,QSA]
+RewriteRule ^([a-z0-9][a-z0-9_-]*)/\.well-known/(?:oauth-authorization-server|openid-configuration)$ mcp-oauth-meta.php?doc=server&t=$1 [L,QSA]
 
 # Un commerce servi sous le domaine du portail : /<identifiant>/… affiche la
 # boutique de tenants/<identifiant>/ (le PHP reconnaît le commerce à l'adresse

@@ -6,7 +6,8 @@
 //   - commandes payées du site (table orders) ;
 //   - pièces marquées vendues (products.sold_at) par canal : Leboncoin, Vinted, Facebook, marché, stand… hors commandes du site ;
 //   - ventes de la boutique physique saisies à la main (physical_visits), au poids moyen du catalogue.
-// Côté « coût » : seul l'usage de l'IA (api_usage) est estimé ; l'hébergement et les trajets ne sont pas comptés.
+// Côté « production » : textes, images, vidéos et détourages générés par l'IA (table ai_usage, par boutique) et, pour la plateforme
+// seulement, le code produit (estimé d'après le nombre de lignes). L'hébergement et les trajets ne sont pas comptés.
 
 /** Part de l'impact du neuf réellement évitée (nettoyage, transport et emballage de la pièce d'occasion). */
 const IMPACT_REUSE_RATE = 0.9;
@@ -76,14 +77,62 @@ function impact_channel_label(string $channel): string
     return $channel === '' || $channel === 'autre' ? 'Autre canal' : ucfirst($channel);
 }
 
-/** Coût numérique d'un appel d'IA, d'après les ordres de grandeur publiés (texte ≈ 0,03 g et 0,26 mL ; image bien plus). */
+/** Types d'appels d'IA enregistrés (table ai_usage) : libellé, kg CO₂e et litres d'eau par appel (ordres de grandeur publiés : un texte ≈ 0,03 g et 0,26 mL ; image et vidéo bien plus). */
+function impact_ai_kinds(): array
+{
+    return [
+        'text' => ['label' => 'Textes générés', 'co2' => 0.00005, 'water' => 0.0005],
+        'search' => ['label' => 'Recherches web par IA', 'co2' => 0.00008, 'water' => 0.0008],
+        'image' => ['label' => 'Images générées', 'co2' => 0.003, 'water' => 0.03],
+        'cutout' => ['label' => 'Détourages de photos', 'co2' => 0.001, 'water' => 0.01],
+        'video' => ['label' => 'Vidéos générées', 'co2' => 0.05, 'water' => 0.5],
+    ];
+}
+
 function impact_digital_unit(string $kind): array
 {
-    return match ($kind) {
-        'gemini_image' => ['co2' => 0.003, 'water' => 0.03],      // kg CO₂e, litres
-        'fal_cutout' => ['co2' => 0.001, 'water' => 0.01],
-        default => ['co2' => 0.00003, 'water' => 0.00026],
-    };
+    $k = impact_ai_kinds();
+    return $k[$kind] ?? $k['text'];
+}
+
+/** Code produit avec l'aide de l'IA : par ligne écrite ≈ 12 jetons × 30 (relectures, essais) × 0,002 Wh ≈ 0,7 Wh, soit ≈ 0,22 g CO₂e (0,3 kg/kWh) et ≈ 1,3 mL d'eau (1,8 L/kWh). */
+const IMPACT_CODE_G_CO2_PER_LINE = 0.22;
+const IMPACT_CODE_ML_WATER_PER_LINE = 1.3;
+
+/**
+ * Empreinte estimée du code du projet : lignes des fichiers PHP, JS, CSS, HTML, SH et SQL (hors bibliothèques, envois, données et sauvegardes).
+ * Le décompte est gardé 24 h dans $cache (fichier JSON) pour ne pas relire tout le code à chaque affichage.
+ * -> ['lines' => int, 'files' => int, 'co2' => kg, 'water' => litres]
+ */
+function impact_code_footprint(?string $root = null, ?string $cache = null): array
+{
+    $root = rtrim($root ?? dirname(__DIR__), '/');
+    $cache ??= $root . '/data/impact-code.json';
+    $c = is_file($cache) ? json_decode((string) @file_get_contents($cache), true) : null;
+    if (is_array($c) && isset($c['lines'], $c['files'], $c['at']) && time() - (int) $c['at'] < 86400) {
+        $lines = (int) $c['lines'];
+        $files = (int) $c['files'];
+    } else {
+        $skip = ['vendor', 'node_modules', '.git', '.claude', 'uploads', 'data', 'backups', 'db-backup', 'var', 'exemples-test'];
+        $lines = 0;
+        $files = 0;
+        try {
+            $it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
+                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+                static fn (SplFileInfo $f): bool => !($f->isDir() && in_array($f->getFilename(), $skip, true))
+            ));
+            foreach ($it as $f) {
+                if (!$f->isFile() || !preg_match('/\.(php|js|css|html|sh|sql)$/i', $f->getFilename()) || str_contains($f->getFilename(), '.bak-') || str_contains($f->getFilename(), '.min.')) continue;
+                $n = substr_count((string) @file_get_contents($f->getPathname()), "\n");
+                $lines += $n;
+                $files++;
+            }
+        } catch (Throwable $e) {
+            // dossier illisible : on garde ce qui a été compté
+        }
+        @file_put_contents($cache, json_encode(['lines' => $lines, 'files' => $files, 'at' => time()]), LOCK_EX);
+    }
+    return ['lines' => $lines, 'files' => $files, 'co2' => $lines * IMPACT_CODE_G_CO2_PER_LINE / 1000, 'water' => $lines * IMPACT_CODE_ML_WATER_PER_LINE / 1000];
 }
 
 /** « 12,3 kg » ou « 1,2 t » de CO₂e. */
@@ -150,11 +199,15 @@ function impact_aggregate(array $lines, int $physicalCount = 0, ?array $avgPiece
     $dCo2 = 0.0;
     $dWater = 0.0;
     $calls = 0;
+    $byKind = [];
     foreach ($aiCalls as $kind => $n) {
+        $n = (int) $n;
+        if ($n <= 0) continue;
         $u = impact_digital_unit((string) $kind);
-        $dCo2 += $u['co2'] * (int) $n;
-        $dWater += $u['water'] * (int) $n;
-        $calls += (int) $n;
+        $byKind[(string) $kind] = ['calls' => $n, 'co2' => $u['co2'] * $n, 'water' => $u['water'] * $n];
+        $dCo2 += $u['co2'] * $n;
+        $dWater += $u['water'] * $n;
+        $calls += $n;
     }
     uasort($families, static fn (array $a, array $b): int => $b['co2'] <=> $a['co2']);
 
@@ -162,7 +215,7 @@ function impact_aggregate(array $lines, int $physicalCount = 0, ?array $avgPiece
         'total' => $total,
         'groups' => $groups,
         'families' => $families,
-        'digital' => ['calls' => $calls, 'co2' => $dCo2, 'water' => $dWater],
+        'digital' => ['calls' => $calls, 'co2' => $dCo2, 'water' => $dWater, 'by_kind' => $byKind],
         'net' => ['co2' => $total['co2'] - $dCo2, 'water' => $total['water'] - $dWater],
         'km' => $total['co2'] / IMPACT_KG_PER_KM,
         'showers' => $total['water'] / IMPACT_LITRES_PER_SHOWER,
@@ -211,11 +264,15 @@ function impact_report(int $days = 0, ?PDO $pdo = null): array
         $st = $pdo->prepare('SELECT COALESCE(SUM(sales_count), 0) FROM physical_visits WHERE day >= ?');
         $st->execute([$sinceDay]);
         $physical = (int) $st->fetchColumn();
-        $st = $pdo->prepare('SELECT kind, COUNT(*) AS n FROM api_usage WHERE ts >= ? GROUP BY kind');
+    } catch (Throwable $e) {
+        // table absente sur une très ancienne base : on l'ignore
+    }
+    try {
+        $st = $pdo->prepare('SELECT kind, COUNT(*) AS n FROM ai_usage WHERE at >= ? GROUP BY kind');
         $st->execute([$since]);
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $aiCalls[$r['kind']] = (int) $r['n'];
     } catch (Throwable $e) {
-        // tables absentes sur une très ancienne base : on les ignore
+        // pas d'IA utilisée sur cette base
     }
 
     $avg = null;
@@ -242,6 +299,10 @@ function impact_merge(array $reports): array
     foreach ($reports as $r) {
         $sum($out['total'], $r['total'], ['pieces', 'co2', 'water']);
         $sum($out['digital'], $r['digital'], ['calls', 'co2', 'water']);
+        foreach ($r['digital']['by_kind'] ?? [] as $kind => $row) {
+            $out['digital']['by_kind'][$kind] ??= ['calls' => 0, 'co2' => 0.0, 'water' => 0.0];
+            $sum($out['digital']['by_kind'][$kind], $row, ['calls', 'co2', 'water']);
+        }
         foreach ($r['groups'] as $g => $group) {
             $sum($out['groups'][$g]['total'], $group['total'], ['pieces', 'co2', 'water']);
             foreach ($group['rows'] as $channel => $row) {
@@ -288,5 +349,47 @@ function impact_report_all(int $days = 0): array
         }
     }
     uasort($shops, static fn (array $a, array $b): int => ($b['report']['total']['co2'] ?? -1) <=> ($a['report']['total']['co2'] ?? -1));
-    return ['all' => impact_merge($reports), 'shops' => $shops];
+    $all = impact_merge($reports);
+    $all['code'] = impact_code_footprint();   // le code est commun à toutes les boutiques : compté une seule fois, ici
+    $all['net'] = ['co2' => $all['net']['co2'] - $all['code']['co2'], 'water' => $all['net']['water'] - $all['code']['water']];
+    return ['all' => $all, 'shops' => $shops];
+}
+
+// ── Affichage public sur l'accueil de la boutique (option du commerçant) ────
+
+function impact_setting(string $name): string
+{
+    try {
+        $st = db()->prepare('SELECT value FROM settings WHERE name = ?');
+        $st->execute([$name]);
+        return (string) $st->fetchColumn();
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
+function impact_setting_save(string $name, string $value): void
+{
+    db()->prepare('INSERT OR REPLACE INTO settings (name, value) VALUES (?, ?)')->execute([$name, $value]);
+}
+
+/** Le commerçant a-t-il choisi d'afficher le bilan sur l'accueil de sa boutique ? */
+function impact_public_enabled(): bool
+{
+    return impact_setting('impact_public') === '1';
+}
+
+/** Chiffres du bandeau public (depuis le début), recalculés au plus une fois par heure. -> ['pieces' => n, 'co2' => kg, 'water' => L] */
+function impact_public_summary(): array
+{
+    $c = json_decode(impact_setting('impact_public_cache'), true);
+    if (is_array($c) && isset($c['at'], $c['pieces']) && time() - (int) $c['at'] < 3600) return $c;
+    try {
+        $t = impact_report(0)['total'];
+        $c = ['at' => time(), 'pieces' => (int) $t['pieces'], 'co2' => (float) $t['co2'], 'water' => (float) $t['water']];
+        impact_setting_save('impact_public_cache', json_encode($c));
+    } catch (Throwable $e) {
+        $c = ['at' => time(), 'pieces' => 0, 'co2' => 0.0, 'water' => 0.0];
+    }
+    return $c;
 }

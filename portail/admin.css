@@ -123,6 +123,8 @@ p { text-wrap: pretty; }
   background: linear-gradient(150deg, #3a8c63, #1d4a36);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 8px 18px -10px rgba(0, 0, 0, 0.7);
 }
+.pnav-mark.is-logo { background: #fff6e5; padding: 4px; }
+.pnav-mark.is-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .pnav-brand-text { display: grid; line-height: 1.05; }
 .pnav-brand-text b { font-size: 1.18rem; letter-spacing: -0.03em; font-weight: 700; }
 .pnav-brand-text small { margin-top: 3px; font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pnav-muted); font-weight: 600; }

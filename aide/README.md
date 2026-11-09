@@ -20,6 +20,10 @@ Centre d'aide documentaire de la plateforme : FAQ par rôle, tutoriels pas à pa
 | `aide/assets/captures/` | Fiches de capture ; aucune image réelle pour l'instant. |
 | `aide/assets/videos/` | 5 sous-titres `.vtt` et storyboards ; aucun MP4. |
 
+## Édition depuis le portail
+
+`portail/aide-contenu.php` (Plateforme → Contenu de l'aide) permet de corriger la FAQ, le glossaire et les tutoriels (titre, résumé, étapes), d'ajouter une question ou un terme, de créer un tutoriel complet (prérequis, étapes, erreurs fréquentes) et de cacher une fiche. Les corrections sont écrites dans `data/saas/aide-contenu.json` (dossier jamais déployé) et appliquées par-dessus les JSON de `aide/contenu/` par `aide_json_file()` (`includes/aide-edition.php`). Chaque environnement (local, préprod, prod) a donc ses propres corrections ; les JSON restent la base livrée avec le code.
+
 ## Source de contenu
 
 La base structurée est préparée dans `/Users/admin/Documents/projet/web local/brocs/contenu-aide/`. Elle est copiée dans `aide/contenu/` et reste la source de vérité éditoriale. Pour la mettre à jour :
