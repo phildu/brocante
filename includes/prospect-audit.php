@@ -452,10 +452,19 @@ function pa_score_web(array $site): array
     $state = (string) ($site['state'] ?? 'absent');
     $criteria = [];
     $gaps = [];
-    $add = static function (string $key, string $label, int $points, int $max, array $notes = []) use (&$criteria, &$gaps): void {
+    $problems = [
+        'dispo' => 'Disponibilité ou sécurité insuffisante',
+        'mobile' => 'Expérience mobile incomplète',
+        'perf' => 'Performance insuffisante',
+        'seo' => 'Contenu et référencement à reprendre',
+        'fraicheur' => 'Site peu entretenu',
+        'conversion' => 'Conversion et contact à améliorer',
+        'a11y' => 'Accessibilité de base à corriger',
+    ];
+    $add = static function (string $key, string $label, int $points, int $max, array $notes = []) use (&$criteria, &$gaps, $problems): void {
         $points = max(0, min($max, $points));
         $criteria[] = ['key' => $key, 'label' => $label, 'points' => $points, 'max' => $max, 'notes' => $notes];
-        if ($points < $max) $gaps[] = ['key' => $key, 'label' => $label, 'lost' => $max - $points, 'detail' => implode(' · ', $notes)];
+        if ($points < $max) $gaps[] = ['key' => $key, 'label' => $problems[$key] ?? $label, 'lost' => $max - $points, 'detail' => implode(' · ', $notes)];
     };
     if ($state === 'absent') {
         foreach ([['dispo', 'Disponibilité et sécurité', 20], ['mobile', 'Adapté au mobile', 18], ['perf', 'Performance', 18], ['seo', 'Contenu et référencement', 18], ['fraicheur', 'Fraîcheur et maintenance', 10], ['conversion', 'Conversion et contact', 10], ['a11y', 'Accessibilité de base', 6]] as [$k, $l, $max]) {
