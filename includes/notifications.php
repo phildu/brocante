@@ -1328,13 +1328,14 @@ function nt_send_email(string $to, array $msg): array
  * Client SMTP minimal : SSL implicite (465) ou STARTTLS (587), AUTH PLAIN/LOGIN.
  * 4xx et problèmes réseau = temporaire ; 5xx = définitif.
  */
-function nt_smtp_send(string $from, string $to, string $raw): array
+function nt_smtp_send(string $from, string $to, string $raw, ?array $smtp = null): array
 {
-    $host = (string) nt_cfg('email.smtp_host');
-    $port = (int) nt_cfg('email.smtp_port');
-    $secure = (string) nt_cfg('email.smtp_secure');
-    $user = (string) nt_cfg('email.smtp_user');
-    $pass = (string) nt_cfg('email.smtp_pass');
+    // $smtp (host, port, secure, user, pass) remplace les réglages du module : utilisé par le mailer du portail.
+    $host = (string) ($smtp['host'] ?? nt_cfg('email.smtp_host'));
+    $port = (int) ($smtp['port'] ?? nt_cfg('email.smtp_port'));
+    $secure = (string) ($smtp['secure'] ?? nt_cfg('email.smtp_secure'));
+    $user = (string) ($smtp['user'] ?? nt_cfg('email.smtp_user'));
+    $pass = (string) ($smtp['pass'] ?? nt_cfg('email.smtp_pass'));
     $fp = null;
     try {
         $ctx = stream_context_create(['ssl' => ['verify_peer' => true, 'verify_peer_name' => true]]);

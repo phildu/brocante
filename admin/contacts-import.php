@@ -5,13 +5,15 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/contacts-import-ui.php';
 require_admin(); // réservée aux administrateurs
 
+require_once __DIR__ . '/../includes/vente-scope.php';
 $content = get_content();
 $csrf = admin_csrf_token();
+$venteOn = vs_boutique_enabled();      // les prospects ont leur carnet dans l'extension « Force de vente » ; ici, seulement les clients
 $body = ci_page([
     'url' => '/admin/contacts-import.php', 'back_url' => '/admin/accounts.php', 'back_label' => 'Voir les comptes',
     'csrf_html' => '<input type="hidden" name="csrf" value="' . h($csrf) . '">', 'csrf_check' => 'admin_csrf_check',
     'noun' => 'les comptes de la boutique', 'require_email' => true, 'allow_custom_fields' => true,
-    'roles' => ['prospect' => 'Prospects', 'client' => 'Clients'], 'role_label' => 'Ajouter ces contacts comme',
+    'roles' => ['client' => 'Clients'], 'role_label' => 'Ajouter ces contacts comme',
     'exists' => static fn (array $c): ?array => account_find_by_email($c['email']),
     'create' => static function (array $c, array $o): bool {
         try {
@@ -61,6 +63,8 @@ $body = ci_page([
     <p class="eyebrow">Équipe et contacts</p>
     <h1 style="font-size:1.8rem;margin:12px 0 12px;">Importer des contacts</h1>
     <p><a href="/admin/accounts.php">← Retour aux comptes</a></p>
+    <p class="hint" style="max-width:70ch;">Cet import ajoute des <strong>clients</strong>. Vos <strong>prospects</strong> ont leur propre carnet dans l'extension <strong>Force de vente</strong> :
+      <?php if ($venteOn): ?><a href="/admin/vente/prospects-import.php">importer des prospects</a> (Excel, CSV, base SQLite…).<?php else: ?><a href="/admin/plugin.php?p=force-de-vente">activer l'extension</a> pour les importer.<?php endif; ?></p>
     <?= $body ?>
   </div>
 </section>

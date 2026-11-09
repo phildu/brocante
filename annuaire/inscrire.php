@@ -102,7 +102,7 @@ $draft['url'] = $scan['final_url'] ?? $input['url'];
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
 <header class="site-head"><div class="wrap bar">
-  <a class="brand" href="/"><span class="mark" aria-hidden="true"><?= saas_e(mb_strtoupper(mb_substr($cfg['name'], 0, 1))) ?></span><?= saas_e($cfg['name']) ?></a>
+  <a class="brand" href="/"><?= saas_brand_mark($cfg) ?><?= saas_e($cfg['name']) ?></a>
   <nav aria-label="Navigation principale">
     <a href="/annuaire/">Annuaire</a>
     <a href="/galerie/">Galeries</a>

@@ -4,6 +4,9 @@
 // mailing, kits de communication, pitch, sondages, codes de parrainage et
 // récompenses. Module autonome : sa base SQLite vit dans data/vente/ et ne
 // touche ni aux bases des boutiques ni aux réglages du portail.
+//
+// Extension « Force de vente » : le même moteur sert aussi le carnet de prospects d'une galerie (/galerie/<id>/vente/…, ?g=<id>) avec
+// SA base (data/vente/galeries/<id>.db) et un menu réduit (prospects, import, tournées). Voir includes/vente-scope.php.
 
 const FV_ROOT = __DIR__ . '/..' . '/..';
 require_once __DIR__ . '/_geo.php';
@@ -20,6 +23,64 @@ if (!function_exists('e')) {
     }
 }
 
+// ── Carnet visé par la requête (portail ou galerie) ──────────────────────────
+
+/** ['type' => 'portail'|'galerie', 'slug', 'gallery'] — voir includes/vente-scope.php. */
+function fv_scope(): array
+{
+    static $scope = null;
+    if ($scope !== null) return $scope;
+    if (!defined('FV_SCOPE_BOUTIQUE') && (string) ($_GET['g'] ?? '') === '') return $scope = ['type' => 'portail', 'slug' => '', 'gallery' => null];
+    require_once FV_ROOT . '/includes/vente-scope.php';
+    if (defined('FV_SCOPE_BOUTIQUE')) return $scope = vs_scope();      // carnet de la boutique : pages admin/vente/*.php (après require_admin)
+    $scope = vs_scope();
+    // Adresse d'origine (/portail/vente/<page>.php?g=<id>) : on revient à l'adresse de la galerie, dont les liens relatifs gardent le carnet.
+    $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && str_starts_with($path, '/portail/vente/') && !headers_sent()) {
+        $query = $_GET;
+        unset($query['g']);
+        header('Location: ' . vs_gallery_url($scope['slug'], basename($path)) . ($query ? '?' . http_build_query($query) : ''));
+        exit;
+    }
+    return $scope;
+}
+
+function fv_is_gallery(): bool
+{
+    return fv_scope()['type'] === 'galerie';
+}
+
+function fv_is_boutique(): bool
+{
+    return fv_scope()['type'] === 'boutique';
+}
+
+/** Carnet d'un propriétaire (galerie ou boutique) plutôt que celui de l'équipe commerciale du portail : menu réduit, pas d'équipe. */
+function fv_is_scoped(): bool
+{
+    return fv_scope()['type'] !== 'portail';
+}
+
+/** Adresse d'une page de l'espace (avec le préfixe de la galerie quand le carnet en est un). */
+function fv_url(string $page): string
+{
+    return fv_is_gallery() ? vs_gallery_url(fv_scope()['slug'], $page) : $page;      // boutique : pages voisines (admin/vente/), adresses relatives
+}
+
+/** Ressource statique du module (feuille de style, script) : adresse absolue, valable aussi sous /galerie/<id>/vente/. */
+function fv_asset(string $path): string
+{
+    // Boutique : adresse relative (admin/vente/ -> portail/vente/), elle suit aussi un commerce servi sous /<commerce>/.
+    return fv_is_boutique() ? '../../portail/vente/' . $path : '/portail/vente/' . $path;
+}
+
+/** Nom affiché dans l'en-tête : la marque de la plateforme, ou la galerie. */
+function fv_brand(): string
+{
+    if (fv_is_boutique()) return fv_scope()['name'];
+    return fv_is_gallery() ? (string) (fv_scope()['gallery']['name'] ?? 'Galerie') : fv_setting('marque_nom', 'Brocs');
+}
+
 // ── Base de données ──────────────────────────────────────────────────────────
 
 function fv_db(): PDO
@@ -28,11 +89,16 @@ function fv_db(): PDO
     if ($pdo instanceof PDO) {
         return $pdo;
     }
-    $dir = FV_ROOT . '/data/vente';
-    if (!is_dir($dir) && !@mkdir($dir, 0770, true)) {
-        throw new RuntimeException("Impossible de créer data/vente/ : droits d'écriture manquants.");
+    if (fv_is_scoped()) {
+        $file = fv_is_gallery() ? vs_gallery_db_file(fv_scope()['slug']) : vs_boutique_db_file(fv_scope()['slug']);      // un carnet séparé par galerie ou boutique
+        $dir = dirname($file);
+    } else {
+        $dir = getenv('VENTE_DATA_DIR') ?: FV_ROOT . '/data/vente';      // VENTE_DATA_DIR : dossier jetable pour les tests
+        $file = "$dir/vente.db";
     }
-    $file = "$dir/vente.db";
+    if (!is_dir($dir) && !@mkdir($dir, 0770, true) && !is_dir($dir)) {
+        throw new RuntimeException("Impossible de créer $dir : droits d'écriture manquants.");
+    }
     $new = !is_file($file);
     $pdo = new PDO('sqlite:' . $file, null, null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -50,6 +116,8 @@ function fv_db(): PDO
     if ($new) @chmod($file, 0600);
     fv_migrate($pdo);
     fv_settings_ensure($pdo);
+    if (fv_is_gallery()) vs_gallery_migrate($pdo, fv_scope()['slug']);      // reprise unique de l'ancienne liste de prospects de la galerie
+    if (fv_is_boutique()) vs_boutique_migrate($pdo, db());                  // reprise unique des comptes « prospect » de la boutique (comptes non modifiés)
     return $pdo;
 }
 
@@ -58,7 +126,8 @@ function fv_migrate(PDO $pdo): void
 {
     $cols = array_column($pdo->query('PRAGMA table_info(prospects)')->fetchAll(), 'name');
     if (!$cols) return;
-    foreach (['lat' => 'REAL', 'lng' => 'REAL', 'geo_at' => 'TEXT'] as $col => $type) {
+    // optout : prospect qui a demandé à ne plus être contacté ; legacy_id : identifiant dans l'ancienne liste d'une galerie (liens de désinscription déjà envoyés).
+    foreach (['lat' => 'REAL', 'lng' => 'REAL', 'geo_at' => 'TEXT', 'custom_fields' => "TEXT NOT NULL DEFAULT '{}'", 'optout' => 'INTEGER NOT NULL DEFAULT 0', 'legacy_id' => "TEXT NOT NULL DEFAULT ''"] as $col => $type) {
         if (!in_array($col, $cols, true)) $pdo->exec("ALTER TABLE prospects ADD COLUMN $col $type");
     }
 }
@@ -104,6 +173,9 @@ CREATE TABLE IF NOT EXISTS prospects (
     lat REAL,
     lng REAL,
     geo_at TEXT,
+    custom_fields TEXT NOT NULL DEFAULT '{}',
+    optout INTEGER NOT NULL DEFAULT 0,
+    legacy_id TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -288,7 +360,7 @@ function fv_statuses(): array
         'contacte' => 'Contacté',
         'interesse' => 'Intéressé',
         'rdv' => 'RDV pris',
-        'boutique_creee' => 'Boutique créée',
+        'boutique_creee' => fv_is_boutique() ? 'Client' : (fv_is_gallery() ? 'Inscrit' : 'Boutique créée'),
         'perdu' => 'Sans suite',
     ];
 }
@@ -456,6 +528,13 @@ function fv_current(): array
     static $ctx = null;
     if ($ctx !== null) return $ctx;
 
+    if (fv_is_scoped()) {
+        // Carnet d'une galerie : seuls l'exploitant et les administrateurs de CETTE galerie y entrent (pas l'équipe commerciale du portail).
+        // Carnet d'une boutique : l'administrateur de la boutique (connexion contrôlée par la page avant d'arriver ici).
+        $access = fv_is_boutique() ? vs_boutique_access() : vs_gallery_access(fv_scope()['slug'], fv_real_manager());
+        return $ctx = ['member' => null, 'member_id' => 0, 'manager' => $access, 'real_manager' => $access, 'view_as' => false];
+    }
+
     $member = null;
     $realManager = fv_real_manager();
     $viewAs = false;
@@ -484,8 +563,39 @@ function fv_current(): array
     ];
 }
 
+/** Carnet d'une galerie ou d'une boutique : connexion, extension activée, pages autorisées. Termine la requête si l'une des conditions manque. */
+function fv_gallery_gate(): void
+{
+    $scope = fv_scope();
+    $slug = $scope['slug'];
+    if (!fv_current()['manager']) {
+        fv_redirect(fv_is_boutique() ? '/admin/login.php' : ga_login_url($slug));
+    }
+    if (fv_is_boutique() ? !vs_boutique_enabled() : !vs_gallery_enabled($scope['gallery'])) {
+        http_response_code(403);
+        $url = fv_is_boutique() ? '../plugin.php?p=force-de-vente' : '/portail/galerie-modules.php?g=' . rawurlencode($slug);
+        $name = fv_brand();
+        ?><!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<title>Force de vente — <?= e($name) ?></title><link href="/assets/fonts.css" rel="stylesheet"><link rel="stylesheet" href="<?= e(fv_asset('assets/vente.css?v=7')) ?>"></head>
+<body class="fv-body"><main class="fv-main" style="max-width:620px;margin:10vh auto;padding:0 16px;">
+<section class="fv-card"><div class="fv-card-head"><div><h2>Force de vente</h2><p><?= e($name) ?></p></div></div>
+<div class="fv-card-body"><p>Cette extension n’est pas activée pour <?= fv_is_boutique() ? 'votre boutique' : 'votre galerie' ?>. Elle réunit votre carnet de prospects, l’import de fichiers (Excel, CSV, base SQLite), la tournée sur carte et le suivi des échanges.</p>
+<p><a class="fv-btn fv-btn-primary" href="<?= e($url) ?>"><?= fv_is_boutique() ? 'Activer l’extension' : 'Voir les extensions de la galerie' ?></a></p></div></section></main></body></html>
+<?php
+        exit;
+    }
+    if (!in_array(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')), VS_GALLERY_PAGES, true)) {
+        fv_redirect(fv_url('prospects.php'));
+    }
+}
+
 function fv_require_auth(): void
 {
+    if (fv_is_scoped()) {
+        fv_gallery_gate();
+        return;
+    }
     $ctx = fv_current();
     if ($ctx['member'] || $ctx['manager']) return;
     $target = $_SERVER['REQUEST_URI'] ?? '/portail/vente/';
@@ -778,6 +888,31 @@ function fv_member_commission(array $member, int $shops, int $amountCents, int $
 
 // ── Prospects et activités ───────────────────────────────────────────────────
 
+/** Champs personnalisés d'un prospect (emplacement, Instagram…) : intitulé => valeur. Accepte un tableau intitulé => valeur ou une liste [label, value]. */
+function fv_custom_fields_normalize($fields): array
+{
+    if (!is_array($fields)) return [];
+    $out = [];
+    foreach ($fields as $label => $field) {
+        if (is_array($field)) {
+            $label = $field['label'] ?? $label;
+            $field = $field['value'] ?? '';
+        }
+        if (!is_scalar($label) || !is_scalar($field)) continue;
+        $label = fv_text($label, 60);
+        $value = fv_text($field, 500);
+        if ($label !== '' && $value !== '') $out[$label] = $value;
+        if (count($out) >= 30) break;
+    }
+    return $out;
+}
+
+function fv_custom_fields_of(?array $prospect): array
+{
+    $d = json_decode((string) ($prospect['custom_fields'] ?? ''), true);
+    return fv_custom_fields_normalize(is_array($d) ? $d : []);
+}
+
 function fv_prospect_from_input(array $input, ?array $existing = null): array
 {
     $name = fv_text($input['name'] ?? '', 120);
@@ -816,6 +951,7 @@ function fv_prospect_from_input(array $input, ?array $existing = null): array
         'owner_id' => $owner,
         'notes' => fv_paragraph($input['notes'] ?? '', 4000),
         'next_action_at' => $next !== '' ? $next : null,
+        'custom_fields' => array_key_exists('custom_fields', $input) ? fv_custom_fields_normalize($input['custom_fields']) : fv_custom_fields_of($existing),
     ];
 }
 
@@ -823,15 +959,15 @@ function fv_prospect_save(array $data, ?array $existing = null): int
 {
     $pdo = fv_db();
     if ($existing) {
-        $st = $pdo->prepare('UPDATE prospects SET name=?, business=?, kind=?, address=?, postal=?, city=?, phone=?, email=?, website=?, zone=?, source=?, status=?, priority=?, owner_id=?, notes=?, next_action_at=?, updated_at=? WHERE id=?');
-        $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], fv_now(), $existing['id']]);
+        $st = $pdo->prepare('UPDATE prospects SET name=?, business=?, kind=?, address=?, postal=?, city=?, phone=?, email=?, website=?, zone=?, source=?, status=?, priority=?, owner_id=?, notes=?, next_action_at=?, custom_fields=?, updated_at=? WHERE id=?');
+        $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], json_encode($data['custom_fields'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), fv_now(), $existing['id']]);
         if (fv_prospect_address_line($data) !== fv_prospect_address_line($existing)) {   // adresse modifiée : à situer de nouveau sur la carte
             $pdo->prepare('UPDATE prospects SET lat = NULL, lng = NULL, geo_at = NULL WHERE id = ?')->execute([$existing['id']]);
         }
         return (int) $existing['id'];
     }
-    $st = $pdo->prepare('INSERT INTO prospects (name, business, kind, address, postal, city, phone, email, website, zone, source, status, priority, owner_id, notes, next_action_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], fv_now(), fv_now()]);
+    $st = $pdo->prepare('INSERT INTO prospects (name, business, kind, address, postal, city, phone, email, website, zone, source, status, priority, owner_id, notes, next_action_at, custom_fields, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $st->execute([$data['name'], $data['business'], $data['kind'], $data['address'], $data['postal'], $data['city'], $data['phone'], $data['email'], $data['website'], $data['zone'], $data['source'], $data['status'], $data['priority'], $data['owner_id'], $data['notes'], $data['next_action_at'], json_encode($data['custom_fields'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), fv_now(), fv_now()]);
     return (int) $pdo->lastInsertId();
 }
 
@@ -1346,6 +1482,13 @@ function fv_icon(string $name, int $size = 18): string
 
 function fv_nav_items(): array
 {
+    if (fv_is_scoped()) {
+        return [
+            ['prospects.php', 'Prospects', 'users'],
+            ['prospects-import.php', 'Importer un fichier', 'plus'],
+            ['tournees.php', 'Tournées & carte', 'route'],
+        ];
+    }
     $manager = fv_can_manage();
     $items = [
         ['index.php', 'Tableau de bord', 'gauge'],
@@ -1371,12 +1514,13 @@ function fv_layout_start(string $title, array $options = []): void
     fv_require_auth();
     $ctx = fv_current();
     $member = $ctx['member'];
-    $who = $member ? $member['name'] : 'Direction';
-    $role = $member ? fv_role_label($member['role']) : 'Administration';
+    $who = $member ? $member['name'] : (fv_is_scoped() ? fv_brand() : 'Direction');
+    $role = $member ? fv_role_label($member['role']) : (fv_is_boutique() ? 'Administration de la boutique' : (fv_is_gallery() ? 'Administration de la galerie' : 'Administration'));
     $flash = fv_flash();
     $current = basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'index.php'));
     $actions = (string) ($options['actions'] ?? '');
-    $eyebrow = (string) ($options['eyebrow'] ?? 'Forces de vente');
+    $eyebrow = (string) ($options['eyebrow'] ?? (fv_is_scoped() ? 'Force de vente' : 'Forces de vente'));
+    $gal = fv_is_scoped();
     $desc = (string) ($options['desc'] ?? '');
     $wide = !empty($options['wide']);
     $head = (string) ($options['head'] ?? '');
@@ -1386,9 +1530,9 @@ function fv_layout_start(string $title, array $options = []): void
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title><?= e($title) ?> — <?= e(fv_setting('marque_nom', 'Brocs')) ?> · Vente</title>
+<title><?= e($title) ?> — <?= e(fv_brand()) ?> · <?= $gal ? 'Force de vente' : 'Vente' ?></title>
 <link href="/assets/fonts.css" rel="stylesheet">
-<link rel="stylesheet" href="assets/vente.css?v=7">
+<link rel="stylesheet" href="<?= e(fv_asset('assets/vente.css?v=7')) ?>">
 <?= $head ?>
 </head>
 <body class="fv-body<?= $wide ? ' fv-wide' : '' ?>">
@@ -1396,7 +1540,7 @@ function fv_layout_start(string $title, array $options = []): void
   <aside class="fv-side" id="fv-side">
     <div class="fv-brand">
       <span class="fv-mark" aria-hidden="true">B</span>
-      <span><b><?= e(fv_setting('marque_nom', 'Brocs')) ?></b><small>Forces de vente</small></span>
+      <span><b><?= e(fv_brand()) ?></b><small><?= $gal ? 'Force de vente' : 'Forces de vente' ?></small></span>
     </div>
     <nav class="fv-nav" aria-label="Navigation de l’espace vente">
       <?php foreach (fv_nav_items() as [$href, $label, $icon]): ?>
@@ -1407,7 +1551,13 @@ function fv_layout_start(string $title, array $options = []): void
       <?php if ($member): ?>
         <a href="deconnexion.php"><?= fv_icon('logout', 16) ?> Se déconnecter</a>
       <?php endif; ?>
-      <a href="/portail/"><?= fv_icon('arrow', 16) ?> Retour au portail</a>
+      <?php if (fv_is_boutique()): ?>
+        <a href="../plugin.php?p=force-de-vente"><?= fv_icon('arrow', 16) ?> Retour à la boutique</a>
+      <?php elseif ($gal): ?>
+        <a href="/portail/galerie-prospects.php?g=<?= e(rawurlencode(fv_scope()['slug'])) ?>"><?= fv_icon('arrow', 16) ?> Retour à la galerie</a>
+      <?php else: ?>
+        <a href="/portail/"><?= fv_icon('arrow', 16) ?> Retour au portail</a>
+      <?php endif; ?>
     </div>
   </aside>
 
@@ -1446,12 +1596,12 @@ function fv_layout_end(): void
 {
     ?></main>
     <footer class="fv-foot">
-      <span><?= e(fv_setting('marque_nom', 'Brocs')) ?> · espace des forces de vente</span>
+      <span><?= e(fv_brand()) ?> · <?= fv_is_scoped() ? 'force de vente' : 'espace des forces de vente' ?></span>
       <span class="fv-mono">données locales · <?= e(date('d/m/Y')) ?></span>
     </footer>
   </div>
 </div>
-<script src="assets/vente.js?v=6" defer></script>
+<script src="<?= e(fv_asset('assets/vente.js?v=6')) ?>" defer></script>
 </body>
 </html><?php
 }

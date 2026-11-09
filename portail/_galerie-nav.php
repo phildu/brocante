@@ -35,6 +35,8 @@ if ($navOn('messages')) {
 }
 if ($navOn('tableau')) $navBtn('galerie-tableau.php', 'Tableau de bord');
 if ($navOn('prospects')) $navBtn('galerie-prospects.php', 'Prospects');
+// Extension « Force de vente » : carnet de prospects, import, tournée (pages servies à /galerie/<id>/vente/, voir includes/vente-scope.php).
+if ($navG && $navMod('vente')) echo '<a class="btn' . ($here === 'prospects.php' ? ' btn-primary' : '') . '" href="/galerie/' . rawurlencode($navSlug) . '/vente/prospects.php">Force de vente</a>';
 if ($navOn('fidelite')) $navBtn('galerie-fidelite.php', 'Fidélité visiteurs');
 $navBtn('galerie-promos.php', 'Promos');
 $navBtn('galerie-applications.php', 'Applications');

@@ -119,6 +119,12 @@ class LocalValetDriver extends BasicValetDriver
             return $this->run($sitePath, '/' . (($m[2] ?? '') === '' ? 'dons' : 'dons-' . $m[2]) . '.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
         }
 
+        // Force de vente d'une galerie : /galerie/<identifiant>/vente/[<page>.php] → portail/vente/
+        if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/vente(?:/|/(prospects|prospect-action|prospects-import|tournees|tournee-geo|activite-action)\.php)?$#', $uri, $m)) {
+            $_GET['g'] = strtolower($m[1]);
+            return $this->run($sitePath, '/portail/vente/' . (($m[2] ?? '') === '' ? 'prospects' : $m[2]) . '.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
+        }
+
         // Galeries commerciales : /galerie/ et /galerie/<identifiant>/
         if (preg_match('#^/galerie(?:/([A-Za-z0-9][A-Za-z0-9-]*))?/?$#', $uri, $m)) {
             $_GET['g'] = strtolower($m[1] ?? '');

@@ -103,6 +103,7 @@ if ($adminPaletteOk) {
     <?php if ($adminWho): ?>
       <span class="admin-whoami admin-label"><?= h($adminWho['name'] !== '' ? $adminWho['name'] : 'Compte principal') ?> · <?= h(account_role_label($adminWho['role'])) ?></span>
     <?php endif; ?>
+    <a href="/aide/" target="_blank" rel="noopener" title="Centre d'aide"><?= $adminIcon('help') ?><span class="admin-label">Centre d'aide</span></a>
     <a href="/index.php" target="_blank" title="Voir le site"><?= $adminIcon('external') ?><span class="admin-label">Voir le site</span></a>
     <a href="/admin/logout.php" title="Se déconnecter"><?= $adminIcon('logout') ?><span class="admin-label">Se déconnecter</span></a>
     <button type="button" class="admin-collapse" id="admin-sidebar-collapse" aria-pressed="false" title="Réduire le menu">

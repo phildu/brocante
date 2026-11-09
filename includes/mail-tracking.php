@@ -177,6 +177,12 @@ function mail_open_send(string $to, string $subject, string $body, string $sourc
     if ($replyTo !== '') $headers[] = 'Reply-To: ' . $replyTo;
     $headers[] = 'MIME-Version: 1.0';
     $headers[] = 'Content-Type: multipart/alternative; boundary="' . $mime['boundary'] . '"';
+    // Messages de la plateforme (expéditeur du domaine du portail) : SMTP authentifié de contact@ ; sinon, ou en cas d'échec, mail().
+    require_once __DIR__ . '/portal-mailer.php';
+    if (portal_mailer_dispatch($from, $to, '=?UTF-8?B?' . base64_encode($subject) . '?=',
+        array_slice($headers, $from !== '' ? 1 : 0), $mime['body']) === true) {
+        return true;
+    }
     return @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $mime['body'], implode("\r\n", $headers));
 }
 

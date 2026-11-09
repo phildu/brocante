@@ -137,7 +137,7 @@ $dataJson = json_encode([
         </div>
 
         <div class="sa-drop" id="sa-first-drop">
-          <input type="file" accept="image/*" capture="environment" id="sa-cam-first" hidden>
+          <input type="file" accept="image/*" capture id="sa-cam-first" hidden>
           <input type="file" accept="image/*" id="sa-lib-first" hidden>
           <div class="sa-drop-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>
@@ -150,13 +150,6 @@ $dataJson = json_encode([
           </div>
         </div>
 
-        <div class="sa-live sa-live-first" id="sa-first-live" hidden>
-          <video id="sa-first-video" playsinline muted autoplay></video>
-          <div class="sa-live-bar">
-            <button type="button" class="btn btn-primary" id="sa-first-capture">📸 Prendre la photo</button>
-            <button type="button" class="btn btn-ghost" id="sa-first-close">Fermer</button>
-          </div>
-        </div>
 
         <div class="sa-preview" id="sa-first-preview" hidden>
           <img id="sa-first-img" alt="Première photo de la pièce">
@@ -220,6 +213,7 @@ $dataJson = json_encode([
           <span class="sa-badge" id="sa-shot-badge"></span>
           <h2 id="sa-shot-title"></h2>
           <p id="sa-shot-tip"></p>
+          <p class="sa-shot-notice" id="sa-shot-notice" role="status" hidden></p>
           <div class="sa-shot-tools">
             <button type="button" class="btn-small sa-listen" id="sa-shot-audio">🔊 Écouter le conseil</button>
             <button type="button" class="btn-small" id="sa-shot-audio-off">🔇 Couper la voix</button>
@@ -228,7 +222,7 @@ $dataJson = json_encode([
           </div>
         </div>
 
-        <input type="file" accept="image/*" capture="environment" id="sa-shot-cam" hidden>
+        <input type="file" accept="image/*" capture id="sa-shot-cam" hidden>
         <input type="file" accept="image/*" id="sa-shot-lib" hidden>
 
         <div class="sa-shot-stage" id="sa-shot-stage">
@@ -237,15 +231,8 @@ $dataJson = json_encode([
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>
             </div>
             <div class="sa-drop-actions">
-              <button type="button" class="btn btn-primary" id="sa-shot-take">Ouvrir la caméra</button>
+              <button type="button" class="btn btn-primary" id="sa-shot-take">Ouvrir l'appareil photo</button>
               <button type="button" class="btn btn-ghost" id="sa-shot-lib-btn">Galerie</button>
-            </div>
-          </div>
-          <div class="sa-live" id="sa-live" hidden>
-            <video id="sa-live-video" playsinline muted autoplay></video>
-            <div class="sa-live-bar">
-              <button type="button" class="btn btn-primary" id="sa-live-capture">📸 Prendre la photo</button>
-              <button type="button" class="btn btn-ghost" id="sa-live-close">Fermer</button>
             </div>
           </div>
           <img id="sa-shot-img" alt="" hidden>
@@ -294,14 +281,14 @@ $dataJson = json_encode([
             <button type="button" data-video-mode="orbit-continuous">🎥 Tour de l'objet · continu</button>
             <button type="button" data-video-mode="orbit-frame">🎥 Tour de l'objet · image par image</button>
           </div>
+          <input type="file" accept="video/*" capture id="sa-video-cam" hidden>
+          <input type="file" accept="image/*" capture id="sa-video-frame-cam" hidden>
           <p class="sa-video-help" id="sa-video-help"></p>
           <div class="sa-video-stage" id="sa-video-stage" hidden>
-            <video id="sa-video-preview" playsinline muted autoplay></video>
             <div class="sa-video-actions">
-              <button type="button" class="btn btn-primary" id="sa-video-start">● Démarrer</button>
+              <button type="button" class="btn btn-primary" id="sa-video-start">● Filmer</button>
               <button type="button" class="btn btn-primary" id="sa-video-frame" hidden>📸 Prendre une image</button>
               <button type="button" class="btn btn-primary" id="sa-video-finish" hidden>✓ Terminer la vidéo</button>
-              <button type="button" class="btn btn-ghost" id="sa-video-stop" hidden>⏹ Arrêter</button>
               <button type="button" class="btn btn-ghost" id="sa-video-close">Fermer</button>
             </div>
             <video id="sa-video-result" controls playsinline hidden></video>

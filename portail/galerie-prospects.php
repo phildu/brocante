@@ -1,6 +1,7 @@
 <?php
-// Prospects d'une galerie : commerçants en cours d'inscription, commerces à recruter (liste libre), visiteurs abonnés aux nouveautés.
+// Prospects d'une galerie : commerçants en cours d'inscription, commerces à recruter (carnet de l'extension « Force de vente »), visiteurs abonnés aux nouveautés.
 require __DIR__ . '/_galerie-layout.php';
+require_once PORTAIL_ROOT . '/includes/vente-scope.php';
 
 $self = '/portail/galerie-prospects.php' . ($limited ? '' : '?g=' . urlencode($gaSlug));
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -13,23 +14,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $err = ga_signup_remind($gaSlug, $id);
             portail_flash($err ?? 'Relance envoyée.', $err ? 'error' : 'ok');
             break;
-        case 'pro_add':
-            $err = ga_prospect_add($gaSlug, (string) ($_POST['name'] ?? ''), (string) ($_POST['email'] ?? ''), (string) ($_POST['note'] ?? ''));
-            portail_flash($err ?? 'Prospect ajouté.', $err ? 'error' : 'ok');
-            break;
-        case 'pro_update':
-            $err = ga_prospect_update($gaSlug, $id, ['status' => $_POST['status'] ?? null, 'note' => $_POST['note'] ?? null, 'custom_fields' => $_POST['custom_fields'] ?? []]);
-            portail_flash($err ?? 'Prospect mis à jour.', $err ? 'error' : 'ok');
-            break;
-        case 'pro_delete':
-            $err = ga_prospect_update($gaSlug, $id, ['delete' => true]);
-            portail_flash($err ?? 'Prospect supprimé.', $err ? 'error' : 'ok');
-            break;
-        case 'pro_send':
-            $err = ga_prospect_send($gaSlug, $id, (string) ($_POST['subject'] ?? ''), (string) ($_POST['body'] ?? ''));
-            portail_flash($err ?? 'Message envoyé.', $err ? 'error' : 'ok');
-            if ($err) $back = $self . (str_contains($self, '?') ? '&' : '?') . 'ecrire=' . urlencode($id);
-            break;
         case 'sub_send':
             [$n, $err] = ga_sub_broadcast($gaSlug, (string) ($_POST['subject'] ?? ''), (string) ($_POST['body'] ?? ''));
             portail_flash($err ?? "Message envoyé à $n abonné" . ($n > 1 ? 's' : '') . '.', $err ? 'error' : 'ok');
@@ -41,11 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $signups = ga_signups($gaSlug);
 $pros = ga_prospects($gaSlug);
+$venteOn = vs_gallery_enabled($gaGallery);
 $subs = ga_subs($gaSlug);
 $subsOk = array_values(array_filter($subs, static fn ($s) => !empty($s['confirmed'])));
-$compose = null;
-foreach ($pros as $p) if ($p['id'] === (string) ($_GET['ecrire'] ?? '')) $compose = $p;
-$tpl = ga_prospect_template($gaGallery);
 $kindLabels = ['draft' => 'inscription commencée', 'pending' => 'demande à valider', 'paid' => 'payée, boutique à créer'];
 $hid = '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">' . ($limited ? '' : '<input type="hidden" name="g" value="' . e($gaSlug) . '">');
 ga_head('Prospects');
@@ -64,39 +46,15 @@ ga_head('Prospects');
     </section>
 
     <section class="gcard"><h2>2. Commerces à recruter</h2>
-      <p><a class="btn" href="/portail/galerie-import.php<?= $limited ? '' : '?g=' . e(urlencode($gaSlug)) ?>">Importer des contacts (CSV, téléphone, CRM)</a></p>
-      <p class="meta">Votre liste de commerces à convaincre. Chaque message contient un lien de désinscription ; un commerce désinscrit n'est plus jamais contacté. Faites-le uniquement avec des professionnels dont vous avez les coordonnées professionnelles.</p>
-      <form method="post" class="row" autocomplete="off"><?= $hid ?><input type="hidden" name="action" value="pro_add">
-        <label class="f">Commerce<input type="text" name="name" required maxlength="100" placeholder="Boutique de Marie"></label>
-        <label class="f">E-mail<input type="email" name="email" maxlength="160" placeholder="contact@exemple.fr"></label>
-        <label class="f">Note<input type="text" name="note" maxlength="400" placeholder="rencontrée au marché de…"></label>
-        <button class="btn btn-primary" type="submit">Ajouter</button></form>
-      <?php if ($compose): ?>
-        <form method="post" class="gcard" style="background:var(--bg);"><?= $hid ?><input type="hidden" name="action" value="pro_send"><input type="hidden" name="id" value="<?= e($compose['id']) ?>">
-          <h3>Écrire à <?= e($compose['name']) ?> (<?= e($compose['email']) ?>)</h3>
-          <label class="f">Objet<input type="text" name="subject" maxlength="150" value="<?= e($tpl['subject']) ?>"></label>
-          <label class="f">Message — variables : {nom} {galerie} {lien} ; <strong>{desinscription}</strong> est obligatoire<textarea name="body"><?= e($tpl['body']) ?></textarea></label>
-          <p class="row"><button class="btn btn-primary" type="submit">Envoyer</button><a class="btn" href="<?= e($self) ?>">Annuler</a></p></form>
+      <?php if ($venteOn): ?>
+        <p class="meta">Votre liste de commerces à convaincre est dans l'extension <strong>Force de vente</strong> : fiches et champs personnalisés, import d'un fichier Excel, CSV ou base SQLite, tournée sur carte, journal des échanges et messages de recrutement avec lien de désinscription.</p>
+        <p class="row"><a class="btn btn-primary" href="<?= e(vs_gallery_url($gaSlug, 'prospects.php')) ?>">Ouvrir la Force de vente</a>
+          <a class="btn" href="<?= e(vs_gallery_url($gaSlug, 'prospects-import.php')) ?>">Importer un fichier</a></p>
+        <p class="meta"><?= count($pros) ?> commerce<?= count($pros) > 1 ? 's' : '' ?> dans le carnet.</p>
+      <?php else: ?>
+        <p class="meta">La liste des commerces à recruter (import de fichiers, tournée sur carte, messages de recrutement) fait partie de l'extension <strong>Force de vente</strong>. Elle n'est pas activée pour cette galerie.</p>
+        <p><a class="btn btn-primary" href="/portail/galerie-modules.php<?= $limited ? '' : '?g=' . e(urlencode($gaSlug)) ?>">Voir les extensions de la galerie</a></p>
       <?php endif; ?>
-      <?php if ($pros): ?>
-      <table class="t"><thead><tr><th>Commerce</th><th>Suivi</th><th class="num">Messages</th><th></th></tr></thead><tbody>
-      <?php foreach ($pros as $p): $sent = (array) ($p['contacts'] ?? []); $wait = $sent && time() - max($sent) < GA_RELANCE_DELAY; $done = count($sent) >= GA_RELANCE_MAX + 1; ?>
-        <tr><td><strong><?= e($p['name']) ?></strong><br><small class="meta"><?= e($p['email'] ?: 'pas d\'e-mail') ?><?= !empty($p['phone']) ? ' · ' . e($p['phone']) : '' ?><?= !empty($p['optout']) ? ' — désinscrit' : '' ?></small>
-            <?php foreach (ga_prospect_custom_fields_normalize((array) ($p['custom_fields'] ?? [])) as $label => $value): ?><br><small class="meta"><?= e($label) ?> : <?= e($value) ?></small><?php endforeach; ?></td>
-          <td><form method="post" class="row" style="gap:4px;"><?= $hid ?><input type="hidden" name="action" value="pro_update"><input type="hidden" name="id" value="<?= e($p['id']) ?>">
-            <select name="status" style="flex:none;min-width:0;"><?php foreach (GA_PROSPECT_STATUS as $k => $l): ?><option value="<?= e($k) ?>"<?= $p['status'] === $k ? ' selected' : '' ?>><?= e($l) ?></option><?php endforeach; ?></select>
-            <input type="text" name="note" value="<?= e($p['note']) ?>" maxlength="400" placeholder="note" style="min-width:120px;">
-            <?php foreach (ga_prospect_custom_fields_normalize((array) ($p['custom_fields'] ?? [])) as $label => $value): ?>
-              <input type="hidden" name="custom_fields[<?= e((string) $label) ?>][label]" value="<?= e((string) $label) ?>">
-              <input type="text" name="custom_fields[<?= e((string) $label) ?>][value]" value="<?= e($value) ?>" maxlength="500" aria-label="<?= e((string) $label) ?>" style="min-width:120px;">
-            <?php endforeach; ?>
-            <button class="btn small" type="submit">Enregistrer</button></form></td>
-          <td class="num"><?= count($sent) ?><?= $sent ? '<br><small class="meta">dernier ' . e(date('d/m', max($sent))) . '</small>' : '' ?></td>
-          <td class="row" style="gap:4px;">
-            <?php if ($p['email'] !== '' && empty($p['optout']) && !$done): ?><a class="btn small<?= $wait ? '' : ' btn-primary' ?>" href="<?= e($self . (str_contains($self, '?') ? '&' : '?') . 'ecrire=' . urlencode($p['id'])) ?>" <?= $wait ? 'title="Un message est déjà parti il y a moins de 3 jours"' : '' ?>><?= $sent ? 'Relancer' : 'Écrire' ?></a><?php endif; ?>
-            <form method="post" onsubmit="return confirm('Supprimer ce prospect ?')"><?= $hid ?><input type="hidden" name="action" value="pro_delete"><input type="hidden" name="id" value="<?= e($p['id']) ?>"><button class="btn small danger" type="submit">Supprimer</button></form></td></tr>
-      <?php endforeach; ?></tbody></table>
-      <?php else: ?><p class="meta">Aucun prospect dans la liste.</p><?php endif; ?>
     </section>
 
     <section class="gcard"><h2>3. Visiteurs abonnés aux nouveautés</h2>

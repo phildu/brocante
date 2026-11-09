@@ -272,6 +272,8 @@
         "max_order_cents",
         "max_percent",
         "media_visuals_synced",
+        "migration_comptes",
+        "migration_json",
         "min_cents",
         "mode",
         "monthly_goal_cents",

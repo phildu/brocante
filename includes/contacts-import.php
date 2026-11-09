@@ -20,6 +20,32 @@ const CI_CRMS = [
     'pipedrive' => ['Pipedrive', 'Jeton API personnel (Préférences personnelles → API).'],
 ];
 
+/** Colonnes sans champ propre, reconnues par leur intitulé : intitulé du champ personnalisé => synonymes (sans accents, minuscules). Proposées d'office quand la page l'active ('auto_custom'). */
+const CI_AUTO_CUSTOM = [
+    'Site web' => ['site', 'site web', 'site internet', 'website', 'web', 'url du site', 'site officiel'],
+    'Facebook' => ['facebook', 'page facebook'],
+    'Instagram' => ['instagram', 'compte instagram'],
+    'Adresse' => ['adresse', 'adresse postale', 'address', 'rue', 'voie'],
+    'Code postal' => ['code postal', 'cp', 'zip', 'postal code', 'zipcode'],
+    'Ville' => ['ville', 'commune', 'city', 'localite'],
+    'Catégorie' => ['categorie', 'category', 'type', 'secteur', 'famille'],
+    'Horaires' => ['horaires', 'horaire', 'heures d\'ouverture', 'opening hours'],
+    'SIRET' => ['siret', 'n° siret', 'numero siret'],
+    'Emplacement' => ['emplacement', 'localisation'],
+    'Zone' => ['zone', 'quartier', 'secteur geographique'],
+    'N° d\'emplacement' => ['numero d\'emplacement', 'n° d\'emplacement', 'stand', 'numero de stand'],
+    'Latitude' => ['lat', 'latitude'],
+    'Longitude' => ['lon', 'lng', 'long', 'longitude'],
+    'Lien' => ['url', 'lien', 'lien fiche', 'fiche'],
+];
+
+/** Valeurs qui disent « rien » (cellule remplie par un robot ou à la main) : « Non trouvé », « Non spécifié », « N/A »… */
+function ci_placeholder(string $v): bool
+{
+    $n = ci_norm_header($v);
+    return $n === '' || (bool) preg_match('/^(non (trouve|specifie|renseigne|communique|disponible|applicable)e?s?|aucune?( .*)?( trouve| renseigne| disponible)e?s?|n\/?a|na|nc|neant|inconnu(e)?|null|none|nan|undefined|\?+|[-–—_.\/\s]+)$/u', $n);
+}
+
 const CI_FIELDS = ['email' => 'E-mail', 'first' => 'Prénom', 'last' => 'Nom', 'name' => 'Nom complet', 'phone' => 'Téléphone', 'company' => 'Société', 'note' => 'Note', 'status' => 'Statut d\'abonnement'];
 
 /** Synonymes d'en-têtes (sans accents, minuscules) des exports usuels : HubSpot, Mailchimp, Brevo, Zoho, Pipedrive, Google Contacts, Outlook, Odoo, Salesforce, Excel. */
@@ -27,10 +53,10 @@ const CI_SYNONYMS = [
     'email' => ['email', 'e-mail', 'e mail', 'mail', 'courriel', 'adresse e-mail', 'adresse email', 'email address', 'e-mail address', 'e-mail 1 - value', 'email 1 - value', 'person - email - work', 'person - email', 'work email', 'primary email', 'email principal', 'courrier electronique'],
     'first' => ['first name', 'firstname', 'prenom', 'given name', 'first', 'prenom du contact', 'person - first name'],
     'last' => ['last name', 'lastname', 'nom de famille', 'family name', 'surname', 'last', 'person - last name'],
-    'name' => ['name', 'nom', 'nom complet', 'full name', 'display name', 'contact name', 'person - name', 'nom du contact', 'raison sociale', 'nom et prenom'],
+    'name' => ['name', 'nom', 'nom complet', 'full name', 'display name', 'contact name', 'person - name', 'nom du contact', 'raison sociale', 'nom et prenom', 'contact', 'interlocuteur', 'responsable', 'gerant', 'dirigeant'],
     'phone' => ['phone', 'telephone', 'tel', 'tel.', 'mobile', 'portable', 'gsm', 'sms', 'phone number', 'mobile phone', 'mobilephone', 'phone 1 - value', 'person - phone - work', 'person - phone - mobile', 'person - phone', 'numero de telephone', 'telephone mobile', 'cell', 'cell phone', 'primary phone', 'business phone', 'work phone', 'home phone'],
-    'company' => ['company', 'company name', 'societe', 'entreprise', 'organisation', 'organization', 'organization name', 'organization 1 - name', 'organization - name', 'account name', 'nom de la societe', 'nom de l\'entreprise'],
-    'note' => ['note', 'notes', 'commentaire', 'commentaires', 'remarque', 'description', 'tags', 'etiquettes'],
+    'company' => ['company', 'company name', 'societe', 'entreprise', 'organisation', 'organization', 'organization name', 'organization 1 - name', 'organization - name', 'account name', 'nom de la societe', 'nom de l\'entreprise', 'nom boutique', 'nom de la boutique', 'boutique', 'nom du commerce', 'commerce', 'enseigne', 'nom commercial', 'etablissement', 'marchand'],
+    'note' => ['note', 'notes', 'commentaire', 'commentaires', 'remarque', 'description', 'tags', 'etiquettes', 'specialite / description', 'specialite', 'activite'],
     'status' => ['status', 'statut', 'subscription status', 'email marketing status', 'marketing contact status', 'opt-out', 'opt out', 'email opt out', 'unsubscribed', 'desabonne', 'blacklisted', 'emailblacklisted', 'hs_email_optout'],
 ];
 
@@ -124,6 +150,91 @@ function ci_parse_spreadsheet(string $path): array
     }
 }
 
+/**
+ * Base SQLite (.db/.sqlite) -> [en-têtes, lignes], comme un tableur. La table lue est la plus évidente (commerces, contacts, prospects… sinon la plus
+ * remplie). Une colonne « xxx_id » est remplacée par le nom de la table liée (rue_id -> rue), « numero » + « rue » deviennent « adresse »,
+ * et dans une table de commerces la colonne « nom » devient « commerce ». Le fichier est ouvert en lecture seule et jamais exécuté.
+ */
+function ci_parse_sqlite(string $path): array
+{
+    if (!extension_loaded('pdo_sqlite')) throw new RuntimeException('Le lecteur de bases SQLite est indisponible sur ce serveur.');
+    $fh = @fopen($path, 'rb');
+    $magic = $fh ? (string) fread($fh, 16) : '';
+    if ($fh) fclose($fh);
+    if ($magic !== "SQLite format 3\0") throw new InvalidArgumentException('Ce fichier n’est pas une base SQLite valide.');
+    $q = static fn (string $id): string => '"' . str_replace('"', '""', $id) . '"';
+    try {
+        $pdo = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+        $pdo->exec('PRAGMA query_only = 1');
+        $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'")->fetchAll(PDO::FETCH_COLUMN);
+        if (!$tables) throw new InvalidArgumentException('Cette base ne contient aucune table.');
+        $counts = [];
+        foreach ($tables as $t) $counts[$t] = (int) $pdo->query('SELECT COUNT(*) FROM ' . $q($t))->fetchColumn();
+        $table = null;
+        foreach (['commerces', 'commerce', 'prospects', 'contacts', 'marchands', 'boutiques', 'entreprises', 'societes', 'clients'] as $want) {
+            foreach ($tables as $t) if (strtolower($t) === $want && $counts[$t] > 0) { $table = $t; break 2; }
+        }
+        if ($table === null) { arsort($counts); $table = (string) array_key_first($counts); }
+        if (($counts[$table] ?? 0) === 0) throw new InvalidArgumentException('La table « ' . $table . ' » est vide.');
+        if ($counts[$table] > CI_MAX_ROWS) throw new InvalidArgumentException('La base dépasse la limite de 5 000 contacts (' . $counts[$table] . ' lignes dans « ' . $table . ' »).');
+        $cols = array_column($pdo->query('PRAGMA table_info(' . $q($table) . ')')->fetchAll(), 'name');
+        if (count($cols) > CI_MAX_COLUMNS) throw new InvalidArgumentException('Le fichier contient plus de 200 colonnes.');
+        $lower = array_map('strtolower', $tables);
+        $select = [];
+        $headers = [];
+        $joins = '';
+        $n = 0;
+        foreach ($cols as $col) {
+            $lc = strtolower($col);
+            if ($lc === 'id') continue;
+            if (str_ends_with($lc, '_id')) {
+                $base = substr($lc, 0, -3);
+                $ref = null;
+                foreach ([$base . 's', $base, $base . 'es'] as $cand) { $i = array_search($cand, $lower, true); if ($i !== false) { $ref = $tables[$i]; break; } }
+                if ($ref !== null) {
+                    $refCols = array_map('strtolower', array_column($pdo->query('PRAGMA table_info(' . $q($ref) . ')')->fetchAll(), 'name'));
+                    $label = in_array('nom', $refCols, true) ? 'nom' : (in_array('name', $refCols, true) ? 'name' : null);
+                    if ($label !== null) {
+                        $a = 'j' . (++$n);
+                        $joins .= ' LEFT JOIN ' . $q($ref) . ' ' . $a . ' ON ' . $a . '.id = t.' . $q($col);
+                        $select[] = $a . '.' . $q($label);
+                        $headers[] = $base;
+                    }
+                }
+                continue;
+            }
+            $select[] = 't.' . $q($col);
+            $headers[] = $lc === 'nom' && preg_match('/commerce|boutique|marchand|entreprise|societe/i', $table) ? 'commerce' : $col;
+        }
+        if (!$select) throw new InvalidArgumentException('Aucune colonne lisible dans la table « ' . $table . ' ».');
+        $rows = [];
+        $stmt = $pdo->query('SELECT ' . implode(', ', $select) . ' FROM ' . $q($table) . ' t' . $joins . ' LIMIT ' . (CI_MAX_ROWS + 1));
+        while (($r = $stmt->fetch(PDO::FETCH_NUM)) !== false) {
+            $rows[] = array_map(static fn ($v): string => trim((string) ($v ?? '')), $r);
+        }
+        $hn = array_map('strtolower', $headers);
+        $iNum = array_search('numero', $hn, true);
+        $iRue = array_search('rue', $hn, true);
+        if ($iNum !== false && $iRue !== false) {      // « 12 » + « rue des Halles » -> « 12 rue des Halles »
+            foreach ($rows as &$r) {
+                $r[$iRue] = trim($r[$iNum] . ' ' . $r[$iRue]);
+                unset($r[$iNum]);
+                $r = array_values($r);
+            }
+            unset($r);
+            $headers[$iRue] = 'adresse';
+            unset($headers[$iNum]);
+            $headers = array_values($headers);
+        }
+        $rows = array_values(array_filter($rows, static fn (array $r): bool => (bool) array_filter($r, static fn (string $c): bool => $c !== '')));
+        return [$headers, $rows];
+    } catch (InvalidArgumentException $e) {
+        throw $e;
+    } catch (Throwable $e) {
+        throw new InvalidArgumentException('Impossible de lire cette base SQLite : vérifiez qu’elle n’est pas endommagée.', 0, $e);
+    }
+}
+
 /** Carnet d'adresses vCard (.vcf, 2.1 / 3.0 / 4.0) -> contacts normalisés. */
 function ci_parse_vcf(string $text): array
 {
@@ -157,7 +268,7 @@ function ci_parse_vcf(string $text): array
 }
 
 /** Colonnes reconnues : champ => index de colonne (ou -1). + nom du CRM reconnu d'après les en-têtes (ou ''). */
-function ci_guess_mapping(array $headers): array
+function ci_guess_mapping(array $headers, bool $autoCustom = false): array
 {
     $norm = array_map('ci_norm_header', $headers);
     $map = [];
@@ -169,6 +280,17 @@ function ci_guess_mapping(array $headers): array
         }
     }
     if ($map['first'] >= 0 && $map['last'] < 0 && $map['name'] >= 0) { $map['last'] = $map['name']; $map['name'] = -1; }   // « Prénom » + « Nom » : Nom est le nom de famille
+    if ($autoCustom) {      // colonnes restantes reconnues (site, adresse, catégorie…) : champ personnalisé proposé d'office
+        $used = array_filter($map, static fn ($v): bool => is_int($v) && $v >= 0);
+        foreach (CI_AUTO_CUSTOM as $label => $syns) {
+            foreach ($norm as $i => $hn) {
+                if (in_array($i, $used, true) || !in_array($hn, $syns, true)) continue;
+                $map['custom'][$i] = ['label' => $label];
+                $used[] = $i;
+                break;
+            }
+        }
+    }
     $preset = '';
     foreach (CI_PRESETS as $name => $need) if (!array_diff($need, $norm)) { $preset = $name; break; }
     return [$map, $preset];
@@ -177,8 +299,8 @@ function ci_guess_mapping(array $headers): array
 /** Numéro nettoyé : chiffres et « + » ; 0X… français devient +33X… ; 00… devient +… ; '' si invraisemblable. */
 function ci_phone(string $p): string
 {
-    $p = trim($p);
-    if ($p === '') return '';
+    $p = trim((string) preg_replace('/\(\s*0\s*\)/', '', $p));      // +33 (0)6… : le 0 entre parenthèses ne se compose pas
+    if ($p === '' || ci_placeholder($p)) return '';
     $plus = str_starts_with($p, '+');
     $d = preg_replace('/\D/', '', $p);
     if (str_starts_with($d, '00')) { $d = substr($d, 2); $plus = true; }
@@ -220,19 +342,24 @@ function ci_contacts_from_rows(array $rows, array $map): array
 /** Nettoie un contact et lui donne son motif d'écart éventuel ($seen : e-mails déjà vus dans ce lot). */
 function ci_clean(array $c, int $line, array &$seen): array
 {
-    $email = mb_strtolower(trim((string) ($c['email'] ?? '')));
+    $clean = static fn ($v): string => ci_placeholder((string) $v) ? '' : trim((string) $v);
+    $email = mb_strtolower($clean($c['email'] ?? ''));
     $email = preg_replace('/^mailto:/', '', $email);
-    $name = trim((string) ($c['name'] ?? '')) !== '' ? trim((string) $c['name']) : trim(trim((string) ($c['first'] ?? '')) . ' ' . trim((string) ($c['last'] ?? '')));
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/[^\s<>,;:"\'()\[\]–—-][^\s<>,;:"\'()\[\]]*@[^\s<>,;:"\'()\[\]]+\.[a-z]{2,}/u', $email, $m)) $email = $m[0];   // « – nom@site.fr », « <nom@site.fr> »
+    $name = $clean($c['name'] ?? '') !== '' ? $clean($c['name']) : trim($clean($c['first'] ?? '') . ' ' . $clean($c['last'] ?? ''));
+    if ($name !== '' && !preg_match('/\p{L}/u', $name)) $name = '';      // « 43 » (numéro de stand) n'est pas un nom
+    if (mb_strlen($name) > 3 && $name === mb_strtoupper($name) && $name !== mb_strtolower($name)) $name = mb_convert_case($name, MB_CASE_TITLE, 'UTF-8');   // « CLÉMENCE AMBLARD »
     $phone = ci_phone((string) ($c['phone'] ?? ''));
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL) && $phone !== '') $email = '';      // adresse inutilisable mais téléphone valide : on garde la fiche
     $skip = '';
     if (ci_unsubscribed((string) ($c['status'] ?? ''))) $skip = 'désinscrit ou exclu du CRM';
     elseif ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $skip = 'e-mail invalide';
     elseif ($email === '' && $phone === '') $skip = 'ni e-mail ni téléphone';
     elseif ($email !== '' && isset($seen[$email])) $skip = 'doublon dans le fichier';
     if ($email !== '' && $skip === '') $seen[$email] = true;
-    return ['email' => mb_substr($email, 0, 120), 'name' => mb_substr($name, 0, 100), 'phone' => $phone, 'company' => mb_substr(trim((string) ($c['company'] ?? '')), 0, 100),
-        'note' => mb_substr(trim((string) ($c['note'] ?? '')), 0, 300),
-        'custom_fields' => array_slice(array_filter((array) ($c['custom_fields'] ?? []), static fn ($v): bool => is_scalar($v) && trim((string) $v) !== ''), 0, 30, true),
+    return ['email' => mb_substr($email, 0, 120), 'name' => mb_substr($name, 0, 100), 'phone' => $phone, 'company' => mb_substr($clean($c['company'] ?? ''), 0, 100),
+        'note' => mb_substr($clean($c['note'] ?? ''), 0, 300),
+        'custom_fields' => array_slice(array_filter((array) ($c['custom_fields'] ?? []), static fn ($v): bool => is_scalar($v) && !ci_placeholder((string) $v)), 0, 30, true),
         'line' => $line, 'skip' => $skip];
 }
 

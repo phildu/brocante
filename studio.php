@@ -194,10 +194,6 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
               <button type="button" data-kind="media" aria-pressed="false">📚 Média</button>
             </div>
             <p class="sb-guide" id="sb-guide"></p>
-            <div class="sb-view">
-              <video id="sb-video" playsinline muted autoplay></video>
-              <div class="sb-flash" id="sb-flash"></div>
-            </div>
             <div class="sb-chips" id="sb-chips" aria-live="polite"></div>
             <div class="sb-strip" id="sb-strip" aria-label="Photos de la pièce en cours"></div>
             <div class="sb-extras">
@@ -205,7 +201,8 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
               <button type="button" class="sb-extra" id="sb-detail" aria-pressed="false"><?= $ico('<circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2M11 8.5v5M8.5 11h5"/>') ?><span>Gros plan</span></button>
               <button type="button" class="sb-extra" id="sb-measure"><?= $ico('<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>') ?><span>Mesure</span></button>
               <button type="button" class="sb-extra" id="sb-rec"><?= $ico('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>') ?><span>Vidéo</span></button>
-              <input type="file" id="sb-video-file" accept="video/*" capture="environment" hidden>
+              <input type="file" id="sb-video-file" accept="video/*" capture hidden>
+              <input type="file" id="sb-native-cam" accept="image/*" capture hidden>
             </div>
             <div class="sb-controls">
               <label class="sb-side" for="sb-gallery" aria-label="Ajouter depuis la galerie"><?= $ico('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>') ?><span>Galerie</span></label>
@@ -301,6 +298,33 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
       <label class="qa-field">Sous-catégorie<select id="sr-sous" data-ai-input="sous_categorie"><?= product_subcategory_select_html(null) ?></select></label>
       <label class="qa-field">Étiquette<input type="text" id="sr-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
       <label class="qa-switch"><input type="checkbox" id="sr-publish"> <span>Visible dans la boutique<br><small class="qa-note">Sinon la fiche reste masquée.</small></span></label>
+      <details class="sr-pack" id="sp">
+        <summary>📦 Pack d'annonce (Vinted, Leboncoin)</summary>
+        <div class="sp-body">
+          <p class="qa-note">Vinted et Leboncoin n'ont pas d'import : copiez le texte, puis ajoutez les photos depuis la galerie du téléphone. Le pack reprend vos <b>vraies photos</b> (pas les images générées) et les valeurs affichées ci-dessus, même non enregistrées.</p>
+          <div class="sp-tabs" id="sp-tabs" role="group" aria-label="Plateforme">
+            <button type="button" data-platform="vinted" aria-pressed="true">Vinted</button>
+            <button type="button" data-platform="leboncoin" aria-pressed="false">Leboncoin</button>
+          </div>
+          <p class="qa-note" id="sp-status" role="status">Chargement…</p>
+          <div id="sp-text" hidden>
+            <label class="qa-field">Titre <small id="sp-title-count" class="qa-note"></small><span class="sp-row"><input type="text" id="sp-title" readonly><button type="button" class="btn btn-ghost" data-copy="sp-title">Copier</button></span></label>
+            <div class="qa-two">
+              <label class="qa-field">Prix (€)<span class="sp-row"><input type="text" id="sp-price" readonly><button type="button" class="btn btn-ghost" data-copy="sp-price">Copier</button></span></label>
+              <label class="qa-field">État <small class="qa-note">à choisir dans la liste</small><span class="sp-row"><input type="text" id="sp-cond" readonly><button type="button" class="btn btn-ghost" data-copy="sp-cond">Copier</button></span></label>
+            </div>
+            <label class="qa-field">Description <small id="sp-desc-count" class="qa-note"></small><textarea id="sp-desc" rows="8" readonly></textarea></label>
+            <button type="button" class="btn btn-ghost" data-copy="sp-desc">Copier la description</button>
+            <button type="button" class="btn btn-primary" id="sp-copy-all">Copier toute l'annonce</button>
+          </div>
+          <div id="sp-photos-box" hidden>
+            <p class="eyebrow" id="sp-photos-title"></p>
+            <div class="sp-photos" id="sp-photos"></div>
+            <button type="button" class="btn btn-primary" id="sp-share" hidden>Envoyer les photos vers Vinted / Leboncoin…</button>
+            <button type="button" class="btn btn-ghost" id="sp-zip">Télécharger le pack (.zip : photos + textes)</button>
+          </div>
+        </div>
+      </details>
       <p class="qa-warn" id="sr-error" role="alert" hidden></p>
       <div class="sr-actions">
         <button type="button" class="btn btn-primary" id="sr-save">Enregistrer</button>
