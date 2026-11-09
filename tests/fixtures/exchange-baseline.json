@@ -112,6 +112,7 @@
         "password_resets",
         "physical_visits",
         "plugins",
+        "pos_appraisals",
         "pr_entries",
         "pr_jobs",
         "pr_log",

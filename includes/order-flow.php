@@ -48,6 +48,12 @@ function order_ensure_schema(PDO $pdo): void
             'gift_wrap' => 'INTEGER NOT NULL DEFAULT 0',        // 1 : emballage cadeau demandé
             'gift_wrap_cents' => 'INTEGER NOT NULL DEFAULT 0',  // montant facturé pour l'emballage
             'gift_message' => 'TEXT',                           // petit mot du client pour le destinataire
+            // Vente en caisse : qui a vendu, prix convenu sur place, et avertissement du gérant quand c'est un autre vendeur.
+            'sold_by' => 'TEXT',                                // nom du vendeur connecté à la caisse
+            'sold_by_id' => 'INTEGER',                          // compte du vendeur (NULL : compte principal)
+            'price_negotiated' => 'INTEGER NOT NULL DEFAULT 0', // 1 : au moins un prix n'était pas fixé à l'avance (négocié sur place)
+            'notify_manager' => 'INTEGER NOT NULL DEFAULT 0',   // 1 : vendeur autre que le gérant, à lui signaler
+            'manager_notified_at' => 'TEXT',
         ];
         foreach ($extra as $column => $type) {
             if (!in_array($column, $columns, true)) {

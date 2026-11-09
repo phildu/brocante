@@ -21,6 +21,7 @@ const MAIL_OPEN_SOURCES = [
     'assistance-vendeur' => 'Assistance vendeur',
     'espace-visiteur' => 'Espace visiteur',
     'recu' => 'Reçu / comptabilité',
+    'caisse' => 'Vente en caisse (avis au gérant)',
     'galerie' => 'Abonnements et demandes de galerie',
     'plateforme' => 'Plateforme Brocs',
 ];

@@ -13,12 +13,13 @@ const ACCOUNT_ROLES = [
     'admin' => 'Administrateur',
     'community_manager' => 'Community manager',
     'photographe' => 'Photographe',
+    'vendeur' => 'Vendeur (caisse)',
     'client' => 'Client',
     'prospect' => 'Prospect',
 ];
 
 /** Rôles qui se connectent à l'administration (les autres sont des contacts, sans accès). */
-const ACCOUNT_STAFF_ROLES = ['admin', 'community_manager', 'photographe'];
+const ACCOUNT_STAFF_ROLES = ['admin', 'community_manager', 'photographe', 'vendeur'];
 
 const ACCOUNT_SOURCES = ['manuel' => 'Ajouté à la main', 'commande' => 'Commande', 'newsletter' => 'Newsletter', 'connexion' => 'Connexion sociale', 'import' => 'Import (fichier ou CRM)', 'inscription' => 'Inscription client'];
 
@@ -172,6 +173,9 @@ function admin_home_for_role(string $role): string
     if ($role === 'photographe') {
         return '/admin/shop-shooting.php';
     }
+    if ($role === 'vendeur') {
+        return '/caisse.php';
+    }
     return $role === 'community_manager' ? '/admin/media.php' : '/admin/dashboard.php';
 }
 
@@ -203,13 +207,13 @@ function account_staff_by_login(string $login): ?array
         return null;
     }
     $stmt = db()->prepare("SELECT * FROM accounts WHERE (email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE)
-        AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND password_hash IS NOT NULL LIMIT 1");
+        AND role IN ('admin', 'community_manager', 'photographe', 'vendeur') AND is_active = 1 AND password_hash IS NOT NULL LIMIT 1");
     $stmt->execute([$login, $login]);
     if ($row = $stmt->fetch()) {
         return $row;
     }
     $byName = db()->prepare("SELECT * FROM accounts WHERE name = ? COLLATE NOCASE AND name != ''
-        AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND password_hash IS NOT NULL LIMIT 2");
+        AND role IN ('admin', 'community_manager', 'photographe', 'vendeur') AND is_active = 1 AND password_hash IS NOT NULL LIMIT 2");
     $byName->execute([$login]);
     $rows = $byName->fetchAll();
     return count($rows) === 1 ? $rows[0] : null;
@@ -218,7 +222,7 @@ function account_staff_by_login(string $login): ?array
 /** Compte de l'équipe actif portant cette adresse e-mail, avec ou sans mot de passe (connexion par un réseau social : l'adresse vérifiée suffit). */
 function account_staff_by_email(string $email): ?array
 {
-    $stmt = db()->prepare("SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 LIMIT 1");
+    $stmt = db()->prepare("SELECT * FROM accounts WHERE email = ? COLLATE NOCASE AND role IN ('admin', 'community_manager', 'photographe', 'vendeur') AND is_active = 1 LIMIT 1");
     $stmt->execute([trim($email)]);
     return $stmt->fetch() ?: null;
 }
@@ -256,7 +260,7 @@ function accounts_list(?string $role = null, string $search = ''): array
         (SELECT COUNT(*) FROM orders o WHERE o.status = 'paid' AND o.email = a.email COLLATE NOCASE) AS orders_count,
         (SELECT COALESCE(SUM(o.amount_total), 0) FROM orders o WHERE o.status = 'paid' AND o.email = a.email COLLATE NOCASE) AS orders_total
         FROM accounts a" . ($where ? ' WHERE ' . implode(' AND ', $where) : '')
-        . " ORDER BY CASE a.role WHEN 'admin' THEN 0 WHEN 'community_manager' THEN 1 WHEN 'photographe' THEN 2 WHEN 'client' THEN 3 ELSE 4 END, a.name COLLATE NOCASE, a.email COLLATE NOCASE";
+        . " ORDER BY CASE a.role WHEN 'admin' THEN 0 WHEN 'community_manager' THEN 1 WHEN 'photographe' THEN 2 WHEN 'vendeur' THEN 3 WHEN 'client' THEN 4 ELSE 5 END, a.name COLLATE NOCASE, a.email COLLATE NOCASE";
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetchAll();

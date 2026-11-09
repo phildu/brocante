@@ -31,7 +31,8 @@
   var okBtn = el('button', 'btn btn-ghost', 'Chercher'); okBtn.type = 'button';
   row.appendChild(camBtn); row.appendChild(input); row.appendChild(okBtn);
   var msg = el('p', 'pos-msg'); msg.setAttribute('role', 'status');
-  scanCard.appendChild(row); scanCard.appendChild(msg);
+  var exBtn = el('button', 'btn btn-ghost', '📸 Pièce hors catalogue (vente express)'); exBtn.type = 'button';
+  scanCard.appendChild(row); scanCard.appendChild(exBtn); scanCard.appendChild(msg);
   var result = el('div', 'pos-result'); result.hidden = true;
   var basketCard = el('section', 'pos-card');
   var overlay = el('div', 'pos-overlay'); overlay.hidden = true;
@@ -56,6 +57,105 @@
   });
   okBtn.addEventListener('click', function () { lookup(input.value); input.value = ''; });
   input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); okBtn.click(); } });
+
+  // ── Vente express : une pièce qui n'est pas au catalogue. Photo → fiche rédigée par l'IA → prix convenu → panier ──
+  var exFile = el('input'); exFile.type = 'file'; exFile.accept = 'image/*'; exFile.setAttribute('capture', 'environment'); exFile.hidden = true;
+  root.appendChild(exFile);
+  exBtn.addEventListener('click', function () { exFile.value = ''; exFile.click(); });
+  exFile.addEventListener('change', function () {
+    var f = exFile.files && exFile.files[0];
+    if (!f) return;
+    exBtn.disabled = true; say('Analyse de la photo… (quelques secondes)');
+    shrink(f, 1600, function (blob) {
+      var fd = new FormData(); fd.append('action', 'express_photo'); fd.append('photo', blob, 'piece.jpg');
+      fetch(ACTION, { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' }, body: fd })
+        .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Réponse inattendue (' + r.status + ').' }; }); })
+        .catch(function () { return { ok: false, error: 'Connexion perdue : vérifiez le réseau.' }; })
+        .then(function (r) {
+          exBtn.disabled = false;
+          if (!r.ok) { say(r.error || 'Erreur.', true); return; }
+          say(''); expressForm(r);
+        });
+    });
+  });
+  // Photo réduite avant l'envoi (un téléphone en produit de 5 à 10 Mo) ; en cas d'échec, l'original part tel quel.
+  function shrink(file, max, cb) {
+    try {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var s = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        c.toBlob(function (b) { cb(b || file); }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); cb(file); };
+      img.src = url;
+    } catch (e) { cb(file); }
+  }
+  function discardExpress(ref) { call({ action: 'express_discard', ref: ref }); }
+  function expressForm(r) {
+    result.textContent = ''; result.hidden = false;
+    var close = el('button', 'pos-close', '✕'); close.type = 'button'; close.setAttribute('aria-label', 'Annuler cette vente express');
+    function cancel() { stopWatch(); discardExpress(r.ref); result.hidden = true; say(''); }
+    close.addEventListener('click', cancel);
+    result.appendChild(close);
+    result.appendChild(el('h2', null, 'Pièce hors catalogue'));
+    var img = el('img', 'pos-express-photo'); img.src = r.photo; img.alt = 'Photo de la pièce';
+    result.appendChild(img);
+    result.appendChild(el('p', 'qa-note', r.ai ? 'Nom et description proposés d’après la photo : corrigez-les si besoin.' : 'Rédaction automatique indisponible : saisissez le nom.'));
+    var name = el('input'); name.type = 'text'; name.maxLength = 120; name.value = r.name || ''; name.placeholder = 'Nom de la pièce'; name.setAttribute('aria-label', 'Nom de la pièce');
+    var desc = el('textarea'); desc.rows = 4; desc.value = r.description || ''; desc.placeholder = 'Description'; desc.setAttribute('aria-label', 'Description');
+    var price = el('input'); price.type = 'number'; price.min = '0'; price.step = '0.5'; price.inputMode = 'decimal'; price.placeholder = 'Prix convenu (€)'; price.setAttribute('aria-label', 'Prix convenu en euros');
+    // Vendeur qui ne sait pas évaluer la pièce : l'expert (le gérant) reçoit la photo et la suggestion, répond, le vendeur conclut.
+    var expert = el('div', 'pos-expert');
+    var ask = el('button', 'btn btn-ghost', '🔎 Demander l’avis de l’expert'); ask.type = 'button';
+    var expertMsg = el('p', 'qa-note', 'Vous ne savez pas combien elle vaut ? L’expert reçoit la photo et vous répond avec un prix.');
+    expert.appendChild(expertMsg); expert.appendChild(ask);
+    var timer = null;
+    function stopWatch() { if (timer) clearInterval(timer); timer = null; }
+    function watch() {
+      stopWatch();
+      timer = setInterval(function () {
+        if (result.hidden || !result.contains(expert)) { stopWatch(); return; }
+        call({ action: 'express_status', ref: r.ref }).then(function (x) {
+          if (!x.ok || x.status !== 'answered') return;
+          stopWatch();
+          expertMsg.textContent = 'L’expert estime la pièce à ' + eur(x.price_cents) + (x.comment ? ' — « ' + x.comment + ' »' : '') + '. Vous pouvez encore négocier.';
+          expertMsg.className = 'pos-ok';
+          price.value = (x.price_cents / 100).toFixed(2);
+          ask.hidden = true;
+        });
+      }, 4000);
+    }
+    ask.addEventListener('click', function () {
+      ask.disabled = true; expertMsg.textContent = 'Envoi à l’expert…';
+      call({ action: 'express_ask', ref: r.ref, note: desc.value, hint: r.hint || '' }).then(function (x) {
+        ask.disabled = false;
+        if (!x.ok) { expertMsg.textContent = x.error || 'Erreur.'; expertMsg.className = 'pos-bad'; return; }
+        expertMsg.className = 'qa-note';
+        expertMsg.textContent = x.sent ? 'Demande envoyée à l’expert avec la photo. Sa réponse s’affichera ici : patientez ou continuez avec le client.' : 'Demande déjà en attente chez l’expert (ou e-mail non parti) : sa réponse s’affichera ici.';
+        ask.hidden = true; watch();
+      });
+    });
+    var add = el('button', 'btn btn-primary', 'Ajouter au panier'); add.type = 'button';
+    add.addEventListener('click', function () {
+      stopWatch();
+      var cents = Math.round(parseFloat(String(price.value).replace(',', '.')) * 100);
+      if (!name.value.trim()) { say('Donnez un nom à la pièce.', true); name.focus(); return; }
+      if (!isFinite(cents) || cents <= 0) { say('Saisissez le prix convenu avec le client.', true); price.focus(); return; }
+      add.disabled = true;
+      call({ action: 'express_save', ref: r.ref, name: name.value, description: desc.value }).then(function (x) {
+        add.disabled = false;
+        if (!x.ok) { say(x.error || 'Erreur.', true); return; }
+        basket.push({ ref: r.ref, name: name.value.trim(), price_cents: cents, express: true }); save();
+        result.hidden = true; renderBasket(); say('« ' + name.value.trim() + ' » ajoutée au panier.');
+      });
+    });
+    var drop = el('button', 'btn btn-ghost', 'Annuler cette pièce'); drop.type = 'button';
+    drop.addEventListener('click', cancel);
+    [name, desc, price, expert, add, drop].forEach(function (n) { result.appendChild(n); });
+    price.focus();
+  }
 
   function showResult(r) {
     result.textContent = ''; result.hidden = false;
@@ -125,7 +225,7 @@
       var p = el('input'); p.type = 'number'; p.min = '0'; p.step = '0.5'; p.inputMode = 'decimal'; p.value = (l.price_cents / 100).toFixed(2); p.setAttribute('aria-label', 'Prix de ' + l.name + ' en euros');
       p.addEventListener('change', function () { var v = Math.round(parseFloat(String(p.value).replace(',', '.')) * 100); l.price_cents = isFinite(v) && v >= 0 ? v : 0; save(); renderBasket(); });
       var rm = el('button', 'pos-rm', '✕'); rm.type = 'button'; rm.setAttribute('aria-label', 'Retirer');
-      rm.addEventListener('click', function () { basket.splice(i, 1); save(); renderBasket(); });
+      rm.addEventListener('click', function () { if (l.express) discardExpress(l.ref); basket.splice(i, 1); save(); renderBasket(); });
       r.appendChild(p); r.appendChild(el('span', null, '€')); r.appendChild(rm);
       basketCard.appendChild(r);
     });
@@ -166,7 +266,7 @@
     }
     basketCard.appendChild(pay);
     var clear = el('button', 'btn btn-ghost pos-clear', 'Vider le panier'); clear.type = 'button';
-    clear.addEventListener('click', function () { basket = []; save(); renderBasket(); });
+    clear.addEventListener('click', function () { basket.forEach(function (l) { if (l.express) discardExpress(l.ref); }); basket = []; save(); renderBasket(); });
     basketCard.appendChild(clear);
   }
 

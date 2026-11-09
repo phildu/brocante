@@ -3322,7 +3322,7 @@ function admin_password_configured(): bool
         }
     }
     try {
-        return (bool) db()->query("SELECT 1 FROM accounts WHERE role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND password_hash IS NOT NULL")->fetchColumn();
+        return (bool) db()->query("SELECT 1 FROM accounts WHERE role IN ('admin', 'community_manager', 'photographe', 'vendeur') AND is_active = 1 AND password_hash IS NOT NULL")->fetchColumn();
     } catch (Throwable $e) {
         return false;
     }
