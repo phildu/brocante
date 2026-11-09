@@ -33,12 +33,12 @@ if (!$https && app_env() !== 'local') mcp_http(400, ['error' => 'HTTPS obligatoi
 if (($_SERVER['HTTP_ORIGIN'] ?? '') !== '') mcp_http(403, ['error' => 'Origine refusée.']);
 
 $ip = mcp_client_ip();
-if (mcp_auth_blocked($ip)) mcp_http(429, ['error' => 'Trop d\'échecs : réessayez dans quelques minutes.'], ['Retry-After: ' . MCP_AUTH_WINDOW_SECONDS]);
-
 $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
 $token = preg_match('/^Bearer\s+(\S+)$/i', $auth, $m) ? $m[1] : (string) ($_SERVER['HTTP_X_API_KEY'] ?? '');
-if ($token === '' || !mcp_token_valid($token)) {
-    mcp_audit('auth', null, 'refus');
+// Un jeton valable n'est jamais bloqué ; seuls les jetons faux le sont, après trop d'échecs depuis la même IP.
+$access = mcp_access($token, $ip);
+if ($access === 'bloque') mcp_http(429, ['error' => 'Trop d\'échecs : réessayez dans quelques minutes.'], ['Retry-After: ' . MCP_AUTH_WINDOW_SECONDS]);
+if ($access !== 'ok') {
     usleep(400000);
     // Même réponse que le jeton soit absent, faux, révoqué ou que le MCP soit désactivé.
     mcp_http(401, ['error' => 'Jeton invalide.'], ['WWW-Authenticate: Bearer']);

@@ -85,6 +85,18 @@ function mcp_auth_blocked(string $ip): bool
     return (int) $stmt->fetchColumn() >= MCP_AUTH_MAX_FAILS;
 }
 
+/**
+ * Décision d'accès : 'ok' (jeton valable, jamais bloqué), 'bloque' (jeton faux et trop d'échecs récents depuis cette IP : 429),
+ * 'refus' (jeton faux ou absent : 401, l'échec est journalisé). Le blocage ne touche que les jetons faux.
+ */
+function mcp_access(string $token, string $ip): string
+{
+    if ($token !== '' && mcp_token_valid($token)) return 'ok';
+    if (mcp_auth_blocked($ip)) return 'bloque';
+    mcp_audit('auth', null, 'refus');
+    return 'refus';
+}
+
 function mcp_audit(string $tool, ?array $args, string $outcome, $before = null, $after = null): void
 {
     try {
