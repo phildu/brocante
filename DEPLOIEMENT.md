@@ -147,7 +147,9 @@ Les galeries (`data/galeries/`) et les bases des boutiques ne sont jamais envoy�
 - **Voyage** : réglages de présentation (nom, couleurs, textes, catégories, logo), fiches, photos et vidéos, bandeaux, diaporamas, livraison,
   remises du panier, horaires, apparence ; pour une galerie : présentation, plan, membres, événement, promotions.
 - **Ne voyage jamais** : commandes, clients, comptes, mots de passe, clés (Stripe, IA, SMS…), coordonnées bancaires, `site_url` et domaines,
-  abonnements et options payantes, administrateurs de galerie, pièces d'identité, inscriptions, listes d'attente, base de la buvette, journal des dépenses (factures, notes de frais et leurs justificatifs).
+  abonnements et options payantes, administrateurs de galerie, pièces d'identité, inscriptions, listes d'attente, base de la buvette,
+  sponsors & partenaires d'une galerie (fiches et logos : à ressaisir sur chaque environnement),
+  journal des dépenses (factures, notes de frais et leurs justificatifs).
 - **Sans perte par défaut** : les fiches sont ajoutées ou mises à jour par numéro, rien n'est supprimé ; le stock et l'état de vente de la cible sont
   conservés ; un fichier existant n'est jamais écrasé (le nouveau reçoit un nom voisin). La base d'une boutique existante est sauvegardée avant
   l'import (`data/backups/<base>-echange-<horodatage>.db`), son `tenant.php` aussi (`.bak-…`), une galerie existante aussi (`.json.bak-…`).

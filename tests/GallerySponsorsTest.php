@@ -11,9 +11,12 @@ require_once __DIR__ . '/../includes/gallery-sponsors.php';
 final class GallerySponsorsTest extends TestCase
 {
     private string $dir;
+    /** @var string|false Valeur de BROCANTE_GALLERIES_DIR avant le test : d'autres fichiers de test la posent au chargement et comptent dessus. */
+    private $previousDir;
 
     protected function setUp(): void
     {
+        $this->previousDir = getenv('BROCANTE_GALLERIES_DIR');
         $this->dir = sys_get_temp_dir() . '/gsp-test-' . bin2hex(random_bytes(4));
         mkdir($this->dir);
         putenv('BROCANTE_GALLERIES_DIR=' . $this->dir);
@@ -21,7 +24,7 @@ final class GallerySponsorsTest extends TestCase
 
     protected function tearDown(): void
     {
-        putenv('BROCANTE_GALLERIES_DIR');
+        putenv($this->previousDir === false ? 'BROCANTE_GALLERIES_DIR' : 'BROCANTE_GALLERIES_DIR=' . $this->previousDir);
         foreach (glob($this->dir . '/*') ?: [] as $f) @unlink($f);
         @rmdir($this->dir);
     }
