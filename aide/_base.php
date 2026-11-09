@@ -2,6 +2,7 @@
 // Socle du centre d'aide : chargement du contenu, recherche accent/insensible à la casse,
 // assistant documentaire et helpers d'affichage. Aucun appel réseau n'est fait ici.
 require_once __DIR__ . '/../includes/saas.php';
+require_once __DIR__ . '/../includes/aide-edition.php';
 
 /**
  * Point d'extension pour une réponse générative future.
@@ -43,7 +44,8 @@ function aide_json_file(string $file): array
     $raw = file_get_contents($path);
     if ($raw === false) return [];
     $data = json_decode($raw, true);
-    return is_array($data) ? $data : [];
+    // Corrections faites dans le portail (Plateforme → Contenu de l'aide), appliquées par-dessus la base livrée avec le code.
+    return is_array($data) ? aide_edit_apply($file, $data) : [];
 }
 
 /** Convertit la base FAQ structurée (faq.json) vers le schéma du centre d'aide. */

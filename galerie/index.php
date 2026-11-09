@@ -328,8 +328,7 @@ $metaDescription = $sector ? ($sector['note'] !== '' ? $sector['note'] : $sector
     <p class="eyebrow">Des commerçants réunis</p>
     <h1>Galeries commerciales</h1>
     <p class="tagline">Une rue, un village, un groupe d'amis : leurs boutiques réunies au même endroit.</p>
-    <p class="hero-share"><?= share_button_html($origin . '/galerie/', 'Galeries commerciales', "Des commerçants réunis au même endroit.") ?>
-      <a class="alt" href="/galerie/admin.php" rel="nofollow" style="margin-left:14px;">Se connecter</a></p>
+    <p class="hero-share"><?= share_button_html($origin . '/galerie/', 'Galeries commerciales', "Des commerçants réunis au même endroit.") ?></p>
     <?php if ($canSignup): ?>
       <p class="hero-cta"><a class="btn-cta" href="/inscription/"<?= cta_attrs('galerie_hero_cta') ?>><?= e(cta_label('galerie_hero_cta')) ?></a>
         <span class="from"><?= e(saas_grid_from_text(saas_grid(''))) ?> · sans engagement</span><a class="alt" href="/#formules">Voir les tarifs</a></p>

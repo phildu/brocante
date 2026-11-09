@@ -24,6 +24,11 @@ final class VenteScopeTest extends TestCase
 
     protected function setUp(): void
     {
+        // Un autre fichier de tests peut avoir changé ou retiré ces variables entre-temps (ordre de la suite complète) : on les remet.
+        $tmp = sys_get_temp_dir() . '/vente-scope-test-' . getmypid();
+        @mkdir($tmp . '/galeries', 0775, true);
+        putenv('BROCANTE_GALLERIES_DIR=' . $tmp . '/galeries');
+        putenv('VENTE_DATA_DIR=' . $tmp . '/vente');
         $this->dir = (string) getenv('VENTE_DATA_DIR');
         foreach (glob(galleries_dir() . '/*') ?: [] as $f) @unlink($f);
         foreach (glob($this->dir . '/galeries/*') ?: [] as $f) @unlink($f);
