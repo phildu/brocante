@@ -354,6 +354,7 @@
         ".json",
         ".messages.json",
         ".slots.json",
+        ".sponsors.json",
         ".waitlist.json",
         "/cache/",
         "/cni/"
