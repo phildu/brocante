@@ -41,7 +41,8 @@ if ($access === 'bloque') mcp_http(429, ['error' => 'Trop d\'échecs : réessaye
 if ($access !== 'ok') {
     usleep(400000);
     // Même réponse que le jeton soit absent, faux, révoqué ou que le MCP soit désactivé.
-    mcp_http(401, ['error' => 'Jeton invalide.'], ['WWW-Authenticate: Bearer']);
+    require_once __DIR__ . '/includes/mcp-oauth.php';
+    mcp_http(401, ['error' => 'Jeton invalide.'], ['WWW-Authenticate: Bearer resource_metadata="' . mcp_oauth_resource_metadata_url() . '"']);
 }
 
 $raw = file_get_contents('php://input', false, null, 0, MCP_MAX_BODY + 1);

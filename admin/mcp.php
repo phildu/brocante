@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/mcp.php';
+require_once __DIR__ . '/../includes/mcp-oauth.php';
 require_admin();
 
 $newToken = null;
@@ -14,8 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mcp_audit('token', null, 'jeton créé');
     } elseif ($action === 'revoke') {
         mcp_token_revoke();
-        mcp_audit('token', null, 'jeton révoqué');
-        flash_set('Accès MCP désactivé : le jeton ne fonctionne plus.');
+        mcp_oauth_revoke_all();
+        mcp_audit('token', null, 'jeton et autorisations révoqués');
+        flash_set('Accès MCP désactivé : le jeton et toutes les applications autorisées sont révoqués.');
         header('Location: /admin/mcp.php');
         exit;
     }
@@ -24,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 mcp_ensure_schema();
 $content = get_content();
 $flash = flash_get();
+$connections = mcp_oauth_connections();
 $active = mcp_token_active();
 $created = shop_setting('mcp_token_created', '');
 $log = db()->query("SELECT at, ip, tool, outcome FROM mcp_audit ORDER BY id DESC LIMIT 30")->fetchAll(PDO::FETCH_ASSOC);
@@ -78,13 +81,22 @@ $endpoint = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . tenant_ba
         <input type="hidden" name="action" value="create">
         <button type="submit" class="btn" <?= $active ? 'onclick="return confirm(\'Remplacer le jeton ? L\\\'ancien cessera de fonctionner.\')"' : '' ?>><?= $active ? 'Nouveau jeton' : 'Créer un jeton' ?></button>
       </form>
-      <?php if ($active): ?>
+      <?php if ($active || $connections): ?>
       <form method="post" style="display:inline-block;" onsubmit="return confirm('Désactiver l\'accès MCP ?');">
         <?= shop_csrf_input() ?>
         <input type="hidden" name="action" value="revoke">
         <button type="submit" class="btn btn-ghost">Révoquer</button>
       </form>
       <?php endif; ?>
+    </div>
+
+    <div class="admin-block" style="margin-top:20px;">
+      <h2 style="font-size:1.1rem;">Connexion depuis Claude (sans jeton)</h2>
+      <p>Dans Claude : Paramètres → Connecteurs → Ajouter → <em>Ajouter un connecteur personnalisé</em>, puis collez l'adresse :</p>
+      <code class="mcp-token"><?= h($endpoint) ?></code>
+      <p>Claude vous renvoie ici pour approuver l'accès. <?= $connections ? 'Applications autorisées :' : 'Aucune application autorisée pour l\'instant.' ?></p>
+      <?php if ($connections): ?><ul><?php foreach ($connections as $cn): ?><li><?= h($cn['client_name'] !== '' ? $cn['client_name'] : $cn['client_id']) ?> — depuis le <?= h(gmdate('Y-m-d H:i', (int) $cn['since'])) ?> UTC</li><?php endforeach; ?></ul>
+      <p class="hint">« Révoquer » coupe le jeton ci-dessus <strong>et</strong> toutes ces applications.</p><?php endif; ?>
     </div>
 
     <div class="admin-block" style="margin-top:20px;">

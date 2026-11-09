@@ -92,6 +92,10 @@ function mcp_auth_blocked(string $ip): bool
 function mcp_access(string $token, string $ip): string
 {
     if ($token !== '' && mcp_token_valid($token)) return 'ok';
+    if (str_starts_with($token, 'bbmcpo_')) {
+        require_once __DIR__ . '/mcp-oauth.php';
+        if (mcp_oauth_access_valid($token)) return 'ok';
+    }
     if (mcp_auth_blocked($ip)) return 'bloque';
     mcp_audit('auth', null, 'refus');
     return 'refus';

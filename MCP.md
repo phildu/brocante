@@ -15,6 +15,16 @@ Permet à un assistant (Claude Code…) de lire et modifier les données d'un co
    (utiliser un nom différent par environnement : `brocante-preprod`, `brocante-local`). Pour un commerce servi sous le domaine d'un autre, l'adresse porte son identifiant : `https://pre.bricbrok.com/<identifiant>/mcp.php` ; la page Accès MCP affiche la bonne.
 4. « Révoquer » ou « Nouveau jeton » coupe immédiatement l'ancien accès.
 
+## Connexion sans jeton (OAuth) : Claude → Paramètres → Connecteurs
+
+Le serveur gère OAuth 2.1 (enregistrement dynamique, PKCE S256) : dans Claude, Paramètres → Connecteurs → Ajouter → *Ajouter un connecteur
+personnalisé*, adresse `https://<site>/<identifiant>/mcp.php` (celle que la page Accès MCP affiche). Claude ouvre `mcp-authorize.php` : le propriétaire
+se connecte à l'administration du commerce (rôle admin) et clique « Autoriser ». Jetons d'accès : 1 h ; renouvellement : 30 jours, renouvelé à chaque
+usage ; seules leurs empreintes SHA-256 sont conservées. « Révoquer » (Accès MCP) coupe le jeton statique **et** toutes les applications autorisées.
+Fichiers : `mcp-oauth-meta.php` (découverte, aussi servie sous `/.well-known/…` par le `.htaccess`), `mcp-register.php`, `mcp-authorize.php`,
+`mcp-token.php`, `includes/mcp-oauth.php`. Tables : `mcp_oauth_clients`, `mcp_oauth_codes`, `mcp_oauth_tokens`. Les règles `/.well-known` sont propres à Apache (OVH) ;
+en local, `/mcp-oauth-meta.php?doc=resource|server` donne les mêmes documents.
+
 ## Outils
 
 | Outil | Rôle |
@@ -45,8 +55,7 @@ brand, etat, size_text, weight_text, weight_grams, lot_qty, negotiable`. Mêmes 
 
 ## Limites
 
-- Réponses JSON simples (pas de flux SSE, pas de session MCP) ; compatible Claude Code (`--transport http`).
-  Les « connecteurs personnalisés » de claude.ai exigent OAuth : non géré ici.
+- Réponses JSON simples (pas de flux SSE, pas de session MCP) ; compatible Claude Code (`--transport http`, jeton) et connecteurs personnalisés (OAuth).
 - Le jeton donne **tous** les droits ci-dessus : le traiter comme un mot de passe admin.
 - Les réglages `opening_hours` est un JSON de l'administration : n'y toucher que sur demande explicite.
 
