@@ -359,6 +359,25 @@ final class ExchangeTest extends TestCase
         self::assertSame('Ouvert tous les jours', gh_read('rue-des-arts')['notice']);
     }
 
+    public function testGallerySponsorsTravelWithoutTheInternalNote(): void
+    {
+        $this->makeGallery('rue-des-arts');
+        require_once __DIR__ . '/../includes/gallery-sponsors.php';
+        gsp_save('rue-des-arts', [['id' => 'aaaaaaaa', 'name' => 'Mairie', 'tier' => 'institutionnel', 'note' => 'contact : Mme X']]);
+        $e = exchange_gallery_export('rue-des-arts');
+        self::assertSame('Mairie', $e['package']['sponsors'][0]['name']);
+        self::assertArrayNotHasKey('note', $e['package']['sponsors'][0]);
+
+        // Cible : la fiche existe déjà avec sa propre note, une autre disparaît au profit du paquet.
+        gsp_save('rue-des-arts', [['id' => 'aaaaaaaa', 'name' => 'Ancien nom', 'note' => 'note locale'], ['id' => 'bbbbbbbb', 'name' => 'Autre']]);
+        $r = exchange_gallery_import($e['package']);
+        self::assertSame([], array_filter($r['warnings'], static fn ($w) => str_contains($w, 'sponsors')));
+        $list = gsp_load('rue-des-arts');
+        self::assertCount(1, $list);
+        self::assertSame('Mairie', $list[0]['name']);
+        self::assertSame('note locale', $list[0]['note']);
+    }
+
     public function testGalleryImportWarnsAboutMissingLocalMembers(): void
     {
         $r = exchange_gallery_import(['slug' => 'avec-membres', 'name' => 'X', 'data' => ['name' => 'X', 'members' => [['type' => 'local', 'slug' => 'boutique-inexistante-xyz']]]]);
