@@ -29,7 +29,25 @@ function sumup_config(): ?array
         'api_key' => $apiKey,
         'merchant_code' => $merchant,
         'api_base' => rtrim(trim((string) ($config['api_base'] ?? '')), '/'),
+        // Terminal Solo (API Cloud) : clé d'affiliation et lecteur appairé, facultatifs.
+        'affiliate_app_id' => trim((string) ($config['affiliate_app_id'] ?? '')),
+        'affiliate_key' => trim((string) ($config['affiliate_key'] ?? '')),
+        'reader_id' => trim((string) ($config['reader_id'] ?? '')),
+        'reader_name' => trim((string) ($config['reader_name'] ?? '')),
     ];
+}
+
+/** Réglages du terminal Solo si le lecteur est appairé et la clé d'affiliation saisie, sinon null. */
+function sumup_terminal_config(): ?array
+{
+    $config = sumup_config();
+    if (!$config || $config['reader_id'] === '' || $config['affiliate_app_id'] === '' || $config['affiliate_key'] === '') return null;
+    return $config;
+}
+
+function sumup_terminal_configured(): bool
+{
+    return sumup_terminal_config() !== null;
 }
 
 function sumup_configured(): bool
@@ -57,7 +75,7 @@ function sumup_request(array $config, string $method, string $path, ?array $body
     ];
     if ($method === 'POST') {
         $options[CURLOPT_POST] = true;
-        $options[CURLOPT_POSTFIELDS] = json_encode($body ?? [], JSON_UNESCAPED_UNICODE);
+        $options[CURLOPT_POSTFIELDS] = $body === null ? '' : json_encode($body, JSON_UNESCAPED_UNICODE);
     }
     curl_setopt_array($ch, $options);
     $raw = curl_exec($ch);
@@ -66,8 +84,8 @@ function sumup_request(array $config, string $method, string $path, ?array $body
     $data = json_decode((string) $raw, true);
     $data = is_array($data) ? $data : [];
     if ($status >= 400) {
-        $reason = (string) ($data['message'] ?? $data['error_message'] ?? $data['detail'] ?? $data['title'] ?? $data['error_code'] ?? ('HTTP ' . $status));
-        throw new RuntimeException('SumUp a refusé la demande : ' . $reason);
+        $reason = (string) ($data['message'] ?? $data['error_message'] ?? $data['detail'] ?? $data['title'] ?? $data['errors']['detail'] ?? $data['error_code'] ?? ('HTTP ' . $status));
+        throw new RuntimeException('SumUp a refusé la demande : ' . $reason, $status);
     }
     return $data;
 }
@@ -179,4 +197,106 @@ function sumup_refund(array $order, int $cents, array $config): string
     $path = '/v1.0/merchants/' . rawurlencode($config['merchant_code']) . '/payments/' . rawurlencode($transactionId) . '/refunds';
     $refund = sumup_request($config, 'POST', $path, ['amount' => sumup_amount_major(max(1, $cents))]);
     return (string) ($refund['id'] ?? ('sumup-refund-' . substr($transactionId, 0, 8) . '-' . $cents));
+}
+
+// ── Terminal physique SumUp Solo (API Cloud) ─────────────────────────────────
+// Vérifié dans la documentation SumUp (2026-11-09) : appairage POST
+// /v0.1/merchants/{code}/readers (code de 8 ou 9 caractères affiché sur le Solo
+// déconnecté, valable 5 minutes), encaissement POST
+// /v0.1/merchants/{code}/readers/{reader_id}/checkout (montant en centimes,
+// clé d'affiliation obligatoire, return_url https publique), annulation POST
+// .../terminate, résultat par webhook « solo.transaction.updated » puis
+// GET /v2.1/merchants/{code}/transactions?client_transaction_id=… Un seul
+// paiement à la fois par lecteur. Nécessite un lecteur Solo (firmware 3.3.24.3
+// ou plus). Rien n'est testé ici contre un vrai lecteur.
+
+/** Appaire un Solo avec le code affiché à l'écran ; renvoie l'objet lecteur (id, name, status, device). */
+function sumup_reader_pair(array $config, string $pairingCode, string $name): array
+{
+    $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $pairingCode) ?? '');
+    if (strlen($code) < 8 || strlen($code) > 9) throw new RuntimeException('Le code d’appairage compte 8 ou 9 caractères.');
+    $data = sumup_request($config, 'POST', '/v0.1/merchants/' . rawurlencode($config['merchant_code']) . '/readers', [
+        'pairing_code' => $code,
+        'name' => mb_substr($name !== '' ? $name : 'Caisse', 0, 500),
+    ]);
+    return is_array($data['data'] ?? null) ? $data['data'] : $data;
+}
+
+/** État du lecteur appairé (status : paired, processing, expired…). */
+function sumup_reader_get(array $config): array
+{
+    $data = sumup_request($config, 'GET', '/v0.1/merchants/' . rawurlencode($config['merchant_code']) . '/readers/' . rawurlencode($config['reader_id']));
+    return is_array($data['data'] ?? null) ? $data['data'] : $data;
+}
+
+/**
+ * Envoie un montant au lecteur. Renvoie le client_transaction_id qui relie le
+ * webhook et la transaction à la vente. $webhookUrl doit être en https et publique.
+ */
+function sumup_reader_checkout(array $config, int $cents, string $description, string $webhookUrl, string $foreignId): string
+{
+    $body = [
+        'total_amount' => ['currency' => 'EUR', 'minor_unit' => 2, 'value' => max(0, $cents)],
+        'description' => mb_substr($description, 0, 255),
+        'return_url' => $webhookUrl,
+        'affiliate' => [
+            'app_id' => $config['affiliate_app_id'],
+            'key' => $config['affiliate_key'],
+            'foreign_transaction_id' => mb_substr($foreignId, 0, 64),
+        ],
+    ];
+    $data = sumup_request($config, 'POST', '/v0.1/merchants/' . rawurlencode($config['merchant_code']) . '/readers/' . rawurlencode($config['reader_id']) . '/checkout', $body);
+    $data = is_array($data['data'] ?? null) ? $data['data'] : $data;
+    $id = trim((string) ($data['client_transaction_id'] ?? ''));
+    if ($id === '') throw new RuntimeException('SumUp n’a pas renvoyé d’identifiant de transaction.');
+    return $id;
+}
+
+/** Demande au lecteur d'abandonner le paiement en cours (asynchrone, sans confirmation). */
+function sumup_reader_terminate(array $config): void
+{
+    sumup_request($config, 'POST', '/v0.1/merchants/' . rawurlencode($config['merchant_code']) . '/readers/' . rawurlencode($config['reader_id']) . '/terminate');
+}
+
+/** Transaction SumUp d'une vente au terminal, ou null tant qu'elle n'existe pas (404). */
+function sumup_transaction_by_client_id(array $config, string $clientTransactionId): ?array
+{
+    if ($clientTransactionId === '') return null;
+    try {
+        $data = sumup_request($config, 'GET', '/v2.1/merchants/' . rawurlencode($config['merchant_code']) . '/transactions?client_transaction_id=' . rawurlencode($clientTransactionId));
+    } catch (RuntimeException $e) {
+        if ($e->getCode() === 404) return null;
+        throw $e;
+    }
+    return $data ?: null;
+}
+
+/** Une transaction relue auprès de SumUp est-elle encaissée (SUCCESSFUL ou déjà reversée) ? */
+function sumup_transaction_paid(?array $transaction): bool
+{
+    if (!$transaction) return false;
+    return in_array(strtoupper((string) ($transaction['status'] ?? '')), ['SUCCESSFUL'], true);
+}
+
+/** Échec définitif : le lecteur a refusé ou abandonné le paiement. */
+function sumup_transaction_failed(?array $transaction): bool
+{
+    if (!$transaction) return false;
+    return in_array(strtoupper((string) ($transaction['status'] ?? '')), ['FAILED', 'CANCELLED'], true);
+}
+
+/** Libellé lisible pour la fiche commande d'une vente au terminal. */
+function sumup_terminal_detail(array $transaction): string
+{
+    $entry = strtoupper((string) ($transaction['entry_mode'] ?? ''));
+    $mode = [
+        'CONTACTLESS' => 'sans contact',
+        'CHIP' => 'puce',
+        'APPLE_PAY' => 'Apple Pay',
+        'GOOGLE_PAY' => 'Google Pay',
+    ][$entry] ?? 'carte';
+    $card = trim((string) ($transaction['card']['type'] ?? ''));
+    $last4 = trim((string) ($transaction['card']['last_4_digits'] ?? ''));
+    $code = trim((string) ($transaction['transaction_code'] ?? ''));
+    return 'SumUp terminal — ' . $mode . ($card !== '' && $card !== 'UNKNOWN' ? ' ' . $card : '') . ($last4 !== '' ? ' •••• ' . $last4 : '') . ($code !== '' ? ' · ' . $code : '');
 }

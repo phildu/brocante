@@ -459,6 +459,7 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
       $revolutKeySet = trim((string) ($revolutConfig['api_key'] ?? '')) !== '';
       $revolutWebhookSet = trim((string) ($revolutConfig['webhook_secret'] ?? '')) !== '';
       $sumupKeySet = trim((string) ($sumupConfig['api_key'] ?? '')) !== '';
+      $sumupAffiliateSet = trim((string) ($sumupConfig['affiliate_key'] ?? '')) !== '';
       ?>
       <form class="admin-block" method="post" action="/admin/save-payment-keys.php" id="payment-settings" data-panel="paiement">
         <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
@@ -556,6 +557,38 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
         <p class="hint" style="margin-top:8px;">
           Aucun webhook à déclarer : l’adresse de notification (<code><?= h(rtrim(tenant_site_url(), '/') . '/sumup-webhook.php') ?></code>) est envoyée à SumUp avec chaque paiement.
           La page de paiement reste valable 30 minutes ; le bouton « Vérifier auprès de SumUp » de la fiche commande rattrape un paiement non confirmé.
+        </p>
+
+        <h4 style="margin:18px 0 6px;">Terminal SumUp Solo (caisse en boutique)</h4>
+        <p class="hint">Avec un lecteur <strong>SumUp Solo</strong>, le bouton « Terminal SumUp » de la caisse envoie le montant au lecteur : le client paie dessus et la vente s’enregistre toute seule. La clé d’affiliation se crée dans <a href="https://developer.sumup.com/affiliate-keys" target="_blank" rel="noopener">SumUp → Développeurs → Affiliate Keys</a>. Pour appairer : déconnectez le Solo (Menu → Réglages → À propos → Se déconnecter), puis Connexions → API → Connecter, et saisissez le code affiché (valable 5 minutes). Le terminal ne peut être joint par SumUp qu’en ligne (adresse https publique), pas depuis un site local.</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Identifiant d’application (app_id)</label>
+            <input type="text" name="sumup_affiliate_app_id" autocomplete="off" value="<?= h((string) ($sumupConfig['affiliate_app_id'] ?? '')) ?>" placeholder="com.example.boutique">
+          </div>
+          <div class="field">
+            <label>Clé d’affiliation</label>
+            <input type="password" name="sumup_affiliate_key" autocomplete="off" placeholder="<?= $sumupAffiliateSet ? 'Déjà enregistrée' : '123e4567-e89b-…' ?>">
+          </div>
+        </div>
+        <div class="field-row-2" style="margin-top:12px;">
+          <div class="field">
+            <label>Code d’appairage du Solo (8 ou 9 caractères)</label>
+            <input type="text" name="sumup_pairing_code" autocomplete="off" maxlength="12" placeholder="<?= sumup_terminal_configured() ? 'Laisser vide : lecteur déjà appairé' : '4WLFDSBF' ?>">
+          </div>
+          <div class="field">
+            <label>Nom du lecteur</label>
+            <input type="text" name="sumup_reader_name" autocomplete="off" maxlength="60" value="<?= h((string) ($sumupConfig['reader_name'] ?? '')) ?>" placeholder="Caisse">
+          </div>
+        </div>
+        <?php if (($sumupConfig['reader_id'] ?? '') !== ''): ?>
+          <label style="font-size:0.9rem;display:inline-flex;align-items:center;gap:6px;margin-top:10px;">
+            <input type="checkbox" name="sumup_reader_unpair" value="1">
+            Retirer le lecteur (pensez aussi à le déconnecter sur le Solo : Connexions → API → Déconnecter)
+          </label>
+        <?php endif; ?>
+        <p class="publish-status" style="margin-top:10px;">
+          <?= sumup_terminal_configured() ? 'Terminal prêt — lecteur « ' . h((string) ($sumupConfig['reader_name'] ?: 'Caisse')) . ' » appairé.' : 'Terminal inactif tant que la clé d’affiliation et le lecteur appairé ne sont pas enregistrés.' ?>
         </p>
 
         <h3 style="margin-top:24px;">Wero</h3>

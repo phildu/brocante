@@ -107,7 +107,7 @@ Cible : **prod = `https://www.bricbrok.com`**, **préprod = `https://pre.bricbro
 - [ ] `scripts/smoke-remote.sh https://<domaine-prod> prod` au vert ; ouvrir `/portail/` et se connecter.
 - [ ] **Paiements** : saisir les clés **live** (Stripe, et Revolut/SumUp/PayPal/Monetico si utilisés) depuis l'administration de la prod ; déclarer les
   webhooks côté prestataire avec l'adresse de prod (`stripe-webhook.php`, `revolut-webhook.php`, `monetico-ipn.php` ; SumUp n'en demande pas, l'adresse est transmise à chaque paiement) ;
-  **Wero** : l'activer dans Stripe → Moyens de paiement (compte live), puis cocher la case dans l'administration ; un paiement réel
+  **Terminal SumUp Solo** : en prod seulement (adresse https publique), saisir la clé d'affiliation puis appairer le lecteur depuis l'administration, et faire un petit encaissement puis remboursement ; **Wero** : l'activer dans Stripe → Moyens de paiement (compte live), puis cocher la case dans l'administration ; un paiement réel
   de faible montant puis remboursement.
 - [ ] **Clés d'IA partagées** : portail → « Clés API partagées » → *Mise en production* (taper `PRODUCTION`) : chaque commerce n'utilise plus que les siennes.
 - [ ] **Messages sortants** (module Notifications : e-mail, SMS, WhatsApp, Discord, Telegram) : identifiants de prod saisis ; vérifier qu'aucun

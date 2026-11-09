@@ -106,6 +106,21 @@ function pos_release_pending(array $items): void
     foreach ($rows as $o) {
         $inOrder = array_map('strval', array_column(json_decode((string) $o['items'], true) ?: [], 'ref'));
         if (!array_intersect($refs, $inOrder)) continue;
+        if (payment_provider_of($o) === 'sumup') {
+            // Vente au terminal SumUp oubliée : on relit la transaction avant de libérer les pièces.
+            try {
+                $state = pos_sumup_refresh($o);
+                if ($state === 'pending') {
+                    $config = sumup_terminal_config();
+                    if ($config) { try { sumup_reader_terminate($config); } catch (Throwable $e) { /* rien à abandonner */ } }
+                    $state = pos_sumup_refresh($o);
+                }
+            } catch (Throwable $e) {
+                $state = 'pending';
+            }
+            if ($state !== 'paid') db()->prepare("UPDATE orders SET status = 'canceled' WHERE id = ? AND status = 'pending'")->execute([$o['id']]);
+            continue;
+        }
         $session = null;
         try { stripe_request('POST', '/checkout/sessions/' . urlencode($o['stripe_session_id']) . '/expire'); } catch (Throwable $e) { /* déjà payée ou expirée */ }
         try { $session = stripe_request('GET', '/checkout/sessions/' . urlencode($o['stripe_session_id'])); } catch (Throwable $e) {}
@@ -151,4 +166,32 @@ function pos_receipt_url(int $orderId): string
     } catch (Throwable $e) {
         return '';
     }
+}
+
+/**
+ * Vente au terminal SumUp : relit la transaction auprès de SumUp (jamais d'après un webhook seul)
+ * et renvoie 'paid' (vente enregistrée), 'failed' (refusée ou abandonnée) ou 'pending'.
+ */
+function pos_sumup_refresh(array $order): string
+{
+    $config = sumup_terminal_config() ?? sumup_config();
+    if (!$config) throw new RuntimeException('SumUp n’est plus configuré pour cette boutique.');
+    $transaction = sumup_transaction_by_client_id($config, (string) ($order['provider_checkout_id'] ?? ''));
+    if (sumup_transaction_paid($transaction)) return pos_sumup_settle($order, $transaction) ? 'paid' : 'pending';
+    if (sumup_transaction_failed($transaction)) return 'failed';
+    return 'pending';
+}
+
+/** Enregistre la vente d'un paiement SumUp réussi (montant et devise contrôlés). Faux si le contrôle échoue. */
+function pos_sumup_settle(array $order, array $transaction): bool
+{
+    $orderId = (int) $order['id'];
+    if (sumup_cents($transaction['amount'] ?? -1) !== (int) $order['amount_total'] || strtoupper((string) ($transaction['currency'] ?? '')) !== 'EUR') {
+        order_event($orderId, 'paiement_echec', 'Montant SumUp incohérent : ' . sumup_cents($transaction['amount'] ?? 0) . ' centimes au lieu de ' . (int) $order['amount_total'], 'sumup');
+        return false;
+    }
+    db()->prepare("UPDATE orders SET payment_provider = 'sumup', provider_payment_id = ?, payment_detail = ?, payment_date = ? WHERE id = ?")
+        ->execute([(string) ($transaction['id'] ?? ''), sumup_terminal_detail($transaction), gmdate('c'), $orderId]);
+    pos_finalize($orderId, []);
+    return true;
 }
