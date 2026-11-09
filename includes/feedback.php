@@ -24,6 +24,9 @@ const FEEDBACK_STATUS_LABELS = [
 const FEEDBACK_OPEN_STATUSES = ['new', 'qualified', 'in_progress', 'waiting'];
 const FEEDBACK_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 const FEEDBACK_PRIORITY_LABELS = ['low' => 'Basse', 'normal' => 'Normale', 'high' => 'Haute', 'urgent' => 'Urgente'];
+// Espaces où le widget peut apparaître : back office d'une boutique, site public (client connecté), portail.
+const FEEDBACK_SURFACES = ['admin', 'front', 'portail'];
+const FEEDBACK_SURFACE_LABELS = ['admin' => 'Administration boutique', 'front' => 'Site public', 'portail' => 'Portail'];
 const FEEDBACK_MAX_MESSAGE = 4000;
 const FEEDBACK_MAX_ATTACHMENT = 3145728; // 3 Mo
 const FEEDBACK_MAX_RECORDS = 5000;
@@ -65,6 +68,7 @@ function feedback_settings_defaults(): array
         'widget' => true,
         'open_to_all' => false,
         'include_beta_testers' => true,
+        'surfaces' => ['admin' => true, 'front' => true, 'portail' => false],
         'testers' => ['shops' => [], 'galleries' => []],
         'notify_email' => '',
         'reply_days' => 15,
@@ -89,10 +93,16 @@ function feedback_settings_normalize(array $in): array
     $d = feedback_settings_defaults();
     $testers = is_array($in['testers'] ?? null) ? $in['testers'] : [];
     $email = mb_strtolower(trim((string) ($in['notify_email'] ?? '')));
+    $surfaces = [];
+    $inSurfaces = is_array($in['surfaces'] ?? null) ? $in['surfaces'] : [];
+    foreach (FEEDBACK_SURFACES as $surface) {
+        $surfaces[$surface] = array_key_exists($surface, $inSurfaces) ? !empty($inSurfaces[$surface]) : $d['surfaces'][$surface];
+    }
     return [
         'widget' => !array_key_exists('widget', $in) || !empty($in['widget']),
         'open_to_all' => !empty($in['open_to_all']),
         'include_beta_testers' => !array_key_exists('include_beta_testers', $in) || !empty($in['include_beta_testers']),
+        'surfaces' => $surfaces,
         'testers' => [
             'shops' => feedback_slug_list($testers['shops'] ?? []),
             'galleries' => feedback_slug_list($testers['galleries'] ?? []),
@@ -187,10 +197,20 @@ function feedback_is_tester(string $shop, ?array $settings = null): bool
     return in_array($shop, feedback_tester_shops($settings), true);
 }
 
-function feedback_widget_enabled(string $shop): bool
+/** Le widget est-il ouvert à cette boutique, sur cet espace (admin = back office, front = site public) ? */
+function feedback_widget_enabled(string $shop, string $surface = 'admin'): bool
+{
+    if (!in_array($surface, ['admin', 'front'], true)) return false;
+    $settings = feedback_settings_load();
+    return !empty($settings['widget']) && !empty($settings['surfaces'][$surface])
+        && (!empty($settings['open_to_all']) || feedback_is_tester($shop, $settings));
+}
+
+/** Widget du portail : réglage propre, indépendant de la liste des boutiques testeuses. */
+function feedback_portail_widget_enabled(): bool
 {
     $settings = feedback_settings_load();
-    return !empty($settings['widget']) && (!empty($settings['open_to_all']) || feedback_is_tester($shop, $settings));
+    return !empty($settings['widget']) && !empty($settings['surfaces']['portail']);
 }
 
 /** Nombre de boutiques couvertes par le programme (liste explicite + galeries, ou toutes). */
@@ -341,7 +361,7 @@ function feedback_record_normalize(array $f): array
 {
     $out = array_merge([
         'id' => '', 'at' => '', 'shop' => '', 'shop_name' => '', 'gallery' => '', 'module' => '',
-        'account' => '', 'account_id' => null, 'email' => '', 'source' => 'equipe', 'type' => 'other', 'severity' => '',
+        'account' => '', 'account_id' => null, 'email' => '', 'source' => 'equipe', 'surface' => '', 'type' => 'other', 'severity' => '',
         'message' => '', 'page' => '', 'page_title' => '', 'context' => [],
         'status' => 'new', 'priority' => 'normal', 'attachment' => '',
         'notes' => [], 'replies' => [], 'status_log' => [],
@@ -355,6 +375,8 @@ function feedback_record_normalize(array $f): array
     if (!in_array($out['priority'], FEEDBACK_PRIORITIES, true)) $out['priority'] = 'normal';
     if (!in_array($out['severity'], FEEDBACK_SEVERITIES, true)) $out['severity'] = '';
     if (!in_array($out['source'], ['equipe', 'client'], true)) $out['source'] = 'equipe';
+    // Retours antérieurs à la distinction des espaces : un client vient du site public, l'équipe de l'administration.
+    if (!in_array($out['surface'], FEEDBACK_SURFACES, true)) $out['surface'] = $out['source'] === 'client' ? 'front' : 'admin';
     return $out;
 }
 
@@ -378,7 +400,7 @@ function feedback_find(string $id): ?array
     return null;
 }
 
-/** Filtre une liste déjà chargée. filtres : statut (all|new|open|done|declined), type, shop, q, jours, module. */
+/** Filtre une liste déjà chargée. filtres : statut (all|new|open|done|declined), type, shop, q, jours, module, surface (admin|front|portail). */
 function feedback_filter_list(array $list, array $filters): array
 {
     $status = (string) ($filters['statut'] ?? 'all');
@@ -387,6 +409,7 @@ function feedback_filter_list(array $list, array $filters): array
     $q = mb_strtolower(trim((string) ($filters['q'] ?? '')));
     $days = (int) ($filters['jours'] ?? 0);
     $module = (string) ($filters['module'] ?? '');
+    $surface = (string) ($filters['surface'] ?? '');
     $cutoff = $days > 0 ? time() - $days * 86400 : 0;
     $out = [];
     foreach ($list as $f) {
@@ -398,6 +421,7 @@ function feedback_filter_list(array $list, array $filters): array
         if ($type !== '' && $f['type'] !== $type) continue;
         if ($shop !== '' && $f['shop'] !== $shop) continue;
         if ($module !== '' && $f['module'] !== $module) continue;
+        if ($surface !== '' && $f['surface'] !== $surface) continue;
         if ($cutoff > 0 && (int) strtotime((string) $f['at']) < $cutoff) continue;
         if ($q !== '') {
             $haystack = mb_strtolower(implode(' ', [
@@ -439,6 +463,45 @@ function feedback_shop_unread(string $shop): int
         }
     }
     return $n;
+}
+
+/** Retours déposés depuis le portail (les plus récents d'abord) ; $gallery limite à ceux d'une galerie (administrateur de galerie). */
+function feedback_portail_records(string $gallery = '', int $limit = 20): array
+{
+    $out = [];
+    foreach (feedback_all() as $f) {
+        if ($f['surface'] !== 'portail') continue;
+        if ($gallery !== '' && $f['gallery'] !== $gallery) continue;
+        $out[] = $f;
+        if (count($out) >= max(1, $limit)) break;
+    }
+    return $out;
+}
+
+function feedback_portail_unread(string $gallery = ''): int
+{
+    $n = 0;
+    foreach (feedback_portail_records($gallery, FEEDBACK_MAX_RECORDS) as $f) {
+        foreach ($f['replies'] as $reply) {
+            if ((string) ($reply['at'] ?? '') > (string) $f['tester_seen_at']) $n++;
+        }
+    }
+    return $n;
+}
+
+function feedback_mark_portail_seen(string $gallery = ''): void
+{
+    if (feedback_portail_unread($gallery) === 0) return;
+    feedback_mutate(static function (array &$data) use ($gallery): void {
+        $now = gmdate('c');
+        foreach ($data as &$f) {
+            $n = feedback_record_normalize($f);
+            if ($n['surface'] !== 'portail') continue;
+            if ($gallery !== '' && $n['gallery'] !== $gallery) continue;
+            $f['tester_seen_at'] = $now;
+        }
+        unset($f);
+    });
 }
 
 /** Retours d'un auteur précis (même boutique), les plus récents d'abord. */
@@ -502,9 +565,20 @@ function feedback_message_error(string $message): ?string
 /** Enregistre un retour envoyé depuis le widget. Lève une exception avec un message affichable. */
 function feedback_add(array $in, ?int $accountId = null, string $accountName = ''): array
 {
-    $shop = preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', (string) ($in['shop'] ?? '')) ? (string) $in['shop'] : '';
-    if ($shop === '') throw new InvalidArgumentException('Boutique inconnue.');
-    if (!feedback_widget_enabled($shop)) throw new InvalidArgumentException("Le widget de retour n'est pas ouvert à cette boutique.");
+    $portail = (string) ($in['surface'] ?? '') === 'portail';
+    $audience = (string) ($in['audience'] ?? 'admin') === 'customer' ? 'customer' : 'admin';
+    if ($portail) {
+        // Retour déposé depuis le portail : aucune boutique, éventuellement la galerie de l'administrateur connecté.
+        if ($audience === 'customer') throw new InvalidArgumentException('Espace inconnu.');
+        if (!feedback_portail_widget_enabled()) throw new InvalidArgumentException("Le widget de retour n'est pas ouvert sur le portail.");
+        $shop = '';
+        $surface = 'portail';
+    } else {
+        $shop = preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', (string) ($in['shop'] ?? '')) ? (string) $in['shop'] : '';
+        if ($shop === '') throw new InvalidArgumentException('Boutique inconnue.');
+        $surface = $audience === 'customer' ? 'front' : 'admin';
+        if (!feedback_widget_enabled($shop, $surface)) throw new InvalidArgumentException("Le widget de retour n'est pas ouvert à cette boutique.");
+    }
 
     $type = (string) ($in['type'] ?? 'other');
     if (!in_array($type, FEEDBACK_TYPES, true)) $type = 'other';
@@ -513,10 +587,9 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
     $severity = $type === 'bug' && in_array((string) ($in['severity'] ?? ''), FEEDBACK_SEVERITIES, true)
         ? (string) $in['severity'] : ($type === 'bug' ? 'major' : '');
 
-    $audience = (string) ($in['audience'] ?? 'admin') === 'customer' ? 'customer' : 'admin';
     $email = mb_strtolower(trim((string) ($in['email'] ?? '')));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $email = $audience === 'customer' ? '' : feedback_shop_email($shop, $accountId);
+        $email = $audience === 'customer' ? '' : ($portail ? '' : feedback_shop_email($shop, $accountId));
     }
     if ($audience === 'customer' && $email === '') throw new InvalidArgumentException('Session client expirée : reconnectez-vous.');
 
@@ -547,13 +620,16 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
         'id' => $id,
         'at' => gmdate('c'),
         'shop' => $shop,
-        'shop_name' => feedback_shop_name($shop),
-        'gallery' => feedback_shop_gallery($shop),
+        'shop_name' => $portail ? 'Portail' : feedback_shop_name($shop),
+        'gallery' => $portail
+            ? (preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', (string) ($in['gallery'] ?? '')) ? (string) $in['gallery'] : '')
+            : feedback_shop_gallery($shop),
         'module' => $module,
         'account' => feedback_clean_text($accountName, 80),
         'account_id' => $accountId,
         'email' => $email,
         'source' => $audience === 'customer' ? 'client' : 'equipe',
+        'surface' => $surface,
         'type' => $type,
         'severity' => $severity,
         'message' => $message,
@@ -789,11 +865,14 @@ function feedback_notify_new(array $f): bool
     }
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
     $firstLine = trim((string) strtok((string) $f['message'], "\n"));
-    $subject = '[Retours] ' . (FEEDBACK_TYPE_LABELS[$f['type']] ?? 'Retour') . ' — ' . $f['shop_name']
+    $where = $f['surface'] === 'portail' ? 'Portail' : $f['shop_name'];
+    $subject = '[Retours] ' . (FEEDBACK_TYPE_LABELS[$f['type']] ?? 'Retour') . ' — ' . $where
         . ' : ' . mb_substr($firstLine, 0, 60);
     $link = feedback_origin() . '/portail/retours.php?focus=' . rawurlencode($f['id']);
-    $body = "Nouveau retour " . ($f['source'] === 'client' ? "d'un client" : 'de testeur') . ".\n\n"
-        . "Boutique : {$f['shop_name']} ({$f['shop']})\n"
+    $body = "Nouveau retour " . ($f['source'] === 'client' ? "d'un client" : 'de testeur') . " — " . (FEEDBACK_SURFACE_LABELS[$f['surface']] ?? '') . ".\n\n"
+        . ($f['surface'] === 'portail'
+            ? 'Espace : Portail' . ($f['gallery'] !== '' ? " (galerie {$f['gallery']})" : '') . "\n"
+            : "Boutique : {$f['shop_name']} ({$f['shop']})\n")
         . "Type : " . (FEEDBACK_TYPE_LABELS[$f['type']] ?? $f['type']) . "\n"
         . ($f['severity'] !== '' ? 'Gravité : ' . (FEEDBACK_SEVERITY_LABELS[$f['severity']] ?? $f['severity']) . "\n" : '')
         . "Compte : " . ($f['account'] !== '' ? $f['account'] : '—') . "\n"
@@ -882,7 +961,7 @@ function feedback_stats(?array $list = null, ?array $settings = null): array
         $at = (int) strtotime((string) $f['at']);
         if ($at > $now - 7 * 86400) $week++;
         elseif ($at > $now - 14 * 86400) $prevWeek++;
-        if ($at > $now - 30 * 86400) $shops30[$f['shop']] = true;
+        if ($at > $now - 30 * 86400 && $f['shop'] !== '') $shops30[$f['shop']] = true;
         if ($f['first_reply_at'] !== '') {
             $delta = (int) strtotime((string) $f['first_reply_at']) - $at;
             if ($delta >= 0) $firstReply[] = $delta;
@@ -984,13 +1063,14 @@ function feedback_participation(?array $list = null, ?array $settings = null): a
 /** Lignes du CSV : [en-têtes, lignes]. */
 function feedback_csv(array $list): array
 {
-    $headers = ['Identifiant', 'Date', 'Boutique', 'Type', 'Gravité', 'Statut', 'Priorité', 'Compte', 'E-mail', 'Page', 'Message', 'Réponse', 'Pièce jointe'];
+    $headers = ['Identifiant', 'Date', 'Espace', 'Boutique', 'Type', 'Gravité', 'Statut', 'Priorité', 'Compte', 'E-mail', 'Page', 'Message', 'Réponse', 'Pièce jointe'];
     $rows = [];
     foreach ($list as $f) {
         $replies = [];
         foreach ($f['replies'] as $reply) $replies[] = (string) ($reply['text'] ?? '');
         $rows[] = [
-            $f['id'], $f['at'], $f['shop_name'] . ' (' . $f['shop'] . ')',
+            $f['id'], $f['at'], FEEDBACK_SURFACE_LABELS[$f['surface']] ?? $f['surface'],
+            $f['shop'] !== '' ? $f['shop_name'] . ' (' . $f['shop'] . ')' : $f['shop_name'],
             FEEDBACK_TYPE_LABELS[$f['type']] ?? $f['type'],
             FEEDBACK_SEVERITY_LABELS[$f['severity']] ?? '',
             FEEDBACK_STATUS_LABELS[$f['status']] ?? $f['status'],
@@ -1045,33 +1125,63 @@ function feedback_widget_html(): string
     static $rendered = false;
     if ($rendered) return '';
     $shop = function_exists('tenant_slug') ? tenant_slug() : '';
-    if ($shop === '' || !feedback_widget_enabled($shop)) return '';
+    if ($shop === '') return '';
     $session = function_exists('admin_session') ? admin_session() : null;
     $customer = null;
     if ($session !== null) {
         $audience = 'admin';
+        $surface = 'admin';
         $csrf = function_exists('admin_csrf_token') ? admin_csrf_token() : '';
         $kicker = 'Programme testeurs';
     } else {
         $customer = function_exists('customer_session') ? customer_session() : null;
         if (!is_array($customer) || !filter_var((string) ($customer['email'] ?? ''), FILTER_VALIDATE_EMAIL)) return '';
         $audience = 'customer';
+        $surface = 'front';
         $csrf = feedback_csrf_token();
         $kicker = 'Votre boutique';
     }
+    if (!feedback_widget_enabled($shop, $surface)) return '';
     $rendered = true;
     // Le cookie de session est limité au préfixe de la boutique (/<identifiant>/)
     // sur les adresses partagées : l'API doit être appelée sous ce même préfixe.
     $base = function_exists('tenant_base_path') ? tenant_base_path() : '';
-    $config = [
+    return feedback_widget_render([
         'api' => $base . '/admin/feedback-api.php',
         'csrf' => $csrf,
         'audience' => $audience,
+        'surface' => $surface,
         'shop' => $shop,
+        'module' => (string) ($_GET['p'] ?? ''),
+    ], $kicker, $audience === 'customer'
+        ? 'La page et votre navigateur sont joints automatiquement pour nous aider à comprendre.'
+        : 'La page, votre boutique et votre navigateur sont joints automatiquement pour aider à reproduire.');
+}
+
+/** Widget des pages du portail (exploitant ou administrateur de galerie) : $csrf est le jeton de la session du portail. */
+function feedback_portail_widget_html(string $csrf, string $gallery = ''): string
+{
+    static $rendered = false;
+    if ($rendered || $csrf === '' || !feedback_portail_widget_enabled()) return '';
+    $rendered = true;
+    return feedback_widget_render([
+        'api' => '/portail/retour-api.php',
+        'csrf' => $csrf,
+        'audience' => 'admin',
+        'surface' => 'portail',
+        'shop' => '',
+        'gallery' => $gallery,
+        'module' => '',
+    ], 'Portail', 'La page du portail et votre navigateur sont joints automatiquement pour aider à reproduire.');
+}
+
+/** Balisage du widget ; $config est transmis tel quel au script (API, jeton, espace, page courante). */
+function feedback_widget_render(array $config, string $kicker, string $hint): string
+{
+    $config += [
         'types' => FEEDBACK_TYPE_LABELS,
         'severities' => FEEDBACK_SEVERITY_LABELS,
         'statuses' => array_map('feedback_status_tester_label', array_combine(FEEDBACK_STATUSES, FEEDBACK_STATUSES)),
-        'module' => (string) ($_GET['p'] ?? ''),
         'lang' => 'fr-FR',
     ];
     ob_start(); ?>
@@ -1133,9 +1243,7 @@ function feedback_widget_html(): string
           </label>
           <p class="fbw-shot-state" data-fbw-shot-state hidden role="status" aria-live="polite"></p>
         </div>
-        <p class="fbw-hint"><?= $audience === 'customer'
-            ? 'La page et votre navigateur sont joints automatiquement pour nous aider à comprendre.'
-            : 'La page, votre boutique et votre navigateur sont joints automatiquement pour aider à reproduire.' ?></p>
+        <p class="fbw-hint"><?= htmlspecialchars($hint) ?></p>
         <div class="fbw-actions">
           <button type="submit" class="fbw-submit">Envoyer mon retour</button>
           <p class="fbw-msg" data-fbw-msg role="status" aria-live="polite"></p>

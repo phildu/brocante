@@ -404,4 +404,11 @@ function portail_page_start(array $opts = []): void
 <script src="/assets/ai-wait-timer.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/ai-wait-timer.js') ?>"></script>
 <script src="/assets/heic-convert.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/heic-convert.js') ?>"></script>
 <?php
+    // Widget « Un retour ? » du portail (réglage : Retours testeurs → Programme testeurs → Portail).
+    try {
+        if (!function_exists('feedback_portail_widget_html')) require_once PORTAIL_ROOT . '/includes/feedback.php';
+        echo feedback_portail_widget_html(csrf_token(), $limited ? (string) GA_LIMITED : '');
+    } catch (Throwable $error) {
+        // Le widget ne doit jamais empêcher d'afficher une page du portail.
+    }
 }
