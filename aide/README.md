@@ -22,7 +22,7 @@ Centre d'aide documentaire de la plateforme : FAQ par rôle, tutoriels pas à pa
 
 ## Édition depuis le portail
 
-`portail/aide-contenu.php` (Plateforme → Contenu de l'aide) permet de corriger la FAQ, le glossaire et les tutoriels (titre, résumé, étapes), d'ajouter une question ou un terme et de cacher une fiche. Les corrections sont écrites dans `data/saas/aide-contenu.json` (dossier jamais déployé) et appliquées par-dessus les JSON de `aide/contenu/` par `aide_json_file()` (`includes/aide-edition.php`). Chaque environnement (local, préprod, prod) a donc ses propres corrections ; les JSON restent la base livrée avec le code.
+`portail/aide-contenu.php` (Plateforme → Contenu de l'aide) permet de corriger la FAQ, le glossaire et les tutoriels (titre, résumé, étapes), d'ajouter une question ou un terme, de créer un tutoriel complet (prérequis, étapes, erreurs fréquentes) et de cacher une fiche. Les corrections sont écrites dans `data/saas/aide-contenu.json` (dossier jamais déployé) et appliquées par-dessus les JSON de `aide/contenu/` par `aide_json_file()` (`includes/aide-edition.php`). Chaque environnement (local, préprod, prod) a donc ses propres corrections ; les JSON restent la base livrée avec le code.
 
 ## Source de contenu
 
