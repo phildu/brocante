@@ -52,7 +52,7 @@ function admin_menu_default_groups(): array
 function admin_menu_default_order(): array
 {
     return [
-        'pilotage' => ['assistant', 'dashboard', 'rentabilite', 'emails'],
+        'pilotage' => ['assistant', 'dashboard', 'rentabilite', 'depenses', 'emails'],
         'catalogue' => ['catalogue', 'univers', 'etiquettes', 'prise', 'batch', 'connecteurs'],
         'ventes' => ['commandes', 'offres', 'promos', 'comptes', 'remises', 'bareme-etat', 'shipping'],
         'contenus' => ['hero', 'slideshow', 'banners', 'media', 'legal', 'impression'],
@@ -167,6 +167,8 @@ function admin_menu_core_items(): array
         // Page économique de la boutique (chiffre d'affaires, marge, frais, fréquentation), ligne « main » : voir admin/rentabilite.php.
         // Buvette, Invendus & dons et Comptage de foule ne sont pas des plugins de boutique : ce sont des extensions de galerie (includes/gallery-modules.php).
         'rentabilite' => ['/admin/rentabilite.php', 'Rentabilité', 'gauge'],
+        // Journal des dépenses : tickets, factures fournisseurs et notes de frais (includes/expenses.php).
+        'depenses' => ['/admin/depenses.php', 'Dépenses & notes de frais', 'receipt'],
         'comptes' => ['/admin/accounts.php', 'Comptes', 'users'],
         'social' => ['/admin/social.php', 'API & réseaux', 'user'],
         'ia' => ['/admin/ai-usage.php', 'Consommation IA', 'receipt'],

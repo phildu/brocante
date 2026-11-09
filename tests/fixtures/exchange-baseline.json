@@ -82,6 +82,8 @@
         "ev_rewards",
         "ev_settings",
         "events",
+        "expense_reports",
+        "expenses",
         "hello_notes",
         "hero_slides",
         "import_sources",
