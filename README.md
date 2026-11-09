@@ -982,7 +982,7 @@ aussi « modules ». Pour ne pas les nommer de trois façons, le portail règle 
   remplace les jetons de toute la page ; ailleurs (messages JSON, e-mails, libellés), on appelle `ext_t('…')`.
   Test : `php scripts/test-vocabulary.php`.
 
-## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule, Annulation & remboursements (organisateur d'un vide-grenier)
+## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule, Annulation & remboursements, Sponsors & partenaires
 
 Les anciennes « options » d'une galerie (carte interactive, espace organisateur, file d'attente : `includes/gallery-modules.php`) sont des
 **extensions de galerie** : l'organisateur les active depuis l'onglet « Extensions » de son espace (essai gratuit, puis abonnement Stripe ou
@@ -1009,6 +1009,13 @@ dossier : ils servent aussi bien `/comptage/` qu'une galerie, avec un cache par 
 **Annulation & remboursements** (`annulation`, voir `ANNULATION.md`, proposée aux vide-greniers, marchés aux puces, marchés de Noël et marchés de producteurs) : annuler l'événement et rembourser les exposants en totalité ou en partie.
 Pas de base SQL : elle s'appuie sur l'événement et le registre des demandes de la galerie (`includes/gallery-cancellation.php`,
 `portail/galerie-annulation.php`). L'annulation passe par l'extension ; le suivi d'un événement déjà annulé reste ouvert si elle s'arrête.
+
+**Sponsors & partenaires** (`sponsors`, proposée à tous les types de galerie, incluse d'office ; réglable par type dans *Types de galerie*) : l'organisateur
+présente ceux qui soutiennent son événement (nom, niveau, site, logo, mot de présentation, note interne jamais affichée). Cinq niveaux, du sponsor
+principal aux partenaires médias (`GSP_TIERS`). Page d'administration `portail/galerie-sponsors.php` (ajout, modification, ordre dans le niveau, masquer,
+supprimer) ; la page publique de la galerie affiche la rubrique `#partenaires` dès qu'une fiche est affichée. Pas de base SQL : les fiches sont dans
+`data/galeries/<id>.sponsors.json` (jamais déployé, supprimé avec la galerie) et les logos sous `uploads/galeries/` (logos locaux uniquement, jamais d'adresse
+externe ; liens sortants en `rel="noopener nofollow sponsored"`). Code : `includes/gallery-sponsors.php` ; test : `tests/GallerySponsorsTest.php`.
 
 ## Horaires et alerte de fermeture d'une galerie
 

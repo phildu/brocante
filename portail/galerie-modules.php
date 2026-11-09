@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $type = gt_of($gaGallery);
 $stripeOn = saas_stripe_configured();
 $openPages = ['carte' => 'galerie-plan.php', 'attente' => 'galerie-attente.php', 'buvette' => 'galerie-buvette.php', 'invendus' => 'galerie-invendus.php',
-    'comptage' => 'galerie-comptage.php', 'annulation' => 'galerie-annulation.php'];   // les autres ouvrent l'espace organisateur
+    'comptage' => 'galerie-comptage.php', 'annulation' => 'galerie-annulation.php', 'sponsors' => 'galerie-sponsors.php'];   // les autres ouvrent l'espace organisateur
 $openUrl = static fn (string $key): string => '/portail/' . ($openPages[$key] ?? 'galerie-evenement.php') . ($limited ? '' : '?g=' . urlencode($gaSlug));
 ga_head('{Exts}');
 ?>
