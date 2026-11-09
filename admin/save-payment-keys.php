@@ -79,6 +79,32 @@ if (($revolut['api_key'] ?? '') !== '') {
     }
 }
 
+// ── SumUp ────────────────────────────────────────────────────────────────
+$sumup = payment_config('sumup') ?? [];
+$sumupKey = trim((string) ($_POST['sumup_api_key'] ?? ''));
+$sumupMerchant = strtoupper(trim((string) ($_POST['sumup_merchant_code'] ?? '')));
+
+if ($sumupKey !== '') $sumup['api_key'] = $sumupKey;
+if ($sumupMerchant !== '' && !preg_match('/^[A-Z0-9]{4,16}$/', $sumupMerchant)) {
+    $errors[] = 'Le code marchand SumUp est invalide (4 à 16 lettres ou chiffres, ex. MH4H92C7).';
+} elseif ($sumupMerchant !== '') {
+    $sumup['merchant_code'] = $sumupMerchant;
+}
+unset($sumup['api_base']);
+
+if (($sumup['api_key'] ?? '') !== '' || ($sumup['merchant_code'] ?? '') !== '') {
+    if (!payment_config_save('sumup', $sumup)) {
+        $errors[] = 'Impossible d’enregistrer les réglages SumUp (dossier .secrets non inscriptible).';
+    } elseif (!sumup_configured()) {
+        $messages[] = 'SumUp inactif (clé API ou code marchand manquant)';
+    } else {
+        $messages[] = 'SumUp enregistré';
+    }
+}
+
+// ── Wero (via Stripe) ────────────────────────────────────────────────────
+shop_setting_set('stripe_wero', !empty($_POST['stripe_wero']) ? '1' : '0');
+
 // ── Virement SEPA ────────────────────────────────────────────────────────
 $sepaOld = sepa_config();
 $sepaHolder = trim((string) ($_POST['sepa_holder'] ?? ''));

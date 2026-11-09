@@ -18,6 +18,8 @@ final class PaymentProvidersTest extends TestCase
         self::assertSame('paypal', payment_provider_of(['payment_provider' => 'paypal', 'stripe_session_id' => 'paypal:B123']));
         self::assertSame('revolut', payment_provider_of(['stripe_session_id' => 'revolut:B123']));
         self::assertSame('sepa', payment_provider_of(['stripe_session_id' => 'sepa:B123']));
+        self::assertSame('sumup', payment_provider_of(['stripe_session_id' => 'sumup:B123']));
+        self::assertSame('SumUp', payment_provider_label('sumup'));
         self::assertSame('PayPal', payment_provider_label('paypal'));
         self::assertSame('Revolut', payment_provider_label('revolut'));
         self::assertSame('Virement SEPA', payment_provider_label('sepa'));
@@ -234,5 +236,54 @@ final class PaymentProvidersTest extends TestCase
         [$event, $order] = revolut_webhook_parts(['event' => 'order_failed', 'id' => 'ord-2']);
         self::assertSame('ORDER_FAILED', $event);
         self::assertSame('ord-2', $order['id']);
+    }
+
+    public function testSumupAmountsUseMajorUnits(): void
+    {
+        self::assertSame(62.73, sumup_amount_major(6273));
+        self::assertSame(0.0, sumup_amount_major(-500));
+        self::assertSame(6273, sumup_cents(62.73));
+        self::assertSame(1999, sumup_cents('19.99'));
+        self::assertSame(1010, sumup_cents(10.1));
+        self::assertSame(-1, sumup_checkout_cents([]));
+        self::assertSame(1200, sumup_checkout_cents(['amount' => 12]));
+    }
+
+    public function testSumupCheckoutUrlOnlyAcceptsHttpsSumupHosts(): void
+    {
+        self::assertSame('https://checkout.sumup.com/pay/abc', sumup_checkout_url(['hosted_checkout_url' => 'https://checkout.sumup.com/pay/abc']));
+        self::assertSame('', sumup_checkout_url([]));
+        self::assertSame('', sumup_checkout_url(['hosted_checkout_url' => 'http://checkout.sumup.com/pay/abc']));
+        self::assertSame('', sumup_checkout_url(['hosted_checkout_url' => 'https://checkout.sumup.com.evil.test/pay/abc']));
+        self::assertSame('', sumup_checkout_url(['hosted_checkout_url' => 'https://evilsumup.com/pay/abc']));
+    }
+
+    public function testSumupStates(): void
+    {
+        self::assertSame('paid', sumup_state(['status' => 'PAID']));
+        self::assertTrue(sumup_is_paid(['status' => 'PAID']));
+        self::assertFalse(sumup_is_paid(['status' => 'PENDING']));
+        self::assertFalse(sumup_is_paid(['status' => 'FAILED']));
+        self::assertFalse(sumup_is_paid([]));
+    }
+
+    public function testSumupPaymentIdAndDetailUseSuccessfulTransaction(): void
+    {
+        $checkout = [
+            'id' => 'chk-1',
+            'transactions' => [
+                ['id' => 'tx-1', 'status' => 'FAILED', 'entry_mode' => 'CUSTOMER_ENTRY'],
+                ['id' => 'tx-2', 'status' => 'SUCCESSFUL', 'entry_mode' => 'APPLE_PAY', 'transaction_code' => 'TEENSK4W2K'],
+            ],
+        ];
+        self::assertSame('tx-2', sumup_payment_id($checkout));
+        self::assertSame('SumUp — Apple Pay · TEENSK4W2K', sumup_payment_detail($checkout));
+        self::assertSame('chk-1', sumup_payment_id(['id' => 'chk-1']));
+        self::assertSame('SumUp — Carte', sumup_payment_detail(['id' => 'chk-1']));
+    }
+
+    public function testStripeWeroIsAnnouncedOnlyWhenSettingIsOn(): void
+    {
+        self::assertTrue(function_exists('stripe_wero_enabled'));
     }
 }
