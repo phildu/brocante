@@ -12,7 +12,7 @@ Permet à un assistant (Claude Code…) de lire et modifier les données d'un co
    ```bash
    claude mcp add --transport http brocante-prod https://www.bricbrok.com/mcp.php --header "Authorization: Bearer bbmcp_…"
    ```
-   (utiliser un nom différent par environnement : `brocante-preprod`, `brocante-local`).
+   (utiliser un nom différent par environnement : `brocante-preprod`, `brocante-local`). Pour un commerce servi sous le domaine d'un autre, l'adresse porte son identifiant : `https://pre.bricbrok.com/<identifiant>/mcp.php` ; la page Accès MCP affiche la bonne.
 4. « Révoquer » ou « Nouveau jeton » coupe immédiatement l'ancien accès.
 
 ## Outils

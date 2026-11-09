@@ -28,7 +28,8 @@ $active = mcp_token_active();
 $created = shop_setting('mcp_token_created', '');
 $log = db()->query("SELECT at, ip, tool, outcome FROM mcp_audit ORDER BY id DESC LIMIT 30")->fetchAll(PDO::FETCH_ASSOC);
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' ? 'https' : 'http';
-$endpoint = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/mcp.php';
+// Sous bricbrok.com/<identifiant>/, le commerce est désigné par le préfixe de l'adresse : le jeton n'est valable que pour lui.
+$endpoint = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . tenant_base_path() . '/mcp.php';
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
