@@ -44,6 +44,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'include_beta_testers' => !empty($_POST['include_beta_testers']),
                 'surfaces' => array_combine(FEEDBACK_SURFACES, array_map(
                     static fn (string $surface): bool => !empty($_POST['surfaces'][$surface]), FEEDBACK_SURFACES)),
+                'roles' => array_combine(array_keys(FEEDBACK_ROLES), array_map(
+                    static fn (string $role): bool => !empty($_POST['roles'][$role]), array_keys(FEEDBACK_ROLES))),
+                // Exceptions : « » = hérite, « 1 » = oui, « 0 » = non (feedback_settings_normalize ne garde que oui / non).
+                'overrides' => is_array($_POST['overrides'] ?? null) ? $_POST['overrides'] : [],
                 'testers' => [
                     'shops' => is_array($testers['shops'] ?? null) ? $testers['shops'] : [],
                     'galleries' => is_array($testers['galleries'] ?? null) ? $testers['galleries'] : [],
@@ -92,6 +96,8 @@ $flash = portail_flash();
 $shops = feedback_tenant_list();
 $galleries = feedback_gallery_list();
 $testerShops = feedback_tester_shops($settings);
+$overrideCount = 0;
+foreach ($settings['overrides'] as $byKind) foreach ($byKind as $values) $overrideCount += count($values);
 $focusRecord = $focus !== '' ? feedback_find($focus) : null;
 $shopChoices = [];
 foreach ($shops as $slug => $cfg) $shopChoices[$slug] = (string) ($cfg['name'] ?? $slug);
@@ -273,6 +279,47 @@ if (function_exists('saas_config')) {
             <input type="number" name="reply_days" min="1" max="90" value="<?= (int) $settings['reply_days'] ?>">
           </label>
         </div>
+        <fieldset>
+          <legend>Rôles concernés — décochez un rôle pour lui retirer le bouton « Un retour ? »</legend>
+          <?php foreach (FEEDBACK_SURFACE_LABELS as $surfaceKey => $surfaceLabel): ?>
+            <p class="muted" style="margin:8px 0 2px;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;"><?= e($surfaceLabel) ?></p>
+            <div class="fb-checks" style="max-height:none;">
+              <?php foreach (FEEDBACK_ROLES as $roleKey => $role): if ($role['surface'] !== $surfaceKey) continue; ?>
+                <label><input type="checkbox" name="roles[<?= e($roleKey) ?>]" value="1"<?= !empty($settings['roles'][$roleKey]) ? ' checked' : '' ?>><?= e($role['label']) ?></label>
+              <?php endforeach; ?>
+            </div>
+          <?php endforeach; ?>
+          <p class="muted" style="margin:6px 0 0;font-size:.8rem;">Un rôle décoché ne voit plus le bouton, même si l’espace est actif. Le propriétaire d’une boutique est « Administrateur de la boutique ».</p>
+        </fieldset>
+        <fieldset>
+          <legend>Exceptions par galerie et par boutique (<?= $overrideCount ?>)</legend>
+          <p class="muted" style="margin:0 0 8px;font-size:.8rem;">« Comme le réglage général » : rien à faire. Une boutique prend d’abord sa propre exception, puis celle de sa galerie. Une boutique doit toujours être testeuse (liste ci-dessous) pour voir le widget.</p>
+          <div class="scroll">
+            <table class="t">
+              <thead><tr><th>Galerie / boutique</th><th>Administration</th><th>Site public</th><th>Portail</th></tr></thead>
+              <tbody>
+                <?php foreach ($galleries as $slug => $gallery): ?>
+                  <tr>
+                    <td><strong><?= e((string) $gallery['name']) ?></strong> <span class="muted">galerie · <?= e((string) $slug) ?></span></td>
+                    <?php foreach (['admin', 'front', 'portail'] as $surface): $v = $settings['overrides']['galleries'][$slug][$surface] ?? null; ?>
+                      <td><select name="overrides[galleries][<?= e((string) $slug) ?>][<?= $surface ?>]"><option value="">Comme le général</option><option value="1"<?= $v === true ? ' selected' : '' ?>>Oui</option><option value="0"<?= $v === false ? ' selected' : '' ?>>Non</option></select></td>
+                    <?php endforeach; ?>
+                  </tr>
+                <?php endforeach; ?>
+                <?php foreach ($shops as $slug => $cfg): ?>
+                  <tr>
+                    <td><?= e((string) ($cfg['name'] ?? $slug)) ?> <span class="muted">boutique · <?= e((string) $slug) ?></span></td>
+                    <?php foreach (['admin', 'front'] as $surface): $v = $settings['overrides']['shops'][$slug][$surface] ?? null; ?>
+                      <td><select name="overrides[shops][<?= e((string) $slug) ?>][<?= $surface ?>]"><option value="">Comme le général</option><option value="1"<?= $v === true ? ' selected' : '' ?>>Oui</option><option value="0"<?= $v === false ? ' selected' : '' ?>>Non</option></select></td>
+                    <?php endforeach; ?>
+                    <td class="muted">—</td>
+                  </tr>
+                <?php endforeach; ?>
+                <?php if (!$galleries && !$shops): ?><tr><td colspan="4" class="muted">Aucune galerie ni boutique sur ce serveur.</td></tr><?php endif; ?>
+              </tbody>
+            </table>
+          </div>
+        </fieldset>
         <fieldset>
           <legend>Boutiques testeuses (<?= count($settings['testers']['shops']) ?>)</legend>
           <div class="fb-checks">

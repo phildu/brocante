@@ -20,6 +20,7 @@ $customer = null;
 if ($session !== null) {
     $audience = 'admin';
     $surface = 'admin';
+    $role = (string) ($session['role'] ?? 'admin');
     $csrf = admin_csrf_token();
 } else {
     $customer = customer_session();
@@ -28,12 +29,14 @@ if ($session !== null) {
     }
     $audience = 'customer';
     $surface = 'front';
+    $role = 'client';
     $csrf = feedback_csrf_token();
 }
 
 feedback_api_handle([
     'audience' => $audience,
     'surface' => $surface,
+    'role' => $role,
     'shop' => tenant_slug(),
     'csrf' => $csrf,
     'customer' => $customer,

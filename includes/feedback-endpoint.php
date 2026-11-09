@@ -47,7 +47,7 @@ function feedback_widget_items(array $records): array
  *
  * $ctx : audience (admin|customer), surface (admin|front|portail), shop ('' pour le portail),
  *        gallery (portail : galerie de l'administrateur connecté, sinon ''), csrf, customer (client connecté ou null),
- *        session (session d'administration ou null), account_name (auteur du retour portail).
+ *        session (session d'administration ou null), role (clé de FEEDBACK_ROLES), account_name (auteur du retour portail).
  */
 function feedback_api_handle(array $ctx): never
 {
@@ -60,7 +60,8 @@ function feedback_api_handle(array $ctx): never
     $session = is_array($ctx['session'] ?? null) ? $ctx['session'] : null;
     $portail = $surface === 'portail';
 
-    $enabled = $portail ? feedback_portail_widget_enabled() : feedback_widget_enabled($shop, $surface);
+    $role = (string) ($ctx['role'] ?? '');
+    $enabled = $portail ? feedback_portail_widget_enabled($gallery, true) : feedback_widget_enabled($shop, $surface, $role);
     if (!$enabled) {
         feedback_json(['ok' => false, 'error' => $portail
             ? "Le widget de retour n'est pas ouvert sur le portail."
@@ -112,6 +113,7 @@ function feedback_api_handle(array $ctx): never
             $record = feedback_add([
                 'shop' => $shop,
                 'surface' => $surface,
+                'role' => $role,
                 'gallery' => $gallery,
                 'audience' => $audience,
                 'email' => $audience === 'customer' ? (string) $customer['email'] : '',

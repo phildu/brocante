@@ -27,6 +27,19 @@ const FEEDBACK_PRIORITY_LABELS = ['low' => 'Basse', 'normal' => 'Normale', 'high
 // Espaces où le widget peut apparaître : back office d'une boutique, site public (client connecté), portail.
 const FEEDBACK_SURFACES = ['admin', 'front', 'portail'];
 const FEEDBACK_SURFACE_LABELS = ['admin' => 'Administration boutique', 'front' => 'Site public', 'portail' => 'Portail'];
+// Rôles dont le widget peut être coupé : chacun appartient à un espace. « admin » est le propriétaire de la
+// boutique (ou un compte administrateur), « exploitant » le propriétaire du portail, « galerie » un administrateur de galerie.
+const FEEDBACK_ROLES = [
+    'admin' => ['label' => 'Administrateur de la boutique', 'surface' => 'admin'],
+    'community_manager' => ['label' => 'Community manager', 'surface' => 'admin'],
+    'photographe' => ['label' => 'Photographe', 'surface' => 'admin'],
+    'vendeur' => ['label' => 'Vendeur (caisse)', 'surface' => 'admin'],
+    'client' => ['label' => 'Client connecté', 'surface' => 'front'],
+    'exploitant' => ['label' => 'Exploitant du portail', 'surface' => 'portail'],
+    'galerie' => ['label' => 'Administrateur de galerie', 'surface' => 'portail'],
+];
+// Espaces réglables par boutique et par galerie (le portail ne l'est que par galerie).
+const FEEDBACK_OVERRIDE_SURFACES = ['shops' => ['admin', 'front'], 'galleries' => ['admin', 'front', 'portail']];
 const FEEDBACK_MAX_MESSAGE = 4000;
 const FEEDBACK_MAX_ATTACHMENT = 3145728; // 3 Mo
 const FEEDBACK_MAX_RECORDS = 5000;
@@ -69,6 +82,8 @@ function feedback_settings_defaults(): array
         'open_to_all' => false,
         'include_beta_testers' => true,
         'surfaces' => ['admin' => true, 'front' => true, 'portail' => false],
+        'roles' => array_fill_keys(array_keys(FEEDBACK_ROLES), true),
+        'overrides' => ['shops' => [], 'galleries' => []],
         'testers' => ['shops' => [], 'galleries' => []],
         'notify_email' => '',
         'reply_days' => 15,
@@ -98,11 +113,32 @@ function feedback_settings_normalize(array $in): array
     foreach (FEEDBACK_SURFACES as $surface) {
         $surfaces[$surface] = array_key_exists($surface, $inSurfaces) ? !empty($inSurfaces[$surface]) : $d['surfaces'][$surface];
     }
+    $roles = [];
+    $inRoles = is_array($in['roles'] ?? null) ? $in['roles'] : [];
+    foreach (array_keys(FEEDBACK_ROLES) as $role) {
+        $roles[$role] = array_key_exists($role, $inRoles) ? !empty($inRoles[$role]) : true;
+    }
+    // Exceptions par boutique et par galerie : seules les valeurs explicites (oui / non) sont gardées, le reste hérite.
+    $overrides = ['shops' => [], 'galleries' => []];
+    $inOverrides = is_array($in['overrides'] ?? null) ? $in['overrides'] : [];
+    foreach (FEEDBACK_OVERRIDE_SURFACES as $kind => $allowed) {
+        foreach ((array) ($inOverrides[$kind] ?? []) as $slug => $values) {
+            $slug = strtolower(trim((string) $slug));
+            if (!preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', $slug) || !is_array($values)) continue;
+            foreach ($allowed as $surface) {
+                $v = $values[$surface] ?? null;
+                if ($v === true || $v === 1 || $v === '1' || $v === 'on') $overrides[$kind][$slug][$surface] = true;
+                elseif ($v === false || $v === 0 || $v === '0' || $v === 'off') $overrides[$kind][$slug][$surface] = false;
+            }
+        }
+    }
     return [
         'widget' => !array_key_exists('widget', $in) || !empty($in['widget']),
         'open_to_all' => !empty($in['open_to_all']),
         'include_beta_testers' => !array_key_exists('include_beta_testers', $in) || !empty($in['include_beta_testers']),
         'surfaces' => $surfaces,
+        'roles' => $roles,
+        'overrides' => $overrides,
         'testers' => [
             'shops' => feedback_slug_list($testers['shops'] ?? []),
             'galleries' => feedback_slug_list($testers['galleries'] ?? []),
@@ -197,20 +233,41 @@ function feedback_is_tester(string $shop, ?array $settings = null): bool
     return in_array($shop, feedback_tester_shops($settings), true);
 }
 
-/** Le widget est-il ouvert à cette boutique, sur cet espace (admin = back office, front = site public) ? */
-function feedback_widget_enabled(string $shop, string $surface = 'admin'): bool
+/** Interrupteur d'un espace pour une boutique : exception de la boutique, puis de sa galerie, puis réglage général. */
+function feedback_surface_on(string $surface, string $shop, ?array $settings = null): bool
+{
+    $settings ??= feedback_settings_load();
+    $own = $settings['overrides']['shops'][$shop][$surface] ?? null;
+    if ($own !== null) return (bool) $own;
+    $gallery = $shop !== '' ? feedback_shop_gallery($shop) : '';
+    $inherited = $gallery !== '' ? ($settings['overrides']['galleries'][$gallery][$surface] ?? null) : null;
+    return $inherited !== null ? (bool) $inherited : !empty($settings['surfaces'][$surface]);
+}
+
+/**
+ * Le widget est-il ouvert à cette boutique, sur cet espace (admin = back office, front = site public) ?
+ * $role (clé de FEEDBACK_ROLES) restreint à un rôle ; vide = on ne regarde pas le rôle.
+ */
+function feedback_widget_enabled(string $shop, string $surface = 'admin', string $role = ''): bool
 {
     if (!in_array($surface, ['admin', 'front'], true)) return false;
     $settings = feedback_settings_load();
-    return !empty($settings['widget']) && !empty($settings['surfaces'][$surface])
-        && (!empty($settings['open_to_all']) || feedback_is_tester($shop, $settings));
+    if (empty($settings['widget']) || !feedback_surface_on($surface, $shop, $settings)) return false;
+    if ($role !== '' && (!isset(FEEDBACK_ROLES[$role]) || FEEDBACK_ROLES[$role]['surface'] !== $surface || empty($settings['roles'][$role]))) return false;
+    return !empty($settings['open_to_all']) || feedback_is_tester($shop, $settings);
 }
 
-/** Widget du portail : réglage propre, indépendant de la liste des boutiques testeuses. */
-function feedback_portail_widget_enabled(): bool
+/**
+ * Widget du portail : réglage propre, indépendant de la liste des boutiques testeuses.
+ * $gallery : galerie de l'administrateur connecté (exception de galerie, rôle « galerie ») ; vide = exploitant.
+ */
+function feedback_portail_widget_enabled(string $gallery = '', bool $checkRole = false): bool
 {
     $settings = feedback_settings_load();
-    return !empty($settings['widget']) && !empty($settings['surfaces']['portail']);
+    if (empty($settings['widget'])) return false;
+    $override = $gallery !== '' ? ($settings['overrides']['galleries'][$gallery]['portail'] ?? null) : null;
+    if (!($override !== null ? (bool) $override : !empty($settings['surfaces']['portail']))) return false;
+    return !$checkRole || !empty($settings['roles'][$gallery !== '' ? 'galerie' : 'exploitant']);
 }
 
 /** Nombre de boutiques couvertes par le programme (liste explicite + galeries, ou toutes). */
@@ -570,14 +627,15 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
     if ($portail) {
         // Retour déposé depuis le portail : aucune boutique, éventuellement la galerie de l'administrateur connecté.
         if ($audience === 'customer') throw new InvalidArgumentException('Espace inconnu.');
-        if (!feedback_portail_widget_enabled()) throw new InvalidArgumentException("Le widget de retour n'est pas ouvert sur le portail.");
+        $galleryIn = preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', (string) ($in['gallery'] ?? '')) ? (string) $in['gallery'] : '';
+        if (!feedback_portail_widget_enabled($galleryIn, isset($in['role']))) throw new InvalidArgumentException("Le widget de retour n'est pas ouvert sur le portail.");
         $shop = '';
         $surface = 'portail';
     } else {
         $shop = preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', (string) ($in['shop'] ?? '')) ? (string) $in['shop'] : '';
         if ($shop === '') throw new InvalidArgumentException('Boutique inconnue.');
         $surface = $audience === 'customer' ? 'front' : 'admin';
-        if (!feedback_widget_enabled($shop, $surface)) throw new InvalidArgumentException("Le widget de retour n'est pas ouvert à cette boutique.");
+        if (!feedback_widget_enabled($shop, $surface, (string) ($in['role'] ?? ''))) throw new InvalidArgumentException("Le widget de retour n'est pas ouvert à cette boutique.");
     }
 
     $type = (string) ($in['type'] ?? 'other');
@@ -621,9 +679,7 @@ function feedback_add(array $in, ?int $accountId = null, string $accountName = '
         'at' => gmdate('c'),
         'shop' => $shop,
         'shop_name' => $portail ? 'Portail' : feedback_shop_name($shop),
-        'gallery' => $portail
-            ? (preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', (string) ($in['gallery'] ?? '')) ? (string) $in['gallery'] : '')
-            : feedback_shop_gallery($shop),
+        'gallery' => $portail ? $galleryIn : feedback_shop_gallery($shop),
         'module' => $module,
         'account' => feedback_clean_text($accountName, 80),
         'account_id' => $accountId,
@@ -1131,6 +1187,7 @@ function feedback_widget_html(): string
     if ($session !== null) {
         $audience = 'admin';
         $surface = 'admin';
+        $role = (string) ($session['role'] ?? 'admin');
         $csrf = function_exists('admin_csrf_token') ? admin_csrf_token() : '';
         $kicker = 'Programme testeurs';
     } else {
@@ -1138,10 +1195,11 @@ function feedback_widget_html(): string
         if (!is_array($customer) || !filter_var((string) ($customer['email'] ?? ''), FILTER_VALIDATE_EMAIL)) return '';
         $audience = 'customer';
         $surface = 'front';
+        $role = 'client';
         $csrf = feedback_csrf_token();
         $kicker = 'Votre boutique';
     }
-    if (!feedback_widget_enabled($shop, $surface)) return '';
+    if (!feedback_widget_enabled($shop, $surface, $role)) return '';
     $rendered = true;
     // Le cookie de session est limité au préfixe de la boutique (/<identifiant>/)
     // sur les adresses partagées : l'API doit être appelée sous ce même préfixe.
@@ -1162,7 +1220,7 @@ function feedback_widget_html(): string
 function feedback_portail_widget_html(string $csrf, string $gallery = ''): string
 {
     static $rendered = false;
-    if ($rendered || $csrf === '' || !feedback_portail_widget_enabled()) return '';
+    if ($rendered || $csrf === '' || !feedback_portail_widget_enabled($gallery, true)) return '';
     $rendered = true;
     return feedback_widget_render([
         'api' => '/portail/retour-api.php',

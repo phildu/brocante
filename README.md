@@ -1062,6 +1062,12 @@ boutiques testeuses, avec une capture d'écran facultative, et les suit jusqu'à
   (défaut : **coupé**). L'interrupteur général « Afficher le widget » coupe tout. Chaque retour porte son espace (`surface` : `admin`,
   `front`, `portail`) : filtre « Espace » et pastille dans le triage, colonne « Espace » du CSV. Les retours antérieurs sont rangés
   d'après leur origine (client → site public, équipe → administration).
+- **Exceptions par galerie et par boutique** (`overrides`) : pour chaque galerie (administration, site public, portail) et chaque boutique
+  (administration, site public), « Comme le général », « Oui » ou « Non ». Priorité : exception de la boutique, puis de sa galerie, puis
+  réglage général (`feedback_surface_on()`). Une boutique doit toujours être testeuse pour voir le widget : l'exception ne l'y ajoute pas.
+- **Réglage par rôle** (`roles`, `FEEDBACK_ROLES`) : on retire le bouton à un rôle précis — administrateur de la boutique, community manager,
+  photographe, vendeur (administration) ; client connecté (site public) ; exploitant du portail, administrateur de galerie (portail).
+  Tous actifs par défaut. Le rôle est contrôlé à l'affichage et à chaque appel d'API (un rôle coupé ne peut plus envoyer).
 - **Widget du portail** : sur toutes les pages (`portail_page_start()` dans `portail/_chrome.php`), pour l'exploitant et les
   administrateurs de galerie ; API `portail/retour-api.php` (session et jeton CSRF du portail). Pas de boutique : le retour est
   rangé sous « Portail » (`shop` vide), avec la galerie de l'administrateur connecté. Un administrateur de galerie ne voit que les

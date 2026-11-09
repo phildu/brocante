@@ -21,6 +21,7 @@ feedback_api_handle([
     'surface' => 'portail',
     'shop' => '',
     'gallery' => $gallery,
+    'role' => $gallery !== '' ? 'galerie' : 'exploitant',
     'csrf' => csrf_token(),
     'customer' => null,
     'session' => null,

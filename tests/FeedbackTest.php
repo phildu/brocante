@@ -368,4 +368,99 @@ final class FeedbackTest extends TestCase
         self::assertSame(0, feedback_stats()['active_shops_30']);
         self::assertSame(['demo'], array_column(feedback_participation(), 'shop'));
     }
+
+    public function testSettingsNormalizeRolesAndOverrides(): void
+    {
+        $s = feedback_settings_normalize([
+            'roles' => ['vendeur' => false, 'inconnu' => false],
+            'overrides' => [
+                'shops' => ['Demo' => ['admin' => '0', 'front' => '', 'portail' => '1'], 'pas un slug' => ['admin' => '1']],
+                'galleries' => ['rue-des-arts' => ['portail' => '1', 'admin' => 'peut-etre']],
+            ],
+        ]);
+        self::assertFalse($s['roles']['vendeur']);
+        self::assertTrue($s['roles']['admin'], 'Un rôle non mentionné reste actif.');
+        self::assertArrayNotHasKey('inconnu', $s['roles']);
+        self::assertSame(['demo' => ['admin' => false]], $s['overrides']['shops'], "Le portail n'est pas réglable par boutique ; « hérite » n'est pas stocké.");
+        self::assertSame(['rue-des-arts' => ['portail' => true]], $s['overrides']['galleries']);
+    }
+
+    public function testShopOverrideBeatsGalleryOverrideBeatsGeneralSetting(): void
+    {
+        // Aucune galerie locale dans ce test : l'exception de boutique prend le pas sur le général.
+        feedback_settings_save(['overrides' => ['shops' => ['demo' => ['front' => false]], 'galleries' => []]] + $this->baseSettings());
+        self::assertTrue(feedback_widget_enabled('demo', 'admin'));
+        self::assertFalse(feedback_widget_enabled('demo', 'front'));
+        feedback_settings_save(['surfaces' => ['admin' => false, 'front' => false, 'portail' => false],
+            'overrides' => ['shops' => ['demo' => ['admin' => true]], 'galleries' => []]] + $this->baseSettings());
+        self::assertTrue(feedback_widget_enabled('demo', 'admin'), "L'exception de la boutique rouvre un espace coupé en général.");
+        self::assertFalse(feedback_widget_enabled('demo', 'front'));
+    }
+
+    public function testShopOverrideDoesNotBypassTesterCoverage(): void
+    {
+        feedback_settings_save(['overrides' => ['shops' => ['autre' => ['admin' => true]], 'galleries' => []]] + $this->baseSettings());
+        self::assertFalse(feedback_widget_enabled('autre', 'admin'));
+    }
+
+    public function testRoleSwitchesCutTheWidgetForThatRoleOnly(): void
+    {
+        feedback_settings_save(['roles' => ['vendeur' => false, 'client' => false, 'galerie' => false]] + $this->baseSettings());
+        self::assertTrue(feedback_widget_enabled('demo', 'admin', 'admin'));
+        self::assertFalse(feedback_widget_enabled('demo', 'admin', 'vendeur'));
+        self::assertFalse(feedback_widget_enabled('demo', 'front', 'client'));
+        self::assertFalse(feedback_widget_enabled('demo', 'front', 'admin'), "Un rôle d'administration n'ouvre pas le site public.");
+        self::assertTrue(feedback_widget_enabled('demo', 'front'), 'Sans rôle, seul l’espace compte.');
+
+        $in = ['shop' => 'demo', 'type' => 'bug', 'message' => 'Retour d\'un vendeur à la caisse.', 'email' => 'v@example.test'];
+        try {
+            feedback_add($in + ['role' => 'vendeur'], 7, 'Vendeur');
+            self::fail('Le rôle vendeur est coupé.');
+        } catch (InvalidArgumentException $e) {
+            self::assertCount(0, feedback_all());
+        }
+        self::assertSame('admin', feedback_add($in + ['role' => 'admin'], 7, 'Gérant')['surface']);
+    }
+
+    public function testPortailRolesAndGalleryOverride(): void
+    {
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => true, 'portail' => true],
+            'roles' => ['galerie' => false]] + $this->baseSettings());
+        self::assertTrue(feedback_portail_widget_enabled('', true), 'Exploitant : actif.');
+        self::assertFalse(feedback_portail_widget_enabled('rue-des-arts', true), 'Rôle « administrateur de galerie » coupé.');
+        self::assertTrue(feedback_portail_widget_enabled('rue-des-arts', false));
+
+        feedback_settings_save(['surfaces' => ['admin' => true, 'front' => true, 'portail' => false],
+            'overrides' => ['shops' => [], 'galleries' => ['rue-des-arts' => ['portail' => true]]]] + $this->baseSettings());
+        self::assertTrue(feedback_portail_widget_enabled('rue-des-arts', true), 'La galerie ouvre le portail pour ses administrateurs.');
+        self::assertFalse(feedback_portail_widget_enabled('', true), "L'exploitant suit le réglage général.");
+        self::assertFalse(feedback_portail_widget_enabled('autre-galerie', true));
+    }
+
+    public function testGalleryOverrideAppliesToItsMembersAndShopOverrideWins(): void
+    {
+        $previous = getenv('BROCANTE_GALLERIES_DIR');
+        $dir = sys_get_temp_dir() . '/fbk-galleries-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        putenv('BROCANTE_GALLERIES_DIR=' . $dir);
+        try {
+            file_put_contents($dir . '/rue-des-arts.json', json_encode([
+                'name' => 'Rue des Arts', 'members' => [['type' => 'local', 'slug' => 'demo']],
+            ]));
+            feedback_settings_save(['overrides' => ['shops' => [], 'galleries' => ['rue-des-arts' => ['front' => false, 'admin' => false]]]] + $this->baseSettings());
+            self::assertFalse(feedback_widget_enabled('demo', 'front'), 'La galerie coupe le site public de ses membres.');
+            self::assertFalse(feedback_widget_enabled('demo', 'admin'));
+
+            feedback_settings_save(['overrides' => [
+                'shops' => ['demo' => ['admin' => true]],
+                'galleries' => ['rue-des-arts' => ['front' => false, 'admin' => false]],
+            ]] + $this->baseSettings());
+            self::assertTrue(feedback_widget_enabled('demo', 'admin'), "L'exception de la boutique l'emporte sur celle de sa galerie.");
+            self::assertFalse(feedback_widget_enabled('demo', 'front'));
+        } finally {
+            putenv($previous === false ? 'BROCANTE_GALLERIES_DIR' : 'BROCANTE_GALLERIES_DIR=' . $previous);
+            foreach (glob($dir . '/*') ?: [] as $f) @unlink($f);
+            @rmdir($dir);
+        }
+    }
 }
