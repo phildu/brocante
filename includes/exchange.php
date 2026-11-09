@@ -50,6 +50,7 @@ const EXCHANGE_SETTINGS_ALLOWED = [
     'appearance', 'universes', 'opening_hours', 'opening_closures', 'opening_notice', 'opening_closure_alerts',
     'slideshow_auto_promos', 'slideshow_idle_enabled', 'slideshow_idle_minutes', 'hide_shooting_photos',
     'product_condition_price_rates', 'legal_address', 'legal_lat', 'legal_lng', 'footer_note', 'shooting_custom_types',
+    'impact_public',   // bilan CO₂ / eau affiché sur l'accueil (le cache de ses chiffres, lui, ne voyage pas)
 ];
 
 /** Champs d'une fiche existante conservés par l'import quand « conserver le stock » est coché. */

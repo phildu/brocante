@@ -365,7 +365,7 @@ $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'
           <div class="dash-kpi"><div class="k">CO₂ évité</div><div class="v"><?= h(impact_fmt_co2($impact['total']['co2'])) ?></div><div class="s">≈ <?= h(number_format($impact['km'], 0, ',', ' ')) ?> km en voiture</div></div>
           <div class="dash-kpi"><div class="k">Eau économisée</div><div class="v"><?= h(impact_fmt_water($impact['total']['water'])) ?></div><div class="s">≈ <?= h(number_format($impact['showers'], 0, ',', ' ')) ?> douches</div></div>
           <div class="dash-kpi"><div class="k">Pièces remises en circulation</div><div class="v"><?= (int) $impact['total']['pieces'] ?></div><div class="s">vendues sur la période</div></div>
-          <div class="dash-kpi"><div class="k">Coût numérique (IA)</div><div class="v"><?= h(impact_fmt_co2($impact['digital']['co2'])) ?></div><div class="s"><?= (int) $impact['digital']['calls'] ?> appel<?= $impact['digital']['calls'] > 1 ? 's' : '' ?> · <?= h(impact_fmt_water($impact['digital']['water'])) ?> d’eau</div></div>
+          <div class="dash-kpi"><div class="k">Textes, images &amp; vidéos générés</div><div class="v"><?= h(impact_fmt_co2($impact['digital']['co2'])) ?></div><div class="s"><?= (int) $impact['digital']['calls'] ?> appel<?= $impact['digital']['calls'] > 1 ? 's' : '' ?> · <?= h(impact_fmt_water($impact['digital']['water'])) ?> d’eau</div></div>
         </div>
 
         <div class="dash-grid">
@@ -396,10 +396,35 @@ $h = static fn ($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'
             </div>
           <?php endif; ?>
         </div>
+        <?php if ($impact['digital']['by_kind']): ?>
+          <div class="dash-card" style="margin-top:16px;">
+            <h2>Ce que l’IA a produit pour la boutique</h2>
+            <table class="dash-table">
+              <thead><tr><th>Production</th><th class="num">Générés</th><th class="num">CO₂</th><th class="num">Eau</th></tr></thead>
+              <tbody>
+                <?php foreach ($impact['digital']['by_kind'] as $kind => $row): ?>
+                  <tr><td><?= h(impact_ai_kinds()[$kind]['label'] ?? $kind) ?></td><td class="num"><?= (int) $row['calls'] ?></td><td class="num"><?= h(impact_fmt_co2($row['co2'])) ?></td><td class="num"><?= h(impact_fmt_water($row['water'])) ?></td></tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+            <p class="dash-note" style="margin:8px 0 0;">Retiré du bilan net ci-dessous. Le code du site, commun à toutes les boutiques, est compté dans le portail.</p>
+          </div>
+        <?php endif; ?>
+
+        <form class="dash-card" method="post" action="/admin/impact-action.php" style="margin-top:16px;">
+          <?= shop_csrf_input() ?>
+          <h2>Afficher le bilan sur l’accueil</h2>
+          <label style="display:flex;gap:10px;align-items:flex-start;font-size:.9rem;">
+            <input type="checkbox" name="impact_public" value="1"<?= impact_public_enabled() ? ' checked' : '' ?> style="margin-top:3px;">
+            <span>Montrer à vos visiteurs, sur la page d’accueil, le CO₂ et l’eau évités grâce aux pièces déjà vendues. Le bandeau n’apparaît qu’à partir de la première vente et se met à jour toutes les heures.</span>
+          </label>
+          <p style="margin:12px 0 0;"><button class="btn btn-primary" type="submit">Enregistrer</button></p>
+        </form>
+
         <?php if ($impact['total']['pieces'] === 0): ?>
           <p class="dash-empty" style="margin-top:16px;">Aucune vente enregistrée sur la période : le compteur démarre dès qu’une pièce est vendue (commande du site, « Vendue via… » dans le catalogue, caisse ou ventes de boutique saisies).</p>
         <?php endif; ?>
-        <p class="dash-note" style="margin:16px 0 0;">Bilan net : <strong><?= h(impact_fmt_co2($impact['net']['co2'])) ?></strong> de CO₂ et <strong><?= h(impact_fmt_water($impact['net']['water'])) ?></strong> d’eau, une fois retiré l’usage de l’IA.
+        <p class="dash-note" style="margin:16px 0 0;">Bilan net : <strong><?= h(impact_fmt_co2($impact['net']['co2'])) ?></strong> de CO₂ et <strong><?= h(impact_fmt_water($impact['net']['water'])) ?></strong> d’eau, une fois retirée la production de l’IA (textes, images, vidéos).
           <strong>Ordres de grandeur, pas une mesure</strong> : chaque pièce vendue d’occasion est supposée éviter la fabrication d’une pièce neuve (90 % de son impact), estimée d’après son poids et sa famille d’objets (ADEME Base Empreinte, Water Footprint Network). L’hébergement, les trajets des clients et l’emballage ne sont pas comptés. Une pièce vendue en ligne n’est comptée qu’une fois ; les ventes de boutique saisies à la main sont comptées au poids moyen du catalogue.</p>
       <?php endif; ?>
 
