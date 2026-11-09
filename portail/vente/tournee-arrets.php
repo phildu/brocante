@@ -23,5 +23,6 @@ echo json_encode([
     'owners' => $owners,
     'today' => fv_today(),
     'week' => fv_days_from(7),
+    'now' => fv_hours_now(),
     'max' => FV_TOURNEE_MAX_IDS,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);

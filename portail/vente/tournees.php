@@ -77,7 +77,7 @@ fv_layout_start('Tournées & terrain', [
     'eyebrow' => fv_is_scoped() ? 'Force de vente · tournée' : 'Porte-à-porte',
     'desc' => 'Choisissez les commerces d’une même ville ou zone, dans l’ordre de la rue. La tournée se prépare, s’imprime et se consigne arrêt par arrêt.',
     'actions' => '<a class="fv-btn fv-btn-sm" href="prospects.php?nouveau=1">' . fv_icon('plus', 14) . ' Ajouter un commerce</a>',
-    'head' => '<link rel="stylesheet" href="/assets/lib/leaflet/leaflet.min.css"><link rel="stylesheet" href="assets/tournee-arrets.css?v=3">',
+    'head' => '<link rel="stylesheet" href="/assets/lib/leaflet/leaflet.min.css"><link rel="stylesheet" href="assets/tournee-arrets.css?v=4">',
 ]);
 ?>
 
@@ -239,6 +239,12 @@ fv_layout_start('Tournées & terrain', [
           <label class="fv-field">Prochaine action
             <select name="due"><option value="">Toutes</option><option value="today">Due aujourd’hui ou en retard</option><option value="week">Dans la semaine</option><option value="none">Sans échéance</option></select>
           </label>
+          <label class="fv-field">Ouvert
+            <select name="ouvert"><option value="">Peu importe</option><option value="now">Maintenant</option><option value="1">Le lundi</option><option value="2">Le mardi</option><option value="3">Le mercredi</option><option value="4">Le jeudi</option><option value="5">Le vendredi</option><option value="6">Le samedi</option><option value="7">Le dimanche</option></select>
+          </label>
+          <label class="fv-field">À l’heure de
+            <input type="time" name="heure" disabled>
+          </label>
           <label class="fv-field">Position GPS
             <select name="gps"><option value="">Toutes</option><option value="oui">Avec position</option><option value="non">Sans position</option></select>
           </label>
@@ -246,6 +252,7 @@ fv_layout_start('Tournées & terrain', [
         <div class="fv-ta-checks">
           <label class="fv-check"><input type="checkbox" name="tous"> Inclure les fiches closes</label>
           <label class="fv-check"><input type="checkbox" name="only"> Seulement les cochés</label>
+          <label class="fv-check" title="La plupart des fiches n’ont pas d’horaires : elles restent proposées quand on filtre sur l’ouverture"><input type="checkbox" name="hinc" checked> Garder les horaires inconnus</label>
           <button type="button" class="fv-btn fv-btn-sm fv-btn-ghost" data-ta-reset>Réinitialiser les filtres</button>
         </div>
       </details>
@@ -308,7 +315,7 @@ fv_layout_start('Tournées & terrain', [
   <datalist id="fv-ta-cities"></datalist>
   <datalist id="fv-ta-streets"></datalist>
 </dialog>
-<script src="assets/tournee-arrets.js?v=1"></script>
+<script src="assets/tournee-arrets.js?v=2"></script>
 <?php endif; ?>
 
 <script type="application/json" id="fv-tmap-data"><?= json_encode($mapData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
