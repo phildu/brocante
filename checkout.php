@@ -330,7 +330,7 @@ if (oa_enabled() && $resumeRequestId <= 0) {
 // Paiement chez un prestataire autre que Stripe : la commande est créée ici,
 // puis le client est envoyé sur la page sécurisée du prestataire. Le retour
 // (et l'IPN Monetico) confirme le paiement — voir monetico-return.php,
-// monetico-ipn.php et paypal-return.php.
+// monetico-ipn.php, paypal-return.php, revolut-return.php et sumup-return.php.
 if ($paymentMethod !== 'stripe') {
     $provider = $paymentMethod;
     $reference = payment_reference();
@@ -448,6 +448,38 @@ if ($paymentMethod !== 'stripe') {
         } catch (Throwable $e) {
             $cancelExternal($orderId, 'revolut', $e->getMessage());
             flash_set("Le paiement Revolut n'a pas pu être ouvert : " . $e->getMessage(), 'error');
+            header('Location: /cart.php');
+            exit;
+        }
+    }
+
+    if ($provider === 'sumup') {
+        $sumup = sumup_config();
+        if (!$sumup || !$order) {
+            $cancelExternal($orderId, 'sumup', 'réglages absents');
+            flash_set("SumUp n'est pas configuré pour cette boutique.", 'error');
+            header('Location: /cart.php');
+            exit;
+        }
+        try {
+            $siteUrl = rtrim(tenant_site_url(), '/');
+            $sumupCheckout = sumup_create_checkout(
+                $sumup,
+                $orderTotal,
+                $reference,
+                $siteUrl . '/sumup-return.php?order=' . $orderId . '&sig=' . rawurlencode(payment_return_token($orderId, 'sumup')),
+                $siteUrl . '/sumup-webhook.php?order=' . $orderId . '&sig=' . rawurlencode(payment_return_token($orderId, 'sumup')),
+                (string) ($content['site_name'] ?? 'Boutique')
+            );
+            $checkoutUrl = sumup_checkout_url($sumupCheckout);
+            $sumupId = (string) ($sumupCheckout['id'] ?? '');
+            if ($sumupId === '' || $checkoutUrl === '') throw new RuntimeException("SumUp n'a pas renvoyé de lien de paiement.");
+            db()->prepare('UPDATE orders SET provider_checkout_id = ? WHERE id = ?')->execute([$sumupId, $orderId]);
+            header('Location: ' . $checkoutUrl, true, 303);
+            exit;
+        } catch (Throwable $e) {
+            $cancelExternal($orderId, 'sumup', $e->getMessage());
+            flash_set("Le paiement SumUp n'a pas pu être ouvert : " . $e->getMessage(), 'error');
             header('Location: /cart.php');
             exit;
         }

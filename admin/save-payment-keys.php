@@ -79,6 +79,58 @@ if (($revolut['api_key'] ?? '') !== '') {
     }
 }
 
+// ── SumUp ────────────────────────────────────────────────────────────────
+$sumup = payment_config('sumup') ?? [];
+$sumupKey = trim((string) ($_POST['sumup_api_key'] ?? ''));
+$sumupMerchant = strtoupper(trim((string) ($_POST['sumup_merchant_code'] ?? '')));
+
+if ($sumupKey !== '') $sumup['api_key'] = $sumupKey;
+if ($sumupMerchant !== '' && !preg_match('/^[A-Z0-9]{4,16}$/', $sumupMerchant)) {
+    $errors[] = 'Le code marchand SumUp est invalide (4 à 16 lettres ou chiffres, ex. MH4H92C7).';
+} elseif ($sumupMerchant !== '') {
+    $sumup['merchant_code'] = $sumupMerchant;
+}
+unset($sumup['api_base']);
+
+// Terminal Solo : clé d'affiliation, nom du lecteur, retrait éventuel.
+$sumupAppId = trim((string) ($_POST['sumup_affiliate_app_id'] ?? ''));
+$sumupAffiliate = trim((string) ($_POST['sumup_affiliate_key'] ?? ''));
+$sumupReaderName = trim((string) ($_POST['sumup_reader_name'] ?? ''));
+$sumupPairing = trim((string) ($_POST['sumup_pairing_code'] ?? ''));
+if ($sumupAppId !== '' || isset($_POST['sumup_affiliate_app_id'])) $sumup['affiliate_app_id'] = mb_substr($sumupAppId, 0, 120);
+if ($sumupAffiliate !== '') $sumup['affiliate_key'] = $sumupAffiliate;
+if ($sumupReaderName !== '') $sumup['reader_name'] = mb_substr($sumupReaderName, 0, 60);
+if (!empty($_POST['sumup_reader_unpair'])) {
+    unset($sumup['reader_id'], $sumup['reader_name']);
+    $messages[] = 'lecteur SumUp retiré';
+}
+
+if (($sumup['api_key'] ?? '') !== '' || ($sumup['merchant_code'] ?? '') !== '') {
+    if (!payment_config_save('sumup', $sumup)) {
+        $errors[] = 'Impossible d’enregistrer les réglages SumUp (dossier .secrets non inscriptible).';
+    } elseif (!sumup_configured()) {
+        $messages[] = 'SumUp inactif (clé API ou code marchand manquant)';
+    } else {
+        $messages[] = 'SumUp enregistré';
+        // Appairage du Solo : le code n'est jamais conservé, SumUp renvoie l'identifiant du lecteur.
+        if ($sumupPairing !== '') {
+            try {
+                $reader = sumup_reader_pair(sumup_config(), $sumupPairing, (string) ($sumup['reader_name'] ?? ''));
+                $readerId = trim((string) ($reader['id'] ?? ''));
+                if ($readerId === '') throw new RuntimeException('SumUp n’a pas renvoyé d’identifiant de lecteur.');
+                $sumup['reader_id'] = $readerId;
+                if (!payment_config_save('sumup', $sumup)) throw new RuntimeException('dossier .secrets non inscriptible');
+                $messages[] = 'lecteur SumUp appairé' . (sumup_terminal_configured() ? '' : ' (renseignez aussi la clé d’affiliation pour activer le terminal)');
+            } catch (Throwable $e) {
+                $errors[] = 'Appairage du lecteur SumUp impossible : ' . $e->getMessage();
+            }
+        }
+    }
+}
+
+// ── Wero (via Stripe) ────────────────────────────────────────────────────
+shop_setting_set('stripe_wero', !empty($_POST['stripe_wero']) ? '1' : '0');
+
 // ── Virement SEPA ────────────────────────────────────────────────────────
 $sepaOld = sepa_config();
 $sepaHolder = trim((string) ($_POST['sepa_holder'] ?? ''));

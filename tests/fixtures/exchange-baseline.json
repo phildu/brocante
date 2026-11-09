@@ -322,6 +322,7 @@
         "stripe_customer_id",
         "stripe_session_id",
         "stripe_subscription_id",
+        "stripe_wero",
         "subscribed_at",
         "subscription_status",
         "terms",

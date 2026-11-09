@@ -1,7 +1,7 @@
 <?php
 
-// Moyens de paiement de la boutique : Stripe (flux historique), Monetico et
-// PayPal (comptes propres du commerçant). Ce fichier ne remplace pas Stripe :
+// Moyens de paiement de la boutique : Stripe (flux historique, qui porte aussi
+// Wero), Monetico, PayPal, Revolut et SumUp (comptes propres du commerçant). Ce fichier ne remplace pas Stripe :
 // il ajoute un registre de fournisseurs, la lecture des réglages et la
 // finalisation commune d'une commande payée hors Stripe.
 
@@ -9,6 +9,7 @@ require_once __DIR__ . '/stripe-mode.php';
 require_once __DIR__ . '/payments/monetico.php';
 require_once __DIR__ . '/payments/paypal.php';
 require_once __DIR__ . '/payments/revolut.php';
+require_once __DIR__ . '/payments/sumup.php';
 require_once __DIR__ . '/payments/sepa.php';
 
 /** Fournisseur d'une commande ; les commandes antérieures (sans colonne) sont Stripe. */
@@ -20,6 +21,7 @@ function payment_provider_of(array $order): string
     if (str_starts_with($session, 'monetico:')) return 'monetico';
     if (str_starts_with($session, 'paypal:')) return 'paypal';
     if (str_starts_with($session, 'revolut:')) return 'revolut';
+    if (str_starts_with($session, 'sumup:')) return 'sumup';
     if (str_starts_with($session, 'sepa:')) return 'sepa';
     return 'stripe';
 }
@@ -31,6 +33,7 @@ function payment_provider_label(string $provider): string
         'monetico' => 'Monetico',
         'paypal' => 'PayPal',
         'revolut' => 'Revolut',
+        'sumup' => 'SumUp',
         'sepa' => 'Virement SEPA',
     ][$provider] ?? $provider;
 }
@@ -42,16 +45,28 @@ function stripe_checkout_ready(): bool
 }
 
 /**
+ * Wero passe par Stripe (pas d'API directe pour un commerçant) : il apparaît
+ * sur la page Stripe dès qu'il est activé dans le tableau de bord Stripe. Ce
+ * réglage de la boutique (settings.stripe_wero = 1) ne fait qu'afficher Wero
+ * dans le libellé et les logos ; il ne déclenche rien chez Stripe.
+ */
+function stripe_wero_enabled(): bool
+{
+    return function_exists('shop_setting') && shop_setting('stripe_wero', '') === '1';
+}
+
+/**
  * Moyens de paiement configurés pour la boutique, avant filtrage par les
  * réglages (sert à l'écran d'administration pour proposer les cases à cocher).
  */
 function shop_payment_methods_available(): array
 {
     $all = [];
-    if (stripe_checkout_ready()) $all['stripe'] = 'Carte bancaire (Stripe)';
+    if (stripe_checkout_ready()) $all['stripe'] = stripe_wero_enabled() ? 'Carte bancaire ou Wero (Stripe)' : 'Carte bancaire (Stripe)';
     if (monetico_configured()) $all['monetico'] = 'Carte bancaire (Monetico)';
     if (paypal_configured()) $all['paypal'] = 'PayPal';
     if (revolut_configured()) $all['revolut'] = 'Carte bancaire (Revolut)';
+    if (sumup_configured()) $all['sumup'] = 'Carte bancaire (SumUp)';
     if (sepa_configured()) $all['sepa'] = 'Virement SEPA';
     return $all;
 }
@@ -89,8 +104,8 @@ function payment_reference(?PDO $pdo = null): string
     $pdo ??= db();
     for ($try = 0; $try < 10; $try++) {
         $reference = 'B' . strtoupper(bin2hex(random_bytes(5)));
-        $st = $pdo->prepare("SELECT 1 FROM orders WHERE payment_reference = ? OR stripe_session_id IN (?, ?, ?, ?) LIMIT 1");
-        $st->execute([$reference, 'monetico:' . $reference, 'paypal:' . $reference, 'revolut:' . $reference, 'sepa:' . $reference]);
+        $st = $pdo->prepare("SELECT 1 FROM orders WHERE payment_reference = ? OR stripe_session_id IN (?, ?, ?, ?, ?) LIMIT 1");
+        $st->execute([$reference, 'monetico:' . $reference, 'paypal:' . $reference, 'revolut:' . $reference, 'sumup:' . $reference, 'sepa:' . $reference]);
         if (!$st->fetchColumn()) return $reference;
     }
     throw new RuntimeException('Impossible de générer une référence de commande.');
@@ -100,7 +115,7 @@ function payment_reference(?PDO $pdo = null): string
  * Jeton du lien de retour : permet d'afficher la commande sans dépendre du
  * cookie de session (Monetico revient par un POST depuis un autre domaine,
  * où le cookie SameSite=Lax n'est pas envoyé). Les fournisseurs sans secret
- * propre (virement, Revolut) utilisent une clé de boutique dédiée.
+ * propre (virement, Revolut, SumUp) utilisent une clé de boutique dédiée.
  */
 function payment_return_secret(string $provider): string
 {
@@ -115,6 +130,10 @@ function payment_return_secret(string $provider): string
     if ($provider === 'revolut') {
         $config = revolut_config();
         return (string) ($config['api_key'] ?? '') !== '' ? payment_token_secret() : '';
+    }
+    if ($provider === 'sumup') {
+        $config = sumup_config();
+        return $config ? payment_token_secret() : '';
     }
     if ($provider === 'sepa') {
         return sepa_configured() ? payment_token_secret() : '';

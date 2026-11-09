@@ -31,8 +31,8 @@
       "id": "vendeur-encaisser",
       "role": "vendeur",
       "question": "Comment encaisser les paiements de ma boutique ?",
-      "reponse": "Ouvrez Réglages → Paiement & livraison et configurez au moins un moyen de paiement : Stripe (compte Connect ou vos propres clés), Monetico, PayPal, Revolut ou virement SEPA. Commencez en mode test, vérifiez une commande, puis basculez en mode réel. Sans aucun moyen configuré, les clients ne peuvent pas payer.",
-      "mots_cles": ["encaisser", "paiement", "stripe", "monetico", "paypal", "revolut", "sepa", "carte", "webhook"],
+      "reponse": "Ouvrez Réglages → Paiement & livraison et configurez au moins un moyen de paiement : Stripe (compte Connect ou vos propres clés), Monetico, PayPal, Revolut, SumUp ou virement SEPA. Wero s'active dans le tableau de bord Stripe. Commencez en mode test, vérifiez une commande, puis basculez en mode réel. Sans aucun moyen configuré, les clients ne peuvent pas payer.",
+      "mots_cles": ["encaisser", "paiement", "stripe", "monetico", "paypal", "revolut", "sumup", "wero", "sepa", "carte", "webhook"],
       "liens": [
         {"libelle": "Réglages Paiement & livraison", "url": "/admin/index.php?s=paiement"}
       ],
@@ -203,8 +203,8 @@
       "id": "visiteur-paiement",
       "role": "visiteur",
       "question": "Quels moyens de paiement puis-je utiliser ?",
-      "reponse": "Cela dépend de la boutique : carte bancaire via Stripe ou Monetico, PayPal, Revolut, ou virement SEPA. Vous êtes redirigé vers la page sécurisée du prestataire choisi ; Brocs ne stocke aucune donnée bancaire. Pour un virement SEPA, la commande est réservée et le vendeur confirme la réception du virement.",
-      "mots_cles": ["paiement", "carte", "stripe", "paypal", "revolut", "sepa", "virement", "sécurisé"],
+      "reponse": "Cela dépend de la boutique : carte bancaire via Stripe ou Monetico, Wero (via Stripe), PayPal, Revolut, SumUp, ou virement SEPA. Vous êtes redirigé vers la page sécurisée du prestataire choisi ; Brocs ne stocke aucune donnée bancaire. Pour un virement SEPA, la commande est réservée et le vendeur confirme la réception du virement.",
+      "mots_cles": ["paiement", "carte", "stripe", "paypal", "revolut", "sumup", "wero", "sepa", "virement", "sécurisé"],
       "liens": [
         {"libelle": "Passer à la caisse", "url": "/checkout.php"}
       ]

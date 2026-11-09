@@ -105,8 +105,9 @@ Cible : **prod = `https://www.bricbrok.com`**, **préprod = `https://pre.bricbro
 - [ ] `scripts/release.sh prod --portail --dry-run` puis déploiement réel **avec `--no-backup`** (aucune base n'existe encore sur le serveur, la sauvegarde
   échouerait) : `scripts/release.sh prod --portail --no-backup`. Les bases se créent à la première visite. Dès le déploiement suivant, sans cette option.
 - [ ] `scripts/smoke-remote.sh https://<domaine-prod> prod` au vert ; ouvrir `/portail/` et se connecter.
-- [ ] **Paiements** : saisir les clés **live** (Stripe, et Revolut/PayPal/Monetico si utilisés) depuis l'administration de la prod ; déclarer les
-  webhooks côté prestataire avec l'adresse de prod (`stripe-webhook.php`, `revolut-webhook.php`, `monetico-ipn.php`) ; un paiement réel
+- [ ] **Paiements** : saisir les clés **live** (Stripe, et Revolut/SumUp/PayPal/Monetico si utilisés) depuis l'administration de la prod ; déclarer les
+  webhooks côté prestataire avec l'adresse de prod (`stripe-webhook.php`, `revolut-webhook.php`, `monetico-ipn.php` ; SumUp n'en demande pas, l'adresse est transmise à chaque paiement) ;
+  **Terminal SumUp Solo** : en prod seulement (adresse https publique), saisir la clé d'affiliation puis appairer le lecteur depuis l'administration, et faire un petit encaissement puis remboursement ; **Wero** : l'activer dans Stripe → Moyens de paiement (compte live), puis cocher la case dans l'administration ; un paiement réel
   de faible montant puis remboursement.
 - [ ] **Clés d'IA partagées** : portail → « Clés API partagées » → *Mise en production* (taper `PRODUCTION`) : chaque commerce n'utilise plus que les siennes.
 - [ ] **Messages sortants** (module Notifications : e-mail, SMS, WhatsApp, Discord, Telegram) : identifiants de prod saisis ; vérifier qu'aucun

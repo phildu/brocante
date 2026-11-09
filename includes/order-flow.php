@@ -499,7 +499,7 @@ function order_restock(int $orderId): void
 }
 
 /**
- * Rembourse tout ou partie d'une commande payée via Stripe, Monetico ou PayPal.
+ * Rembourse tout ou partie d'une commande payée via Stripe, Monetico, PayPal, Revolut ou SumUp.
  * Pour un paiement Stripe Connect (destination charge), le transfert et la
  * commission sont repris au commerçant/à la galerie (reverse_transfer +
  * refund_application_fee). Monetico passe par le re-crédit, PayPal par le
@@ -533,6 +533,10 @@ function order_refund(int $orderId, int $cents, string $reason = '', bool $resto
             $revolut = revolut_config();
             if (!$revolut) throw new RuntimeException("Revolut n'est plus configuré pour cette boutique.");
             $refundId = revolut_refund($order, $cents, $revolut);
+        } elseif ($provider === 'sumup') {
+            $sumup = sumup_config();
+            if (!$sumup) throw new RuntimeException("SumUp n'est plus configuré pour cette boutique.");
+            $refundId = sumup_refund($order, $cents, $sumup);
         } elseif ($provider === 'sepa') {
             // Virement manuel : aucun prestataire à appeler. Le remboursement est
             // noté ici, le commerçant effectue le virement depuis sa banque.

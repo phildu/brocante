@@ -4,6 +4,7 @@
 //   pickup_collect, pickup_release → billet de retrait : encaisser (la somme bloquée est prélevée) ou annuler
 //   sale_cash     → vente réglée en espèces (ou autrement, en main propre)
 //   sale_card     → page de paiement Stripe à faire scanner au client ; sale_status → la suivre ; sale_cancel → l'annuler
+//   sale_terminal → montant envoyé au terminal SumUp Solo appairé (suivi et annulation par sale_status / sale_cancel)
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/pos.php';
@@ -73,6 +74,29 @@ try {
             db()->exec('COMMIT');
             pos_reply(['ok' => true, 'order_id' => $oid, 'url' => (string) $session['url'], 'total_cents' => array_sum(array_column($lines, 'unit_cents'))]);
 
+        case 'sale_terminal':
+            $config = sumup_terminal_config();
+            if (!$config) pos_reply(['ok' => false, 'error' => 'Le terminal SumUp n\'est pas appairé (Administration → Paiement → SumUp).'], 422);
+            pos_release_pending((array) ($in['items'] ?? []));
+            [$lines, $err] = pos_lines((array) ($in['items'] ?? []));
+            if ($err) pos_reply(['ok' => false, 'error' => $err], 422);
+            $total = array_sum(array_column($lines, 'unit_cents'));
+            if ($total <= 0) pos_reply(['ok' => false, 'error' => 'Montant nul : utilisez le paiement en espèces / en main.'], 422);
+            $reference = payment_reference();
+            db()->exec('BEGIN IMMEDIATE');
+            $oid = pos_create_order($lines, 'sumup:' . $reference, 'carte (terminal SumUp)');
+            db()->prepare("UPDATE orders SET payment_provider = 'sumup', payment_reference = ?, shop_slug = ? WHERE id = ?")->execute([$reference, tenant_slug(), $oid]);
+            db()->exec('COMMIT');
+            try {
+                $webhook = rtrim(tenant_site_url(), '/') . '/sumup-terminal-webhook.php?order=' . $oid . '&sig=' . rawurlencode(payment_return_token($oid, 'sumup'));
+                $clientId = sumup_reader_checkout($config, $total, 'Vente en boutique ' . $reference, $webhook, $reference);
+                db()->prepare('UPDATE orders SET provider_checkout_id = ? WHERE id = ?')->execute([$clientId, $oid]);
+            } catch (Throwable $e) {
+                db()->prepare("UPDATE orders SET status = 'canceled' WHERE id = ? AND status = 'pending'")->execute([$oid]);
+                pos_reply(['ok' => false, 'error' => 'Le terminal n\'a pas accepté le paiement : ' . mb_substr($e->getMessage(), 0, 160)], 502);
+            }
+            pos_reply(['ok' => true, 'order_id' => $oid, 'total_cents' => $total]);
+
         case 'sale_status':
         case 'sale_cancel':
             $st = db()->prepare("SELECT * FROM orders WHERE id = ? AND shipping_method LIKE 'Vente en boutique%'");
@@ -84,6 +108,20 @@ try {
                 pos_reply(['ok' => true, 'status' => 'paid', 'receipt_url' => pos_receipt_url((int) $order['id'])]);
             }
             if ($order['status'] !== 'pending') pos_reply(['ok' => true, 'status' => 'canceled']);
+            if (payment_provider_of($order) === 'sumup') {
+                // Vente au terminal SumUp : l'état vient de la transaction relue auprès de SumUp.
+                if ($action === 'sale_cancel') {
+                    $config = sumup_terminal_config();
+                    if ($config) { try { sumup_reader_terminate($config); } catch (Throwable $e) { /* rien à abandonner */ } }
+                }
+                $state = pos_sumup_refresh($order);
+                if ($state === 'paid') pos_reply(['ok' => true, 'status' => 'paid', 'receipt_url' => pos_receipt_url((int) $order['id'])]);
+                if ($state === 'failed' || $action === 'sale_cancel') {
+                    db()->prepare("UPDATE orders SET status = 'canceled' WHERE id = ? AND status = 'pending'")->execute([$order['id']]);
+                    pos_reply(['ok' => true, 'status' => $state === 'failed' ? 'failed' : 'canceled']);
+                }
+                pos_reply(['ok' => true, 'status' => 'pending']);
+            }
             if ($action === 'sale_cancel') {
                 try { stripe_request('POST', '/checkout/sessions/' . urlencode($order['stripe_session_id']) . '/expire'); } catch (Throwable $e) { /* déjà payée ou expirée */ }
                 $session = null;

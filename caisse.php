@@ -146,7 +146,7 @@ $shareAttrs = ' data-share-url="' . h($appUrl) . '" data-share-title="' . h($app
 
   <script src="/assets/barcode-scan.js"></script>
   <script src="/assets/vendor/qrcode-generator.js"></script>
-  <script src="/assets/pos.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pos.js') ?>" data-action="/admin/pos-action.php"></script>
+  <script src="/assets/pos.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pos.js') ?>" data-action="/admin/pos-action.php"<?= sumup_terminal_configured() ? ' data-terminal="1"' : '' ?>></script>
   <script>
   // Bouton « Installer l'application » : PwaSave donne la marche à suivre du navigateur (Safari, Chrome, Samsung…).
   (function () {
