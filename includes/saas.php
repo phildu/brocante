@@ -1240,7 +1240,7 @@ function saas_page_start(string $title, string $description, string $active = ''
   <a class="brand" href="/"><?= saas_brand_mark($cfg) ?><?= saas_e($cfg['name']) ?></a>
   <nav aria-label="Navigation principale">
     <?php foreach ($nav as $k => [$href, $label]): ?><a href="<?= $href ?>"<?= $active === $k ? ' aria-current="page"' : '' ?>><?= $label ?></a><?php endforeach; ?>
-    <a href="/#connexion">Se connecter</a>
+    <a href="/connexion.php" rel="nofollow">Se connecter</a>
     <a class="cta" href="/inscription/"<?= $active === 'inscription' ? ' aria-current="page"' : '' ?><?= cta_attrs('site_header_cta') ?>><?= saas_e(cta_label('site_header_cta')) ?></a>
   </nav>
 </div></header>
