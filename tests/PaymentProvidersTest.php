@@ -282,6 +282,33 @@ final class PaymentProvidersTest extends TestCase
         self::assertSame('SumUp — Carte', sumup_payment_detail(['id' => 'chk-1']));
     }
 
+    public function testSumupTerminalTransactionStates(): void
+    {
+        self::assertTrue(sumup_transaction_paid(['status' => 'SUCCESSFUL']));
+        self::assertFalse(sumup_transaction_paid(['status' => 'PENDING']));
+        self::assertFalse(sumup_transaction_paid(null));
+        self::assertTrue(sumup_transaction_failed(['status' => 'FAILED']));
+        self::assertTrue(sumup_transaction_failed(['status' => 'CANCELLED']));
+        self::assertFalse(sumup_transaction_failed(['status' => 'PENDING']));
+        self::assertFalse(sumup_transaction_failed(null));
+    }
+
+    public function testSumupTerminalDetail(): void
+    {
+        self::assertSame(
+            'SumUp terminal — sans contact VISA •••• 3456 · TEENSK4W2K',
+            sumup_terminal_detail(['entry_mode' => 'CONTACTLESS', 'card' => ['type' => 'VISA', 'last_4_digits' => '3456'], 'transaction_code' => 'TEENSK4W2K'])
+        );
+        self::assertSame('SumUp terminal — Apple Pay', sumup_terminal_detail(['entry_mode' => 'APPLE_PAY', 'card' => ['type' => 'UNKNOWN']]));
+        self::assertSame('SumUp terminal — carte', sumup_terminal_detail([]));
+    }
+
+    public function testSumupReaderPairingRejectsBadCodeBeforeAnyRequest(): void
+    {
+        $this->expectException(RuntimeException::class);
+        sumup_reader_pair(['api_key' => 'x', 'merchant_code' => 'MTEST123'], '12 34', 'Caisse');
+    }
+
     public function testStripeWeroIsAnnouncedOnlyWhenSettingIsOn(): void
     {
         self::assertTrue(function_exists('stripe_wero_enabled'));

@@ -1,10 +1,11 @@
 // Caisse du Studio : lire un QR code (billet de retrait d'un achat en ligne, reçu, étiquette d'une pièce) et encaisser une vente en boutique
-// (espèces, ou carte : le client scanne le QR de la page de paiement Stripe). Appels : admin/pos-action.php.
+// (espèces, carte via le QR de la page de paiement Stripe, ou terminal SumUp Solo). Appels : admin/pos-action.php.
 (function () {
   'use strict';
   var root = document.getElementById('pos');
   if (!root) return;
   var ACTION = document.currentScript.dataset.action;
+  var TERMINAL = document.currentScript.dataset.terminal === '1';   // terminal SumUp Solo appairé (réglages de paiement)
   var KEY = 'pos-panier';
 
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
@@ -151,6 +152,18 @@
       });
     });
     pay.appendChild(cash); pay.appendChild(card);
+    if (TERMINAL) {
+      var term = el('button', 'btn btn-ghost', '📟 Terminal SumUp'); term.type = 'button';
+      term.addEventListener('click', function () {
+        term.disabled = true; say('Envoi du montant au terminal…');
+        call({ action: 'sale_terminal', items: basket }).then(function (r) {
+          term.disabled = false;
+          if (!r.ok) { say(r.error || 'Erreur.', true); return; }
+          say(''); terminalScreen(r);
+        });
+      });
+      pay.appendChild(term);
+    }
     basketCard.appendChild(pay);
     var clear = el('button', 'btn btn-ghost pos-clear', 'Vider le panier'); clear.type = 'button';
     clear.addEventListener('click', function () { basket = []; save(); renderBasket(); });
@@ -185,6 +198,32 @@
         if (x.status !== 'pending') finish(x.status, x.receipt_url);
       });
     }, 3000);
+  }
+
+  // ── Paiement au terminal SumUp Solo : le client présente sa carte sur le lecteur ──
+  function terminalScreen(r) {
+    overlay.textContent = ''; overlay.hidden = false;
+    overlay.appendChild(el('h2', null, 'Terminal SumUp — ' + eur(r.total_cents)));
+    overlay.appendChild(el('p', 'qa-note', 'Le montant s’affiche sur le terminal. Tendez-le au client : carte, sans contact, Apple Pay ou Google Pay. La vente s’enregistre dès que le paiement est accepté.'));
+    var st = el('p', 'pos-msg', 'En attente du paiement sur le terminal…'); st.setAttribute('role', 'status'); overlay.appendChild(st);
+    var cancel = el('button', 'btn btn-ghost', 'Annuler sur le terminal'); cancel.type = 'button';
+    overlay.appendChild(cancel);
+    function finish(status, receipt) {
+      stopPoll(); overlay.hidden = true;
+      if (status === 'paid') { basket = []; save(); renderBasket(); done('Paiement reçu : ' + eur(r.total_cents), receipt); }
+      else say(status === 'failed' ? 'Paiement refusé ou abandonné sur le terminal.' : 'Paiement annulé.', true);
+    }
+    cancel.addEventListener('click', function () {
+      cancel.disabled = true; st.textContent = 'Annulation en cours…';
+      call({ action: 'sale_cancel', order_id: r.order_id }).then(function (x) { cancel.disabled = false; finish(x.status || 'canceled', x.receipt_url); });
+    });
+    stopPoll();
+    poll = setInterval(function () {
+      call({ action: 'sale_status', order_id: r.order_id }).then(function (x) {
+        if (!x.ok) { st.textContent = x.error || 'Vérification impossible, nouvel essai…'; return; }
+        if (x.status !== 'pending') finish(x.status, x.receipt_url);
+      });
+    }, 2500);
   }
 
   function done(text, receiptUrl) {
