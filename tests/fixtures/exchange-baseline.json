@@ -254,6 +254,8 @@
         "gift_quota_bar",
         "gift_quota_food",
         "hide_shooting_photos",
+        "impact_public",
+        "impact_public_cache",
         "last_purge",
         "last_scan",
         "last_sync",

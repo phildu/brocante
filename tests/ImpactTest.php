@@ -43,7 +43,7 @@ final class ImpactTest extends TestCase
             ['channel' => 'ecommerce', 'cat' => 'ceramique', 'weight' => 1000, 'qty' => 1],
             ['channel' => 'stand', 'cat' => 'bois', 'weight' => 2000, 'qty' => 1],
             ['channel' => 'inconnu-xyz', 'cat' => 'bois', 'weight' => 2000, 'qty' => 0],
-        ], 3, ['co2' => 5.0, 'water' => 100.0, 'family' => 'curiosites'], ['gemini_text' => 1000]);
+        ], 3, ['co2' => 5.0, 'water' => 100.0, 'family' => 'curiosites'], ['text' => 1000, 'image' => 10]);
 
         self::assertSame(2, $r['groups']['marketplace']['rows']['vinted']['pieces']);
         self::assertEqualsWithDelta(36.0, $r['groups']['marketplace']['total']['co2'], 0.001);
@@ -55,7 +55,8 @@ final class ImpactTest extends TestCase
         self::assertSame(7, $r['total']['pieces']);
         self::assertArrayNotHasKey('inconnu-xyz', $r['groups']['physical']['rows']);
         // le coût numérique est retiré du bilan net
-        self::assertEqualsWithDelta(1000 * 0.00003, $r['digital']['co2'], 0.0001);
+        self::assertEqualsWithDelta(1000 * 0.00005 + 10 * 0.003, $r['digital']['co2'], 0.0001);
+        self::assertSame(10, $r['digital']['by_kind']['image']['calls']);
         self::assertEqualsWithDelta($r['total']['co2'] - $r['digital']['co2'], $r['net']['co2'], 0.0001);
     }
 
@@ -78,7 +79,7 @@ final class ImpactTest extends TestCase
 
     public function testMergeSumsReports(): void
     {
-        $a = impact_aggregate([['channel' => 'vinted', 'cat' => 'textile', 'weight' => 1000, 'qty' => 1]], 0, null, ['gemini_text' => 100]);
+        $a = impact_aggregate([['channel' => 'vinted', 'cat' => 'textile', 'weight' => 1000, 'qty' => 1]], 0, null, ['text' => 100, 'video' => 2]);
         $b = impact_aggregate([
             ['channel' => 'vinted', 'cat' => 'textile', 'weight' => 1000, 'qty' => 2],
             ['channel' => 'stand', 'cat' => 'bois', 'weight' => 2000, 'qty' => 1],
@@ -90,8 +91,29 @@ final class ImpactTest extends TestCase
         self::assertEqualsWithDelta($a['total']['co2'] + $b['total']['co2'], $m['total']['co2'], 0.001);
         self::assertSame(1, $m['groups']['physical']['rows']['stand']['pieces']);
         self::assertSame(['textile', 'bois'], array_keys($m['families']));
-        self::assertSame(100, $m['digital']['calls']);
+        self::assertSame(102, $m['digital']['calls']);
+        self::assertSame(2, $m['digital']['by_kind']['video']['calls']);
         self::assertEqualsWithDelta($m['total']['co2'] - $m['digital']['co2'], $m['net']['co2'], 0.0001);
         self::assertSame(0, impact_merge([])['total']['pieces']);
+    }
+
+    public function testCodeFootprintCountsSourceLinesOnly(): void
+    {
+        $dir = sys_get_temp_dir() . '/impact-code-' . bin2hex(random_bytes(4));
+        mkdir($dir . '/vendor', 0777, true);
+        mkdir($dir . '/sub', 0777, true);
+        file_put_contents($dir . '/a.php', "<?php\n\$x = 1;\n\$y = 2;\n");          // 3 lignes
+        file_put_contents($dir . '/sub/b.js', "a\nb\n");                                // 2 lignes
+        file_put_contents($dir . '/vendor/c.php', str_repeat("x\n", 500));             // ignoré
+        file_put_contents($dir . '/a.php.bak-20260101-000000', str_repeat("x\n", 500)); // ignoré
+        file_put_contents($dir . '/notes.md', str_repeat("x\n", 500));                  // ignoré
+
+        $r = impact_code_footprint($dir, $dir . '/cache.json');
+        self::assertSame(5, $r['lines']);
+        self::assertSame(2, $r['files']);
+        self::assertEqualsWithDelta(5 * IMPACT_CODE_G_CO2_PER_LINE / 1000, $r['co2'], 1e-9);
+        // deuxième appel : lu dans le cache, même si un fichier change
+        file_put_contents($dir . '/a.php', str_repeat("x\n", 100));
+        self::assertSame(5, impact_code_footprint($dir, $dir . '/cache.json')['lines']);
     }
 }
