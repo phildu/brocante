@@ -130,7 +130,7 @@ function feedback_todo_detail(array $record, string $message): string
     $kind = (string) ($record['source'] ?? '') === 'client' ? 'client' : 'testeur';
     $page = trim((string) ($record['url'] ?? '')) ?: trim((string) ($record['page'] ?? ''));
     $parts = [
-        "Retour {$kind} du {$date} ({$ref}" . ($shop !== '' ? ", boutique {$shop}" : '') . ').',
+        "Retour {$kind} du {$date} ({$ref}" . ($shop !== '' ? (($record['surface'] ?? '') === 'portail' ? ", espace {$shop}" : ", boutique {$shop}") : '') . ').',
         '« ' . mb_substr($message, 0, 800) . ' »',
     ];
     if ($page !== '') {

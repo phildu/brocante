@@ -1057,6 +1057,22 @@ boutiques testeuses, avec une capture d'écran facultative, et les suit jusqu'à
 - **Dictée** : bouton « Dicter » (API Web Speech, `fr-FR`, HTTPS + autorisation du micro). La transcription s'ajoute au message,
   les résultats intermédiaires s'affichent, le moteur relance après un silence, et le bouton est masqué si le navigateur ne la
   propose pas. Un refus du micro affiche un message sans bloquer le formulaire.
+- **Trois espaces, chacun avec son interrupteur** (portail → **Retours testeurs** → *Programme testeurs*, réglage `surfaces`) :
+  *Administration des boutiques* (back end, défaut : actif), *Site public* (front end, clients connectés, défaut : actif) et *Portail*
+  (défaut : **coupé**). L'interrupteur général « Afficher le widget » coupe tout. Chaque retour porte son espace (`surface` : `admin`,
+  `front`, `portail`) : filtre « Espace » et pastille dans le triage, colonne « Espace » du CSV. Les retours antérieurs sont rangés
+  d'après leur origine (client → site public, équipe → administration).
+- **Exceptions par galerie et par boutique** (`overrides`) : pour chaque galerie (administration, site public, portail) et chaque boutique
+  (administration, site public), « Comme le général », « Oui » ou « Non ». Priorité : exception de la boutique, puis de sa galerie, puis
+  réglage général (`feedback_surface_on()`). Une boutique doit toujours être testeuse pour voir le widget : l'exception ne l'y ajoute pas.
+- **Réglage par rôle** (`roles`, `FEEDBACK_ROLES`) : on retire le bouton à un rôle précis — administrateur de la boutique, community manager,
+  photographe, vendeur (administration) ; client connecté (site public) ; exploitant du portail, administrateur de galerie (portail).
+  Tous actifs par défaut. Le rôle est contrôlé à l'affichage et à chaque appel d'API (un rôle coupé ne peut plus envoyer).
+- **Widget du portail** : sur toutes les pages (`portail_page_start()` dans `portail/_chrome.php`), pour l'exploitant et les
+  administrateurs de galerie ; API `portail/retour-api.php` (session et jeton CSRF du portail). Pas de boutique : le retour est
+  rangé sous « Portail » (`shop` vide), avec la galerie de l'administrateur connecté. Un administrateur de galerie ne voit que les
+  retours de sa galerie ; l'exploitant voit tous ceux du portail. Il ne dépend pas de la liste des boutiques testeuses.
+  Le traitement des requêtes est commun aux deux API (`includes/feedback-endpoint.php`).
 - **Couverture** : portail → **Retours testeurs** → *Programme testeurs*. On coche des boutiques et/ou des galeries (tous leurs
   membres locaux), on peut inclure automatiquement les testeurs déjà déclarés sur les modules « En test » (Tarifs des plugins), ou
   ouvrir le widget à toutes les boutiques. Le même écran règle l'e-mail d'alerte et le délai de relance.
