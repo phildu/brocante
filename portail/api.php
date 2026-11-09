@@ -1,11 +1,12 @@
 <?php
-// « API & réseaux » : une seule page pour les réglages techniques de la plateforme, en quatre sections
+// « API & réseaux » : une seule page pour les réglages techniques de la plateforme, en cinq sections
 //   social : connexion sociale (clés OAuth)   cles : clés API partagées de la période de test   ovh : API OVH (domaines)
+//   messagerie : boîte contact@ chez OVH et envoi des messages de la plateforme
 //   notion : publication des retours dans la base « Suivi des jalons »
 // Chaque section vit dans portail/_api-<section>.php (traitement du formulaire puis contenu).
 require __DIR__ . '/_bootstrap.php';
 
-const API_TABS = ['social' => 'Connexion sociale', 'cles' => 'Clés API partagées', 'ovh' => 'API OVH (domaines)', 'notion' => 'Retours → Notion'];
+const API_TABS = ['social' => 'Connexion sociale', 'cles' => 'Clés API partagées', 'ovh' => 'API OVH (domaines)', 'messagerie' => 'Messagerie', 'notion' => 'Retours → Notion'];
 $tab = (string) ($_GET['s'] ?? 'social');
 if (!isset(API_TABS[$tab])) $tab = 'social';
 
@@ -34,7 +35,7 @@ foreach (API_TABS as $k => $label) {
 portail_page_start([
     'title' => 'API & réseaux',
     'eyebrow' => 'Plateforme',
-    'desc' => 'Connexion sociale, clés partagées de la période de test, domaines OVH.',
+    'desc' => 'Connexion sociale, clés partagées de la période de test, domaines OVH, messagerie.',
     'tabs' => $apiTabs,
 ]);
 ?>

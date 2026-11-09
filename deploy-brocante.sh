@@ -8,10 +8,10 @@
 # et sa base sont envoyés ; un fichier .tenant indique au serveur quel commerce servir.
 #
 # Mode portail (--portail) : déploie TOUS les commerces et le portail de
-# gestion dans un même dossier (ex. brocs.arrimage.com, chaque commerce sur
-# <slug>.brocs.arrimage.com). Identifiants dans .env.deploy.portail :
+# gestion dans un même dossier (ex. bricbrok.com, chaque commerce sur
+# <slug>.bricbrok.com). Identifiants dans .env.deploy.portail :
 #   FTP_SERVER, FTP_USER, FTP_PASS, FTP_PATH_FRONT (ex. /www/pre-bricbrok/ en préprod, /www/bricbrok/ en prod),
-#   URL_FRONT (ex. https://brocs.arrimage.com),
+#   URL_FRONT (ex. https://bricbrok.com),
 #   PORTAIL_USER, PORTAIL_PASSWORD (compte de connexion au portail en ligne).
 #
 # Usage :
@@ -35,7 +35,7 @@
 #   --env prod              → .env.deploy.portail.prod, .env.deploy.<slug>.prod, .env.deploy.prod
 #                             Garde-fous : arbre git propre, HEAD déjà déployé en préprod (tag preprod-*),
 #                             serveur différent de la préprod, base JAMAIS envoyée (sauf --first-install),
-#                             confirmation tapée « PROD ». --skip-preprod-check = correctif urgent, à justifier.
+#                             confirmation tapée « PROD » (ou --confirm-prod, voir DEPLOIEMENT.md). --skip-preprod-check = correctif urgent, à justifier.
 #   Le script dépose .app-env sur le serveur (preprod|prod) ; en préprod, aussi un robots.txt « Disallow: / ».
 #   Modèles des fichiers d'accès : deploy/env.preprod.example et deploy/env.prod.example.
 #   Orchestration complète (pré-vol, sauvegarde, déploiement, vérification, tag) : scripts/release.sh.
@@ -63,9 +63,9 @@ err()  { echo -e "${RED}❌${NC} $1"; exit 1; }
 # Documents Markdown de la racine (README.md, notes _*.md) : jamais en ligne (fonctionnement interne de la plateforme).
 # Commerces d'essai purement locaux : jamais envoyés, quel que soit le mode (dossiers tenants/<slug>/ et assets/tenants/<slug>/).
 LOCAL_ONLY_TENANTS="kllklmk zz-sandbox-revolut librairie-des-quais la-fripe-a-naty exemple-librairie _modele mes-livres petit-chalet"
-# Code purement local (tests, outillage, centre d'aide pas encore prêt, pages de test), bases SQLite locales,
+# Code purement local (tests, outillage, notes Markdown du centre d'aide (aide/**/*.md : fiches de capture, README), pages de test), bases SQLite locales,
 # sauvegardes *.bak-*, fichiers de développement (docs, phpunit, composer, dépendances de dev de vendor/) : jamais envoyé.
-LOCAL_ONLY_EXCLUDES="--exclude '^tests/' --exclude '^scripts/' --exclude '^aide/' --exclude '^admin/sms-test\\.php\$' --exclude '^portail/journal-local\\.php\$' --exclude '^assets/autofeed/.*\\.lock\$' --exclude-glob '*.sqlite' --exclude-glob '*.bak-*' --exclude '^docs/' --exclude '^deploy/' --exclude '^\\.gitignore\$' --exclude '^\\.phpunit\\.result\\.cache\$' --exclude '^phpunit\\.xml\$' --exclude '^composer\\.(json|lock)\$' --exclude '^schema\\.sql\$' --exclude '^vendor/(bin|composer|phpunit|nikic|sebastian|phar-io|myclabs|staabm|theseer)/' --exclude '^vendor/autoload\\.php\$'"
+LOCAL_ONLY_EXCLUDES="--exclude '^tests/' --exclude '^scripts/' --exclude '^aide/.*\\.md\$' --exclude '^admin/sms-test\\.php\$' --exclude '^portail/journal-local\\.php\$' --exclude '^assets/autofeed/.*\\.lock\$' --exclude-glob '*.sqlite' --exclude-glob '*.bak-*' --exclude '^docs/' --exclude '^deploy/' --exclude '^\\.gitignore\$' --exclude '^\\.phpunit\\.result\\.cache\$' --exclude '^phpunit\\.xml\$' --exclude '^composer\\.(json|lock)\$' --exclude '^vendor/(bin|composer|phpunit|nikic|sebastian|phar-io|myclabs|staabm|theseer)/' --exclude '^vendor/autoload\\.php\$'"
 
 WITH_DB=0
 PORTAIL=0
@@ -73,6 +73,7 @@ DRY_RUN=0
 DEPLOY_ENV="preprod"
 FIRST_INSTALL=0
 SKIP_PREPROD_CHECK=0
+CONFIRM_PROD=0
 TENANT="${TENANT:-petit-chalet}"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -83,6 +84,7 @@ while [ $# -gt 0 ]; do
         --env) DEPLOY_ENV="$2"; shift ;;
         --first-install) FIRST_INSTALL=1 ;;
         --skip-preprod-check) SKIP_PREPROD_CHECK=1 ;;
+        --confirm-prod) CONFIRM_PROD=1 ;;
         *) err "Option inconnue : $1" ;;
     esac
     shift
@@ -216,9 +218,15 @@ echo ""
 if [ "$DEPLOY_ENV" = "prod" ] && [ "$DRY_RUN" = "0" ]; then
     echo -e "${RED}${BOLD}  PRODUCTION : ${URL_FRONT} — commit $(git rev-parse --short HEAD 2>/dev/null)${NC}"
     [ "$FIRST_INSTALL" = "1" ] && echo -e "${RED}${BOLD}  --first-install : la base du serveur sera ÉCRASÉE${NC}"
-    [ -t 0 ] || err "Confirmation impossible : la prod se déploie depuis un terminal interactif."
-    read -r -p "  Tapez PROD pour confirmer : " confirm_prod
-    [ "$confirm_prod" = "PROD" ] || err "Confirmation refusée : rien n'a été envoyé."
+    if [ "$CONFIRM_PROD" = "1" ]; then
+        # La confirmation est donnée par l'option : elle remplace la saisie « PROD » quand un humain a déjà validé
+        # la commande exacte (carte d'approbation de l'application, règle « ask » sur release.sh prod).
+        warn "--confirm-prod : confirmation donnée par l'option, sans saisie."
+    else
+        [ -t 0 ] || err "Confirmation impossible : la prod se déploie depuis un terminal interactif (ou avec --confirm-prod après validation humaine)."
+        read -r -p "  Tapez PROD pour confirmer : " confirm_prod
+        [ "$confirm_prod" = "PROD" ] || err "Confirmation refusée : rien n'a été envoyé."
+    fi
     echo ""
 fi
 
@@ -273,6 +281,7 @@ mirror --reverse --no-perms --no-umask \
   --exclude-glob '_*.md' \
   --exclude '^[^/]+\.md$' \
   --exclude '^[^/]+\.sql$' \
+  --include '^schema\.sql$' \
   --exclude-glob '*.bak' \
   --exclude-glob '*.db' \
   --exclude-glob '*.db.bak-*' \

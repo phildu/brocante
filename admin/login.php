@@ -53,6 +53,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (!empty($_POST['remember'])) {
             session_remember();
+            // Appareil de confiance : jeton révocable en base, indépendant du fichier de session.
+            require_once __DIR__ . '/../includes/remember.php';
+            try {
+                $trusted = remember_issue(db(), $login['role'], $login['id'], (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+                remember_set_cookie($trusted['value'], $trusted['expires']);
+            } catch (Throwable $e) {
+                // La session mémorisée de 30 jours reste active.
+            }
         }
         header('Location: ' . $after_login($login['role']));
         exit;
@@ -100,7 +108,7 @@ if (!admin_password_configured()) {
       'submit' => 'Se connecter',
       'remember' => true,
       'remember_name' => 'remember',
-      'remember_label' => 'Rester connecté sur cet appareil de confiance (30 jours)',
+      'remember_label' => 'Rester connecté sur cet appareil de confiance (jusqu\'à déconnexion)',
     ]) ?>
     <p class="login-other"><a href="/connexion.php">Connexion unique — boutique, galerie, portail, compte client</a></p>
   </div>

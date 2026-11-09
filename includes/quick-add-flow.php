@@ -46,7 +46,7 @@ $conditionRatesJson = json_encode(product_condition_price_rates(), JSON_HEX_APOS
     <div class="qa-shots" id="shots">
       <?php foreach ($angles as $i => [$key, $title, $tip, $required]): ?>
         <div class="qa-shot<?= $i === 0 ? ' is-main' : '' ?>" data-index="<?= $i ?>" data-label="<?= h($title) ?>">
-          <input type="file" accept="image/*" capture="environment" id="cam-<?= $i ?>" hidden>
+          <input type="file" accept="image/*" capture id="cam-<?= $i ?>" hidden>
           <label class="qa-shot-take" for="cam-<?= $i ?>">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>
             <b><?= h($title) ?><?= $required ? '' : ' <small>(facultatif)</small>' ?></b>
@@ -72,7 +72,7 @@ $conditionRatesJson = json_encode(product_condition_price_rates(), JSON_HEX_APOS
     </div>
     <div class="qa-video" id="qa-video">
       <label class="qa-video-take" for="qa-video-input"><span aria-hidden="true">🎬</span> Filmer la pièce <small>(facultatif — 10 à 20 secondes, en la faisant tourner)</small></label>
-      <input type="file" id="qa-video-input" accept="video/*" capture="environment" hidden>
+      <input type="file" id="qa-video-input" accept="video/*" capture hidden>
       <span class="qa-video-state" id="qa-video-state" role="status"></span>
       <button type="button" class="btn-small" id="qa-video-remove" hidden>Retirer la vidéo</button>
     </div>

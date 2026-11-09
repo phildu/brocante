@@ -1,0 +1,636 @@
+<?php
+
+// Panneau « Adresse » commun à la boutique (admin/domaine.php) et à la galerie
+// (portail/galerie-adresse.php) : adresse en sous-domaine, domaine déjà possédé,
+// achat d'un domaine chez OVH. Le propriétaire est désigné par sa clé
+// (includes/domain-owner.php) ; le texte s'accorde (boutique / galerie).
+
+require_once __DIR__ . '/domain-owner.php';
+require_once __DIR__ . '/domain-shop.php';
+require_once __DIR__ . '/domain-custom.php';
+require_once __DIR__ . '/domain-sub.php';
+
+function dm_h($value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+/** Mise en forme d'un montant en centimes. */
+function dm_money(int $cents): string
+{
+    return number_format($cents / 100, 2, ',', ' ') . ' €';
+}
+
+/** Avertissement SEO affiché avant tout changement d'adresse. */
+function dm_seo_notice(): string
+{
+    return '<strong>Référencement (SEO) :</strong> changer d’adresse peut dégrader temporairement votre visibilité sur Google et les autres moteurs de recherche. Il leur faut quelques jours, parfois plusieurs semaines, pour découvrir la nouvelle adresse et lui transférer la réputation de l’ancienne ; vos positions peuvent baisser pendant cette période, puis se rétablir. Les liens déjà partagés (réseaux sociaux, annuaires, cartes de visite) restent valables tant que l’ancienne adresse n’est pas retirée. Évitez de changer d’adresse à l’approche d’un événement important.';
+}
+
+/** Feuille de style du panneau (à placer dans un <style>). */
+function dm_css(): string
+{
+    return <<<'CSS'
+  .dm-card { background: var(--surface); border: 1px solid var(--line); padding: 16px 18px; margin-top: 16px; }
+  .dm-card h2 { font-size: 1.1rem; margin: 0 0 6px; }
+  .dm-card p { margin: 0 0 10px; color: var(--ink-soft); font-size: .9rem; }
+  .dm-current { border-left: 3px solid var(--accent); }
+  .dm-current code { overflow-wrap: anywhere; }
+  .dm-table { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: 10px; }
+  .dm-table th, .dm-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  .dm-table th { font-family: var(--font-mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); font-weight: 400; }
+  .dm-table td.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dm-ok { color: #1b6e3c; font-weight: 600; }
+  .dm-no { color: var(--ink-soft); }
+  .dm-form { display: grid; gap: 12px; margin-top: 8px; }
+  .dm-form .field-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .dm-form .field-row-3 { display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 12px; }
+  .dm-form .field-row-4 { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
+  .dm-form .field label { display: block; font-size: .8rem; font-weight: 600; margin-bottom: 4px; }
+  .dm-form .field input, .dm-form .field select { width: 100%; }
+  .dm-form .check { display: flex; gap: 8px; align-items: flex-start; font-size: .86rem; color: var(--ink-soft); }
+  .dm-form .check input { margin-top: 3px; }
+  .dm-quote { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+  .dm-quote .price { font-family: var(--font-mono); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+  .dm-quote .price small { display: block; font-size: .72rem; color: var(--ink-soft); font-family: var(--font-body); }
+  .dm-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .dm-note { font-size: .82rem; color: var(--ink-soft); }
+  .dm-search { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+  .dm-search .field { flex: 1 1 260px; }
+  .dm-search .field label { display: block; font-size: .8rem; font-weight: 600; margin-bottom: 4px; }
+  .dm-search input { width: 100%; }
+  .dm-sub-input { display: flex; align-items: stretch; width: 100%; }
+  .dm-sub-input input { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .dm-sub-suffix { display: inline-flex; align-items: center; padding: 0 10px; border: 1px solid var(--line); border-left: 0; background: var(--surface); font-family: var(--font-mono); font-size: .85rem; color: var(--ink-soft); white-space: nowrap; }
+  .dm-seo { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid #b26a00; background: #fff6e5; color: #5c3a00; font-size: .84rem; line-height: 1.45; }
+  .dm-seo strong { color: #5c3a00; }
+  .dm-badge { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-mono); font-size: .7rem; color: var(--ink-soft); }
+  @media (max-width: 720px) {
+    .dm-form .field-row-2, .dm-form .field-row-3, .dm-form .field-row-4, .dm-quote { grid-template-columns: 1fr; }
+  }
+CSS;
+}
+
+/**
+ * État du panneau pour un propriétaire. $opts :
+ *   address       adresse actuelle affichée (boutique : site_url ; galerie : adresse publique)
+ *   name          nom proposé dans la recherche de domaine
+ *   draft         nom proposé par défaut pour le sous-domaine
+ *   identity      ['company' => …, 'phone' => …, 'email' => …] préremplissant le titulaire d'un domaine acheté
+ *   owner_email   e-mail de repli du titulaire
+ *   action        adresse qui reçoit les formulaires
+ *   self_path     adresse de la page (sans requête)
+ *   self_query    paramètres à conserver dans les liens (['g' => 'ma-galerie'])
+ *   hidden        champs <input type="hidden"> ajoutés à chaque formulaire (HTML déjà échappé)
+ *   csrf          jeton CSRF
+ */
+function domain_panel_context(string $key, array $opts): array
+{
+    $noun = domain_owner_noun($key);
+    $money = 'dm_money';
+    $csrf = (string) ($opts['csrf'] ?? '');
+    $action = (string) ($opts['action'] ?? '');
+    $hidden = (string) ($opts['hidden'] ?? '');
+    $shopAddress = (string) ($opts['address'] ?? '');
+    $siteName = (string) ($opts['name'] ?? '');
+    $draftDefault = (string) ($opts['draft'] ?? '');
+    $identity = (array) ($opts['identity'] ?? []);
+    $ownerEmail = (string) ($opts['owner_email'] ?? '');
+    $selfPath = (string) ($opts['self_path'] ?? '');
+    $selfQuery = (array) ($opts['self_query'] ?? []);
+    $self = static function (array $extra = [], string $hash = '') use ($selfPath, $selfQuery): string {
+        $query = http_build_query($selfQuery + $extra);
+        return $selfPath . ($query !== '' ? '?' . $query : '') . $hash;
+    };
+    $data = domain_shop_load($key);
+    $search = is_array($data['search'] ?? null) ? $data['search'] : null;
+    $purchase = is_array($data['purchase'] ?? null) ? $data['purchase'] : null;
+    $state = (string) ($purchase['state'] ?? '');
+    $quote = (array) ($purchase['quote'] ?? []);
+    $amount = (int) ($quote['amount_cents'] ?? 0);
+    $ovhPrice = (int) ($quote['ovh_cents'] ?? 0);
+    $margin = max(0, $amount - $ovhPrice);
+    $quoteExpired = $state === 'quoted' && time() - (int) ($purchase['created_at'] ?? 0) > 86400;
+
+    $ovhError = '';
+    try {
+        $ovhConfig = branding_domain_config();
+        if ($ovhConfig['application_key'] === '' || $ovhConfig['application_secret'] === '' || $ovhConfig['consumer_key'] === '') {
+            $ovhError = "L’achat de domaines n’est pas encore configuré sur ce serveur : les identifiants API OVH manquent. L’exploitant de la plateforme les renseigne depuis le portail.";
+        }
+    } catch (Throwable $ex) {
+        $ovhError = $ex->getMessage();
+    }
+    $stripeReady = saas_stripe_configured();
+
+    $choose = trim((string) ($_GET['choisir'] ?? ''));
+    $chosen = null;
+    foreach ((array) ($search['domains'] ?? []) as $candidate) {
+        if ($choose !== '' && (string) ($candidate['domain'] ?? '') === $choose && !empty($candidate['available'])) {
+            $chosen = $candidate;
+            break;
+        }
+    }
+    $available = (int) array_sum(array_map(static fn ($c): int => !empty($c['available']) ? 1 : 0, (array) ($search['domains'] ?? [])));
+    $searchStale = $search !== null && time() - (int) ($search['searched_at'] ?? 0) > 86400;
+
+    // Adresse personnalisée déjà possédée par le marchand (hors achat OVH).
+    $custom = domain_custom_load($key);
+    $customState = (string) ($custom['state'] ?? '');
+    $customDomain = (string) ($custom['domain'] ?? '');
+    $customToken = (string) ($custom['token'] ?? '');
+    $customProofAt = (int) ($custom['ownership_at'] ?? 0);
+    $customRoutingAt = (int) ($custom['routing_at'] ?? 0);
+    $customCheckedAt = (int) ($custom['checked_at'] ?? 0);
+    $customObserved = (array) ($custom['observed'] ?? []);
+    $expectedIps = domain_custom_expected_ips();
+    $targetIp = (string) ($expectedIps[0] ?? '');
+    $customPrefill = trim((string) ($_GET['deja'] ?? ''));
+    $customActive = $customState === 'active';
+
+    // Adresse en sous-domaine (nom.domaine) à prix fixe réglé dans le portail.
+    $sub = domain_sub_load($key);
+    $subState = (string) ($sub['state'] ?? '');
+    $subLabel = (string) ($sub['label'] ?? '');
+    $subPrice = domain_sub_price_cents();
+    $subBase = domain_sub_base_host();
+    $subPending = $subState === 'awaiting_payment' && time() - (int) ($sub['created_at'] ?? 0) < DOMAIN_SUB_HOLD_SECONDS && !empty($sub['stripe_url']);
+    $subRenamePrice = domain_sub_rename_price_cents();
+    $subRename = domain_sub_pending_rename($key);
+    $subDraft = trim((string) ($_GET['nom'] ?? ''));
+    if ($subDraft === '') $subDraft = $draftDefault;
+
+    $owner = (array) ($purchase['owner'] ?? []);
+    if (!$owner) {
+        $owner = [
+            'first_name' => '',
+            'last_name' => '',
+            'organization' => trim((string) ($identity['company'] ?? '')),
+            'legal_form' => 'individual',
+            'address' => '',
+            'postal_code' => '',
+            'city' => '',
+            'country' => 'FR',
+            'phone' => trim((string) ($identity['phone'] ?? '')),
+            'email' => filter_var((string) ($identity['email'] ?? ''), FILTER_VALIDATE_EMAIL)
+                ? (string) $identity['email']
+                : $ownerEmail,
+        ];
+    }
+    $legacyPath = domain_owner_legacy_path($key);
+    return get_defined_vars();
+}
+
+/** Affiche les cartes du panneau (adresse actuelle, sous-domaine, domaine existant, achat OVH). */
+function domain_panel_render(array $ctx): void
+{
+    extract($ctx, EXTR_SKIP);
+    $seoNotice = dm_seo_notice();
+    ?>
+    <div class="dm-card dm-current">
+      <h2>Adresse actuelle de la <?= dm_h($noun) ?></h2>
+      <p><code><?= dm_h($shopAddress) ?></code></p>
+      <p class="dm-note"><?= $customActive
+        ? 'Votre domaine personnalisé est en service : cette adresse et l’adresse historique ci-dessus affichent la même ' . $noun . '.'
+        : 'Tant qu’aucun domaine propre n’est actif, cette adresse reste celle de la ' . $noun . '. Un domaine acheté ici est réservé à votre nom : sa mise en service (DNS et certificat) se fait ensuite avec l’exploitant de la plateforme.' ?></p>
+    </div>
+
+    <?php if ($subState === 'active'): ?>
+      <div class="dm-card" id="sous-domaine">
+        <h2>Votre adresse en sous-domaine</h2>
+        <p><strong><?= dm_h($subLabel . '.' . $subBase) ?></strong> · <span class="dm-badge"><?= dm_h(domain_sub_state_label($subState)) ?></span></p>
+        <p>Votre <?= dm_h($noun) ?> répond à l’adresse <a href="<?= dm_h(domain_sub_url($subLabel)) ?>/"><?= dm_h(domain_sub_url($subLabel)) ?>/</a>. L’adresse historique de la plateforme, <code><?= dm_h(strstr(domain_sub_url('x', $subBase), '://', true) . '://' . $subBase . $legacyPath) ?></code>, continue de fonctionner.</p>
+        <?php if ($subRename): ?>
+          <p style="margin-top:12px;">Changement de nom en attente de paiement : <strong><?= dm_h((string) $subRename['label'] . '.' . $subBase) ?></strong> (<?= dm_h($money((int) ($subRename['amount_cents'] ?? 0))) ?>). Votre adresse actuelle reste en service jusqu’à la confirmation.</p>
+          <div class="dm-actions">
+            <?php if (!empty($subRename['stripe_url'])): ?>
+              <a class="btn btn-primary" href="<?= dm_h((string) $subRename['stripe_url']) ?>">Reprendre le paiement</a>
+            <?php endif; ?>
+            <form method="post" action="<?= dm_h($action) ?>" onsubmit="return confirm('Annuler ce changement de nom ?');">
+              <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+              <input type="hidden" name="action" value="sub_cancel">
+              <button type="submit" class="btn">Annuler le changement</button>
+            </form>
+          </div>
+        <?php else: ?>
+          <form class="dm-search" method="post" action="<?= dm_h($action) ?>" style="margin-top:12px;" onsubmit="return confirm('Changer l’adresse ? L’ancien nom en sous-domaine ne fonctionnera plus dès que le changement sera confirmé. Votre référencement Google peut baisser temporairement le temps que la nouvelle adresse soit prise en compte.');">
+            <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+            <input type="hidden" name="action" value="sub_rename">
+            <div class="field">
+              <label for="dm-sub-rename">Changer le nom de l’adresse</label>
+              <div class="dm-sub-input">
+                <input type="text" id="dm-sub-rename" name="label" maxlength="60" required value="" placeholder="nouveau-nom" autocomplete="off" autocapitalize="none" spellcheck="false">
+                <span class="dm-sub-suffix">.<?= dm_h($subBase) ?></span>
+              </div>
+            </div>
+            <?php if ($subRenamePrice > 0 && !$stripeReady): ?>
+              <p class="dm-note">Le paiement en ligne n’est pas configuré sur ce serveur : contactez l’exploitant de la plateforme.</p>
+            <?php else: ?>
+              <button type="submit" class="btn"><?= $subRenamePrice > 0 ? 'Changer pour ' . dm_h($money($subRenamePrice)) : 'Changer le nom' ?></button>
+            <?php endif; ?>
+          </form>
+          <p class="dm-seo"><?= $seoNotice ?></p>
+          <p class="dm-note" style="margin-top:8px;"><?= $subRenamePrice > 0 ? 'Un changement de nom coûte ' . dm_h($money($subRenamePrice)) . ' (montant fixe). ' : 'Le changement de nom est offert. ' ?>L’ancien nom en sous-domaine cesse de fonctionner et redevient disponible ; l’adresse historique de la plateforme reste valable.</p>
+        <?php endif; ?>
+      </div>
+    <?php elseif ($subPending): ?>
+      <div class="dm-card" id="sous-domaine">
+        <h2>Adresse en sous-domaine — paiement en attente</h2>
+        <p>Le paiement de <strong><?= dm_h($subLabel . '.' . $subBase) ?></strong> (<?= dm_h($money((int) ($sub['amount_cents'] ?? 0))) ?>) est ouvert chez Stripe mais n’a pas encore été confirmé.</p>
+        <div class="dm-actions">
+          <a class="btn btn-primary" href="<?= dm_h((string) $sub['stripe_url']) ?>">Reprendre le paiement</a>
+          <form method="post" action="<?= dm_h($action) ?>" onsubmit="return confirm('Annuler ce paiement et libérer le nom ?');">
+            <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+            <input type="hidden" name="action" value="sub_cancel">
+            <button type="submit" class="btn">Changer de nom</button>
+          </form>
+        </div>
+      </div>
+    <?php else: ?>
+      <div class="dm-card" id="sous-domaine">
+        <h2>Adresse en sous-domaine</h2>
+        <p>Remplacez <code><?= dm_h($shopAddress) ?></code> par une adresse courte et facile à retenir : <strong>votre-nom.<?= dm_h($subBase) ?></strong>. <?= $subPrice > 0 ? 'Montant fixe, paiement unique : <strong>' . dm_h($money($subPrice)) . '</strong>.' : 'Offerte.' ?></p>
+        <form class="dm-search" method="post" action="<?= dm_h($action) ?>">
+          <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+          <input type="hidden" name="action" value="sub_pay">
+          <div class="field">
+            <label for="dm-sub-name">Nom de l’adresse</label>
+            <div class="dm-sub-input">
+              <input type="text" id="dm-sub-name" name="label" maxlength="60" required value="<?= dm_h($subDraft) ?>" placeholder="ma-<?= dm_h($noun) ?>" autocomplete="off" autocapitalize="none" spellcheck="false">
+              <span class="dm-sub-suffix">.<?= dm_h($subBase) ?></span>
+            </div>
+          </div>
+          <?php if ($subPrice > 0 && !$stripeReady): ?>
+            <p class="dm-note">Le paiement en ligne n’est pas configuré sur ce serveur : contactez l’exploitant de la plateforme.</p>
+          <?php else: ?>
+            <button type="submit" class="btn btn-primary"><?= $subPrice > 0 ? 'Payer ' . dm_h($money($subPrice)) . ' par carte' : 'Activer cette adresse' ?></button>
+          <?php endif; ?>
+        </form>
+        <p class="dm-seo"><?= $seoNotice ?></p>
+        <p class="dm-note" style="margin-top:8px;">Adresse obtenue : <code id="dm-sub-preview"><?= dm_h(domain_sub_url(domain_sub_label_normalize($subDraft, $subBase) ?: 'nom', $subBase)) ?>/</code> — lettres, chiffres et tirets (3 à 40 caractères). La disponibilité est vérifiée avant le paiement ; l’ancienne adresse continue de fonctionner.</p>
+      </div>
+      <script>
+      (function () {
+        var input = document.getElementById('dm-sub-name'), out = document.getElementById('dm-sub-preview');
+        if (!input || !out) return;
+        var scheme = <?= json_encode(strstr(domain_sub_url('x', $subBase), '://', true)) ?>, base = <?= json_encode($subBase) ?>;
+        input.addEventListener('input', function () {
+          var s = input.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+          out.textContent = scheme + '://' + (s || 'nom') + '.' + base + '/';
+        });
+      })();
+      </script>
+    <?php endif; ?>
+
+    <?php if ($customState === ''): ?>
+      <div class="dm-card" id="deja">
+        <h2>J’ai déjà un nom de domaine</h2>
+        <p>Votre adresse a été achetée chez un autre prestataire (OVH, Gandi, Ionos…), ou vous préférez garder celle que vous possédez déjà : rattachez-la à cette <?= dm_h($noun) ?>. Aucun achat et aucun paiement — le domaine reste chez votre fournisseur, qui continue de le renouveler.</p>
+        <form class="dm-search" method="post" action="<?= dm_h($action) ?>">
+          <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+          <input type="hidden" name="action" value="custom_attach">
+          <div class="field">
+            <label for="dm-custom">Adresse existante</label>
+            <input type="text" id="dm-custom" name="domain" maxlength="253" required value="<?= dm_h($customPrefill) ?>" placeholder="Ex. la-fripe-a-naty.fr">
+          </div>
+          <button type="submit" class="btn btn-primary">Rattacher ce domaine</button>
+        </form>
+        <p class="dm-note" style="margin-top:8px;">Deux vérifications suivent : un enregistrement TXT prouve que le domaine est bien à vous, puis le domaine est pointé vers ce serveur. La mise en service (alias d’hébergement et certificat HTTPS) est faite par l’exploitant de la plateforme.</p>
+      </div>
+    <?php else: ?>
+      <div class="dm-card" id="deja">
+        <h2>Votre nom de domaine</h2>
+        <p><strong><?= dm_h($customDomain) ?></strong> · <span class="dm-badge"><?= dm_h(domain_custom_state_label($customState)) ?></span></p>
+
+        <?php if ($customState === 'active'): ?>
+          <p>Votre <?= dm_h($noun) ?> répond désormais à l’adresse <a href="https://<?= dm_h($customDomain) ?>/">https://<?= dm_h($customDomain) ?>/</a>. L’adresse historique de la plateforme continue de fonctionner.</p>
+          <p class="dm-note">Le domaine reste enregistré chez votre fournisseur : c’est lui qui prélève le renouvellement annuel. Pour le détacher, prévenez aussi l’exploitant de la plateforme afin qu’il retire l’alias d’hébergement et le certificat.</p>
+          <form method="post" action="<?= dm_h($action) ?>" onsubmit="return confirm('Détacher <?= dm_h($customDomain) ?> ? Votre <?= dm_h($noun) ?> ne répondra plus à cette adresse dès maintenant. Le domaine reste chez votre fournisseur.');">
+            <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+            <input type="hidden" name="action" value="custom_remove">
+            <button type="submit" class="btn">Détacher ce domaine</button>
+          </form>
+        <?php else: ?>
+          <p>Étape 1 — prouvez que le domaine est à vous. Ajoutez cet enregistrement TXT chez votre fournisseur de domaine (la propagation prend de quelques minutes à quelques heures) :</p>
+          <table class="dm-table">
+            <thead><tr><th>Type</th><th>Nom</th><th>Valeur</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td>TXT</td>
+                <td><code><?= dm_h('_brocs.' . $customDomain) ?></code></td>
+                <td><code><?= dm_h('brocs-verify=' . $customToken) ?></code></td>
+                <td><?= $customProofAt > 0 ? '<span class="dm-ok">Vérifié</span>' : '<span class="dm-no">En attente</span>' ?></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="dm-note">Si votre fournisseur refuse les noms commençant par « _brocs », l’enregistrement TXT peut aussi être créé sur le domaine lui-même, <code><?= dm_h($customDomain) ?></code>, avec la même valeur.</p>
+
+          <p style="margin-top:14px;">Étape 2 — pointez le domaine vers ce serveur :</p>
+          <table class="dm-table">
+            <thead><tr><th>Type</th><th>Nom</th><th>Valeur</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td>A</td>
+                <td><code>@</code> (le domaine)</td>
+                <td><code><?= $targetIp !== '' ? dm_h($targetIp) : 'adresse à demander à l’exploitant' ?></code></td>
+                <td><?= $customRoutingAt > 0 ? '<span class="dm-ok">Confirmé</span>' : '<span class="dm-no">En attente</span>' ?></td>
+              </tr>
+              <tr>
+                <td>CNAME</td>
+                <td><code>www</code></td>
+                <td><code>@</code> (ou <code><?= dm_h($customDomain) ?></code>)</td>
+                <td><?= !empty($customObserved['www']) ? '<span class="dm-ok">Vu</span>' : '<span class="dm-no">Facultatif</span>' ?></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="dm-note">Conservez la durée de vie (TTL) proposée par votre fournisseur. Si le domaine a déjà des adresses e-mail, ne touchez pas aux enregistrements MX.</p>
+
+          <?php if ($customCheckedAt > 0): ?>
+            <p class="dm-note">Dernier contrôle le <?= dm_h(date('d/m/Y à H:i', $customCheckedAt)) ?><?= !empty($customObserved['a']) ? ' — adresse vue : ' . dm_h(implode(', ', (array) $customObserved['a'])) : '' ?>.</p>
+          <?php endif; ?>
+
+          <div class="dm-actions" style="margin-top:12px;">
+            <form method="post" action="<?= dm_h($action) ?>">
+              <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+              <input type="hidden" name="action" value="custom_check">
+              <button type="submit" class="btn btn-primary">Vérifier maintenant</button>
+            </form>
+            <?php if ($customState === 'dns_ok'): ?>
+              <form method="post" action="<?= dm_h($action) ?>">
+                <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+                <input type="hidden" name="action" value="custom_request">
+                <button type="submit" class="btn btn-primary">Demander la mise en service</button>
+              </form>
+            <?php endif; ?>
+            <form method="post" action="<?= dm_h($action) ?>" onsubmit="return confirm('Détacher ce domaine ? Les consignes DNS seront oubliées et un nouveau jeton sera demandé pour le rattacher à nouveau.');">
+              <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+              <input type="hidden" name="action" value="custom_remove">
+              <button type="submit" class="btn">Détacher</button>
+            </form>
+          </div>
+
+          <?php if ($customState === 'ready'): ?>
+            <p class="dm-note" style="margin-top:10px;">La demande est chez l’exploitant de la plateforme : il déclare le domaine sur l’hébergement, émet le certificat HTTPS puis active l’adresse. Vous n’avez rien d’autre à faire.</p>
+          <?php elseif ($customState === 'dns_ok'): ?>
+            <p class="dm-note" style="margin-top:10px;">Tout est en place. Demandez la mise en service : l’exploitant émet le certificat HTTPS et active l’adresse (généralement sous 24 à 48 heures).</p>
+          <?php elseif ($customState === 'verified'): ?>
+            <p class="dm-note" style="margin-top:10px;">La propriété est confirmée. Il reste à pointer le domaine vers le serveur (étape 2) pour pouvoir demander la mise en service.</p>
+          <?php else: ?>
+            <p class="dm-note" style="margin-top:10px;">L’enregistrement TXT n’est pas encore visible. Vérifiez le nom et la valeur, puis cliquez sur « Vérifier maintenant » après la propagation.</p>
+          <?php endif; ?>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
+
+    <?php if ($ovhError !== ''): ?>
+      <div class="dm-card">
+        <h2>Achat indisponible pour le moment</h2>
+        <p><?= dm_h($ovhError) ?></p>
+      </div>
+    <?php endif; ?>
+
+    <?php if ($state === 'ordered'): ?>
+      <?php $orderedDomain = (string) ($quote['domain'] ?? ''); ?>
+      <div class="dm-card">
+        <h2>Domaine commandé</h2>
+        <p><strong><?= dm_h($orderedDomain) ?></strong> a été commandé chez OVH le <?= dm_h(date('d/m/Y à H:i', (int) ($purchase['ordered_at'] ?? time()))) ?><?= !empty($purchase['ovh_order_id']) ? ' (commande n° ' . dm_h((string) $purchase['ovh_order_id']) . ')' : '' ?>.</p>
+        <p>La réservation couvre la première année. Le renouvellement annuel se règle ensuite dans le compte OVH de la plateforme. Pour mettre le domaine en service, ses enregistrements DNS doivent pointer vers ce serveur : demandez la configuration à l’exploitant de la plateforme, qui l’ajoutera comme adresse de la <?= dm_h($noun) ?>.</p>
+      </div>
+    <?php elseif ($state === 'test_paid'): ?>
+      <div class="dm-card">
+        <h2>Paiement de test</h2>
+        <p>Le paiement de <strong><?= dm_h((string) ($quote['domain'] ?? 'votre domaine')) ?></strong> a été fait avec Stripe en mode test : aucun argent n’a été encaissé et aucune commande n’a été passée chez OVH.</p>
+        <p class="dm-note">Effacez ce paiement de test pour recommencer : la commande réelle part quand la plateforme est en mode réel.</p>
+        <form method="post" action="<?= dm_h($action) ?>">
+          <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+          <input type="hidden" name="action" value="cancel">
+          <button type="submit" class="btn">Effacer et recommencer</button>
+        </form>
+      </div>
+    <?php elseif ($state === 'paid_needs_review'): ?>
+      <div class="dm-card">
+        <h2>Paiement reçu — commande à vérifier</h2>
+        <p>Le paiement de <strong><?= dm_h((string) ($quote['domain'] ?? 'votre domaine')) ?></strong> est confirmé, mais OVH n’a pas confirmé la commande. Aucune nouvelle tentative n’est faite automatiquement.</p>
+        <p class="dm-note"><?= dm_h((string) ($purchase['message'] ?? 'L’exploitant de la plateforme vérifie le statut de la commande.')) ?></p>
+      </div>
+    <?php elseif ($state === 'ordering'): ?>
+      <div class="dm-card">
+        <h2>Commande en cours</h2>
+        <p>Le paiement de <strong><?= dm_h((string) ($quote['domain'] ?? 'votre domaine')) ?></strong> est confirmé. La commande est en cours de transmission à OVH.</p>
+        <?php if (time() - (int) ($purchase['paid_at'] ?? 0) > 600): ?>
+          <p class="dm-note">Cet état dure anormalement longtemps : contactez l’exploitant de la plateforme en indiquant le domaine.</p>
+        <?php endif; ?>
+      </div>
+    <?php elseif ($state === 'awaiting_payment'): ?>
+      <div class="dm-card">
+        <h2>Paiement en attente</h2>
+        <p>Le paiement de <strong><?= dm_h((string) ($quote['domain'] ?? '')) ?></strong> (<?= dm_h($money($amount)) ?>) est ouvert chez Stripe mais n’a pas encore été confirmé.</p>
+        <div class="dm-actions">
+          <?php if (!empty($purchase['stripe_url'])): ?>
+            <a class="btn btn-primary" href="<?= dm_h((string) $purchase['stripe_url']) ?>">Reprendre le paiement</a>
+          <?php endif; ?>
+          <form method="post" action="<?= dm_h($action) ?>" onsubmit="return confirm('Annuler ce paiement et libérer le domaine ?');">
+            <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+            <input type="hidden" name="action" value="cancel">
+            <button type="submit" class="btn">Annuler la commande</button>
+          </form>
+        </div>
+        <p class="dm-note" style="margin-top:10px;">La commande n’est transmise à OVH qu’après confirmation du paiement. Après environ une heure, le lien Stripe peut expirer : annulez puis recommencez.</p>
+      </div>
+    <?php elseif ($state === 'quoted' && !$quoteExpired): ?>
+      <div class="dm-card">
+        <h2>Devis prêt — <?= dm_h((string) ($quote['domain'] ?? '')) ?></h2>
+        <div class="dm-quote">
+          <div>
+            <p>Titulaire : <strong><?= dm_h(trim($owner['first_name'] . ' ' . $owner['last_name'])) ?><?= ($owner['organization'] ?? '') !== '' ? ' — ' . dm_h((string) $owner['organization']) : '' ?></strong><br>
+              <?= dm_h((string) ($owner['address'] ?? '')) ?>, <?= dm_h((string) ($owner['postal_code'] ?? '')) ?> <?= dm_h((string) ($owner['city'] ?? '')) ?>, <?= dm_h((string) ($owner['country'] ?? '')) ?><br>
+              <?= dm_h((string) ($owner['email'] ?? '')) ?> · <?= dm_h((string) ($owner['phone'] ?? '')) ?></p>
+            <p class="dm-note">Enregistrement pour 1 an. Devis OVH valable 24 heures. Le renouvellement annuel n’est pas inclus.</p>
+          </div>
+          <div class="price"><?= dm_h($money($amount)) ?><small><?= $margin > 0 ? 'dont ' . dm_h($money($margin)) . ' de frais de service' : 'prix OVH TTC' ?></small></div>
+        </div>
+        <div class="dm-actions" style="margin-top:12px;">
+          <?php if ($stripeReady): ?>
+            <form method="post" action="<?= dm_h($action) ?>">
+              <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+              <input type="hidden" name="action" value="pay">
+              <button type="submit" class="btn btn-primary">Payer par carte</button>
+            </form>
+          <?php else: ?>
+            <p class="dm-note">Le paiement en ligne n’est pas configuré sur ce serveur : contactez l’exploitant de la plateforme.</p>
+          <?php endif; ?>
+          <form method="post" action="<?= dm_h($action) ?>">
+            <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+            <input type="hidden" name="action" value="cancel">
+            <button type="submit" class="btn">Changer de domaine</button>
+          </form>
+        </div>
+      </div>
+    <?php elseif ($state === 'quoted' && $quoteExpired): ?>
+      <div class="dm-card">
+        <h2>Devis expiré</h2>
+        <p>Le devis pour <strong><?= dm_h((string) ($quote['domain'] ?? '')) ?></strong> a plus de 24 heures. Vérifiez à nouveau le domaine pour obtenir un prix actuel.</p>
+        <form method="post" action="<?= dm_h($action) ?>">
+          <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+          <input type="hidden" name="action" value="cancel">
+          <button type="submit" class="btn">Recommencer</button>
+        </form>
+      </div>
+    <?php else: ?>
+      <div class="dm-card">
+        <h2>Rechercher une adresse</h2>
+        <p>Saisissez le nom de votre <?= dm_h($noun) ?> (nous testons les extensions proches) ou une adresse complète avec son extension.</p>
+        <form class="dm-search" method="post" action="<?= dm_h($action) ?>">
+          <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+          <input type="hidden" name="action" value="search">
+          <div class="field">
+            <label for="dm-q">Nom de <?= dm_h($noun) ?> ou domaine</label>
+            <input type="text" id="dm-q" name="q" maxlength="120" value="<?= dm_h((string) ($search['query'] ?? ($siteName ?? ''))) ?>" placeholder="Ex. La fripe à Naty ou la-fripe-a-naty.fr"<?= $ovhError !== '' ? ' disabled' : '' ?>>
+          </div>
+          <button type="submit" class="btn btn-primary"<?= $ovhError !== '' ? ' disabled' : '' ?>>Vérifier la disponibilité</button>
+        </form>
+        <p class="dm-note" style="margin-top:8px;">La recherche interroge OVH : les prix indiqués sont ceux du jour et peuvent changer avant la commande.</p>
+      </div>
+
+      <?php if ($search): ?>
+        <div class="dm-card">
+          <h2>Résultats</h2>
+          <p class="dm-note">Recherche « <?= dm_h((string) ($search['query'] ?? '')) ?> » effectuée le <?= dm_h(date('d/m/Y à H:i', (int) ($search['searched_at'] ?? time()))) ?> auprès d’OVH · <?= $available ?> adresse<?= $available > 1 ? 's' : '' ?> disponible<?= $available > 1 ? 's' : '' ?>.</p>
+          <?php if ($searchStale): ?>
+            <p class="dm-note">Cette recherche date de plus de 24 heures : relancez-la pour obtenir un prix actuel.</p>
+          <?php endif; ?>
+          <?php if (!empty($search['price_errors'])): ?>
+            <p class="dm-note">Certains tarifs n’ont pas pu être obtenus : <?= dm_h(implode(' ; ', (array) $search['price_errors'])) ?></p>
+          <?php endif; ?>
+          <table class="dm-table">
+            <thead><tr><th>Domaine</th><th>Disponibilité</th><th class="num">1re année</th><th></th></tr></thead>
+            <tbody>
+              <?php foreach ((array) ($search['domains'] ?? []) as $candidate): ?>
+                <?php $candidateDomain = (string) ($candidate['domain'] ?? ''); ?>
+                <tr>
+                  <td><strong><?= dm_h($candidateDomain) ?></strong><?= ($candidate['kind'] ?? '') === 'alternative' ? ' <span class="dm-badge">variante</span>' : '' ?></td>
+                  <td><?= !empty($candidate['available']) ? '<span class="dm-ok">Disponible</span>' : '<span class="dm-no">Indisponible</span>' ?></td>
+                  <td class="num"><?= isset($candidate['price_cents']) ? dm_h($money((int) $candidate['price_cents'])) : '—' ?></td>
+                  <td>
+                    <?php if (!empty($candidate['available']) && !$searchStale): ?>
+                      <a class="btn-small" href="<?= dm_h($self(['choisir' => $candidateDomain])) ?>">Choisir</a>
+                    <?php elseif (($candidate['kind'] ?? '') === 'exact' && $customState === ''): ?>
+                      <a class="btn-small" href="<?= dm_h($self(['deja' => $candidateDomain], '#deja')) ?>">Déjà à vous ?</a>
+                    <?php endif; ?>
+                  </td>
+                </tr>
+                <?php if (!empty($candidate['price_error'])): ?>
+                  <tr><td colspan="4" class="dm-no"><?= dm_h((string) $candidate['price_error']) ?></td></tr>
+                <?php endif; ?>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+
+      <?php if ($chosen): ?>
+        <div class="dm-card">
+          <h2>Titulaire du domaine <?= dm_h((string) $chosen['domain']) ?></h2>
+          <p>Ces informations servent à créer le contact titulaire chez OVH. La personne ou l’organisation indiquée devient le propriétaire légal du domaine.</p>
+          <form class="dm-form" method="post" action="<?= dm_h($action) ?>" autocomplete="on">
+            <input type="hidden" name="csrf" value="<?= dm_h($csrf) ?>"><?= $hidden ?>
+            <input type="hidden" name="action" value="quote">
+            <input type="hidden" name="domain" value="<?= dm_h((string) $chosen['domain']) ?>">
+            <div class="field-row-2">
+              <div class="field"><label for="dm-first">Prénom *</label><input type="text" id="dm-first" name="owner_first_name" maxlength="60" required value="<?= dm_h((string) $owner['first_name']) ?>"></div>
+              <div class="field"><label for="dm-last">Nom *</label><input type="text" id="dm-last" name="owner_last_name" maxlength="60" required value="<?= dm_h((string) $owner['last_name']) ?>"></div>
+            </div>
+            <div class="field-row-2">
+              <div class="field"><label for="dm-form">Forme juridique *</label>
+                <select id="dm-form" name="owner_legal_form" required>
+                  <?php foreach (DOMAIN_SHOP_LEGAL_FORMS as $key => $label): ?>
+                    <option value="<?= dm_h($key) ?>"<?= (string) $owner['legal_form'] === $key ? ' selected' : '' ?>><?= dm_h($label) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="field"><label for="dm-org">Entreprise / organisation (si différente du nom)</label><input type="text" id="dm-org" name="owner_organization" maxlength="100" value="<?= dm_h((string) $owner['organization']) ?>"></div>
+            </div>
+            <div class="field-row-4">
+              <div class="field"><label for="dm-cp">Code postal *</label><input type="text" id="dm-cp" name="owner_postal_code" maxlength="20" required value="<?= dm_h((string) $owner['postal_code']) ?>"></div>
+              <div class="field"><label for="dm-city">Ville *</label><input type="text" id="dm-city" name="owner_city" maxlength="80" required value="<?= dm_h((string) $owner['city']) ?>"></div>
+            </div>
+            <div class="field"><label for="dm-address">Adresse *</label><input type="text" id="dm-address" name="owner_address" maxlength="160" required value="<?= dm_h((string) $owner['address']) ?>"></div>
+            <div class="field-row-2">
+              <div class="field"><label for="dm-country">Pays (code ISO) *</label><input type="text" id="dm-country" name="owner_country" maxlength="2" pattern="[A-Za-z]{2}" required value="<?= dm_h((string) $owner['country']) ?>"></div>
+              <div class="field"><label for="dm-phone">Téléphone *</label><input type="tel" id="dm-phone" name="owner_phone" maxlength="30" required value="<?= dm_h((string) $owner['phone']) ?>" placeholder="06 12 34 56 78"></div>
+            </div>
+            <div class="field"><label for="dm-email">E-mail du titulaire *</label><input type="email" id="dm-email" name="owner_email" maxlength="254" required value="<?= dm_h((string) $owner['email']) ?>"></div>
+            <label class="check"><input type="checkbox" name="owner_legal_age" value="1" required> Je certifie que le titulaire est majeur et habilité à enregistrer ce domaine.</label>
+            <label class="check"><input type="checkbox" name="domain_terms" value="1" required> J’accepte les conditions d’enregistrement d’OVH et les règles de l’extension choisie.</label>
+            <label class="check"><input type="checkbox" name="waive_retraction" value="1" required> Je demande l’exécution immédiate du service et renonce au délai de rétractation une fois le domaine enregistré.</label>
+            <div class="dm-actions">
+              <button type="submit" class="btn btn-primary">Vérifier le prix chez OVH</button>
+              <a class="btn" href="<?= dm_h($self()) ?>">Annuler</a>
+            </div>
+            <p class="dm-note">Le devis et le paiement suivent : le prix est confirmé à l’étape suivante avant tout encaissement.</p>
+          </form>
+        </div>
+      <?php endif; ?>
+    <?php endif; ?>
+    <?php
+}
+
+/**
+ * Retour de Stripe (paramètre ?s=cs_…) : la session est relue chez Stripe, jamais
+ * crue sur parole, puis appliquée une seule fois. Rend [message, 'ok'|'error'].
+ */
+function domain_panel_apply_return(string $sessionId): array
+{
+    if (!preg_match('/^cs_[A-Za-z0-9_]+$/', $sessionId)) return ['Session de paiement invalide.', 'error'];
+    try {
+        $session = saas_stripe_request('GET', '/checkout/sessions/' . rawurlencode($sessionId));
+        $key = (string) ($session['metadata']['shop'] ?? '');
+        $noun = $key !== '' && domain_owner_key_valid($key) ? domain_owner_noun($key) : 'boutique';
+
+        if (($session['metadata']['type'] ?? '') === 'shop_subdomain') {
+            $subResult = domain_sub_apply_session($session);
+            $subLabel = (string) ($subResult['record']['label'] ?? '');
+            if ($subResult['state'] === 'renamed') {
+                return ['Merci ! Votre adresse est devenue ' . domain_sub_url($subLabel) . '/ (l’ancien nom en sous-domaine ne fonctionne plus).', 'ok'];
+            }
+            if ($subResult['state'] === 'activated') {
+                $subTest = isset($subResult['record']['livemode']) && !$subResult['record']['livemode'] ? ' (paiement de test)' : '';
+                return ['Merci ! Votre ' . $noun . ' répond maintenant à ' . domain_sub_url($subLabel) . '/' . $subTest . '.', 'ok'];
+            }
+            if ($subResult['state'] === 'already') {
+                return ['Ce paiement est déjà pris en compte : l’adresse ' . domain_sub_url($subLabel) . '/ est en service.', 'ok'];
+            }
+            if ($subResult['state'] === 'unpaid') {
+                return ['Le paiement n’est pas encore confirmé par Stripe. L’adresse sera activée dès sa confirmation.', 'error'];
+            }
+            return ['Le paiement a été reçu, mais l’adresse n’a pas pu être activée : ' . (string) ($subResult['message'] ?? 'contactez l’exploitant de la plateforme.'), 'error'];
+        }
+
+        $result = domain_shop_apply_session($session);
+        $domain = (string) ($result['purchase']['quote']['domain'] ?? 'votre domaine');
+        if ($result['state'] === 'ordered') {
+            return ['Merci ! La commande de ' . $domain . ' a été transmise à OVH.', 'ok'];
+        }
+        if ($result['state'] === 'test') {
+            return ['Paiement de test enregistré : la commande de ' . $domain . ' n’a pas été transmise à OVH (aucun débit réel).', 'error'];
+        }
+        if ($result['state'] === 'already') {
+            $alreadyState = (string) ($result['purchase']['state'] ?? '');
+            $alreadyDomain = (string) ($result['purchase']['quote']['domain'] ?? 'ce domaine');
+            if ($alreadyState === 'ordered') return ['Ce paiement est déjà pris en compte : la commande de ' . $alreadyDomain . ' est enregistrée.', 'ok'];
+            if ($alreadyState === 'test_paid') return ['Ce paiement de test est déjà enregistré : aucune commande OVH n’a été passée.', 'error'];
+            if ($alreadyState === 'paid_needs_review') return ['Ce paiement est déjà pris en compte, mais OVH n’a pas confirmé la commande. L’exploitant de la plateforme la vérifie.', 'error'];
+            return ['Ce paiement est déjà pris en compte : la commande de ' . $alreadyDomain . ' est en cours de transmission à OVH.', 'ok'];
+        }
+        if ($result['state'] === 'review') {
+            return ['Le paiement est confirmé, mais OVH n’a pas encore confirmé la commande. L’exploitant de la plateforme vérifie le statut.', 'error'];
+        }
+        if ($result['state'] === 'unpaid') {
+            return ['Le paiement n’est pas encore confirmé par Stripe. La commande partira dès sa confirmation.', 'error'];
+        }
+        return ['Le paiement a été reçu, mais la commande du domaine n’a pas pu être appliquée : ' . (string) ($result['message'] ?? 'vérifiez le domaine et recommencez.'), 'error'];
+    } catch (Throwable $ex) {
+        error_log('domain return: ' . $ex->getMessage());
+        return ['Impossible de vérifier le paiement pour le moment : réessayez dans un instant.', 'error'];
+    }
+}

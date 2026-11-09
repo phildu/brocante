@@ -23,6 +23,7 @@ const SAAS_EVENT_TYPES = [
     'addon_subscribed'      => ['{Ext} Annonces {?souscrit|souscrite}', 'paiement', 'ok'],
     'addon_canceled'        => ['{Ext} Annonces {?résilié|résiliée}', 'suppression', 'bad'],
     'domain_ordered'        => ['Nom de domaine commandé (OVH)', 'paiement', 'ok'],
+    'subdomain_activated'   => ['Adresse en sous-domaine activée', 'paiement', 'ok'],
     'payment_failed'        => ['Paiement refusé', 'paiement', 'bad'],
     'payment_refunded'      => ['Paiement remboursé', 'paiement', 'warn'],
     'subscription_canceled' => ['Abonnement résilié', 'suppression', 'bad'],

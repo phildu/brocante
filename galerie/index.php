@@ -8,6 +8,8 @@ require_once __DIR__ . '/../includes/gallery-loyalty.php';
 require_once __DIR__ . '/../includes/gallery-booking.php';
 require_once __DIR__ . '/../includes/gallery-hours.php';
 require_once __DIR__ . '/../includes/gallery-bourse.php';
+require_once __DIR__ . '/../includes/gallery-modules.php';
+require_once __DIR__ . '/../includes/gallery-sponsors.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/promo.php';
 require_once __DIR__ . '/../includes/banner-slides.php';
@@ -874,6 +876,33 @@ $metaDescription = $sector ? ($sector['note'] !== '' ? $sector['note'] : $sector
         <?php endif; ?>
         <p><a class="btn" href="<?= e($gbUrl) ?>">Proposer une pièce<?= $gbCount ? ' · voir les ' . $gbCount . ' recherche' . ($gbCount > 1 ? 's' : '') : '' ?></a></p>
       </section>
+    <?php endif; ?>
+
+    <?php
+      // Extension « Sponsors & partenaires » (includes/gallery-sponsors.php) : fiches visibles, rangées par niveau.
+      $sponsorGroups = $gallery['published'] && gm_enabled($gallery, 'sponsors') ? gsp_public($gallery['slug']) : [];
+    ?>
+    <?php if ($sponsorGroups): ?>
+    <section id="partenaires" aria-labelledby="h-partenaires">
+      <h2 id="h-partenaires"><?= count($sponsorGroups) === 1 ? e(GSP_TIERS[array_key_first($sponsorGroups)][1]) : 'Ils nous soutiennent' ?></h2>
+      <?php foreach ($sponsorGroups as $tierKey => $sponsors): $big = $tierKey === 'principal'; ?>
+        <?php if (count($sponsorGroups) > 1): ?><h3 style="margin:18px 0 8px;font-size:1rem;color:var(--ink-soft);font-weight:600;"><?= e(GSP_TIERS[$tierKey][1]) ?></h3><?php endif; ?>
+        <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(<?= $big ? 260 : 170 ?>px,1fr));">
+          <?php foreach ($sponsors as $sp):
+              $tag = $sp['url'] !== '' ? 'a' : 'div'; ?>
+            <<?= $tag ?> <?= $sp['url'] !== '' ? 'href="' . e($sp['url']) . '" target="_blank" rel="noopener nofollow sponsored"' : '' ?> style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;text-align:center;text-decoration:none;color:inherit;">
+              <?php if ($sp['logo'] !== ''): ?>
+                <span style="display:flex;align-items:center;justify-content:center;width:100%;height:<?= $big ? 110 : 80 ?>px;background:#fff;border-radius:8px;padding:8px;box-sizing:border-box;"><img src="/<?= e($sp['logo']) ?>" alt="<?= e($sp['name']) ?>" loading="lazy" style="max-width:100%;max-height:100%;object-fit:contain;"></span>
+                <span style="font-weight:600;font-size:.9rem;"><?= e($sp['name']) ?></span>
+              <?php else: ?>
+                <span style="font-weight:700;font-size:<?= $big ? '1.15rem' : '1rem' ?>;padding:18px 0;"><?= e($sp['name']) ?></span>
+              <?php endif; ?>
+              <?php if ($sp['description'] !== ''): ?><span style="color:var(--ink-soft);font-size:.85rem;"><?= e($sp['description']) ?></span><?php endif; ?>
+            </<?= $tag ?>>
+          <?php endforeach; ?>
+        </div>
+      <?php endforeach; ?>
+    </section>
     <?php endif; ?>
   </main>
 <?php endif; ?>

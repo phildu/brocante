@@ -11,6 +11,17 @@ $clear = [
 ];
 if (($params['domain'] ?? '') !== '') $clear['domain'] = $params['domain'];
 setcookie(session_name(), '', $clear);
+// Appareil de confiance : le jeton est révoqué en base et son cookie effacé.
+require_once __DIR__ . '/../includes/remember.php';
+$trustedCookie = (string) ($_COOKIE[remember_cookie_name()] ?? '');
+if ($trustedCookie !== '') {
+    try {
+        require_once __DIR__ . '/../config.php';
+        remember_revoke_cookie(db(), $trustedCookie);
+    } catch (Throwable $e) {
+    }
+    remember_set_cookie('', time() - 3600);
+}
 $_SESSION = [];
 session_destroy();
 header('Location: /admin/login.php');

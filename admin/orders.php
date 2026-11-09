@@ -66,7 +66,7 @@ $awaitingOrders = array_values(array_filter($orders, static fn ($o) => (string) 
     <h1 style="font-size:2rem;margin:12px 0 30px;">Commandes (<?= count($orders) ?>)</h1>
 
     <?php if (!shop_checkout_ready()): ?>
-      <p class="publish-status" data-kind="error" style="margin-bottom:24px;">Aucun moyen de paiement configuré — aucune commande ne pourra être encaissée tant que Stripe, Monetico, PayPal, Revolut ou un IBAN de virement SEPA n’est pas réglé.</p>
+      <p class="publish-status" data-kind="error" style="margin-bottom:24px;">Aucun moyen de paiement configuré — aucune commande ne pourra être encaissée tant que Stripe, Monetico, PayPal, Revolut, SumUp ou un IBAN de virement SEPA n’est pas réglé.</p>
     <?php endif; ?>
 
     <?php if ($flash): ?>
@@ -255,6 +255,8 @@ $awaitingOrders = array_values(array_filter($orders, static fn ($o) => (string) 
                       <span style="font-size:0.78rem;color:var(--ink-soft);">Référence Monetico : <?= h((string) ($o['payment_reference'] ?: $o['provider_checkout_id'])) ?><?= !empty($o['payment_authorization']) ? ' · autorisation ' . h($o['payment_authorization']) : '' ?></span>
                     <?php elseif ($provider === 'revolut' && !empty($o['provider_payment_id'])): ?>
                       <span style="font-size:0.78rem;color:var(--ink-soft);">Paiement Revolut : <?= h($o['provider_payment_id']) ?></span>
+                    <?php elseif ($provider === 'sumup' && !empty($o['provider_payment_id'])): ?>
+                      <span style="font-size:0.78rem;color:var(--ink-soft);">Paiement SumUp : <?= h($o['provider_payment_id']) ?></span>
                     <?php elseif ($provider === 'sepa'): ?>
                       <span style="font-size:0.78rem;color:var(--ink-soft);">Virement SEPA — référence <?= h((string) ($o['payment_reference'] ?: 'B' . (int) $o['id'])) ?><?= !empty($o['payment_date']) ? ' · reçu le ' . h(date('d/m/Y', strtotime($o['payment_date']))) : '' ?></span>
                     <?php endif; ?>
@@ -283,6 +285,13 @@ $awaitingOrders = array_values(array_filter($orders, static fn ($o) => (string) 
                         <input type="hidden" name="action" value="refresh_revolut">
                         <input type="hidden" name="id" value="<?= (int) $o['id'] ?>">
                         <button type="submit" class="btn-small">Vérifier auprès de Revolut</button>
+                      </form>
+                    <?php elseif ($provider === 'sumup'): ?>
+                      <form method="post" action="/admin/update-order.php" style="margin:0;">
+                        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                        <input type="hidden" name="action" value="refresh_sumup">
+                        <input type="hidden" name="id" value="<?= (int) $o['id'] ?>">
+                        <button type="submit" class="btn-small">Vérifier auprès de SumUp</button>
                       </form>
                     <?php elseif ($provider === 'sepa'): ?>
                       <form method="post" action="/admin/update-order.php" style="margin:0;" onsubmit="return confirm('Confirmer que le virement de <?= h(format_cents((int) $o['amount_total'])) ?> (référence <?= h((string) ($o['payment_reference'] ?: 'B' . (int) $o['id'])) ?>) a bien été reçu sur votre compte ?');">

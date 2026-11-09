@@ -1,7 +1,7 @@
 <?php
 
 // Ouvre la session du commerce actif. Un commerce servi sous un préfixe
-// d'adresse (brocs.arrimage.com/<slug>/) partage son domaine avec les autres :
+// d'adresse (bricbrok.com/<slug>/) partage son domaine avec les autres :
 // son cookie de session a donc un nom et un chemin propres, sinon le panier
 // et la connexion admin d'un commerce se retrouveraient dans les autres.
 // Sans préfixe (sous-domaine, .tenant), le cookie garde son nom et son chemin habituels.

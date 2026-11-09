@@ -3,6 +3,7 @@ require __DIR__ . '/_bootstrap.php';
 fv_require_auth();
 
 $ctx = fv_current();
+$gal = fv_is_scoped();      // carnet d'une galerie ou d'une boutique (extension « Force de vente ») : pas d'appels, de mailing ni de pitch de la plateforme
 $member = $ctx['member'];
 $pdo = fv_db();
 $filters = [
@@ -48,7 +49,7 @@ if ($viewId > 0 && !$editing && !$isNew) {
     fv_layout_start($prospect['business'] !== '' ? $prospect['business'] : $prospect['name'], [
         'eyebrow' => 'Prospect · ' . fv_status_label($prospect['status']),
         'actions' => '<a class="fv-btn fv-btn-sm" href="prospects.php">' . fv_icon('arrow', 14) . ' Liste</a>'
-            . ($prospect['phone'] !== '' ? '<a class="fv-btn fv-btn-sm fv-btn-primary" href="appels.php?id=' . (int) $prospect['id'] . '">' . fv_icon('phone', 14) . ' Appeler</a>' : ''),
+            . ($prospect['phone'] !== '' ? '<a class="fv-btn fv-btn-sm fv-btn-primary" href="' . ($gal ? 'tel:' . e($prospect['phone']) : 'appels.php?id=' . (int) $prospect['id']) . '">' . fv_icon('phone', 14) . ' Appeler</a>' : ''),
     ]);
     ?>
     <div class="fv-grid fv-grid-2-1">
@@ -68,11 +69,15 @@ if ($viewId > 0 && !$editing && !$isNew) {
               <div><dt>Adresse</dt><dd><?= e(trim($prospect['address'] . ($prospect['postal'] !== '' ? "\n" . $prospect['postal'] : '') . ($prospect['city'] !== '' ? ' ' . $prospect['city'] : '')) ?: '—') ?></dd></div>
               <div><dt>Zone</dt><dd><?= e($prospect['zone'] !== '' ? $prospect['zone'] : '—') ?></dd></div>
               <div><dt>Source</dt><dd><?= e(fv_source_label($prospect['source'])) ?></dd></div>
-              <div><dt>Propriétaire</dt><dd><?= e($prospect['owner_name'] ?? 'Direction') ?></dd></div>
+              <?php if (!$gal): ?><div><dt>Propriétaire</dt><dd><?= e($prospect['owner_name'] ?? 'Direction') ?></dd></div><?php endif; ?>
               <div><dt>Prochaine action</dt><dd><?= e(fv_date($prospect['next_action_at'])) ?> · priorité <?= (int) $prospect['priority'] ?>/3</dd></div>
               <div><dt>Créé le</dt><dd><?= e(fv_datetime($prospect['created_at'])) ?></dd></div>
+              <?php foreach (fv_custom_fields_of($prospect) as $cfLabel => $cfValue): ?>
+                <div><dt><?= e($cfLabel) ?></dt><dd><?= preg_match('#^https?://\S+$#i', $cfValue) ? '<a href="' . e($cfValue) . '" target="_blank" rel="noopener noreferrer">' . e(preg_replace('#^https?://(www\.)?#i', '', rtrim($cfValue, '/'))) . '</a>' : e($cfValue) ?></dd></div>
+              <?php endforeach; ?>
               <?php if ($prospect['shop_slug'] !== ''): ?><div><dt>Boutique</dt><dd><code><?= e($prospect['shop_slug']) ?></code></dd></div><?php endif; ?>
             </dl>
+            <?php if (!empty($prospect['optout'])): ?><div class="fv-note"><b>Désinscrit</b> : ce prospect a demandé à ne plus être contacté par e-mail.</div><?php endif; ?>
             <?php if ($prospect['notes'] !== ''): ?><div class="fv-note"><?= nl2br(e($prospect['notes'])) ?></div><?php endif; ?>
             <div class="fv-actions">
               <a class="fv-btn fv-btn-sm" href="prospects.php?editer=<?= (int) $prospect['id'] ?>">Modifier la fiche</a>
@@ -151,6 +156,34 @@ if ($viewId > 0 && !$editing && !$isNew) {
           </div>
         </section>
 
+        <?php if (fv_is_gallery()): ?>
+        <?php
+          $sentCount = 0;
+          foreach ($timeline as $a) if ($a['kind'] === 'email' && str_starts_with((string) $a['notes'], VS_SENT_NOTE)) $sentCount++;
+          $tpl = ga_prospect_template(fv_scope()['gallery']);
+        ?>
+        <section class="fv-card">
+          <div class="fv-card-head"><div><h2>Écrire au commerce</h2><p><?= $sentCount ?> message<?= $sentCount > 1 ? 's' : '' ?> de recrutement envoyé<?= $sentCount > 1 ? 's' : '' ?> · 4 au plus, un tous les 3 jours.</p></div></div>
+          <div class="fv-card-body">
+            <?php if ($prospect['email'] === ''): ?><p class="fv-hint">Ce prospect n’a pas d’adresse e-mail : ajoutez-la sur la fiche pour lui écrire.</p>
+            <?php elseif (!empty($prospect['optout'])): ?><p class="fv-hint">Ce prospect s’est désinscrit : il ne reçoit plus de message.</p>
+            <?php else: ?>
+            <form class="fv-form" method="post" action="prospect-action.php">
+              <input type="hidden" name="csrf" value="<?= e(fv_csrf()) ?>">
+              <input type="hidden" name="action" value="envoyer">
+              <input type="hidden" name="id" value="<?= (int) $prospect['id'] ?>">
+              <input type="hidden" name="retour" value="prospects.php?id=<?= (int) $prospect['id'] ?>">
+              <label class="fv-field">Objet<input name="subject" maxlength="150" value="<?= e($tpl['subject']) ?>"></label>
+              <label class="fv-field">Message
+                <textarea name="body" rows="9"><?= e($tpl['body']) ?></textarea>
+                <span class="fv-hint">Variables : {nom} {galerie} {lien}. <b>{desinscription}</b> est obligatoire : c’est le lien pour ne plus être contacté. Réservé aux professionnels dont vous avez les coordonnées professionnelles.</span>
+              </label>
+              <button class="fv-btn fv-btn-primary" type="submit" data-confirm="Envoyer ce message à <?= e($prospect['email']) ?> ?">Envoyer</button>
+            </form>
+            <?php endif; ?>
+          </div>
+        </section>
+        <?php elseif (!$gal): ?>
         <section class="fv-card">
           <div class="fv-card-head"><div><h2>Passer à l’action</h2></div></div>
           <div class="fv-card-body">
@@ -160,6 +193,7 @@ if ($viewId > 0 && !$editing && !$isNew) {
             <a class="fv-btn" href="pitch.php"><?= fv_icon('presentation', 15) ?> Ouvrir le pitch</a>
           </div>
         </section>
+        <?php endif; ?>
       </div>
     </div>
     <?php
@@ -186,14 +220,17 @@ $form = [
     'owner_id' => $editing['owner_id'] ?? ($member['id'] ?? 0),
     'notes' => $editing['notes'] ?? '',
     'next_action_at' => $editing['next_action_at'] ?? '',
+    'custom_fields' => fv_custom_fields_of($editing),
 ];
 $showForm = $isNew || $editing !== null;
 $defaultOwner = (int) ($member['id'] ?? 0);
 
 fv_layout_start('Prospects', [
     'eyebrow' => 'Terrain · ' . $total . ' fiche' . ($total > 1 ? 's' : ''),
-    'desc' => 'Le carnet de bord de la prospection : coordonnées, statut, prochaine action et historique. Chaque fiche est reliée aux appels, visites, mailings et codes.',
+    'desc' => $gal ? 'Votre carnet de prospects : coordonnées, statut, prochaine action et historique des échanges. Il est à vous : aucune autre galerie ne le voit.'
+        : 'Le carnet de bord de la prospection : coordonnées, statut, prochaine action et historique. Chaque fiche est reliée aux appels, visites, mailings et codes.',
     'actions' => '<a class="fv-btn fv-btn-sm" href="prospects.php?export=1&amp;' . e(http_build_query(array_filter($filters))) . '">' . fv_icon('download', 14) . ' CSV</a>'
+        . '<a class="fv-btn fv-btn-sm" href="prospects-import.php">' . fv_icon('plus', 14) . ' Importer un fichier</a>'
         . '<a class="fv-btn fv-btn-sm fv-btn-primary" href="prospects.php?nouveau=1">' . fv_icon('plus', 14) . ' Nouveau prospect</a>',
 ]);
 ?>
@@ -269,6 +306,16 @@ fv_layout_start('Prospects', [
         <?php else: ?>
           <input type="hidden" name="owner_id" value="<?= $defaultOwner ?>">
         <?php endif; ?>
+        <div class="fv-field full">
+          <span>Champs personnalisés <small style="font-weight:400;">(emplacement, Instagram, Facebook… vide = supprimé)</small></span>
+          <?php $cfRows = $form['custom_fields']; $cfRows[''] = ''; $cfRows[' '] = ''; $cfi = 0; ?>
+          <?php foreach ($cfRows as $cfLabel => $cfValue): $cfLabel = trim((string) $cfLabel); ?>
+            <div style="display:grid;grid-template-columns:minmax(120px,1fr) 2fr;gap:8px;margin-top:6px;">
+              <input name="custom_fields[<?= $cfi ?>][label]" maxlength="60" value="<?= e($cfLabel) ?>" placeholder="Intitulé (ex. Emplacement)" aria-label="Intitulé du champ">
+              <input name="custom_fields[<?= $cfi ?>][value]" maxlength="500" value="<?= e($cfValue) ?>" placeholder="Valeur" aria-label="Valeur du champ">
+            </div>
+          <?php $cfi++; endforeach; ?>
+        </div>
         <label class="fv-field full">Notes
           <textarea name="notes" rows="3" placeholder="Contexte, besoins, objections, prochain angle…"><?= e($form['notes']) ?></textarea>
         </label>
@@ -299,7 +346,7 @@ fv_layout_start('Prospects', [
         <option value="">Toutes les zones</option>
         <?php foreach ($zones as $z): ?><option value="<?= e($z) ?>"<?= $filters['zone'] === $z ? ' selected' : '' ?>><?= e($z) ?></option><?php endforeach; ?>
       </select>
-      <?php if ($ctx['manager']): ?>
+      <?php if ($ctx['manager'] && !$gal): ?>
         <select name="owner" onchange="this.form.submit()">
           <option value="0">Toute l’équipe</option>
           <?php foreach ($members as $m): ?><option value="<?= (int) $m['id'] ?>"<?= $filters['owner_id'] === (int) $m['id'] ? ' selected' : '' ?>><?= e($m['name']) ?></option><?php endforeach; ?>
@@ -321,7 +368,7 @@ fv_layout_start('Prospects', [
       <div class="fv-empty"><b>Aucun prospect ne correspond</b>Modifiez les filtres ou <a href="prospects.php?nouveau=1">créez une fiche</a>.</div>
     <?php else: ?>
       <table class="fv-table">
-        <thead><tr><th>Commerce / contact</th><th>Statut</th><th>Coordonnées</th><th>Prochaine action</th><th>Propriétaire</th><th class="right">Actions</th></tr></thead>
+        <thead><tr><th>Commerce / contact</th><th>Statut</th><th>Coordonnées</th><th>Prochaine action</th><?php if (!$gal): ?><th>Propriétaire</th><?php endif; ?><th class="right">Actions</th></tr></thead>
         <tbody>
           <?php foreach ($list as $p): ?>
             <tr>
@@ -340,10 +387,10 @@ fv_layout_start('Prospects', [
                   <span <?= $p['next_action_at'] < fv_today() ? 'style="color:var(--fv-warn);font-weight:700;"' : '' ?>><?= e(fv_date($p['next_action_at'])) ?></span>
                 <?php else: ?><span class="sub">À planifier</span><?php endif; ?>
               </td>
-              <td><span class="sub"><?= e($p['owner_name'] ?? 'Direction') ?></span></td>
+              <?php if (!$gal): ?><td><span class="sub"><?= e($p['owner_name'] ?? 'Direction') ?></span></td><?php endif; ?>
               <td>
                 <div class="actions">
-                  <?php if ($p['phone'] !== ''): ?><a class="fv-btn fv-btn-sm" href="appels.php?id=<?= (int) $p['id'] ?>" title="Appeler"><?= fv_icon('phone', 13) ?></a><?php endif; ?>
+                  <?php if ($p['phone'] !== ''): ?><a class="fv-btn fv-btn-sm" href="<?= $gal ? 'tel:' . e($p['phone']) : 'appels.php?id=' . (int) $p['id'] ?>" title="Appeler"><?= fv_icon('phone', 13) ?></a><?php endif; ?>
                   <a class="fv-btn fv-btn-sm" href="prospects.php?id=<?= (int) $p['id'] ?>" title="Fiche"><?= fv_icon('eye', 13) ?></a>
                   <a class="fv-btn fv-btn-sm" href="prospects.php?editer=<?= (int) $p['id'] ?>" title="Modifier">✎</a>
                 </div>
@@ -356,7 +403,7 @@ fv_layout_start('Prospects', [
   </div>
 
   <details class="fv-card-pad" style="border-top:1px solid var(--fv-line);">
-    <summary style="cursor:pointer;font-weight:600;font-size:.86rem;">Importer des prospects (copier-coller CSV)</summary>
+    <summary style="cursor:pointer;font-weight:600;font-size:.86rem;">Importer des prospects (copier-coller CSV) — ou <a href="prospects-import.php">depuis un fichier Excel, CSV ou base SQLite</a></summary>
     <form class="fv-form" method="post" action="prospect-action.php" style="margin-top:12px;">
       <input type="hidden" name="csrf" value="<?= e(fv_csrf()) ?>">
       <input type="hidden" name="action" value="importer">

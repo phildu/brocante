@@ -13,6 +13,7 @@ function payment_badge_labels(): array
         'mastercard' => 'Mastercard',
         'cb' => 'Carte Bancaire',
         'paypal' => 'PayPal',
+        'wero' => 'Wero',
         'sepa' => 'Virement SEPA',
     ];
 }
@@ -29,6 +30,7 @@ function payment_badge_keys(): array
         'stripe' => ['visa', 'mastercard', 'cb'],
         'monetico' => ['visa', 'mastercard', 'cb'],
         'revolut' => ['visa', 'mastercard', 'cb'],
+        'sumup' => ['visa', 'mastercard', 'cb'],
         'paypal' => ['paypal'],
         'sepa' => ['sepa'],
     ];
@@ -36,7 +38,9 @@ function payment_badge_keys(): array
 
     $keys = [];
     foreach (array_keys($providers) as $provider) {
-        foreach ($perProvider[$provider] ?? [] as $key) {
+        $logos = $perProvider[$provider] ?? [];
+        if ($provider === 'stripe' && function_exists('stripe_wero_enabled') && stripe_wero_enabled()) $logos[] = 'wero';
+        foreach ($logos as $key) {
             if (!in_array($key, $keys, true) && is_file(payment_badge_file($key))) $keys[] = $key;
         }
     }

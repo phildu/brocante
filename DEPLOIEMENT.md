@@ -16,12 +16,24 @@ Document de travail (jamais envoyé en ligne). Rien ne se déploie sans commande
 | `APP_ENV` | `local` (présence de `config.local.php`) | `preprod` (`.app-env` déposé par le script) | `prod` (`.app-env` déposé par le script) |
 | Données | bases `*.db` locales, jetables | bases propres à la préprod | **données réelles** : jamais écrasées |
 | Paiements | clés de test | clés de **test** uniquement | clés **live**, saisies sur le serveur |
-| Moteurs de recherche | `noindex` | `noindex` + `robots.txt` « Disallow: / » | indexable |
+| Moteurs de recherche | `noindex` | `noindex` + `robots.txt` « Disallow: / » | **fermé** (`noindex` + `Disallow: /`) tant que `includes/indexation.php` vaut `false` ; indexable après le « go indexation » |
 | Accès de déploiement | — | `.env.deploy.portail` (ou `.env.deploy.<slug>`) | `.env.deploy.portail.prod` (ou `.env.deploy.<slug>.prod`) |
 | Dossier serveur | — | `/www/pre-bricbrok/` (aujourd'hui encore `/www/brocs/`, voir « Noms des dossiers ») | `/www/bricbrok/` (différent de la préprod : le script refuse le même) |
 
 Un serveur sans `.app-env` est traité comme **préprod** (jamais comme prod) : `includes/app-env.php`.
 `/health.php` annonce l'environnement (`"env":"prod"`) ; les contrôles s'en servent pour détecter un mauvais dossier.
+
+## Moteurs de recherche : fermé jusqu'au « go indexation »
+
+La prod est **fermée aux robots** par défaut : chaque page PHP envoie `X-Robots-Tag: noindex, nofollow` et `/robots.txt`
+(servi par `robots.php`, réécriture du `.htaccess`) répond `Disallow: /`. L'interrupteur est `includes/indexation.php`
+(`return false;`, versionné). Local et préprod restent fermés dans tous les cas.
+
+- **Ouvrir** (uniquement sur « go indexation » de l'utilisateur) : passer `includes/indexation.php` à `return true;`, PR, puis
+  préprod → prod comme d'habitude. Le test `testCommittedSwitchIsClosed` doit alors être adapté dans la même PR.
+- **Refermer** : remettre `return false;` et redéployer. Une page déjà indexée n'est retirée de Google qu'après un nouveau
+  passage du robot ; `Disallow: /` l'empêche de voir le `noindex` : pour désindexer vite, utiliser la Search Console.
+- Vérifier : `curl -sI https://www.bricbrok.com/ | grep -i x-robots` et `curl -s https://www.bricbrok.com/robots.txt`.
 
 ## Noms des dossiers
 
@@ -81,7 +93,7 @@ Cible : **prod = `https://www.bricbrok.com`**, **préprod = `https://pre.bricbro
 - `.env.deploy.*.prod` visant le même serveur et dossier que la préprod → refus ;
 - `--with-db` interdit en prod (écraserait commandes et données) ; `--first-install` réservé à un seul commerce (hors `--portail` :
   les bases absentes sont créées à la première visite) ;
-- confirmation `PROD` au clavier, terminal interactif obligatoire ; `scripts/release.sh prod` exige la branche `main`.
+- confirmation `PROD` au clavier (terminal interactif), **ou** `--confirm-prod` : la confirmation est alors le clic d'approbation de l'application sur la commande exacte (règle `ask` sur `scripts/release.sh prod` dans `.claude/settings.local.json`) ; `scripts/release.sh prod` exige la branche `main`.
 - **Correctif urgent** : `--skip-preprod-check` saute seulement le contrôle « déjà en préprod ». Déployer ensuite la même
   version en préprod pour rattraper l'écart, et noter ici la date et la raison.
 
@@ -93,8 +105,9 @@ Cible : **prod = `https://www.bricbrok.com`**, **préprod = `https://pre.bricbro
 - [ ] `scripts/release.sh prod --portail --dry-run` puis déploiement réel **avec `--no-backup`** (aucune base n'existe encore sur le serveur, la sauvegarde
   échouerait) : `scripts/release.sh prod --portail --no-backup`. Les bases se créent à la première visite. Dès le déploiement suivant, sans cette option.
 - [ ] `scripts/smoke-remote.sh https://<domaine-prod> prod` au vert ; ouvrir `/portail/` et se connecter.
-- [ ] **Paiements** : saisir les clés **live** (Stripe, et Revolut/PayPal/Monetico si utilisés) depuis l'administration de la prod ; déclarer les
-  webhooks côté prestataire avec l'adresse de prod (`stripe-webhook.php`, `revolut-webhook.php`, `monetico-ipn.php`) ; un paiement réel
+- [ ] **Paiements** : saisir les clés **live** (Stripe, et Revolut/SumUp/PayPal/Monetico si utilisés) depuis l'administration de la prod ; déclarer les
+  webhooks côté prestataire avec l'adresse de prod (`stripe-webhook.php`, `revolut-webhook.php`, `monetico-ipn.php` ; SumUp n'en demande pas, l'adresse est transmise à chaque paiement) ;
+  **Terminal SumUp Solo** : en prod seulement (adresse https publique), saisir la clé d'affiliation puis appairer le lecteur depuis l'administration, et faire un petit encaissement puis remboursement ; **Wero** : l'activer dans Stripe → Moyens de paiement (compte live), puis cocher la case dans l'administration ; un paiement réel
   de faible montant puis remboursement.
 - [ ] **Clés d'IA partagées** : portail → « Clés API partagées » → *Mise en production* (taper `PRODUCTION`) : chaque commerce n'utilise plus que les siennes.
 - [ ] **Messages sortants** (module Notifications : e-mail, SMS, WhatsApp, Discord, Telegram) : identifiants de prod saisis ; vérifier qu'aucun
@@ -119,8 +132,32 @@ Cible : **prod = `https://www.bricbrok.com`**, **préprod = `https://pre.bricbro
 
 ## Données et secrets
 
-- Les données ne circulent que **prod → préprod** (jamais l'inverse), et seulement après anonymisation des données personnelles (RGPD).
+- Les **données personnelles** (commandes, clients, comptes, pièces d'identité, inscriptions) ne circulent jamais entre environnements.
+  Le **contenu** (boutiques et galeries) circule dans les deux sens par le portail → *Échange prod / préprod* (voir ci-dessous).
 - Local → préprod : contenu de test via Administration → *Envoyer en préprod* ; `--with-db` en préprod uniquement.
+
+### Échange de boutiques et de galeries (prod ↔ préprod ↔ local)
+
+Les galeries (`data/galeries/`) et les bases des boutiques ne sont jamais envoyées par le déploiement : on les copie par un paquet `.zip`.
+
+1. Portail de l'environnement **source** → *Échange prod / préprod* → cocher boutiques et galeries → *Télécharger le paquet*.
+2. Portail de l'environnement **cible** → même page → envoyer le `.zip` : un **aperçu** s'affiche (rien n'est modifié), on choisit les éléments.
+   En production, taper `PROD` pour confirmer. Le résultat s'affiche une fois ; une boutique créée reçoit un mot de passe d'administration neuf.
+
+- **Voyage** : réglages de présentation (nom, couleurs, textes, catégories, logo), fiches, photos et vidéos, bandeaux, diaporamas, livraison,
+  remises du panier, horaires, apparence ; pour une galerie : présentation, plan, membres, événement, promotions.
+- **Ne voyage jamais** : commandes, clients, comptes, mots de passe, clés (Stripe, IA, SMS…), coordonnées bancaires, `site_url` et domaines,
+  abonnements et options payantes, administrateurs de galerie, pièces d'identité, inscriptions, listes d'attente, base de la buvette.
+- **Sans perte par défaut** : les fiches sont ajoutées ou mises à jour par numéro, rien n'est supprimé ; le stock et l'état de vente de la cible sont
+  conservés ; un fichier existant n'est jamais écrasé (le nouveau reçoit un nom voisin). La base d'une boutique existante est sauvegardée avant
+  l'import (`data/backups/<base>-echange-<horodatage>.db`), son `tenant.php` aussi (`.bak-…`), une galerie existante aussi (`.json.bak-…`).
+  L'option *Miroir* (supprimer les fiches absentes du paquet) est faite pour copier la prod vers la préprod, pas l'inverse.
+- Une galerie créée par l'import est **hors ligne** : la publier, régler ses options payantes, ses administrateurs et son adresse sur la cible.
+- Journal : `data/logs/echange.log` (qui a importé quoi, jamais de mot de passe). Code : `includes/exchange.php`, `portail/echange.php`.
+- **Suivre les évolutions du projet** : une nouvelle colonne d'une table qui voyage est reprise automatiquement (ajoutée à la base cible au besoin).
+  Une nouvelle table, clé de boutique ou de galerie, réglage ou fichier annexe de galerie, lui, doit être *décidé* : `tests/ExchangeGuardTest.php`
+  fait échouer la CI tant que `php scripts/exchange-baseline.php` n'a pas été relancé (et l'élément ajouté aux listes de `includes/exchange.php`
+  s'il doit voyager). Horaires de galerie (`.hours.json`) : inclus.
 - Secrets : jamais dans git (`.env.deploy.*`, `.secrets/`, `config.local.php` sont ignorés et exclus du déploiement). Les clés de chaque
   environnement se saisissent depuis son administration ; les clés **Stripe ne sont jamais partagées** entre commerces.
 

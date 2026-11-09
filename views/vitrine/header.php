@@ -22,6 +22,7 @@ $accountLink = oauth_enabled_providers('customer') || customer_session();
     <div class="vt-tools">
       <?php if (shop_sales_enabled()): ?><a class="vt-cart" href="/cart.php">Panier<?= $cartCount ? '<b>' . (int) $cartCount . '</b>' : '' ?></a><?php endif; ?>
       <?php if ($accountLink): ?><a class="vt-account" href="/compte.php"<?= $activeNav === 'compte' ? ' aria-current="page"' : '' ?>>Compte</a><?php endif; ?>
+      <a class="vt-login" href="<?= is_admin_logged_in() ? '/admin/dashboard.php' : '/admin/login.php' ?>"><?= is_admin_logged_in() ? 'Admin' : 'Connexion' ?></a>
       <button type="button" class="burger-btn vt-burger" id="burger-btn" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="primary-nav">
         <span></span><span></span><span></span>
       </button>

@@ -753,8 +753,10 @@ function branding_ovh_prepare_domain(array $request, array $purchase): string
             }
         }
         if (!$ownerConfigured) throw new RuntimeException('OVH n’a pas fourni de configuration de titulaire. Le paiement est bloqué pour éviter une commande au nom du compte plateforme.');
-        $stage = 'POST /order/cart/*/validate';
-        $client->post('/order/cart/' . $cartId . '/validate');
+        // OVH n'a pas de route « validate » : la lecture du récapitulatif de commande
+        // (GET …/checkout) échoue si le panier est incomplet ou invalide, sans rien commander.
+        $stage = 'GET /order/cart/*/checkout';
+        $client->get('/order/cart/' . $cartId . '/checkout');
         return $contactId;
     } catch (\GuzzleHttp\Exception\GuzzleException $ex) {
         throw branding_ovh_api_error($ex, $stage);
@@ -805,7 +807,6 @@ function branding_apply_domain_checkout(array $session): array
     try {
         $client = branding_ovh_client();
         $cartId = rawurlencode((string) $purchase['quote']['cart_id']);
-        $client->post('/order/cart/' . $cartId . '/validate');
         $order = $client->post('/order/cart/' . $cartId . '/checkout', [
             'autoPayWithPreferredPaymentMethod' => true,
             'waiveRetractationPeriod' => true,

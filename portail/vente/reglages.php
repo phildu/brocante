@@ -117,7 +117,7 @@ fv_layout_start('Réglages', [
             <input name="marque_nom" maxlength="80" required value="<?= e(fv_setting('marque_nom', 'Brocs')) ?>">
           </label>
           <label class="fv-field">Adresse du site
-            <input type="url" name="site_url" maxlength="190" value="<?= e(fv_setting('site_url', '')) ?>" placeholder="https://brocs.arrimage.com" autocapitalize="none">
+            <input type="url" name="site_url" maxlength="190" value="<?= e(fv_setting('site_url', '')) ?>" placeholder="https://bricbrok.com" autocapitalize="none">
           </label>
           <label class="fv-field">Téléphone de contact
             <input name="contact_tel" maxlength="40" value="<?= e(fv_setting('contact_tel', '')) ?>" inputmode="tel" placeholder="06 12 34 56 78">

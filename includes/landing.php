@@ -241,8 +241,8 @@ function lp_render(array $p): void
         '@context' => 'https://schema.org',
         '@graph' => [
             ['@type' => 'BreadcrumbList', 'itemListElement' => [
-                ['@type' => 'ListItem', 'position' => 1, 'name' => 'Accueil', 'item' => 'https://' . ($_SERVER['HTTP_HOST'] ?? 'brocs.arrimage.com') . '/'],
-                ['@type' => 'ListItem', 'position' => 2, 'name' => $p['eyebrow'], 'item' => 'https://' . ($_SERVER['HTTP_HOST'] ?? 'brocs.arrimage.com') . $p['path']],
+                ['@type' => 'ListItem', 'position' => 1, 'name' => 'Accueil', 'item' => 'https://' . ($_SERVER['HTTP_HOST'] ?? 'bricbrok.com') . '/'],
+                ['@type' => 'ListItem', 'position' => 2, 'name' => $p['eyebrow'], 'item' => 'https://' . ($_SERVER['HTTP_HOST'] ?? 'bricbrok.com') . $p['path']],
             ]],
             ['@type' => 'FAQPage', 'mainEntity' => $faq],
         ],

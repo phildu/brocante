@@ -39,6 +39,7 @@ $chunkBytes = capture_chunk_bytes();
   .cap-log .ko { color: #b3261e; white-space: normal; text-align: right; max-width: 60%; }
   .cap-expired { border: 1px solid var(--line); background: var(--surface); padding: 18px; }
 </style>
+<script src="/assets/heic-convert.js"></script>
 </head>
 <body>
 <main class="cap">
@@ -53,10 +54,10 @@ $chunkBytes = capture_chunk_bytes();
     <p class="lede">Prenez une photo ou filmez : elle arrive tout de suite sur l'ordinateur, dans la médiathèque de <?= h($content['site_name']) ?>.</p>
 
     <label class="cap-btn primary" id="btn-photo">📷 Prendre une photo
-      <input type="file" accept="image/*" capture="environment" id="in-photo" hidden>
+      <input type="file" accept="image/*" capture id="in-photo" hidden>
     </label>
     <label class="cap-btn" id="btn-video"><span>🎥 Filmer<small>courte vidéo, <?= CAPTURE_VIDEO_MAX_SECONDS ?> secondes maximum</small></span>
-      <input type="file" accept="video/*" capture="environment" id="in-video" hidden>
+      <input type="file" accept="video/*" capture id="in-video" hidden>
     </label>
     <label class="cap-btn ghost" id="btn-gallery">🖼 Choisir dans la galerie
       <input type="file" accept="image/*,video/*" multiple id="in-gallery" hidden>

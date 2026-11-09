@@ -6,6 +6,7 @@ require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/connect.php';
 require_once __DIR__ . '/capture.php';
 require_once __DIR__ . '/studio.php';
+require_once __DIR__ . '/resale-pack.php';
 require_once __DIR__ . '/prompts.php';
 require_once __DIR__ . '/universes.php';
 require_once __DIR__ . '/comparables.php';
@@ -3321,10 +3322,44 @@ function admin_password_configured(): bool
         }
     }
     try {
-        return (bool) db()->query("SELECT 1 FROM accounts WHERE role IN ('admin', 'community_manager', 'photographe') AND is_active = 1 AND password_hash IS NOT NULL")->fetchColumn();
+        return (bool) db()->query("SELECT 1 FROM accounts WHERE role IN ('admin', 'community_manager', 'photographe', 'vendeur') AND is_active = 1 AND password_hash IS NOT NULL")->fetchColumn();
     } catch (Throwable $e) {
         return false;
     }
+}
+
+/**
+ * Rouvre la session d'un administrateur depuis le cookie « appareil de confiance » (includes/remember.php), quand la session
+ * a disparu. Le jeton est renouvelé : seulement possible avant l'envoi de la page, sinon le cookie et la base se désynchroniseraient.
+ */
+function admin_session_from_trusted_device(): bool
+{
+    if (PHP_SAPI === 'cli' || headers_sent() || session_status() !== PHP_SESSION_ACTIVE) {
+        return false;
+    }
+    require_once __DIR__ . '/remember.php';
+    $cookie = (string) ($_COOKIE[remember_cookie_name()] ?? '');
+    if ($cookie === '') {
+        return false;
+    }
+    try {
+        $found = remember_consume(db(), $cookie);
+    } catch (Throwable $e) {
+        return false;
+    }
+    if ($found === null) {
+        remember_set_cookie('', time() - 3600);
+        return false;
+    }
+    remember_set_cookie($found['value'], $found['expires']);
+    session_regenerate_id(true);
+    $_SESSION['is_admin'] = tenant_slug();
+    if ($found['id'] === null) {
+        unset($_SESSION['admin_account_id']);
+    } else {
+        $_SESSION['admin_account_id'] = $found['id'];
+    }
+    return true;
 }
 
 /** Connecté à l'administration de ce commerce ? (une connexion ne vaut que pour un commerce) */
@@ -3336,7 +3371,7 @@ function admin_password_configured(): bool
  */
 function admin_session(): ?array
 {
-    if (($_SESSION['is_admin'] ?? null) !== tenant_slug()) {
+    if (($_SESSION['is_admin'] ?? null) !== tenant_slug() && !admin_session_from_trusted_device()) {
         return null;
     }
     $id = $_SESSION['admin_account_id'] ?? null;

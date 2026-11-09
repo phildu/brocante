@@ -85,6 +85,41 @@ if ($action === 'fulfillment') {
             }
         }
     }
+} elseif ($action === 'refresh_sumup') {
+    // Revérifie auprès de SumUp une commande dont le client n'est pas revenu.
+    $order = order_get($id);
+    if (!$order) {
+        flash_set('Commande introuvable.', 'error');
+        header('Location: ' . $back);
+        exit;
+    }
+    if (payment_provider_of($order) !== 'sumup') {
+        flash_set('Cette commande n’a pas été payée avec SumUp.', 'error');
+    } else {
+        $config = sumup_config();
+        if (!$config) {
+            flash_set('SumUp n’est plus configuré pour cette boutique.', 'error');
+        } else {
+            try {
+                $data = sumup_get_checkout($config, (string) ($order['provider_checkout_id'] ?? ''));
+                if (sumup_is_paid($data)) {
+                    if ($order['status'] === 'paid') {
+                        flash_set('Cette commande est déjà à jour (payée).');
+                    } elseif (sumup_checkout_cents($data) !== (int) $order['amount_total'] || strtoupper((string) ($data['currency'] ?? '')) !== 'EUR') {
+                        order_event($id, 'paiement_echec', 'Montant SumUp incohérent lors de la vérification manuelle', 'admin');
+                        flash_set('SumUp indique un montant différent de la commande — vérifiez avant d’expédier.', 'error');
+                    } else {
+                        order_finalize_external($order, 'sumup', sumup_payment_id($data), '', sumup_payment_detail($data));
+                        flash_set('Paiement confirmé auprès de SumUp — commande mise à jour.');
+                    }
+                } else {
+                    flash_set('SumUp indique que cette commande n’est pas encore payée (état : ' . (sumup_state($data) ?: 'inconnu') . ').', 'error');
+                }
+            } catch (Throwable $e) {
+                flash_set('Impossible de vérifier auprès de SumUp : ' . $e->getMessage(), 'error');
+            }
+        }
+    }
 } elseif ($action === 'mark_sepa_paid') {
     // Virement SEPA constaté sur le compte bancaire : la commande passe en payée.
     $order = order_get($id);

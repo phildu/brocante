@@ -48,6 +48,12 @@ function order_ensure_schema(PDO $pdo): void
             'gift_wrap' => 'INTEGER NOT NULL DEFAULT 0',        // 1 : emballage cadeau demandé
             'gift_wrap_cents' => 'INTEGER NOT NULL DEFAULT 0',  // montant facturé pour l'emballage
             'gift_message' => 'TEXT',                           // petit mot du client pour le destinataire
+            // Vente en caisse : qui a vendu, prix convenu sur place, et avertissement du gérant quand c'est un autre vendeur.
+            'sold_by' => 'TEXT',                                // nom du vendeur connecté à la caisse
+            'sold_by_id' => 'INTEGER',                          // compte du vendeur (NULL : compte principal)
+            'price_negotiated' => 'INTEGER NOT NULL DEFAULT 0', // 1 : au moins un prix n'était pas fixé à l'avance (négocié sur place)
+            'notify_manager' => 'INTEGER NOT NULL DEFAULT 0',   // 1 : vendeur autre que le gérant, à lui signaler
+            'manager_notified_at' => 'TEXT',
         ];
         foreach ($extra as $column => $type) {
             if (!in_array($column, $columns, true)) {
@@ -499,7 +505,7 @@ function order_restock(int $orderId): void
 }
 
 /**
- * Rembourse tout ou partie d'une commande payée via Stripe, Monetico ou PayPal.
+ * Rembourse tout ou partie d'une commande payée via Stripe, Monetico, PayPal, Revolut ou SumUp.
  * Pour un paiement Stripe Connect (destination charge), le transfert et la
  * commission sont repris au commerçant/à la galerie (reverse_transfer +
  * refund_application_fee). Monetico passe par le re-crédit, PayPal par le
@@ -533,6 +539,10 @@ function order_refund(int $orderId, int $cents, string $reason = '', bool $resto
             $revolut = revolut_config();
             if (!$revolut) throw new RuntimeException("Revolut n'est plus configuré pour cette boutique.");
             $refundId = revolut_refund($order, $cents, $revolut);
+        } elseif ($provider === 'sumup') {
+            $sumup = sumup_config();
+            if (!$sumup) throw new RuntimeException("SumUp n'est plus configuré pour cette boutique.");
+            $refundId = sumup_refund($order, $cents, $sumup);
         } elseif ($provider === 'sepa') {
             // Virement manuel : aucun prestataire à appeler. Le remboursement est
             // noté ici, le commerçant effectue le virement depuis sa banque.

@@ -509,3 +509,13 @@ body.print-pitch .fv-pitch-extra { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; transition: none !important; }
 }
+
+/* Carte de la tournée (Leaflet, fond IGN) */
+.fv-tmap-wrap { padding: 0 18px 14px; }
+.fv-card-pad.fv-tmap-wrap { padding-top: 12px; }
+.fv-tmap { height: 340px; border: 1px solid var(--fv-line); border-radius: 12px; overflow: hidden; background: var(--fv-panel-2); z-index: 0; }
+.fv-tmap-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.fv-tmap-bar .fv-hint { margin: 0 auto 0 0; }
+.fv-pin { background: none; border: 0; }
+.fv-pin span { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--fv-accent); color: var(--fv-accent-ink); border: 2px solid #fff; font: 700 13px/1 var(--fv-font); box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
+@media (max-width: 640px) { .fv-tmap { height: 280px; } .fv-tmap-wrap { padding-left: 12px; padding-right: 12px; } }

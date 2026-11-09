@@ -3,13 +3,14 @@
 // Environnement d'exécution (local / preprod / prod) — voir includes/app-env.php et DEPLOIEMENT.md.
 require_once __DIR__ . '/includes/app-env.php';
 app_env_send_headers();
+app_env_enable_badge(); // cartouche « LOCAL / PRÉPROD / PRODUCTION » en haut à gauche
 
 // Marque blanche : les valeurs propres au commerce actif (nom, base, URL,
 // mot de passe admin…) viennent de tenants/<slug>/tenant.php — voir
 // includes/tenant.php.
 require_once __DIR__ . '/includes/tenant.php';
 
-// Commerce servi sous un préfixe (brocs.arrimage.com/<slug>/) : liens,
+// Commerce servi sous un préfixe (bricbrok.com/<slug>/) : liens,
 // formulaires et redirections vers les pages dynamiques reçoivent ce préfixe
 // — voir tenant_rewrite_output() et tenant_rewrite_location().
 tenant_enable_base_path();

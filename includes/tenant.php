@@ -1,5 +1,10 @@
 <?php
 
+// Cartouche d'environnement (LOCAL / PRÉPROD / PRODUCTION) : tenant.php est chargé par tous les points
+// d'entrée (boutique, portail, accueil, galeries, annuaire), contrairement à config.php. Idempotent.
+require_once __DIR__ . '/app-env.php';
+app_env_enable_badge();
+
 // Marque blanche : tout ce qui est propre à un commerce (nom, logo, couleurs,
 // catégories, textes, prompts IA, base, URL…) vit dans tenants/<slug>/tenant.php.
 //
@@ -7,15 +12,21 @@
 //   1. la variable d'environnement TENANT (session cloud, SetEnv Apache) ;
 //   2. le sous-domaine, s'il porte le nom d'un commerce : naty.brocenstock.test
 //      affiche tenants/naty (tests locaux avec Herd) ;
-//   3. le premier segment de l'adresse (brocs.arrimage.com/naty/) ;
+//   3. le premier segment de l'adresse (bricbrok.com/naty/) ;
 //   4. le domaine déclaré par un tenant.php (site_url sans chemin, ex.
 //      brocante.arrimage.com) ;
 //   5. le fichier .tenant à la racine (écrit par le script de déploiement) ;
 //   6. petit-chalet (comportement historique).
 
 const TENANT_DEFAULT = 'petit-chalet';
+// Moteurs de recherche : ce fichier est chargé par toutes les pages, y compris les pages publiques qui n'incluent pas config.php
+// (accueil, galeries, annuaire) ; le noindex y est donc posé aussi (sans doublon : voir app_env_send_headers()).
+require_once __DIR__ . '/app-env.php';
+app_env_send_headers();
+require_once __DIR__ . '/edge-proxy.php'; // hôte et IP réels derrière Cloudflare, avant toute lecture de HTTP_HOST
 require_once __DIR__ . '/business-presence.php';
 require_once __DIR__ . '/domain-custom.php';
+require_once __DIR__ . '/domain-sub.php';
 
 /**
  * Commerce désigné par le sous-domaine de l'hôte (« naty » pour
@@ -29,9 +40,16 @@ function tenant_from_host(?string $host = null): string
         return '';
     }
     $candidate = $labels[0];
-    return preg_match('/^[a-z0-9][a-z0-9_-]*$/', $candidate) && is_file(tenant_dir($candidate) . '/tenant.php')
-        ? $candidate
-        : '';
+    if (!preg_match('/^[a-z0-9][a-z0-9_-]*$/', $candidate)) {
+        return '';
+    }
+    // Adresse en sous-domaine achetée par un commerce (data/domaines/sub/) : le nom
+    // choisi par le marchand désigne sa boutique, quel que soit son identifiant.
+    $alias = domain_sub_hosts()[$candidate] ?? '';
+    if ($alias !== '' && is_file(tenant_dir($alias) . '/tenant.php')) {
+        return $alias;
+    }
+    return is_file(tenant_dir($candidate) . '/tenant.php') ? $candidate : '';
 }
 
 /** Domaine sans le sous-domaine de commerce (brocenstock.test pour naty.brocenstock.test). */
@@ -44,7 +62,7 @@ function tenant_base_host(?string $host = null): string
 /**
  * Commerce dont le tenant.php déclare ce domaine comme site_url (domaine propre
  * servi à la racine, ex. brocante.arrimage.com), ou ''. Seule une adresse sans
- * chemin compte : site_url = https://brocs.arrimage.com/<identifiant> désigne
+ * chemin compte : site_url = https://bricbrok.com/<identifiant> désigne
  * une boutique sous le domaine du portail, pas le domaine lui-même.
  */
 function tenant_from_domain(?string $host = null): string
@@ -88,7 +106,7 @@ function tenant_from_domain(?string $host = null): string
 
 /**
  * Commerce désigné par le premier segment de l'adresse (« naty » pour
- * brocs.arrimage.com/naty/boutique.php), ou '' si ce segment n'est pas un
+ * bricbrok.com/naty/boutique.php), ou '' si ce segment n'est pas un
  * commerce. Un dossier ou fichier de même nom à la racine (admin/, assets/,
  * portail/…) a toujours priorité : il ne peut pas être masqué par un commerce.
  */
@@ -106,7 +124,7 @@ function tenant_from_path(?string $uri = null): string
 /**
  * Commerce actif et préfixe d'adresse éventuel : ['slug' => …, 'base' => '' ou '/slug'].
  * Le préfixe n'existe que pour un commerce servi sous le domaine d'un autre
- * (brocs.arrimage.com/<slug>/) ; un commerce choisi par sous-domaine, par
+ * (bricbrok.com/<slug>/) ; un commerce choisi par sous-domaine, par
  * variable d'environnement ou par .tenant garde des adresses sans préfixe.
  */
 function tenant_resolve(): array
@@ -143,7 +161,7 @@ function tenant_slug(): string
 /**
  * Adresse publique du commerce actif, sans barre finale : le site_url du commerce, sauf si c'est une adresse de remplissage
  * (vide, localhost, *.test, *.example.com — celle d'un commerce créé sans adresse) : on prend alors celle de la requête + le préfixe du
- * commerce (https://brocs.arrimage.com/<identifiant>). Sert aux retours de paiement Stripe et aux images des produits.
+ * commerce (https://bricbrok.com/<identifiant>). Sert aux retours de paiement Stripe et aux images des produits.
  */
 function tenant_site_url(): string
 {
@@ -151,6 +169,8 @@ function tenant_site_url(): string
     // (liens, retours de paiement, e-mails), même sous /<identifiant>/.
     $customHost = domain_custom_active_host(tenant_slug());
     if ($customHost !== '') return 'https://' . $customHost;
+    $subLabel = domain_sub_active_label(tenant_slug());
+    if ($subLabel !== '') return domain_sub_url($subLabel);
     $url = rtrim((string) tenant('site_url'), '/');
     $host = strtolower((string) parse_url($url, PHP_URL_HOST));
     $placeholder = $host === '' || $host === 'localhost' || $host === '127.0.0.1' || str_ends_with($host, '.test') || str_ends_with($host, '.example.com');

@@ -449,6 +449,7 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
       $moneticoConfig = monetico_config() ?? payment_config('monetico') ?? [];
       $paypalConfig = paypal_config() ?? payment_config('paypal') ?? [];
       $revolutConfig = revolut_config() ?? payment_config('revolut') ?? [];
+      $sumupConfig = sumup_config() ?? payment_config('sumup') ?? [];
       $sepaConfig = sepa_config();
       $availableMethods = shop_payment_methods_available();
       $enabledSetting = trim(shop_setting('payment_methods', ''));
@@ -457,6 +458,8 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
       $paypalSecretSet = trim((string) ($paypalConfig['secret'] ?? '')) !== '';
       $revolutKeySet = trim((string) ($revolutConfig['api_key'] ?? '')) !== '';
       $revolutWebhookSet = trim((string) ($revolutConfig['webhook_secret'] ?? '')) !== '';
+      $sumupKeySet = trim((string) ($sumupConfig['api_key'] ?? '')) !== '';
+      $sumupAffiliateSet = trim((string) ($sumupConfig['affiliate_key'] ?? '')) !== '';
       ?>
       <form class="admin-block" method="post" action="/admin/save-payment-keys.php" id="payment-settings" data-panel="paiement">
         <input type="hidden" name="csrf" value="<?= h(admin_csrf_token()) ?>">
@@ -538,6 +541,62 @@ $visitTitle = shop_presence_mode() === 'online' ? 'La boutique' : "Visiter l'ate
           <code><?= h(rtrim(tenant_site_url(), '/') . '/revolut-webhook.php') ?></code>.
           Sans webhook, le retour du client confirme le paiement ; le bouton « Vérifier auprès de Revolut » rattrape une commande restée en attente.
         </p>
+
+        <h3 style="margin-top:24px;">SumUp</h3>
+        <p class="hint">Compte SumUp du commerçant. La clé API et le code marchand se trouvent dans <a href="https://me.sumup.com/settings/developer" target="_blank" rel="noopener">SumUp → Paramètres → Développeurs</a> (code marchand du type « MH4H92C7 »). Le client paie sur la page sécurisée de SumUp (carte, Apple Pay, Google Pay) ; les fonds arrivent sur le compte du commerçant. Pour essayer sans argent réel, utilisez la clé et le code marchand d’un compte bac à sable SumUp.</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Clé API secrète</label>
+            <input type="password" name="sumup_api_key" autocomplete="off" placeholder="<?= $sumupKeySet ? 'Déjà enregistrée' : 'sup_sk_…' ?>">
+          </div>
+          <div class="field">
+            <label>Code marchand</label>
+            <input type="text" name="sumup_merchant_code" autocomplete="off" maxlength="16" value="<?= h((string) ($sumupConfig['merchant_code'] ?? '')) ?>" placeholder="MH4H92C7">
+          </div>
+        </div>
+        <p class="hint" style="margin-top:8px;">
+          Aucun webhook à déclarer : l’adresse de notification (<code><?= h(rtrim(tenant_site_url(), '/') . '/sumup-webhook.php') ?></code>) est envoyée à SumUp avec chaque paiement.
+          La page de paiement reste valable 30 minutes ; le bouton « Vérifier auprès de SumUp » de la fiche commande rattrape un paiement non confirmé.
+        </p>
+
+        <h4 style="margin:18px 0 6px;">Terminal SumUp Solo (caisse en boutique)</h4>
+        <p class="hint">Avec un lecteur <strong>SumUp Solo</strong>, le bouton « Terminal SumUp » de la caisse envoie le montant au lecteur : le client paie dessus et la vente s’enregistre toute seule. La clé d’affiliation se crée dans <a href="https://developer.sumup.com/affiliate-keys" target="_blank" rel="noopener">SumUp → Développeurs → Affiliate Keys</a>. Pour appairer : déconnectez le Solo (Menu → Réglages → À propos → Se déconnecter), puis Connexions → API → Connecter, et saisissez le code affiché (valable 5 minutes). Le terminal ne peut être joint par SumUp qu’en ligne (adresse https publique), pas depuis un site local.</p>
+        <div class="field-row-2">
+          <div class="field">
+            <label>Identifiant d’application (app_id)</label>
+            <input type="text" name="sumup_affiliate_app_id" autocomplete="off" value="<?= h((string) ($sumupConfig['affiliate_app_id'] ?? '')) ?>" placeholder="com.example.boutique">
+          </div>
+          <div class="field">
+            <label>Clé d’affiliation</label>
+            <input type="password" name="sumup_affiliate_key" autocomplete="off" placeholder="<?= $sumupAffiliateSet ? 'Déjà enregistrée' : '123e4567-e89b-…' ?>">
+          </div>
+        </div>
+        <div class="field-row-2" style="margin-top:12px;">
+          <div class="field">
+            <label>Code d’appairage du Solo (8 ou 9 caractères)</label>
+            <input type="text" name="sumup_pairing_code" autocomplete="off" maxlength="12" placeholder="<?= sumup_terminal_configured() ? 'Laisser vide : lecteur déjà appairé' : '4WLFDSBF' ?>">
+          </div>
+          <div class="field">
+            <label>Nom du lecteur</label>
+            <input type="text" name="sumup_reader_name" autocomplete="off" maxlength="60" value="<?= h((string) ($sumupConfig['reader_name'] ?? '')) ?>" placeholder="Caisse">
+          </div>
+        </div>
+        <?php if (($sumupConfig['reader_id'] ?? '') !== ''): ?>
+          <label style="font-size:0.9rem;display:inline-flex;align-items:center;gap:6px;margin-top:10px;">
+            <input type="checkbox" name="sumup_reader_unpair" value="1">
+            Retirer le lecteur (pensez aussi à le déconnecter sur le Solo : Connexions → API → Déconnecter)
+          </label>
+        <?php endif; ?>
+        <p class="publish-status" style="margin-top:10px;">
+          <?= sumup_terminal_configured() ? 'Terminal prêt — lecteur « ' . h((string) ($sumupConfig['reader_name'] ?: 'Caisse')) . ' » appairé.' : 'Terminal inactif tant que la clé d’affiliation et le lecteur appairé ne sont pas enregistrés.' ?>
+        </p>
+
+        <h3 style="margin-top:24px;">Wero</h3>
+        <p class="hint">Wero (paiement instantané depuis l’application bancaire) s’accepte via Stripe : il n’existe pas d’accès direct pour un commerçant. Activez « Wero » dans <a href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener">Stripe → Paramètres → Moyens de paiement</a> ; il apparaît alors tout seul sur la page de paiement Stripe. La case ci-dessous ne fait qu’annoncer Wero sur le site (libellé et logo) ; ne la cochez qu’une fois Wero activé chez Stripe.</p>
+        <label style="font-size:0.9rem;display:inline-flex;align-items:center;gap:6px;">
+          <input type="checkbox" name="stripe_wero" value="1"<?= stripe_wero_enabled() ? ' checked' : '' ?>>
+          Wero est activé dans mon compte Stripe
+        </label>
 
         <h3 style="margin-top:24px;">Virement SEPA</h3>
         <p class="hint">Sans prestataire ni clé : le client vire le montant sur votre compte avec une référence unique, et vous confirmez la réception depuis la fiche commande. Les pièces sont réservées pendant le délai indiqué ; sans virement, la commande est annulée et les pièces remises en vente. L’IBAN est affiché uniquement au client qui possède le lien signé de sa commande.</p>

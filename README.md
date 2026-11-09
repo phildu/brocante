@@ -26,7 +26,7 @@ Commerces fournis :
 1. la variable d'environnement `TENANT` ;
 2. sinon le sous-domaine, s'il porte le nom d'un commerce (`naty.brocenstock.test` → `tenants/naty`) ;
 3. sinon le premier segment de l'adresse, s'il porte le nom d'un commerce
-   (`brocs.arrimage.com/naty/boutique.php` → `tenants/naty`) ;
+   (`bricbrok.com/naty/boutique.php` → `tenants/naty`) ;
 4. sinon le fichier `.tenant` à la racine (écrit sur le serveur par le déploiement) ;
 5. sinon `petit-chalet`.
 
@@ -34,8 +34,8 @@ Commerces fournis :
 
 | Adresse                                | Affiche                                                      |
 |----------------------------------------|--------------------------------------------------------------|
-| `brocs.arrimage.com`                   | le portail (redirigé vers `/portail/`, connexion exigée)     |
-| `brocs.arrimage.com/<identifiant>/`    | le commerce `tenants/<identifiant>` (aucun sous-domaine à créer chez OVH) |
+| `bricbrok.com`                   | le portail (redirigé vers `/portail/`, connexion exigée)     |
+| `bricbrok.com/<identifiant>/`    | le commerce `tenants/<identifiant>` (aucun sous-domaine à créer chez OVH) |
 | `brocante.arrimage.com`                | le Petit Chalet, déployé à part avec son propre sous-domaine |
 
 Un commerce servi sous `/<identifiant>/` voit ses liens, formulaires et
@@ -45,7 +45,7 @@ restent partagés à la racine du domaine. Son panier et sa connexion admin ont 
 propre cookie de session, limité à son chemin (`includes/session.php`). Les règles
 d'adresses sont dans le `.htaccess` ; en local sans Apache, `php -S 127.0.0.1:8000 router.php`
 les reproduit. L'adresse d'un commerce se déclare par `site_url` dans son `tenant.php`
-(`https://brocs.arrimage.com/<identifiant>` pour un commerce sous le portail ; elle sert
+(`https://bricbrok.com/<identifiant>` pour un commerce sous le portail ; elle sert
 notamment aux retours de paiement Stripe).
 
 Le Petit Chalet garde ses emplacements historiques (`brocante.db`, `.secrets/`,
@@ -63,7 +63,7 @@ Les autres commerces ont leur base dans `data/<slug>.db` et leurs clés dans
 | http://naty.brocenstock.test                | le commerce `tenants/naty`                     |
 | http://exemple-librairie.brocenstock.test   | la Librairie des Quais                         |
 | http://brocenstock.test                     | le portail (redirection, comme en ligne) |
-| http://brocenstock.test/exemple-librairie/  | la Librairie des Quais sous le domaine du portail (comme `brocs.arrimage.com/<commerce>/`) |
+| http://brocenstock.test/exemple-librairie/  | la Librairie des Quais sous le domaine du portail (comme `bricbrok.com/<commerce>/`) |
 | http://brocenstock.test/galerie/<id>/       | une galerie commerciale (`/galerie/` : la liste des galeries publiées) |
 
 Le sous-domaine est l'identifiant du commerce (nom de son dossier dans
@@ -539,7 +539,7 @@ comme la galerie. Code : `includes/prompts.php`, `admin/prompts-action.php`, `as
 
 ## Studio : l'application smartphone du commerce
 
-`studio.php` (`/<commerce>/studio.php` sous brocs.arrimage.com) est une application
+`studio.php` (`/<commerce>/studio.php` sous bricbrok.com) est une application
 **indépendante de l'administration**, installable sur l'écran d'accueil du téléphone
 (manifeste `studio-manifest.php`, icône `studio-icon.php` aux couleurs du commerce,
 `studio-sw.php` minimal, sans cache). `admin/quick-add.php` affiche un code QR vers elle.
@@ -615,7 +615,7 @@ refusé. Trois essais au plus ; sans réussite, **aucune version floutée n'est 
 sert alors la 3:2. Le repli sans IA ne subsiste que pour l'ombre portée d'un objet détouré (fond uni).
 Une 9:16 déjà ratée se refait depuis la galerie de la pièce : « ↻ Refaire la version 9:16 (IA) ».
 
-## Déployer le portail en ligne (ex. brocs.arrimage.com)
+## Déployer le portail en ligne (ex. bricbrok.com)
 
 Le mode `--portail` du script de déploiement envoie **tous les commerces et
 le portail** dans un même dossier OVH. En ligne, le portail exige une
@@ -628,7 +628,7 @@ connexion (compte défini dans `.env.deploy.portail`, stocké haché dans
    FTP_USER=…
    FTP_PASS=…
    FTP_PATH_FRONT=/www/brocs/
-   URL_FRONT=https://brocs.arrimage.com
+   URL_FRONT=https://bricbrok.com
    PORTAIL_USER=phil
    PORTAIL_PASSWORD=un-mot-de-passe-long
    ```
@@ -637,9 +637,9 @@ connexion (compte défini dans `.env.deploy.portail`, stocké haché dans
    bases du serveur ne sont plus touchées). Une base absente du serveur est
    créée automatiquement à la première visite du commerce.
 3. Dans l'espace client OVH : **Hébergement → Multisite → Ajouter un
-   domaine** pour `brocs.arrimage.com` uniquement, dossier racine `www/brocs`
+   domaine** pour `bricbrok.com` uniquement, dossier racine `www/brocs`
    (comme `www/brocante`), SSL activé. Les commerces sont servis sous
-   `brocs.arrimage.com/<identifiant>/` : aucun autre domaine à créer.
+   `bricbrok.com/<identifiant>/` : aucun autre domaine à créer.
 
 Le fichier `.htaccess` à la racine interdit l'accès aux bases (`*.db`), aux
 dossiers cachés (`.secrets/`, `.tenant`…) et aux dossiers internes (`data/`,
@@ -752,7 +752,7 @@ Le parcours public (`/inscription/`) se fait en **trois étapes, le paiement AVA
    Les avantages des formules vitrine sont configurables depuis le portail, sans liste prédéfinie. Le formulaire affiche aussi le catalogue des plugins avec les tarifs configurés
    (achat après création), et permet de demander un devis pour un design personnalisé, l’accompagnement au setup, une formation à distance ou en présentiel, la hotline ou un chatbot.
    Ces demandes sont conservées avec l’inscription et signalées à l’exploitant à la création ; elles ne s’ajoutent pas au paiement de la formule. Le formulaire complet ne s'affiche qu'après le paiement.
-2. **Coordonnées et paiement** (`inscription/paiement.php`) : pour une formule payante avec Stripe configuré, le client saisit un nom de boutique, peut décrire son activité et sa zone, puis demander à OVH de vérifier les extensions `.fr`, `.com`, `.net` et `.shop`. Des variantes proches sont testées si le nom exact est déjà pris ; Gemini peut proposer d’autres noms adaptés au métier et à l’emplacement. Le client peut garder l’adresse incluse sous le domaine de la plateforme ou présélectionner un domaine pour l’acheter après la création. Cette présélection n’est pas une réservation : disponibilité, devis et achat seront confirmés ultérieurement avec OVH et un paiement Stripe dédié. L’adresse sans domaine personnalisé est de la forme `brocs.arrimage.com/nom-de-la-boutique` ; une migration ultérieure peut demander des redirections et affecter le référencement. Il saisit ensuite son e-mail ou continue avec Google. L'adresse e-mail vérifiée par Google est liée à la demande et sert à la connexion ultérieure à l'administration de la boutique ; le consentement est enregistré à cette étape. Le client est ensuite redirigé vers Stripe Checkout pour le paiement (abonnement mensuel ou annuel). Le retour (`inscription/merci.php`) INTERROGE Stripe pour confirmer la
+2. **Coordonnées et paiement** (`inscription/paiement.php`) : pour une formule payante avec Stripe configuré, le client saisit un nom de boutique, peut décrire son activité et sa zone, puis demander à OVH de vérifier les extensions `.fr`, `.com`, `.net` et `.shop`. Des variantes proches sont testées si le nom exact est déjà pris ; Gemini peut proposer d’autres noms adaptés au métier et à l’emplacement. Le client peut garder l’adresse incluse sous le domaine de la plateforme ou présélectionner un domaine pour l’acheter après la création. Cette présélection n’est pas une réservation : disponibilité, devis et achat seront confirmés ultérieurement avec OVH et un paiement Stripe dédié. L’adresse sans domaine personnalisé est de la forme `bricbrok.com/nom-de-la-boutique` ; une migration ultérieure peut demander des redirections et affecter le référencement. Il saisit ensuite son e-mail ou continue avec Google. L'adresse e-mail vérifiée par Google est liée à la demande et sert à la connexion ultérieure à l'administration de la boutique ; le consentement est enregistré à cette étape. Le client est ensuite redirigé vers Stripe Checkout pour le paiement (abonnement mensuel ou annuel). Le retour (`inscription/merci.php`) INTERROGE Stripe pour confirmer la
    session payée, enregistre l'e-mail fourni par Stripe, marque la demande « paid » et envoie le client à l'étape 3 ; le webhook signé (`inscription/webhook.php`, `checkout.session.completed` et
    `customer.subscription.deleted`) fait de même et envoie par e-mail le lien de création si le client a fermé la page. Formule gratuite, paiement en ligne non configuré
    ou indisponible : on passe directement à l'étape 3 (paiement « manuel » noté sur la demande et dans l'e-mail à l'exploitant).
@@ -982,7 +982,7 @@ aussi « modules ». Pour ne pas les nommer de trois façons, le portail règle 
   remplace les jetons de toute la page ; ailleurs (messages JSON, e-mails, libellés), on appelle `ext_t('…')`.
   Test : `php scripts/test-vocabulary.php`.
 
-## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule, Annulation & remboursements (organisateur d'un vide-grenier)
+## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule, Annulation & remboursements, Sponsors & partenaires
 
 Les anciennes « options » d'une galerie (carte interactive, espace organisateur, file d'attente : `includes/gallery-modules.php`) sont des
 **extensions de galerie** : l'organisateur les active depuis l'onglet « Extensions » de son espace (essai gratuit, puis abonnement Stripe ou
@@ -1009,6 +1009,13 @@ dossier : ils servent aussi bien `/comptage/` qu'une galerie, avec un cache par 
 **Annulation & remboursements** (`annulation`, voir `ANNULATION.md`, proposée aux vide-greniers, marchés aux puces, marchés de Noël et marchés de producteurs) : annuler l'événement et rembourser les exposants en totalité ou en partie.
 Pas de base SQL : elle s'appuie sur l'événement et le registre des demandes de la galerie (`includes/gallery-cancellation.php`,
 `portail/galerie-annulation.php`). L'annulation passe par l'extension ; le suivi d'un événement déjà annulé reste ouvert si elle s'arrête.
+
+**Sponsors & partenaires** (`sponsors`, proposée à tous les types de galerie, incluse d'office ; réglable par type dans *Types de galerie*) : l'organisateur
+présente ceux qui soutiennent son événement (nom, niveau, site, logo, mot de présentation, note interne jamais affichée). Cinq niveaux, du sponsor
+principal aux partenaires médias (`GSP_TIERS`). Page d'administration `portail/galerie-sponsors.php` (ajout, modification, ordre dans le niveau, masquer,
+supprimer) ; la page publique de la galerie affiche la rubrique `#partenaires` dès qu'une fiche est affichée. Pas de base SQL : les fiches sont dans
+`data/galeries/<id>.sponsors.json` (jamais déployé, supprimé avec la galerie) et les logos sous `uploads/galeries/` (logos locaux uniquement, jamais d'adresse
+externe ; liens sortants en `rel="noopener nofollow sponsored"`). Code : `includes/gallery-sponsors.php` ; test : `tests/GallerySponsorsTest.php`.
 
 ## Horaires et alerte de fermeture d'une galerie
 
@@ -1405,6 +1412,12 @@ et non commités qui partent en ligne ; le commit du seul code se fait à la mai
 prototype), `admin/plugin-mediatheque.php`, `.plugin_enabled` ni les fichiers de travail `_*.md` (que le `.htaccess` refuse
 aussi de servir).
 
+## Échanger boutiques et galeries entre prod, préprod et local
+
+Portail → **Échange prod / préprod** : exporter des boutiques et des galeries dans un paquet `.zip`, l'importer sur un autre environnement
+(dans les deux sens), après un aperçu. Fiches, photos, apparence et plans voyagent ; commandes, clients, mots de passe, clés et abonnements
+jamais. Détail et garde-fous : [DEPLOIEMENT.md](DEPLOIEMENT.md) (« Échange de boutiques et de galeries »).
+
 ## Envoyer des pièces du Mac vers la préprod
 
 Administration → **Envoyer en préprod** : les pièces créées en local partent
@@ -1530,12 +1543,20 @@ Portail → Galeries commerciales → *Gérer* → **Publication** → « Nom de
 
 Ce que le site ne fait pas : l'enregistrement DNS et le certificat HTTPS. Faites pointer le domaine vers ce serveur (enregistrement `A`/`AAAA`, ou `CNAME` vers l'hébergement) puis activez le certificat (Let's Encrypt chez l'hébergeur, ou certificat du proxy) avant d'annoncer l'adresse. En local : `curl -H 'Host: galerie-exemple.fr' http://127.0.0.1:8123/`. Les exports JSON n'emportent pas le domaine (risque de collision) ; un import dans une galerie existante conserve le sien.
 
+## Force de vente : extension indépendante
+
+Le moteur de `portail/vente/` sert plusieurs **carnets de prospects séparés** (`includes/vente-scope.php`) : celui du portail (équipe commerciale de la plateforme, `data/vente/vente.db`, inchangé) et, par galerie, un carnet à elle (`data/vente/galeries/<id>.db`, jamais partagé). Un carnet de galerie est servi à `/galerie/<id>/vente/` (prospects, import Excel/CSV/SQLite, tournée sur carte, journal des échanges, messages de recrutement avec désinscription) ; l'équipe, les codes, les récompenses, les sondages, etc. restent propres au portail.
+
+- **Activation** : module de galerie « Force de vente » (`vente`, `includes/gallery-modules.php`) : mode par type de galerie, essai, prix et accès offert réglés comme les autres extensions. Une galerie qui avait déjà une liste de prospects garde l'accès (offert).
+- **Reprise sans perte** : à la première ouverture, `data/galeries/<id>.prospects.json` est copié dans le carnet (sauvegarde `.bak-AAAAMMJJ-HHMMSS` à côté, fichier jamais modifié ni supprimé, reprise rejouable sans doublon). Ensuite le carnet fait foi : `ga_prospects()` le relit (assistant, tableau de bord, recherche) et un lien de désinscription déjà envoyé reste valable (`legacy_id`).
+- **Boutique** : extension (plugin) **Force de vente** `packs/force-de-vente` (essai, abonnement ou accès offert comme les autres, prix dans `includes/addons.php`, réglables au portail). Carnet `data/vente/boutiques/<boutique>.db`, pages `admin/vente/*.php` (administrateur de la boutique, même moteur : `FV_SCOPE_BOUTIQUE`). Les comptes « prospect » de la boutique sont **copiés** dans le carnet à la première ouverture (table `accounts` jamais modifiée, rejouable sans doublon, `legacy_id` = `compte:<n°>`). L'import de prospects de la boutique (Comptes → Importer des contacts) renvoie vers le carnet ; il reste réservé aux clients dans les comptes. Les carnets (`data/vente/`) ne sont jamais déployés.
+
 ## Import de prospects et de clients
 
 Deux entrées, un même moteur (`includes/contacts-import.php`, écrans dans `includes/contacts-import-ui.php`) :
 
-- **Boutique** : Administration → Comptes → « Importer des contacts » (`admin/contacts-import.php`, administrateurs seulement). Les contacts deviennent des fiches **prospects** ou **clients** (au choix) avec leur téléphone, leur société et leur origine dans les notes ; source « Import (fichier ou CRM) ». Une fiche exige une adresse e-mail : les lignes sans e-mail sont écartées avec leur motif.
-- **Galerie** : Prospects → « Importer des contacts » (`portail/galerie-import.php`). Les contacts rejoignent la liste des commerces à recruter (le téléphone est maintenant conservé) ; un contact sans e-mail mais avec téléphone est accepté.
+- **Boutique** : Administration → Comptes → « Importer des contacts » (`admin/contacts-import.php`, administrateurs seulement). Les contacts deviennent des fiches **clients** (les prospects : extension Force de vente, `admin/vente/prospects-import.php`)  avec leur téléphone, leur société et leur origine dans les notes ; source « Import (fichier ou CRM) ». Une fiche exige une adresse e-mail : les lignes sans e-mail sont écartées avec leur motif.
+- **Galerie** : extension **Force de vente** → « Importer un fichier » (`/galerie/<id>/vente/prospects-import.php` ; l'ancienne adresse `portail/galerie-import.php` y renvoie). Les contacts rejoignent le carnet de la galerie ; un contact sans e-mail mais avec téléphone est accepté.
 
 **Sources** : fichiers **CSV** (séparateur `;` `,` tabulation ou `|` détecté, UTF-8 ou Windows-1252 d'Excel), **Excel `.xls` / `.xlsx`** (première feuille) et carnet **vCard** `.vcf` (export des contacts d'un téléphone), ou lecture directe de **HubSpot**, **Brevo**, **Mailchimp** et **Pipedrive** avec leur clé API. Fichiers jusqu'à 10 Mo, 5 000 contacts et 200 colonnes. Zoho CRM, Google Contacts, Outlook, Odoo et Salesforce passent par leur export CSV : leurs en-têtes sont reconnus (« Modèle reconnu » dans l'aperçu), les colonnes peuvent aussi être choisies à la main.
 
@@ -1678,3 +1699,12 @@ Module autonome pour recruter sur trois pistes, sans toucher au module Équipe e
 - **Stockage** : fichiers JSON dans `data/recrutement/` (`besoins/`, `candidatures/`, `settings.json`), jamais servis en HTTP, comme le reste du portail ; écritures atomiques. Aucune table SQL, aucune migration.
 - **Accès** : entrée « Recrutement » dans le menu du portail (groupe Pilotage), avec pastille des candidatures à traiter.
 - **Code** : `includes/recrutement.php`, `portail/recrutement/index.php`, `portail/recrutement/action.php`, `portail/recrutement/postuler.php` ; tests `tests/RecrutementTest.php`.
+
+## Caisse : vente express, avis de l'expert et journal des ventes
+
+- **Vente express** (`caisse.php`, bouton « 📸 Pièce hors catalogue ») : une pièce absente du catalogue se vend au prix convenu sur place. Photo prise au téléphone → fiche **masquée** (badge « Vente express ») dont le nom et la description sont rédigés par l'IA (comme l'ajout rapide ; sans IA, le vendeur saisit le nom) → prix convenu → panier → espèces, carte ou terminal. À l'encaissement la pièce passe « vendue sur le stand » et son prix de fiche devient le prix convenu ; une vente abandonnée supprime la fiche. Logique : `includes/pos-express.php`, actions `express_*` de `admin/pos-action.php`.
+- **Prix non fixé à l'avance** (aussi pour une pièce du catalogue sans prix, en fourchette ou « sur devis ») : le prix est obligatoire, une vente à 0 € est refusée. La commande garde `price_negotiated`.
+- **Rôle « Vendeur (caisse) »** : accès à la seule caisse (`/caisse.php`), jamais à l'administration. Chaque vente enregistre le vendeur (`orders.sold_by`). Quand ce n'est pas un administrateur, le **gérant est prévenu par e-mail**, une seule fois par vente (`notify_manager`, `manager_notified_at`).
+- **Avis de l'expert** : un vendeur occasionnel qui ne sait pas évaluer la pièce clique « Demander l'avis de l'expert ». Le gérant reçoit un e-mail (photo, nom, suggestion de prix de l'IA, mot du vendeur) avec un lien secret vers `avis-expertise.php` où il saisit un prix et un mot. La caisse du vendeur affiche la réponse (relève toutes les 4 s), préremplit le prix, et le vendeur conclut, en pouvant encore négocier. Table `pos_appraisals` (créée au premier usage, non transférée entre prod et préprod).
+- **Journal des ventes** (module « Reçus & journal des ventes ») : colonnes ajoutées au CSV *Mode de paiement* (espèces, carte, en ligne), *Vendeur* et *Prix négocié* ; la colonne « Paiement Stripe » n'affiche plus les références internes des ventes en caisse. Dans le FEC, les espèces vont au **compte de caisse** (réglage `acc_cash`, 531000 par défaut) et non à la banque.
+- Tests : `tests/VenteExpressTest.php`.

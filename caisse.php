@@ -58,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $account = admin_session();
 $isAdmin = $account !== null && $account['role'] === 'admin';
+$canSell = $account !== null && in_array($account['role'], ['admin', 'vendeur'], true);   // le gérant et les vendeurs de la caisse
 $ico = static fn (string $d): string => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
 $siteName = trim((string) $content['site_name']) ?: (string) tenant('name');
 $appName = shop_app_name('vente');
@@ -114,11 +115,11 @@ $shareAttrs = ' data-share-url="' . h($appUrl) . '" data-share-title="' . h($app
     ]) ?>
     <p class="st-share-row"><button type="button" class="btn btn-ghost"<?= $shareAttrs ?> data-share-open="share">Partager l'application</button></p>
   </main>
-<?php elseif (!$isAdmin): ?>
+<?php elseif (!$canSell): ?>
   <main class="st-login">
     <p class="eyebrow">Vente</p>
     <h1>Accès réservé</h1>
-    <p class="lede">L'application Vente encaisse les ventes et valide les commandes : elle est réservée aux administrateurs de la boutique. Vous êtes connecté·e en tant que « <?= h(account_role_label($account['role'])) ?> ».</p>
+    <p class="lede">L'application Vente encaisse les ventes et valide les commandes : elle est réservée aux administrateurs et aux vendeurs de la boutique. Vous êtes connecté·e en tant que « <?= h(account_role_label($account['role'])) ?> ».</p>
     <form method="post" class="st-form"><input type="hidden" name="action" value="logout"><button class="btn btn-ghost" type="submit">Changer de compte</button></form>
   </main>
 <?php else: ?>
@@ -133,8 +134,10 @@ $shareAttrs = ' data-share-url="' . h($appUrl) . '" data-share-title="' . h($app
         <button type="button" class="btn btn-ghost" data-share-open="share"<?= $shareAttrs ?>>Partager l'application</button>
         <button type="button" class="btn btn-ghost" data-share-open="qr"<?= $shareAttrs ?>>Code QR de l'application</button>
         <?php if (!$reachable): ?><p class="qa-note">Adresse locale : un téléphone ne peut pas l'ouvrir. En ligne, le lien fonctionne.</p><?php endif; ?>
+<?php if ($isAdmin): ?>
         <a class="btn btn-ghost" href="<?= h($base) ?>/studio.php">Studio (photos)</a>
         <a class="btn btn-ghost" href="/admin/dashboard.php">Administration</a>
+<?php endif; ?>
         <form method="post"><input type="hidden" name="action" value="logout"><button class="btn btn-ghost" type="submit">Se déconnecter</button></form>
       </div>
     </details>
@@ -146,7 +149,7 @@ $shareAttrs = ' data-share-url="' . h($appUrl) . '" data-share-title="' . h($app
 
   <script src="/assets/barcode-scan.js"></script>
   <script src="/assets/vendor/qrcode-generator.js"></script>
-  <script src="/assets/pos.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pos.js') ?>" data-action="/admin/pos-action.php"></script>
+  <script src="/assets/pos.js?v=<?= (int) @filemtime(__DIR__ . '/assets/pos.js') ?>" data-action="/admin/pos-action.php"<?= sumup_terminal_configured() ? ' data-terminal="1"' : '' ?>></script>
   <script>
   // Bouton « Installer l'application » : PwaSave donne la marche à suivre du navigateur (Safari, Chrome, Samsung…).
   (function () {

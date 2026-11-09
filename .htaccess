@@ -7,6 +7,10 @@ RewriteEngine On
 # /<identifiant>/ ; un déploiement à un seul commerce affiche toujours la boutique.
 DirectoryIndex index.php
 
+# Moteurs de recherche : /robots.txt est produit par robots.php (fermé tant que includes/indexation.php vaut false). La règle passe
+# avant tout fichier robots.txt statique, y compris sous le domaine propre d'un commerce.
+RewriteRule ^robots\.txt$ robots.php [L]
+
 # Galeries commerciales (page publique, sans connexion) : /galerie/ et /galerie/<identifiant>/ — voir galerie/index.php.
 RewriteRule ^galerie/?$ galerie/index.php [L]
 # Connexion à l'administration d'UNE galerie : /galerie/<identifiant>/admin (galerie/admin.php sans identifiant reste la connexion générique).
@@ -21,6 +25,9 @@ RewriteRule ^galerie/[a-z0-9][a-z0-9-]*/comptage/(sw\.js|manifest\.json)$ compta
 # Dons et invendus d'une galerie : /galerie/<identifiant>/dons/ et /galerie/<identifiant>/dons/<page>.php (extension Invendus & dons).
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/dons/?$ dons.php?g=$1 [L,QSA]
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/dons/(point|proposer|suivi|tournee)\.php$ dons-$2.php?g=$1 [L,QSA]
+# Force de vente d'une galerie (carnet de prospects séparé, extension « Force de vente ») : /galerie/<identifiant>/vente/ et /vente/<page>.php → portail/vente/.
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/vente/?$ portail/vente/prospects.php?g=$1 [L,QSA]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/vente/(prospects|prospect-action|prospects-import|tournees|tournee-geo|activite-action)\.php$ portail/vente/$2.php?g=$1 [L,QSA]
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/?$ galerie/index.php?g=$1 [L,QSA]
 
 # Agents externes des plugins (ex. agent de rendu vidéo) : /api/… → plugin-agent.php, aussi sous /<commerce>/api/… (après la
