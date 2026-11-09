@@ -92,6 +92,11 @@ class LocalValetDriver extends BasicValetDriver
             return $this->run($sitePath, '/accueil/index.php', $query);
         }
 
+        // Icône d'onglet par défaut : /favicon.ico (même règle que dans le .htaccess).
+        if ($uri === '/favicon.ico') {
+            return $this->run($sitePath, '/favicon.php', $query);
+        }
+
         // Connexion à l'administration d'une galerie : /galerie/<identifiant>/admin
         if (preg_match('#^/galerie/([A-Za-z0-9][A-Za-z0-9-]*)/admin/?$#', $uri, $m)) {
             $_GET['g'] = strtolower($m[1]);

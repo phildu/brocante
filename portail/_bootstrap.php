@@ -181,6 +181,7 @@ function portail_login_page(): never
         exit('Portail fermé : aucun compte configuré (.secrets/portail.json, créé par ./deploy-brocante.sh --portail).');
     }
     require_once __DIR__ . '/../includes/login-ui.php';
+    require_once __DIR__ . '/../includes/saas.php';
     $error = null;
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'portail_login') {
         $typed = mb_strtolower(trim((string) ($_POST['username'] ?? '')));
@@ -208,6 +209,7 @@ function portail_login_page(): never
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Connexion — Portail des commerces</title>
+<?= saas_favicon_html() ?>
 <link href="/assets/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="/portail/portail.css">
 <link rel="stylesheet" href="/portail/admin.css?v=2">
@@ -216,7 +218,7 @@ function portail_login_page(): never
 <body class="login-body">
 <main class="login-card">
   <div class="login-brand">
-    <span class="mark" aria-hidden="true"><?= function_exists('portail_icon') ? portail_icon('store', 22) : 'B' ?></span>
+    <span class="mark" aria-hidden="true"><img src="/<?= e(saas_brand_image(saas_config(), 'square')) ?>" alt="" width="30" height="30" style="display:block;object-fit:contain;"></span>
     <div><b>brocs</b><small>Administration</small></div>
   </div>
   <h1>Connexion</h1>

@@ -40,6 +40,13 @@ if ($path === '/' && !getenv('TENANT') && is_file(__DIR__ . '/portail/index.php'
     return true;
 }
 
+// Icône d'onglet par défaut (même règle que dans le .htaccess).
+if ($path === '/favicon.ico') {
+    $_SERVER['SCRIPT_NAME'] = '/favicon.php';
+    require __DIR__ . '/favicon.php';
+    return true;
+}
+
 // Connexion à l'administration d'une galerie : /galerie/<identifiant>/admin (même règle que dans le .htaccess).
 if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/admin/?$#', $path, $m)) {
     $_GET['g'] = $m[1];
