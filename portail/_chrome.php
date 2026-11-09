@@ -311,8 +311,8 @@ function portail_page_start(array $opts = []): void
 <?php endif; ?>
 <aside class="pnav" id="pnav" aria-label="Navigation de l'administration">
   <a class="pnav-brand" href="<?= $limited ? '/portail/galerie-tableau.php' : '/portail/' ?>"<?= $brand ? ' title="' . e($brand['name']) . '"' : '' ?>>
-    <span class="pnav-mark<?= $brand ? ' is-gallery' : '' ?>"><?php if ($brand && $brand['logo'] !== ''): ?><img src="/<?= e($brand['logo']) ?>" alt=""><?php else: ?><?= portail_icon($limited ? 'gallery' : 'store', 20) ?><?php endif; ?></span>
-    <span class="pnav-brand-text"><b><?= e($brand['name'] ?? 'brocs') ?></b><small><?= $limited ? 'Espace galerie' : 'Administration' ?></small></span>
+    <span class="pnav-mark<?= $brand ? ' is-gallery' : (!$limited ? ' is-logo' : '') ?>"><?php if ($brand && $brand['logo'] !== ''): ?><img src="/<?= e($brand['logo']) ?>" alt=""><?php elseif (!$brand && !$limited): ?><img src="/assets/bricbrok/bricbrok-etal-icone.svg" alt="" width="30" height="30"><?php else: ?><?= portail_icon($limited ? 'gallery' : 'store', 20) ?><?php endif; ?></span>
+    <span class="pnav-brand-text"><b><?= e($brand['name'] ?? 'bricbrok') ?></b><small><?= $limited ? 'Espace galerie' : 'Administration' ?></small></span>
   </a>
 
   <div class="pnav-scroll">
