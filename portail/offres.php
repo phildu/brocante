@@ -14,18 +14,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $cfg = saas_config();
 
     if ($action === 'save') {
-        $logoError = '';
-        $newLogo = '';
-        $oldLogo = (string) $cfg['logo'];
-        if (!empty($_POST['remove_logo'])) $cfg['logo'] = '';
-        if ((int) ($_FILES['logo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
-            try {
-                $newLogo = saas_logo_store($_FILES['logo']);
-                $cfg['logo'] = $newLogo;
-            } catch (InvalidArgumentException $ex) {
-                $logoError = $ex->getMessage();
-            }
-        }
         $visible = (array) ($_POST['listed'] ?? []);
         $cfg = array_merge($cfg, [
             'name' => trim((string) ($_POST['name'] ?? '')), 'tagline' => trim((string) ($_POST['tagline'] ?? '')),
@@ -34,9 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'hidden' => array_values(array_diff(array_keys($shops), $visible)),
         ]);
         $ok = saas_config_save($cfg);
-        if (!$ok && $newLogo !== '') saas_banner_delete($newLogo);
-        if ($ok && $oldLogo !== '' && $oldLogo !== $cfg['logo']) saas_banner_delete($oldLogo);
-        portail_flash($logoError !== '' ? $logoError . ($ok ? ' Le reste est enregistré.' : '') : ($ok ? 'Réglages enregistrés.' : "Impossible d'écrire data/saas.json (droits du dossier data)."), $logoError !== '' || !$ok ? 'error' : 'ok');
+        portail_flash($ok ? 'Réglages enregistrés.' : "Impossible d'écrire data/saas.json (droits du dossier data).", $ok ? 'ok' : 'error');
     } elseif ($action === 'home_save') {
         $home = $cfg['home'];
         foreach (['eyebrow' => 120, 'title' => 140, 'lede' => 400] as $key => $max) $home[$key] = mb_substr(trim((string) ($_POST[$key] ?? '')), 0, $max);
@@ -196,10 +182,7 @@ $origin = saas_origin();
         <label class="f" style="flex:none;min-width:0;">Couleur<input class="swatch-in" type="color" name="accent" value="<?= e($cfg['accent']) ?>"></label>
       </div>
       <label class="f">Slogan<input type="text" name="tagline" maxlength="160" value="<?= e($cfg['tagline']) ?>"></label>
-      <div class="row">
-        <label class="f">Logo <small>(PNG transparent conseillé, 5 Mo max ; remplace l'initiale dans l'en-tête du site)</small><input type="file" name="logo" accept="image/png,image/jpeg,image/webp"></label>
-        <?php if ($cfg['logo'] !== ''): ?><img src="/<?= e($cfg['logo']) ?>" alt="Logo actuel" style="height:44px;width:auto;max-width:140px;object-fit:contain;background:#f1eee8;border-radius:8px;padding:4px;align-self:end;"><label style="align-self:end;"><input type="checkbox" name="remove_logo" value="1"> Retirer</label><?php endif; ?>
-      </div>
+      <p class="meta" style="margin:0">Le logo (horizontal, vertical, carré) et le favicon se règlent dans <a href="/portail/identite.php">Plateforme → Logo &amp; favicon</a>.</p>
 
       <label class="f" style="max-width:360px">Plafond de boutiques gratuites par 24 h (0 = aucun plafond)<input type="text" name="free_daily_cap" inputmode="numeric" pattern="[0-9]{1,4}" value="<?= (int) $cfg['free_daily_cap'] ?>"></label>
       <p class="meta" style="margin:-4px 0 0">Les boutiques se créent sans validation de votre part : ce plafond limite les créations gratuites en masse (par défaut 10 par jour). Les formules payantes ne sont pas concernées.</p>
