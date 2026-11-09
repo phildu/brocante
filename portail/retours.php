@@ -1,8 +1,9 @@
 <?php
 // Retours des testeurs : boîte de triage, réponses par e-mail, relances et
 // pilotage du programme (boutiques et galeries testeuses, widget).
-// Les retours arrivent par le widget de l'administration des boutiques
-// (admin/feedback-api.php, voir includes/feedback.php). Export CSV.
+// Les retours arrivent par le widget de l'administration des boutiques, du site
+// public (client connecté) et du portail (admin/feedback-api.php,
+// portail/retour-api.php, voir includes/feedback.php). Export CSV.
 
 require __DIR__ . '/_bootstrap.php';
 ext_page();   // jetons du vocabulaire ({Exts}, {un ext}…) remplacés à l'envoi de la page
@@ -21,8 +22,12 @@ $filters = [
     'q' => feedback_clean_text($_GET['q'] ?? '', 80),
     'jours' => in_array((int) ($_GET['jours'] ?? 0), [0, 7, 30, 90], true) ? (int) ($_GET['jours'] ?? 0) : 0,
     'module' => preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', (string) ($_GET['module'] ?? '')) ? (string) $_GET['module'] : '',
+    'surface' => in_array($_GET['espace'] ?? '', FEEDBACK_SURFACES, true) ? (string) $_GET['espace'] : '',
 ];
-$backQuery = http_build_query(array_filter($filters, static fn ($v): bool => $v !== '' && $v !== 0), '', '&');
+$queryParams = $filters;
+$queryParams['espace'] = $queryParams['surface'];   // le paramètre d'adresse s'appelle « espace »
+unset($queryParams['surface']);
+$backQuery = http_build_query(array_filter($queryParams, static fn ($v): bool => $v !== '' && $v !== 0), '', '&');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -37,6 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'widget' => !empty($_POST['widget']),
                 'open_to_all' => !empty($_POST['open_to_all']),
                 'include_beta_testers' => !empty($_POST['include_beta_testers']),
+                'surfaces' => array_combine(FEEDBACK_SURFACES, array_map(
+                    static fn (string $surface): bool => !empty($_POST['surfaces'][$surface]), FEEDBACK_SURFACES)),
                 'testers' => [
                     'shops' => is_array($testers['shops'] ?? null) ? $testers['shops'] : [],
                     'galleries' => is_array($testers['galleries'] ?? null) ? $testers['galleries'] : [],
@@ -88,7 +95,7 @@ $testerShops = feedback_tester_shops($settings);
 $focusRecord = $focus !== '' ? feedback_find($focus) : null;
 $shopChoices = [];
 foreach ($shops as $slug => $cfg) $shopChoices[$slug] = (string) ($cfg['name'] ?? $slug);
-foreach ($all as $f) $shopChoices[$f['shop']] = $f['shop_name'] !== '' ? $f['shop_name'] : $f['shop'];
+foreach ($all as $f) if ($f['shop'] !== '') $shopChoices[$f['shop']] = $f['shop_name'] !== '' ? $f['shop_name'] : $f['shop'];
 ksort($shopChoices);
 
 if (($_GET['export'] ?? '') === 'csv') {
@@ -245,12 +252,16 @@ if (function_exists('saas_config')) {
         <h2 style="margin:0;">Programme testeurs</h2>
         <span class="fb-chip"><?= (int) feedback_program_shop_count($settings) ?> boutique(s)</span>
         <?php if ($settings['open_to_all']): ?><span class="fb-chip" data-tone="doing">Widget ouvert à tous</span><?php endif; ?>
+        <?php foreach (FEEDBACK_SURFACES as $surface): ?><span class="fb-chip"<?= !empty($settings['surfaces'][$surface]) && !empty($settings['widget']) ? ' data-tone="ok"' : '' ?>><?= e(FEEDBACK_SURFACE_LABELS[$surface]) ?> : <?= !empty($settings['surfaces'][$surface]) && !empty($settings['widget']) ? 'actif' : 'coupé' ?></span><?php endforeach; ?>
         <span class="muted" style="font-size:.78rem;margin-left:auto;">depuis le <?= e($day((int) $settings['since'])) ?> · <?= (int) $testerEmailCount ?> adresse(s) e-mail</span>
       </summary>
       <form method="post" style="display:grid;gap:12px;">
         <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="settings"><input type="hidden" name="back" value="<?= e($backQuery) ?>">
         <div class="fb-checks" style="max-height:none;">
-          <label class="fb-toggle"><input type="checkbox" name="widget" value="1"<?= !empty($settings['widget']) ? ' checked' : '' ?>><span><strong>Afficher le widget « Un retour ? »</strong><br><span class="muted">Dans l’administration des boutiques couvertes.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="widget" value="1"<?= !empty($settings['widget']) ? ' checked' : '' ?>><span><strong>Afficher le widget « Un retour ? »</strong><br><span class="muted">Interrupteur général : décoché, le widget disparaît partout, quels que soient les espaces ci-dessous.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="surfaces[admin]" value="1"<?= !empty($settings['surfaces']['admin']) ? ' checked' : '' ?>><span><strong>Administration des boutiques (back end)</strong><br><span class="muted">Pour les commerçants connectés à l’administration d’une boutique couverte.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="surfaces[front]" value="1"<?= !empty($settings['surfaces']['front']) ? ' checked' : '' ?>><span><strong>Site public des boutiques (front end)</strong><br><span class="muted">Pour les clients connectés à une boutique couverte.</span></span></label>
+          <label class="fb-toggle"><input type="checkbox" name="surfaces[portail]" value="1"<?= !empty($settings['surfaces']['portail']) ? ' checked' : '' ?>><span><strong>Portail</strong><br><span class="muted">Sur toutes les pages du portail, pour l’exploitant et les administrateurs de galerie (indépendant de la liste des boutiques).</span></span></label>
           <label class="fb-toggle"><input type="checkbox" name="open_to_all" value="1"<?= !empty($settings['open_to_all']) ? ' checked' : '' ?>><span><strong>Ouvrir à toutes les boutiques</strong><br><span class="muted">Le widget apparaît même hors programme testeurs.</span></span></label>
           <label class="fb-toggle"><input type="checkbox" name="include_beta_testers" value="1"<?= !empty($settings['include_beta_testers']) ? ' checked' : '' ?>><span><strong>Inclure les testeurs {des exts} « En test »</strong><br><span class="muted">Boutiques et galeries déjà déclarées dans Tarifs {des exts}.</span></span></label>
         </div>
@@ -290,6 +301,7 @@ if (function_exists('saas_config')) {
       <form class="fb-toolbar" method="get">
         <label>Statut<select name="statut"><?php foreach ($statusChoices as $key => $label): ?><option value="<?= e($key) ?>"<?= $filters['statut'] === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
         <label>Type<select name="type"><option value="">Tous</option><?php foreach (FEEDBACK_TYPE_LABELS as $key => $label): ?><option value="<?= e($key) ?>"<?= $filters['type'] === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
+        <label>Espace<select name="espace"><option value="">Tous</option><?php foreach (FEEDBACK_SURFACE_LABELS as $key => $label): ?><option value="<?= e($key) ?>"<?= $filters['surface'] === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
         <label>Boutique<select name="shop"><option value="">Toutes</option><?php foreach ($shopChoices as $slug => $name): ?><option value="<?= e((string) $slug) ?>"<?= $filters['shop'] === (string) $slug ? ' selected' : '' ?>><?= e($name) ?></option><?php endforeach; ?></select></label>
         <label>Période<select name="jours"><?php foreach ([0 => 'Tout', 7 => '7 jours', 30 => '30 jours', 90 => '90 jours'] as $d => $label): ?><option value="<?= $d ?>"<?= $filters['jours'] === $d ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></label>
         <label>Recherche<input type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="message, boutique, e-mail…"></label>
@@ -311,8 +323,9 @@ if (function_exists('saas_config')) {
               <span class="fb-chip" data-tone="<?= e($statusTone($f['status'])) ?>"><?= e(FEEDBACK_STATUS_LABELS[$f['status']] ?? $f['status']) ?></span>
               <?php if (in_array($f['priority'], ['high', 'urgent'], true)): ?><span class="fb-chip fb-chip--prio" data-prio="<?= e($f['priority']) ?>"><?= e(FEEDBACK_PRIORITY_LABELS[$f['priority']] ?? $f['priority']) ?></span><?php endif; ?>
               <?php if (!empty($f['attachment'])): ?><span class="fb-chip">Capture</span><?php endif; ?>
-              <?php if (($f['source'] ?? 'equipe') === 'client'): ?><span class="fb-chip">Client</span><?php endif; ?>
-              <span class="fb-summary-shop"><?= e($f['shop_name']) ?></span>
+              <span class="fb-chip" data-surface="<?= e($f['surface']) ?>"><?= e(FEEDBACK_SURFACE_LABELS[$f['surface']] ?? $f['surface']) ?></span>
+              <?php if ($f['surface'] !== 'portail'): ?><span class="fb-summary-shop"><?= e($f['shop_name']) ?></span>
+              <?php elseif ($f['gallery'] !== ''): ?><span class="fb-summary-shop">galerie <?= e($f['gallery']) ?></span><?php endif; ?>
               <?php if ($f['account'] !== ''): ?><span class="muted">· <?= e($f['account']) ?></span><?php endif; ?>
               <span class="fb-summary-date"><?= e($dt((string) $f['at'])) ?></span>
             </span>

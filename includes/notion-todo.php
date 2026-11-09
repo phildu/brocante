@@ -219,7 +219,7 @@ function notion_todo_criterion(array $record, string $message): string
     $shop = trim((string) ($record['shop_name'] ?? '')) ?: (string) ($record['shop'] ?? '');
     $page = trim((string) ($record['url'] ?? '')) ?: trim((string) ($record['page'] ?? ''));
     $lines = [
-        "Retour {$kind} du {$date} ({$ref}" . ($shop !== '' ? ", boutique {$shop}" : '') . ').',
+        "Retour {$kind} du {$date} ({$ref}" . ($shop !== '' ? (($record['surface'] ?? '') === 'portail' ? ", espace {$shop}" : ", boutique {$shop}") : '') . ').',
         '« ' . mb_substr($message, 0, 900) . ' »',
     ];
     if ($page !== '') {
@@ -400,7 +400,7 @@ function notion_todo_pending_add(array $record, string $error): void
 function notion_todo_record_min(array $record): array
 {
     $out = [];
-    foreach (['id', 'at', 'shop', 'shop_name', 'source', 'type', 'severity', 'priority', 'message', 'page', 'url', 'module'] as $key) {
+    foreach (['id', 'at', 'shop', 'shop_name', 'source', 'surface', 'type', 'severity', 'priority', 'message', 'page', 'url', 'module'] as $key) {
         if (isset($record[$key])) {
             $out[$key] = $record[$key];
         }
