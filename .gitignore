@@ -26,3 +26,6 @@ backups/
 .app-env
 # Sauvegardes automatiques avant édition (fichier.bak-AAAAMMJJ-HHMMSS) : archives locales.
 *.bak-*
+# Rapports d'audit des prospects : coordonnées personnelles, jamais versionnées.
+rapports/
+prospects-audit-*
