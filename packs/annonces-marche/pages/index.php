@@ -21,13 +21,14 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
      data-selection-modal-url="<?= h(plugin_page_url('annonces-marche', 'index') . '&modal=selection') ?>"
      data-api-modal-url="<?= $role === 'admin' ? h(plugin_page_url('annonces-marche', 'index') . '&modal=token') : '' ?>">
 
-  <p class="eyebrow">Option · <?= h($plugin['name']) ?> · v<?= h($plugin['version']) ?></p>
+  <p class="eyebrow">Module · <?= h($plugin['name']) ?> · v<?= h($plugin['version']) ?></p>
   <p><a href="<?= h(plugin_page_url('annonces-marche', 'mappings')) ?>">Correspondances des champs (état, catégorie, taille, couleur…) →</a></p>
-  <h1 style="font-size:1.8rem;margin:12px 0 8px;">Annonces Leboncoin &amp; Vinted</h1>
+  <h1 style="font-size:1.8rem;margin:12px 0 8px;">Synchronisation multi-plateformes</h1>
   <p class="hint" style="max-width:62ch;">
-    Remplissez les formulaires de dépôt à partir du catalogue de <strong><?= h($content['site_name']) ?></strong>.
-    L’extension prépare l’annonce ; <strong>vous restez connecté sur le site et vous validez la publication</strong>
-    (pas de robot qui publie à votre place).
+    Préparez et exportez vos annonces depuis le catalogue de <strong><?= h($content['site_name']) ?></strong>
+    vers les plateformes de seconde main. L’extension locale prépare l’annonce et, si vous activez le mode
+    automatique, la publie depuis votre navigateur. Par défaut, vous gardez la validation. Aucune publication
+    ne part de nos serveurs.
   </p>
 
   <section class="am-card" id="am-billing">
@@ -39,16 +40,28 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
   </section>
 
   <section class="am-card<?= $ent['entitled'] ? '' : ' is-dim' ?>">
-    <h2>Extension Chrome</h2>
+    <h2>Extension locale (Chrome)</h2>
     <ol class="am-steps">
       <li>Téléchargez l’archive, décompressez-la.</li>
       <li>Ouvrez <code>chrome://extensions</code>, activez le « mode développeur », « Charger l’extension non empaquetée », choisissez le dossier.</li>
       <li>Dans l’extension : adresse de la boutique <code><?= h(rtrim(shop_abs_url('/'), '/')) ?></code> (ou directement <code><?= h($apiBase) ?></code>) + jeton.</li>
-      <li>Sur Leboncoin ou Vinted, ouvrez « Déposer une annonce », choisissez un article dans l’extension, puis validez à la main.</li>
+      <li>Sur la plateforme de votre choix, ouvrez « Déposer une annonce », choisissez un article dans l’extension, puis validez — ou laissez le mode automatique agir si vous l’avez activé.</li>
     </ol>
+    <p class="hint" style="max-width:68ch;">Le mode automatique est désactivé par défaut. Il s’active dans l’extension après acceptation explicite du risque, avec une simulation proposée en premier et un arrêt sur toute vérification demandée par la plateforme.</p>
     <div class="am-actions">
       <a class="btn-small" href="<?= h($pluginApi('extension-zip')) ?>">Télécharger l’extension (.zip)</a>
     </div>
+  </section>
+
+  <section class="am-card">
+    <h2>Outil indépendant</h2>
+    <p class="hint" style="max-width:72ch;">
+      Cet outil n’est ni affilié, ni mandaté, ni sponsorisé par les plateformes tierces. Vous restez seul
+      responsable du respect de leurs conditions d’utilisation, de la sécurité de vos comptes et de la
+      conformité de vos annonces. Nous ne garantissons pas une interopérabilité continue et ne répondons
+      pas d’une suspension, d’une restriction ou d’un blocage de compte prononcés par une plateforme.
+      Les noms et marques cités appartiennent à leurs titulaires et sont mentionnés à titre descriptif.
+    </p>
   </section>
 
   <section class="am-card">
@@ -56,7 +69,7 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
     <div class="am-actions">
       <button type="button" class="btn-small" data-open-modal="am-selection-dialog">Sélectionner les articles pour l’application</button>
       <?php if ($role === 'admin'): ?>
-        <button type="button" class="btn-small" data-open-modal="am-api-dialog">Clé API et connexion Python</button>
+        <button type="button" class="btn-small" data-open-modal="am-api-dialog">Clé API et connexion de l’application locale</button>
       <?php endif; ?>
     </div>
   </section>
@@ -69,7 +82,7 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
       </div>
       <button type="button" class="am-modal-close" data-close-modal aria-label="Fermer">×</button>
     </div>
-    <p class="hint">Cochez les produits que l’application Python doit préparer. Les changements sont enregistrés automatiquement.</p>
+    <p class="hint">Cochez les produits que l’application locale ou l’extension doit préparer. Les changements sont enregistrés automatiquement.</p>
     <div class="am-selection-toolbar">
       <label class="am-search-label" for="am-product-search">Rechercher un article</label>
       <input type="search" id="am-product-search" placeholder="Nom, référence ou marque…" <?= $ent['entitled'] ? '' : 'disabled' ?>>
@@ -102,7 +115,7 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
       <div class="am-modal-header">
         <div>
           <p class="eyebrow">Accès sécurisé</p>
-          <h2 id="am-api-title">Clé API et connexion Python</h2>
+          <h2 id="am-api-title">Clé API et connexion de l’application locale</h2>
         </div>
         <button type="button" class="am-modal-close" data-close-modal aria-label="Fermer">×</button>
       </div>

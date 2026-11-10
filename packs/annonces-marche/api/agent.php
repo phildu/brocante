@@ -32,7 +32,7 @@ if ($path === '/annonces/ping' && $method === 'GET') {
         'slug' => tenant_slug(),
         'entitled' => am_is_entitled(),
         'authenticated' => $tokenOk,
-        'version' => '1.3.0',
+        'version' => '1.6.0',
     ]);
 }
 
@@ -65,6 +65,27 @@ if ($path === '/annonces/selection' && $method === 'GET') {
         'items' => $items,
         'count' => count($items),
         'updated_at' => gmdate('c'),
+    ]);
+}
+
+// Références déjà publiées sur un canal : l'extension s'en sert pour ne jamais créer de doublon.
+if ($path === '/annonces/publications' && $method === 'GET') {
+    $channel = strtolower(trim((string) ($_GET['channel'] ?? '')));
+    if (!in_array($channel, ['leboncoin', 'vinted'], true)) {
+        plugin_json(['error' => 'Canal invalide (leboncoin|vinted).'], 422);
+    }
+    $stmt = db()->prepare("SELECT product_ref, MAX(id) AS last_id
+        FROM am_listings
+        WHERE channel = ? AND status IN ('published', 'sold')
+        GROUP BY product_ref
+        ORDER BY last_id DESC
+        LIMIT 2000");
+    $stmt->execute([$channel]);
+    plugin_json([
+        'channel' => $channel,
+        'refs' => array_map(static function (array $row): string {
+            return (string) $row['product_ref'];
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC)),
     ]);
 }
 

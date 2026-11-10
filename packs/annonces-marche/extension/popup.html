@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Annonces catalogue</title>
+  <title>Synchronisation multi-plateformes</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <header>
-    <strong>Annonces catalogue</strong>
+    <strong>Synchronisation multi-plateformes</strong>
     <button type="button" id="btn-settings" class="link" aria-expanded="false">Réglages</button>
   </header>
 
@@ -36,6 +36,53 @@
     </div>
     <ul id="list" class="list"></ul>
     <div id="detail" class="detail" hidden></div>
+  </section>
+
+  <section id="auto" class="panel auto">
+    <div class="auto-head">
+      <strong>Publication automatique</strong>
+      <span id="auto-badge" class="badge">Arrêtée</span>
+    </div>
+    <p class="hint">Le navigateur remplit puis clique « Publier » à votre place, uniquement sur cette machine. Les plateformes peuvent interdire l’automatisation : vous assumez le risque de restriction ou de bannissement de votre compte. Aucune donnée n’est publiée depuis le serveur de la boutique.</p>
+
+    <details id="auto-setup" class="auto-setup">
+      <summary>Réglages du mode automatique</summary>
+      <label class="check"><input type="checkbox" id="auto-dry"> <span>Simulation seule (ne clique jamais sur « Publier »)</span></label>
+      <div class="two">
+        <label>Intervalle (min)
+          <input type="number" id="auto-interval" min="2" max="30" step="1" inputmode="numeric">
+        </label>
+        <label>Quota / jour
+          <input type="number" id="auto-cap" min="1" max="30" step="1" inputmode="numeric">
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="auto-keep-tabs"> <span>Garder les onglets ouverts après publication</span></label>
+      <label>Page de dépôt Leboncoin
+        <input type="url" id="auto-url-lbc" spellcheck="false" autocomplete="off">
+      </label>
+      <label>Page de dépôt Vinted
+        <input type="url" id="auto-url-vinted" spellcheck="false" autocomplete="off">
+      </label>
+      <p class="hint">Si une plateforme change l’adresse de son formulaire, corrigez-la ici.</p>
+    </details>
+
+    <label class="check risk"><input type="checkbox" id="auto-armed"> <span><b>J’assume le risque</b> de suspension ou de bannissement de mon compte sur la plateforme, et je vérifie que l’automatisation y est autorisée.</span></label>
+    <p class="hint" id="auto-armed-at"></p>
+
+    <div class="row">
+      <button type="button" id="auto-lbc" class="ghost" disabled>Lancer Leboncoin</button>
+      <button type="button" id="auto-vinted" class="ghost" disabled>Lancer Vinted</button>
+    </div>
+    <div class="row controls">
+      <button type="button" id="auto-pause" class="ghost" disabled>Pause</button>
+      <button type="button" id="auto-resume" class="ghost" disabled>Reprendre</button>
+      <button type="button" id="auto-skip" class="ghost" disabled>Passer</button>
+      <button type="button" id="auto-stop" class="ghost" disabled>Arrêter</button>
+    </div>
+    <p id="auto-status" class="msg" role="status">Chargement…</p>
+    <div id="auto-queue" class="auto-queue" hidden></div>
+    <ul id="auto-history" class="auto-history" aria-label="Derniers traitements"></ul>
+    <button type="button" id="auto-clear-history" class="link small" hidden>Effacer l’historique local</button>
   </section>
 
   <script src="popup.js"></script>

@@ -1,5 +1,5 @@
 <?php
-// Réglages du pack Annonces places de marché (clé / valeur dans am_settings).
+// Réglages du pack Synchronisation multi-plateformes (clé / valeur dans am_settings).
 // Utilisable hors PLUGIN_RUNTIME (webhook Stripe).
 require_once dirname(__DIR__, 3) . '/includes/addons.php';
 
@@ -61,7 +61,7 @@ function am_addon_name(): string
     $shop = function_exists('tenant_slug') ? tenant_slug() : '';
     $info = addon_info('annonces-marche', $shop);
     $name = trim((string) ($info['name'] ?? ''));
-    return $name !== '' ? $name : 'Annonces Leboncoin & Vinted';
+    return $name !== '' ? $name : 'Synchronisation multi-plateformes';
 }
 
 /** Reprend une ancienne souscription avant le premier affichage du panneau commun. */

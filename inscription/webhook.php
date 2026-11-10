@@ -85,14 +85,14 @@ if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'
     }
     error_log('webhook stripe module_addon ' . ($res['slug'] ?? '?') . ' ' . ($res['module'] ?? '?') . ' → ' . ($res['state'] ?? '?'));
 } elseif ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'] ?? '') === 'marketplace_addon')) {
-    // Option Annonces places de marché (packs/annonces-marche) : active l'abonnement de la boutique.
+    // Option Synchronisation multi-plateformes (packs/annonces-marche) : active l'abonnement de la boutique.
     require_once dirname(__DIR__) . '/packs/annonces-marche/lib/subscribe.php';
     $res = am_apply_checkout_session($obj);
     if (($res['state'] ?? '') === 'added') {
         saas_event('addon_subscribed', [
             'slug' => $res['slug'] ?? '',
             'amount' => (int) ($obj['amount_total'] ?? 0),
-            'note' => 'Annonces Leboncoin & Vinted',
+            'note' => 'Synchronisation multi-plateformes',
             'actor' => 'stripe',
         ]);
     }
@@ -200,7 +200,7 @@ if ($event['type'] === 'checkout.session.completed' && (($obj['metadata']['type'
         require_once dirname(__DIR__) . '/packs/annonces-marche/lib/subscribe.php';
         $addonSlug = am_cancel_subscription($sub);
         if ($addonSlug) {
-            saas_event('addon_canceled', ['slug' => $addonSlug, 'note' => 'Annonces Leboncoin & Vinted', 'actor' => 'stripe']);
+            saas_event('addon_canceled', ['slug' => $addonSlug, 'note' => 'Synchronisation multi-plateformes', 'actor' => 'stripe']);
         }
     }
 } elseif ($event['type'] === 'invoice.paid' && ($obj['billing_reason'] ?? '') === 'subscription_cycle') {

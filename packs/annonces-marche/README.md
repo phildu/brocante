@@ -1,6 +1,10 @@
-# Annonces places de marché (option payante)
+# Synchronisation multi-plateformes (option payante)
 
-Assistant de dépôt **Leboncoin** / **Vinted** branché sur le catalogue de la boutique. L’extension Chrome préremplit le formulaire ; le commerçant reste connecté sur le site et **valide la publication lui-même** (pas de robot de publication).
+Préparez et exportez vos annonces vers les plateformes de seconde main depuis le catalogue de la boutique. L’extension Chrome locale préremplit les formulaires et, en mode automatique explicitement activé, peut publier depuis le navigateur du commerçant. **Aucune publication ne part du serveur de la boutique.**
+
+## Outil indépendant
+
+Cet outil n’est ni affilié, ni mandaté, ni sponsorisé par les plateformes tierces. Le commerçant reste seul responsable du respect de leurs conditions d’utilisation, de la sécurité de ses comptes et de la conformité de ses annonces. Aucune interopérabilité continue n’est garantie : un changement d’interface ou une restriction d’automatisation peut interrompre le module sans préavis. Les noms et marques cités appartiennent à leurs titulaires et sont mentionnés à titre descriptif.
 
 ## Option payante
 
@@ -27,9 +31,26 @@ Dans la fiche d’un article, **Télécharger les photos** permet de choisir le 
 
 Le bouton **Exporter les données JSON** télécharge un fichier contenant l’ensemble des champs de la fiche article et les URL des photos, pour préparer ou archiver l’annonce.
 
-Sur le formulaire de dépôt, l’extension repère les champs par leur libellé et préremplit titre, description, prix, état, marque, couleur, matière et taille/dimensions lorsque ces champs sont présents. Sur Vinted, elle propose aussi la nature et la sous-catégorie du catalogue comme indication ; la catégorie finale doit être vérifiée et choisie dans les options Vinted si le champ ne peut pas être prérempli exactement.
+Sur le formulaire de dépôt, l’extension repère les champs par leur libellé visible, leur `aria-label`, leur `name` ou leurs attributs de test (`data-testid`, `data-test`, `data-qa`, `data-cy`) plutôt que par une position profonde dans le DOM, puis préremplit titre, description, prix, état, marque, couleur, matière et taille/dimensions lorsque ces champs sont présents. Les champs sont remplis un par un avec un court tempo, et non en une seule rafale. Sur Vinted, elle propose aussi la nature et la sous-catégorie du catalogue comme indication ; la catégorie finale doit être vérifiée et choisie dans les options Vinted si le champ ne peut pas être prérempli exactement.
 
 Après avoir cliqué sur **Remplir Leboncoin** ou **Remplir Vinted**, un panneau latéral Chrome affiche les informations de l’article et reste ouvert pendant le chargement des photos. Il permet aussi de relancer le préremplissage. Cette fonction nécessite une version récente de Chrome et le droit « panneau latéral » de l’extension.
+
+## Données sensibles et transport
+
+- L’extension ne lit ni ne transmet les cookies de session Leboncoin ou Vinted, ni aucun mot de passe. Aucun identifiant de ces plateformes n’est stocké côté boutique : chaque action se déroule dans la session déjà ouverte du navigateur du commerçant.
+- Le seul secret conservé dans `chrome.storage.local` est le jeton `am_…` de la boutique, utilisé dans l’en-tête `X-Annonces-Token` vers l’API du pack. Il est révocable depuis l’administration.
+- L’adresse de la boutique doit être en HTTPS. Une adresse HTTP n’est acceptée que pour un hôte local ou un réseau privé de développement (`localhost`, `127.*`, `10.*`, `192.168.*`, `172.16–31.*`) ; sinon elle est refusée.
+- Côté serveur, l’extension n’envoie que les données de l’annonce (référence, titre, prix, description, photos) et le résultat de publication ; rien de la session tierce.
+
+## Mode automatique local (opt-in)
+
+Le mode automatique publie **depuis le navigateur du commerçant**, jamais depuis le serveur de la boutique. Il est désarmé par défaut et doit être activé par une confirmation explicite dans l’extension. La simulation (remplissage et progression sans clic sur « Publier ») est cochée par défaut : elle déroule toute la file et classe chaque pièce « simulée » sans rien mettre en ligne.
+
+Garde-fous : un article à la fois, file d’attente enregistrée dans le navigateur (reprise après fermeture de la popup ou redémarrage), intervalle aléatoire (2 à 30 minutes, 5 par défaut), plafond quotidien (10 par défaut), arrêt immédiat en cas de captcha, vérification d’identité, téléphone ou message de sécurité, et pause après un article incomplet ou deux erreurs consécutives. L’extension enregistre chaque résultat dans l’historique (`/marquer`) et consulte `/publications` pour ne jamais republier une référence déjà en ligne.
+
+Quand une pièce exige une action humaine (choix de catégorie dans l’arbre de la plateforme, photos refusées, vérification), la file se met en pause et **l’onglet reste ouvert** : complétez sur place, puis **Reprendre** retente la même pièce, ou **Passer** l’ignore. Une pièce publiée à la main hors mode automatique n’est pas détectée : décochez-la dans la sélection avant de lancer un passage.
+
+**Avertissement.** Leboncoin et Vinted interdisent l’automatisation dans leurs conditions d’utilisation. Le mode automatique reste sous votre seule responsabilité et peut entraîner la suspension ou la fermeture de votre compte. L’éditeur n’est ni affilié, ni mandaté, ni sponsorisé par ces plateformes et ne garantit aucune interopérabilité continue.
 
 ## API agent (`/api/annonces/…`)
 
@@ -39,6 +60,7 @@ Après avoir cliqué sur **Remplir Leboncoin** ou **Remplir Vinted**, un panneau
 | `GET /catalogue?q=` | jeton + option active | liste produits |
 | `GET /produit/{ref}` | jeton + option active | fiche + photos |
 | `GET /selection` | jeton + option active | sélection faite dans l’administration |
+| `GET /publications?channel=` | jeton + option active | références déjà publiées (anti-doublon) |
 | `POST /marquer` | jeton + option active | historique publication |
 
 ### Sélection pour l'application locale

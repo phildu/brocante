@@ -16,12 +16,12 @@ if (preg_match('/^cs_[A-Za-z0-9_]+$/', $id) && function_exists('saas_stripe_requ
         } else {
             $r = am_apply_checkout_session($session);
             if ($r['state'] === 'added') {
-                $message = 'Merci ! L’option Annonces places de marché est active. Créez un jeton pour l’extension.';
+                $message = 'Merci ! L’option Synchronisation multi-plateformes est active. Créez un jeton pour l’extension.';
                 $kind = 'ok';
                 if (function_exists('saas_event')) {
                     saas_event('config_changed', [
                         'slug' => tenant_slug(),
-                        'note' => 'Option Annonces places de marché souscrite',
+                        'note' => 'Option Synchronisation multi-plateformes souscrite',
                         'amount' => (int) ($session['amount_total'] ?? 0),
                         'actor' => 'client',
                     ]);
@@ -44,5 +44,5 @@ if (preg_match('/^cs_[A-Za-z0-9_]+$/', $id) && function_exists('saas_stripe_requ
   <p class="eyebrow">Option · Paiement</p>
   <h1 style="font-size:1.8rem;margin:12px 0 12px;">Confirmation</h1>
   <p class="am-flash" data-kind="<?= h($kind) ?>"><?= h($message) ?></p>
-  <p><a class="btn-small" href="<?= h(plugin_page_url('annonces-marche', 'index')) ?>">Retour à Annonces LBC / Vinted</a></p>
+  <p><a class="btn-small" href="<?= h(plugin_page_url('annonces-marche', 'index')) ?>">Retour à Synchronisation multi-plateformes</a></p>
 </div>

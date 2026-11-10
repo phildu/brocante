@@ -12,7 +12,7 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
      data-csrf="<?= h($pluginCsrf) ?>"
      data-entitled="<?= $ent['entitled'] ? '1' : '0' ?>"
      data-has-token="<?= $ent['has_token'] ? '1' : '0' ?>">
-  <p class="eyebrow"><a href="<?= h(plugin_page_url('annonces-marche', 'index')) ?>">← Annonces Leboncoin &amp; Vinted</a></p>
+  <p class="eyebrow"><a href="<?= h(plugin_page_url('annonces-marche', 'index')) ?>">← Synchronisation multi-plateformes</a></p>
   <h1 style="font-size:1.8rem;margin:12px 0 8px;">Clé API et connexion Python</h1>
   <p class="hint" style="max-width:68ch">Cette clé autorise l’accès aux données de cette boutique. Elle est affichée une seule fois lors de sa création. Ne la partagez pas et ne l’intégrez pas dans un dépôt public.</p>
 

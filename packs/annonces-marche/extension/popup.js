@@ -19,6 +19,9 @@
     if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
     try {
       const parsed = new URL(u);
+      // Le jeton et le catalogue ne transitent jamais en clair hors développement local.
+      const localHost = /^(localhost|127\.|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(parsed.hostname);
+      if (parsed.protocol === 'http:' && !localHost) parsed.protocol = 'https:';
       let path = parsed.pathname.replace(/\/+$/, '') || '';
       path = path.replace(/\/boutique\.php(?:\/api(?:\/annonces)?)?$/i, '');
       if (/\/api\/annonces$/i.test(path)) {
@@ -60,7 +63,9 @@
   async function api(path, opts = {}) {
     const cfg = opts.cfg || (await loadConfig());
     if (!cfg.apiBase || !cfg.token) throw new Error('Indiquez l’adresse de la boutique et le jeton, puis Enregistrer.');
-    const url = cfg.apiBase.replace(/\/+$/, '') + path;
+    const base = normalizeApiBase(cfg.apiBase);
+    if (!base) throw new Error('Adresse de boutique invalide : utilisez HTTPS (HTTP accepté uniquement en local).');
+    const url = base + path;
     const headers = Object.assign(
       { Accept: 'application/json', 'X-Annonces-Token': cfg.token },
       opts.headers || {}
@@ -432,5 +437,260 @@
     if (e.key === 'Enter') search(q.value);
   });
 
+  /* ---------- Publication automatique locale ---------- */
+
+  const auto = {
+    badge: $('auto-badge'),
+    armed: $('auto-armed'),
+    armedAt: $('auto-armed-at'),
+    dry: $('auto-dry'),
+    interval: $('auto-interval'),
+    cap: $('auto-cap'),
+    keepTabs: $('auto-keep-tabs'),
+    urlLbc: $('auto-url-lbc'),
+    urlVinted: $('auto-url-vinted'),
+    status: $('auto-status'),
+    queue: $('auto-queue'),
+    history: $('auto-history'),
+    clearHistory: $('auto-clear-history'),
+    lbc: $('auto-lbc'),
+    vinted: $('auto-vinted'),
+    pause: $('auto-pause'),
+    resume: $('auto-resume'),
+    skip: $('auto-skip'),
+    stop: $('auto-stop'),
+  };
+
+  let autoState = null;
+
+  function autoSend(message) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(response || { ok: false, error: 'Pas de réponse de l’extension.' });
+      });
+    });
+  }
+
+  function fillIfIdle(el, value, prop) {
+    if (document.activeElement === el) return;
+    if (prop === 'checked') el.checked = !!value;
+    else el.value = value;
+  }
+
+  function intInRange(value, min, max, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(n)));
+  }
+
+  function statsLine(queue) {
+    const s = (queue && queue.stats) || {};
+    return [
+      s.published ? s.published + ' publiée(s)' : '',
+      s.prepared ? s.prepared + ' simulée(s)' : '',
+      s.blocked ? s.blocked + ' arrêt(s)' : '',
+      s.error ? s.error + ' erreur(s)' : '',
+    ].filter(Boolean).join(' · ') || 'aucune pièce traitée';
+  }
+
+  function renderAuto() {
+    if (!autoState) return;
+    const s = autoState.settings || {};
+    const queue = autoState.queue;
+    const status = queue ? queue.status : '';
+    const running = status === 'running';
+    const paused = status === 'paused';
+    const queued = running || paused;
+
+    fillIfIdle(auto.armed, !!s.armed, 'checked');
+    auto.armedAt.textContent = s.armed && s.armedAt
+      ? 'Risque accepté le ' + new Date(s.armedAt).toLocaleString('fr-FR') + '.'
+      : 'Sans cette case, aucune publication automatique n’est possible.';
+    fillIfIdle(auto.dry, s.dryRun !== false, 'checked');
+    fillIfIdle(auto.keepTabs, !!s.keepTabs, 'checked');
+    fillIfIdle(auto.interval, String(s.intervalMin || 5));
+    fillIfIdle(auto.cap, String(s.dailyCap || 10));
+    fillIfIdle(auto.urlLbc, (s.depositUrls && s.depositUrls.leboncoin) || '');
+    fillIfIdle(auto.urlVinted, (s.depositUrls && s.depositUrls.vinted) || '');
+
+    auto.lbc.disabled = !s.armed || queued || !autoState.configured;
+    auto.vinted.disabled = !s.armed || queued || !autoState.configured;
+    auto.pause.disabled = !running;
+    auto.resume.disabled = !paused || !s.armed;
+    auto.skip.disabled = !paused;
+    auto.stop.disabled = !queued;
+
+    auto.badge.className = 'badge' + (running ? ' running' : paused ? ' paused' : status === 'done' ? ' done' : '');
+    auto.badge.textContent = running ? 'En cours' : paused ? 'En pause' : status === 'done' ? 'Terminée' : 'Arrêtée';
+
+    if (!autoState.configured) {
+      auto.status.textContent = 'Configurez d’abord la boutique et le jeton dans Réglages.';
+      auto.status.className = 'msg err';
+    } else if (!queue || status === 'idle') {
+      auto.status.textContent = s.armed
+        ? (s.dryRun !== false
+          ? 'Prêt (simulation) : choisissez une plateforme.'
+          : 'Prêt : choisissez une plateforme. La publication réelle cliquera « Publier ».')
+        : 'Publication automatique désactivée : cochez « J’assume le risque » pour l’autoriser.';
+      auto.status.className = 'msg';
+    } else if (running) {
+      auto.status.textContent = queue.channel + ' · ' + Math.min(queue.index + 1, queue.refs.length) + '/' +
+        queue.refs.length + ' · ' + (queue.lastMessage || 'en cours');
+      auto.status.className = 'msg';
+    } else if (paused) {
+      auto.status.textContent = 'En pause · ' + (queue.lastMessage || 'vérifiez l’onglet ouvert.');
+      auto.status.className = 'msg err';
+    } else {
+      auto.status.textContent = 'Terminée · ' + statsLine(queue);
+      auto.status.className = 'msg ok';
+    }
+
+    auto.queue.hidden = !queue || queue.status === 'idle';
+    auto.queue.replaceChildren();
+    if (queue && queue.status !== 'idle') {
+      const total = queue.refs.length || 1;
+      const pct = Math.min(100, Math.round((queue.index / total) * 100));
+      const line = document.createElement('div');
+      line.textContent = queue.index + '/' + queue.refs.length + ' traitée(s) · ' + statsLine(queue);
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const fill = document.createElement('i');
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      auto.queue.append(line, bar);
+    }
+
+    auto.history.replaceChildren();
+    const history = autoState.history || [];
+    auto.clearHistory.hidden = !history.length;
+    history.forEach((entry) => {
+      const li = document.createElement('li');
+      const left = document.createElement('span');
+      left.textContent = new Date(entry.at).toLocaleString('fr-FR', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      }) + ' · ' + entry.ref;
+      const right = document.createElement('span');
+      right.className = 'act ' + entry.action;
+      right.textContent = ({
+        published: 'publiée',
+        prepared: 'simulée',
+        blocked: 'arrêt',
+        skipped: 'passée',
+        error: 'erreur',
+      }[entry.action] || entry.action) + (entry.dryRun ? ' (sim.)' : '');
+      li.append(left, right);
+      auto.history.appendChild(li);
+    });
+  }
+
+  async function refreshAuto() {
+    const state = await autoSend({ type: 'am-auto-state' });
+    if (!state || !state.ok) {
+      auto.status.textContent = 'Extension : ' + ((state && state.error) || 'état indisponible.');
+      auto.status.className = 'msg err';
+      return;
+    }
+    autoState = state;
+    renderAuto();
+  }
+
+  async function patchAuto(patch) {
+    const res = await autoSend({ type: 'am-auto-settings', patch });
+    if (!res || !res.ok) {
+      auto.status.textContent = (res && res.error) || 'Réglage non enregistré.';
+      auto.status.className = 'msg err';
+      return;
+    }
+    if (!autoState) autoState = {};
+    autoState.settings = res.settings;
+    renderAuto();
+  }
+
+  async function startAutoRun(channel) {
+    if (!autoState) return;
+    if (!autoState.settings.armed) {
+      auto.status.textContent = 'Cochez « J’assume le risque » d’abord.';
+      auto.status.className = 'msg err';
+      return;
+    }
+    if (autoState.settings.dryRun === false) {
+      const label = channel === 'leboncoin' ? 'Leboncoin' : 'Vinted';
+      if (!confirm('Publier automatiquement sur ' + label + ' ?\n\nLe navigateur remplira puis cliquera « Publier » à votre place. Vous restez responsable du respect des CGU de la plateforme.')) {
+        return;
+      }
+    }
+    auto.status.textContent = 'Démarrage…';
+    auto.status.className = 'msg';
+    const res = await autoSend({ type: 'am-auto-start', channel });
+    if (!res || !res.ok) {
+      auto.status.textContent = (res && res.error) || 'Démarrage impossible.';
+      auto.status.className = 'msg err';
+      return;
+    }
+    await refreshAuto();
+  }
+
+  auto.armed.addEventListener('change', () => patchAuto({ armed: auto.armed.checked }));
+  auto.dry.addEventListener('change', () => patchAuto({ dryRun: auto.dry.checked }));
+  auto.keepTabs.addEventListener('change', () => patchAuto({ keepTabs: auto.keepTabs.checked }));
+  auto.interval.addEventListener('change', () => {
+    const value = intInRange(auto.interval.value, 2, 30, 5);
+    auto.interval.value = String(value);
+    patchAuto({ intervalMin: value });
+  });
+  auto.cap.addEventListener('change', () => {
+    const value = intInRange(auto.cap.value, 1, 30, 10);
+    auto.cap.value = String(value);
+    patchAuto({ dailyCap: value });
+  });
+  auto.urlLbc.addEventListener('change', () => patchAuto({ depositUrls: { leboncoin: auto.urlLbc.value.trim() } }));
+  auto.urlVinted.addEventListener('change', () => patchAuto({ depositUrls: { vinted: auto.urlVinted.value.trim() } }));
+  auto.lbc.addEventListener('click', () => startAutoRun('leboncoin'));
+  auto.vinted.addEventListener('click', () => startAutoRun('vinted'));
+
+  auto.pause.addEventListener('click', async () => {
+    const res = await autoSend({ type: 'am-auto-pause' });
+    if (res && !res.ok) auto.status.textContent = res.error;
+    await refreshAuto();
+  });
+  auto.resume.addEventListener('click', async () => {
+    const res = await autoSend({ type: 'am-auto-resume' });
+    if (res && !res.ok) {
+      auto.status.textContent = res.error;
+      auto.status.className = 'msg err';
+    }
+    await refreshAuto();
+  });
+  auto.skip.addEventListener('click', async () => {
+    const res = await autoSend({ type: 'am-auto-skip' });
+    if (res && !res.ok) {
+      auto.status.textContent = res.error;
+      auto.status.className = 'msg err';
+    }
+    await refreshAuto();
+  });
+  auto.stop.addEventListener('click', async () => {
+    const res = await autoSend({ type: 'am-auto-stop' });
+    if (res && !res.ok) auto.status.textContent = res.error;
+    await refreshAuto();
+  });
+  auto.clearHistory.addEventListener('click', async () => {
+    await autoSend({ type: 'am-auto-clear-history' });
+    await refreshAuto();
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.amQueue || changes.amAutoSettings || changes.amAutoHistory || changes.amAutoDay) {
+      refreshAuto();
+    }
+  });
+  setInterval(refreshAuto, 2500);
+
   refreshConn();
+  refreshAuto();
 })();

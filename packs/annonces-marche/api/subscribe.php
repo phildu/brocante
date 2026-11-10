@@ -29,7 +29,7 @@ try {
                 'recurring' => ['interval' => 'month'],
                 'product_data' => [
                     'name' => $addon . ' — ' . $name,
-                    'description' => 'Option mensuelle : assistant de dépôt Leboncoin / Vinted depuis le catalogue de la boutique.',
+                    'description' => 'Option mensuelle : préparation et export d’annonces vers les plateformes de seconde main depuis le catalogue de la boutique. Outil indépendant, sans affiliation avec les plateformes.',
                 ],
             ],
         ]],
