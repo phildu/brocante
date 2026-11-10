@@ -1,0 +1,28 @@
+Copie d'electroboy80 reprise du pack Communication (packs/communication/eb80)
+Electroboy80 : commit 569921a 2026-10-18 20:59:33 +0200 (copie d'origine, packs/communication/eb80/SOURCE.txt)
+
+Ce dossier reprend la partie « publication sur les réseaux sociaux » de ce portage pour en faire un pack indépendant :
+- assets/eb80 : l'interface d'electroboy80 entière (admin.html et ses scripts), réduite par eb80-after.js aux pages
+  Publication et API & Réseaux (onglets Réseaux sociaux et Clés IA) ;
+- eb80/api : config.php, media.php, settings.php, rs-v2.php, rs-schedule.php, rs-tiktok-callback.php ;
+- eb80/compat.php : même couche d'adaptation que le pack Communication, sans les outils vidéo IA ni les palettes.
+
+Différences avec le portage du pack Communication :
+- eb80/compat.php : la base reste data/com/<boutique>.db (partagée avec le pack Communication quand il est actif : jetons,
+  applications et publications programmées communs) ; les fichiers publiés vont dans uploads/<boutique>/ ; les fichiers de
+  travail (morceaux d'envoi, imports) vont dans data/rs-tmp/ au lieu de data/com-tmp/.
+- eb80/compat.php : getAiKey et les fonctions de la Vidéo IA et des palettes ne sont pas reprises (aucune page du pack ne les
+  appelle).
+- lib/media.php : seuls les contrôles de fichiers et l'import d'adresse web sont repris (préfixe prs_).
+- lib/reglages.php : mêmes réglages branchés sur la plateforme que le pack Communication (clés d'IA, connexion sociale),
+  préfixe prs_.
+- eb80-after.js : pages ouvertes limitées à Publication et API & Réseaux ; onglets de l'éditeur visuel et de l'affiche masqués
+  sur la page Publication (le visuel vient de la médiathèque ou d'un envoi) ; onglets Connexion & envois, Recherche &
+  billetterie, Sources éditeur et SEO masqués dans API & Réseaux.
+- api/eb80.php : routeur réduit aux contrôleurs portés (media, settings, rs) ; pas de sources de l'éditeur, de palettes ni de
+  file de rendu vidéo.
+- cron/rs-schedule.php : même tâche que le pack Communication, même verrou data/com/<boutique>.cron.lock (une publication due
+  ne part jamais deux fois si les deux packs sont actifs).
+
+Ne pas modifier les fichiers d'eb80/api ni assets/eb80 à la main : relancer la copie depuis le pack Communication (ou depuis
+electroboy80), puis réappliquer les retouches décrites ci-dessus.
