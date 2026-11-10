@@ -23,11 +23,6 @@ require_once __DIR__ . '/../includes/prospect-audit.php';
 require_once __DIR__ . '/../includes/prospect-audit-report.php';
 require_once __DIR__ . '/../includes/contacts-import.php';
 
-const PA_CLI_STATUS_LABELS = [
-    'a_contacter' => 'À contacter', 'contacte' => 'Contacté', 'interesse' => 'Intéressé',
-    'rdv' => 'RDV pris', 'boutique_creee' => 'Client / inscrit', 'perdu' => 'Sans suite',
-];
-
 $options = getopt('', [
     'input:', 'db:', 'out::', 'limit:', 'timeout::', 'social-timeout::', 'no-social',
     'include-clients', 'include-lost', 'statuts:', 'sort::', 'template', 'open', 'help', 'verbose', 'allow-private',
@@ -93,7 +88,7 @@ foreach ($prospects as $prospect) {
     if ($status === 'boutique_creee' && !$flag('include-clients')) continue;
     if ($status === 'perdu' && !$flag('include-lost')) continue;
     if ($statuses !== null && !in_array($status, $statuses, true)) continue;
-    $key = pa_cli_dedupe_key($prospect);
+    $key = pa_dedupe_key($prospect);
     if ($key !== '' && isset($seen[$key])) {
         $duplicates++;
         continue;
@@ -108,73 +103,34 @@ $started = microtime(true);
 $results = [];
 $total = count($filtered);
 foreach ($filtered as $index => $prospect) {
-    $name = pa_cli_display_name($prospect);
-    fwrite(STDERR, sprintf("\r[%d/%d] %s", $index + 1, $total, mb_substr($name, 0, 48)));
-    $site = pa_audit_site((string) ($prospect['website'] ?? ''), ['timeout' => $timeout, 'block_private' => !$allowPrivate]);
-    $social = pa_audit_social($prospect, $site, ['social_timeout' => $socialTimeout, 'no_social' => $noSocial]);
-    $scores = pa_score_prospect($site, $social, $prospect);
+    fwrite(STDERR, sprintf("\r[%d/%d] %s", $index + 1, $total, mb_substr(pa_display_name($prospect), 0, 48)));
+    $result = pa_audit_prospect($prospect, [
+        'timeout' => $timeout,
+        'social_timeout' => $socialTimeout,
+        'no_social' => $noSocial,
+        'allow_private' => $allowPrivate,
+    ]);
     if ($flag('verbose')) {
+        $scores = $result['scores'];
         fwrite(STDERR, sprintf(
             "\n  site %s · web %d · réseaux %s · global %d · priorité %d (%s)\n",
-            $site['state'], $scores['web'], $scores['social'] === null ? '—' : $scores['social'],
+            $result['site']['state'], $scores['web'], $scores['social'] === null ? '—' : $scores['social'],
             $scores['global'], $scores['priority'], $scores['tier_label']
         ));
     }
-    $results[] = [
-        'name' => $name,
-        'business' => (string) ($prospect['business'] ?? ''),
-        'contact' => (string) ($prospect['contact'] ?? ''),
-        'city' => (string) ($prospect['city'] ?? ''),
-        'zone' => (string) ($prospect['zone'] ?? ''),
-        'phone' => (string) ($prospect['phone'] ?? ''),
-        'email' => (string) ($prospect['email'] ?? ''),
-        'website' => (string) ($prospect['website'] ?? ''),
-        'status' => (string) ($prospect['status'] ?? ''),
-        'status_label' => PA_CLI_STATUS_LABELS[(string) ($prospect['status'] ?? '')] ?? (string) ($prospect['status'] ?? ''),
-        'notes' => (string) ($prospect['notes'] ?? ''),
-        'site' => $site,
-        'social' => $social,
-        'scores' => $scores,
-    ];
+    $results[] = $result;
 }
 fwrite(STDERR, "\n");
 
-usort($results, static function (array $a, array $b) use ($sort): int {
-    if ($sort === 'qualite') return $a['scores']['global'] <=> $b['scores']['global'] ?: $b['scores']['priority'] <=> $a['scores']['priority'];
-    if ($sort === 'nom') return strcasecmp($a['name'], $b['name']);
-    return $b['scores']['priority'] <=> $a['scores']['priority'] ?: $a['scores']['web'] <=> $b['scores']['web'] ?: strcasecmp($a['name'], $b['name']);
-});
-foreach ($results as $index => &$result) $result['rank'] = $index + 1;
-unset($result);
+pa_sort_results($results, $sort);
+$report = pa_build_report($results, $source, $started);
+$stats = $report['stats'];
 
-$stats = pa_cli_stats($results);
-$duration = (int) round(microtime(true) - $started);
-$report = [
-    'generated_at' => date('d/m/Y à H:i'),
-    'source' => $source,
-    'duration' => $duration < 60 ? $duration . ' s' : (int) floor($duration / 60) . ' min ' . ($duration % 60) . ' s',
-    'count' => count($results),
-    'stats' => $stats,
-    'prospects' => $results,
-];
-
-$outRoot = $opt('out', dirname(__DIR__) . '/data/rapports/audit-prospects-' . date('Y-m-d-Hi'));
-$outDir = rtrim((string) $outRoot, '/');
-if (!is_dir($outDir) && !mkdir($outDir, 0750, true) && !is_dir($outDir)) pa_cli_fail('Impossible de créer ' . $outDir);
-$base = $outDir . '/audit-prospects';
-$files = [
-    'html' => $base . '.html',
-    'csv' => $base . '.csv',
-    'md' => $base . '.md',
-    'json' => $base . '.json',
-];
-foreach ([
-    'html' => pa_report_html($report),
-    'csv' => pa_report_csv($report),
-    'md' => pa_report_markdown($report),
-    'json' => pa_report_json($report),
-] as $ext => $content) {
-    if (file_put_contents($files[$ext], $content) === false) pa_cli_fail('Impossible d’écrire ' . $files[$ext]);
+$outDir = rtrim((string) $opt('out', dirname(__DIR__) . '/data/rapports/audit-prospects-' . date('Y-m-d-Hi')), '/');
+try {
+    $files = pa_write_report($report, $outDir);
+} catch (RuntimeException $e) {
+    pa_cli_fail($e->getMessage());
 }
 
 fwrite(STDOUT, sprintf(
@@ -289,7 +245,7 @@ function pa_cli_rows_from_table(array $headers, array $rows): array
             if ($key !== '') $values[$key] = trim((string) ($row[$index] ?? ''));
         }
         $prospect = pa_map_values($values);
-        if (pa_cli_display_name($prospect) !== '' && pa_cli_display_name($prospect) !== 'Prospect sans nom') $prospects[] = $prospect;
+        if (pa_display_name($prospect) !== 'Prospect sans nom') $prospects[] = $prospect;
     }
     return $prospects;
 }
@@ -307,187 +263,8 @@ function pa_cli_load_db(string $path): array
     }
     $prospects = [];
     foreach ($rows as $row) {
-        $values = [];
-        foreach ($row as $key => $value) {
-            if (is_string($value) || is_numeric($value)) $values[pa_key((string) $key)] = trim((string) $value);
-        }
-        $custom = json_decode((string) ($row['custom_fields'] ?? ''), true);
-        if (is_array($custom)) {
-            foreach ($custom as $label => $value) {
-                if (!is_scalar($value)) continue;
-                $key = pa_key((string) $label);
-                if ($key !== '' && (!isset($values[$key]) || $values[$key] === '')) $values[$key] = trim((string) $value);
-            }
-        }
-        $prospect = pa_map_values($values);
-        if (pa_cli_display_name($prospect) !== '') $prospects[] = $prospect;
+        $prospect = pa_prospect_from_row($row);
+        if (pa_display_name($prospect) !== 'Prospect sans nom') $prospects[] = $prospect;
     }
     return [$prospects, 'carnet SQLite · ' . basename($path)];
-}
-
-function pa_key(string $value): string
-{
-    $value = ci_norm_header($value);
-    $value = preg_replace('/[^a-z0-9]+/u', ' ', $value) ?? '';
-    return trim(preg_replace('/\s+/', ' ', $value) ?? '');
-}
-
-/** Transforme une ligne d'export (en-têtes normalisés) en prospect du moteur d'audit. */
-function pa_map_values(array $values): array
-{
-    $values = array_change_key_case($values, CASE_LOWER);
-    $pick = static function (array $keys) use ($values): string {
-        foreach ($keys as $key) {
-            $candidate = trim((string) ($values[$key] ?? ''));
-            if ($candidate !== '' && !ci_placeholder($candidate)) return $candidate;
-        }
-        return '';
-    };
-    $website = $pick(['site web', 'site', 'site internet', 'website', 'web', 'url du site', 'site officiel', 'adresse du site', 'url']);
-    if ($website !== '' && preg_match('~(?:https?://|www\.)[^\s,;|]+~i', $website, $match)) $website = $match[0];
-    if ($website !== '' && preg_match('~(aucun|pas de site|sans site|non)$~iu', $website)) $website = '';
-    $social = [
-        'facebook' => pa_handle_url($pick(['facebook', 'page facebook', 'compte facebook', 'fb']), 'facebook'),
-        'instagram' => pa_handle_url($pick(['instagram', 'compte instagram', 'ig']), 'instagram'),
-        'tiktok' => pa_handle_url($pick(['tiktok', 'compte tiktok']), 'tiktok'),
-        'youtube' => pa_handle_url($pick(['youtube', 'chaine youtube', 'compte youtube']), 'youtube'),
-        'linkedin' => pa_handle_url($pick(['linkedin', 'page linkedin', 'compte linkedin']), 'linkedin'),
-        'google' => pa_handle_url($pick(['fiche google', 'google business', 'google maps', 'fiche google business', 'google']), 'google'),
-    ];
-    if ($website !== '') {
-        foreach (['facebook', 'instagram', 'tiktok', 'youtube', 'linkedin'] as $platform) {
-            if ($social[$platform] === '' && stripos($website, $platform . '.com') !== false) {
-                $social[$platform] = $website;
-                $website = '';
-            }
-        }
-    }
-    $prospect = [
-        'business' => $pick(['commerce', 'nom du commerce', 'nom boutique', 'nom de la boutique', 'boutique', 'enseigne', 'nom commercial', 'etablissement', 'societe', 'entreprise', 'raison sociale', 'nom']),
-        'contact' => $pick(['contact', 'nom du contact', 'interlocuteur', 'personne a contacter', 'responsable', 'gerant', 'dirigeant', 'prenom nom', 'name']),
-        'phone' => $pick(['telephone', 'tel', 'numero de telephone', 'portable', 'mobile', 'phone']),
-        'email' => $pick(['e mail', 'email', 'mail', 'courriel', 'adresse e mail']),
-        'website' => $website,
-        'address' => $pick(['adresse', 'adresse postale', 'address', 'rue']),
-        'postal' => $pick(['code postal', 'cp', 'zip', 'postal code', 'postal']),
-        'city' => $pick(['ville', 'commune', 'city', 'localite']),
-        'zone' => $pick(['zone', 'quartier', 'secteur geographique', 'secteur']),
-        'kind' => $pick(['activite', 'categorie', 'category', 'type', 'secteur d activite', 'famille', 'kind']),
-        'status' => pa_normalize_status($pick(['statut code', 'statut', 'status', 'statut du prospect'])),
-        'priority' => (int) ($pick(['priorite', 'priority']) ?: 2),
-        'notes' => $pick(['notes', 'note', 'commentaire', 'commentaires', 'remarque', 'remarques', 'description']),
-        'social_checked' => false,
-        'fb_followers' => $pick(['abonnes facebook', 'abonnes fb', 'followers facebook', 'facebook abonnes']),
-        'ig_followers' => $pick(['abonnes instagram', 'abonnes ig', 'followers instagram', 'instagram abonnes']),
-        'tiktok_followers' => $pick(['abonnes tiktok', 'followers tiktok', 'tiktok abonnes']),
-        'youtube_followers' => $pick(['abonnes youtube', 'followers youtube', 'youtube abonnes']),
-        'linkedin_followers' => $pick(['abonnes linkedin', 'followers linkedin', 'linkedin abonnes']),
-        'google_rating' => $pick(['note google', 'note google maps', 'google note', 'note fiche google']),
-        'google_reviews' => $pick(['avis google', 'nombre avis google', 'google avis', 'avis fiche google']),
-        'last_post' => $pick(['derniere publication', 'dernier post', 'derniere publication sociale', 'last post']),
-    ];
-    if ($prospect['business'] === '' && $prospect['contact'] !== '') $prospect['business'] = $prospect['contact'];
-    foreach ($social as $key => $url) $prospect[$key] = $url;
-    foreach (['facebook', 'instagram', 'tiktok', 'youtube', 'linkedin'] as $key) {
-        if ($prospect[$key] !== '') $prospect['social_checked'] = true;
-    }
-    foreach (['google_rating', 'google_reviews', 'last_post', 'google'] as $key) {
-        if (trim((string) $prospect[$key]) !== '') $prospect['social_checked'] = true;
-    }
-    return $prospect;
-}
-
-function pa_handle_url(string $value, string $platform): string
-{
-    $value = trim($value);
-    if ($value === '') return '';
-    if (preg_match('~https?://~i', $value)) {
-        if (preg_match('~https?://[^\s,;|]+~i', $value, $match)) return $match[0];
-        return '';
-    }
-    if (preg_match('~^(?:www\.)?(?:facebook|instagram|tiktok|youtube|linkedin|google)\.com/~i', $value) || str_starts_with($value, 'maps.app.goo.gl') || str_starts_with($value, 'g.page')) {
-        return pa_normalize_url($value);
-    }
-    if (preg_match('~^@([A-Za-z0-9._-]{2,})$~', $value, $match)) {      // un pseudo n'est reconnu qu'avec @, sinon « Lyon » deviendrait un profil Facebook
-        $handle = $match[1];
-        return match ($platform) {
-            'facebook' => 'https://www.facebook.com/' . $handle,
-            'instagram' => 'https://www.instagram.com/' . $handle,
-            'tiktok' => 'https://www.tiktok.com/@' . $handle,
-            'youtube' => 'https://www.youtube.com/@' . $handle,
-            'linkedin' => 'https://www.linkedin.com/company/' . $handle,
-            default => '',
-        };
-    }
-    return '';
-}
-
-function pa_normalize_status(string $status): string
-{
-    $key = pa_key($status);
-    $map = [
-        'a contacter' => 'a_contacter', 'contacter' => 'a_contacter', 'contacte' => 'contacte',
-        'interesse' => 'interesse', 'rdv pris' => 'rdv', 'rdv' => 'rdv',
-        'boutique creee' => 'boutique_creee', 'client' => 'boutique_creee', 'inscrit' => 'boutique_creee',
-        'sans suite' => 'perdu', 'perdu' => 'perdu',
-    ];
-    return $map[$key] ?? $key;
-}
-
-function pa_cli_display_name(array $prospect): string
-{
-    foreach (['business', 'contact', 'name', 'email', 'phone'] as $key) {
-        $value = trim((string) ($prospect[$key] ?? ''));
-        if ($value !== '') return $value;
-    }
-    return 'Prospect sans nom';
-}
-
-function pa_cli_dedupe_key(array $prospect): string
-{
-    $website = pa_normalize_url((string) ($prospect['website'] ?? ''));
-    if ($website !== '') {
-        $host = strtolower((string) parse_url($website, PHP_URL_HOST));
-        $path = rtrim((string) parse_url($website, PHP_URL_PATH), '/');
-        return preg_replace('/^www\./', '', $host) . $path;
-    }
-    $name = mb_strtolower(trim(($prospect['business'] ?? '') . '|' . ($prospect['city'] ?? '')));
-    return $name !== '|' ? $name : '';
-}
-
-function pa_cli_stats(array $results): array
-{
-    $stats = [
-        'count' => count($results), 'priorite_1' => 0, 'priorite_2' => 0, 'priorite_3' => 0, 'deja_equipe' => 0,
-        'no_site' => 0, 'inaccessible' => 0, 'no_https' => 0, 'not_mobile' => 0, 'no_social' => 0,
-        'social_unverified' => 0, 'avg_web' => 0, 'avg_social' => null, 'avg_global' => 0,
-        'followers_total' => 0, 'with_contact' => 0,
-    ];
-    $web = [];
-    $global = [];
-    $social = [];
-    foreach ($results as $result) {
-        $scores = $result['scores'];
-        $stats[$scores['tier']] = ($stats[$scores['tier']] ?? 0) + 1;
-        $website = $result['site'];
-        if (($website['state'] ?? '') === 'absent') $stats['no_site']++;
-        if (in_array((string) ($website['state'] ?? ''), ['inaccessible', 'erreur', 'non_html'], true)) $stats['inaccessible']++;
-        if (($website['state'] ?? '') === 'ok') {
-            $fetch = (array) ($website['fetch'] ?? []);
-            $metrics = (array) ($website['metrics'] ?? []);
-            if (empty($fetch['final_url']) || !str_starts_with(strtolower((string) $fetch['final_url']), 'https://')) $stats['no_https']++;
-            if (empty($metrics['viewport']) || !str_contains(strtolower((string) $metrics['viewport']), 'width=device-width')) $stats['not_mobile']++;
-        }
-        if (!empty($result['social']['checked']) && (int) ($result['social']['present'] ?? 0) === 0) $stats['no_social']++;
-        if (!empty($result['social']['blocked'])) $stats['social_unverified']++;
-        if (trim($result['phone']) !== '' || trim($result['email']) !== '') $stats['with_contact']++;
-        $stats['followers_total'] += (int) ($result['social']['followers_total'] ?? 0);
-        $web[] = (int) $scores['web'];
-        $global[] = (int) $scores['global'];
-        if ($scores['social'] !== null) $social[] = (int) $scores['social'];
-    }
-    $stats['avg_web'] = $web ? (int) round(array_sum($web) / count($web)) : 0;
-    $stats['avg_global'] = $global ? (int) round(array_sum($global) / count($global)) : 0;
-    $stats['avg_social'] = $social ? (int) round(array_sum($social) / count($social)) : null;
-    return $stats;
 }

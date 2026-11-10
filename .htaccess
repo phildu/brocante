@@ -30,7 +30,7 @@ RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/dons/?$ dons.php?g=$1 [L,QSA]
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/dons/(point|proposer|suivi|tournee)\.php$ dons-$2.php?g=$1 [L,QSA]
 # Force de vente d'une galerie (carnet de prospects séparé, extension « Force de vente ») : /galerie/<identifiant>/vente/ et /vente/<page>.php → portail/vente/.
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/vente/?$ portail/vente/prospects.php?g=$1 [L,QSA]
-RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/vente/(prospects|prospect-action|prospects-import|tournees|tournee-geo|activite-action)\.php$ portail/vente/$2.php?g=$1 [L,QSA]
+RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/vente/(prospects|prospect-action|prospects-import|audit-prospects|tournees|tournee-geo|activite-action)\.php$ portail/vente/$2.php?g=$1 [L,QSA]
 RewriteRule ^galerie/([a-z0-9][a-z0-9-]*)/?$ galerie/index.php?g=$1 [L,QSA]
 
 # Agents externes des plugins (ex. agent de rendu vidéo) : /api/… → plugin-agent.php, aussi sous /<commerce>/api/… (après la
