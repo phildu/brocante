@@ -430,3 +430,25 @@ HTML;
         '__ROWS__' => $rows,
     ]);
 }
+
+/** Écrit les quatre formats dans un dossier (créé en 0750) et renvoie leurs chemins. */
+function pa_write_report(array $report, string $dir): array
+{
+    $dir = rtrim($dir, '/');
+    if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) {
+        throw new RuntimeException('Impossible de créer ' . $dir);
+    }
+    $base = $dir . '/audit-prospects';
+    $files = [];
+    foreach ([
+        'html' => pa_report_html($report),
+        'csv' => pa_report_csv($report),
+        'md' => pa_report_markdown($report),
+        'json' => pa_report_json($report),
+    ] as $ext => $content) {
+        $path = $base . '.' . $ext;
+        if (file_put_contents($path, $content) === false) throw new RuntimeException('Impossible d’écrire ' . $path);
+        $files[$ext] = $path;
+    }
+    return $files;
+}

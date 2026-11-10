@@ -1485,6 +1485,7 @@ function fv_nav_items(): array
     if (fv_is_scoped()) {
         return [
             ['prospects.php', 'Prospects', 'users'],
+            ['audit-prospects.php', 'Audit des sites', 'search'],
             ['prospects-import.php', 'Importer un fichier', 'plus'],
             ['tournees.php', 'Tournées & carte', 'route'],
         ];
@@ -1493,6 +1494,7 @@ function fv_nav_items(): array
     $items = [
         ['index.php', 'Tableau de bord', 'gauge'],
         ['prospects.php', 'Prospects', 'users'],
+        ['audit-prospects.php', 'Audit des sites', 'search'],
         ['tournees.php', 'Tournées & terrain', 'route'],
         ['appels.php', 'Appels', 'phone'],
         ['mailing.php', 'Mailing', 'mail'],
