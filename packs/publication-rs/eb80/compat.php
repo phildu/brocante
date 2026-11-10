@@ -1,0 +1,316 @@
+<?php
+// Couche d'adaptation du portage d'electroboy80 pour le pack Publication réseaux sociaux (eb80/api/ = copies, voir
+// eb80/SOURCE.txt). Elle fixe les constantes des contrôleurs puis remplace les fonctions qu'ils attendent :
+//  - connexion : celle de l'administration de la boutique (aucun jeton electroboy80), vérifiée par admin/plugin-api.php ;
+//  - envoi de fichiers : type réel contrôlé (images, vidéos, sons), extension tirée du type, adresses internes refusées ;
+//  - suggestion SEO et rédaction du message de publication par l'IA : Gemini de la boutique, dans son quota d'IA ;
+//  - réseaux sociaux : simulateur local possible (EB80_RS_SIMULATEUR), rôle « collaborateur » pour le community manager ;
+//  - outils vidéo qui exigent yt-dlp ou ffmpeg sur le serveur : indisponibles (comme electroboy80 sans ces outils).
+//
+// Données : le pack reprend la base d'electroboy80 déjà utilisée par le pack Communication (data/com/<boutique>.db) quand elle
+// existe : applications et jetons des réseaux, publications programmées et historique sont donc conservés tels quels, sans
+// recopie. Fichier absent, la base est créée. Les deux tâches planifiées partagent le même verrou
+// (data/com/<boutique>.cron.lock) : si les deux packs sont actifs, une publication due ne part jamais deux fois.
+// Les fichiers envoyés vont dans uploads/<boutique>/, le dossier de la boutique (servi publiquement), commun aux packs.
+defined('PLUGIN_RUNTIME') || exit;
+require_once __DIR__ . '/../lib/media.php';
+
+// Heures d'electroboy80 (publications programmées) : heure locale de la boutique, comme son interface les saisit (fuseau
+// « timezone » du tenant.php, Paris par défaut ; PHP en ligne de commande compterait sinon en temps universel).
+date_default_timezone_set((string) (tenant('timezone') ?: 'Europe/Paris'));
+
+define('UPLOAD_DIR', prs_root() . '/uploads/' . tenant_slug() . '/');
+define('UPLOAD_URL', '/uploads/' . tenant_slug() . '/');
+define('EB80_DB_PATH', prs_root() . '/data/com/' . tenant_slug() . '.db'); // base du portage, jamais la base de la boutique
+define('JWT_SECRET', bin2hex(random_bytes(16))); // les jetons d'electroboy80 ne servent pas ici : clé jetable
+define('JWT_EXPIRES', 3600);
+define('MAX_FILE_SIZE', PRS_VIDEO_MAX_BYTES);
+define('DB_DRIVER', 'sqlite');
+const EB80_AUDIO_TYPES = ['audio/mpeg' => 'mp3', 'audio/mp4' => 'm4a', 'audio/x-m4a' => 'm4a', 'audio/aac' => 'aac', 'audio/wav' => 'wav',
+    'audio/x-wav' => 'wav', 'audio/ogg' => 'ogg', 'audio/webm' => 'weba', 'audio/flac' => 'flac', 'audio/x-flac' => 'flac'];
+const EB80_AUDIO_MAX_BYTES = 50 * 1024 * 1024;
+define('EB80_TMP_DIR', prs_root() . '/data/rs-tmp/' . tenant_slug() . '/');
+if (!is_dir(dirname(EB80_DB_PATH))) @mkdir(dirname(EB80_DB_PATH), 0700, true);
+if (!is_dir(UPLOAD_DIR)) @mkdir(UPLOAD_DIR, 0755, true);
+if (!is_dir(dirname(EB80_TMP_DIR))) @mkdir(dirname(EB80_TMP_DIR), 0700, true);
+
+require_once __DIR__ . '/api/config.php';
+
+/** Réponse JSON interceptée (voir jsonResponse()) : permet de compléter la réponse d'un contrôleur d'electroboy80. */
+final class Eb80Response extends Exception
+{
+    public function __construct(public mixed $data, public int $status) { parent::__construct('réponse'); }
+}
+
+function jsonResponse($data, $status = 200, int $cacheTtl = 0)
+{
+    if (!empty($GLOBALS['eb80_capture'])) throw new Eb80Response($data, (int) $status);
+    _eb80_orig_jsonResponse($data, $status, $cacheTtl);
+}
+
+/** Exécute une fonction d'electroboy80 et renvoie sa réponse JSON au lieu de l'envoyer : [données, statut]. */
+function eb80_capture(callable $fn): array
+{
+    $GLOBALS['eb80_capture'] = true;
+    try {
+        $fn();
+    } catch (Eb80Response $r) {
+        return [$r->data, $r->status];
+    } finally {
+        $GLOBALS['eb80_capture'] = false;
+    }
+    return [null, 200];
+}
+
+// ── Connexion : celle de l'administration de la boutique ────────────────────
+/** L'utilisateur vu par electroboy80 : un administrateur (les droits fins sont vérifiés par la route eb80 du plugin). */
+function eb80_user(): array
+{
+    $s = $GLOBALS['eb80_session'] ?? null;
+    // Administrateur de la boutique → « admin » d'electroboy80 ; community manager → « collaborateur » (droits editor et community :
+    // il publie et programme, mais les réglages d'electroboy80 ne lui renvoient pas les jetons ni les clés).
+    $admin = ($s['role'] ?? '') === 'admin';
+    return ['id' => (int) ($s['id'] ?? 0), 'role' => $admin ? 'admin' : 'collaborator', 'name' => ($s['name'] ?? '') !== '' ? $s['name'] : 'Compte principal',
+        'email' => '', 'permissions' => $admin ? [] : ['editor', 'community']];
+}
+function requireAuth($roles = [])
+{
+    if (empty($GLOBALS['eb80_session'])) errorResponse('Connexion requise', 401);
+    return eb80_user();
+}
+function requirePerm(string $perm)
+{
+    return requireAuth();
+}
+/** Corps JSON de l'appel ; la route peut le remplacer (réglages filtrés, voir api/eb80.php) par $GLOBALS['eb80_json_input']. */
+function getJsonInput()
+{
+    return isset($GLOBALS['eb80_json_input']) && is_array($GLOBALS['eb80_json_input']) ? $GLOBALS['eb80_json_input'] : _eb80_orig_getJsonInput();
+}
+
+function getCurrentUser()
+{
+    return empty($GLOBALS['eb80_session']) ? null : eb80_user();
+}
+
+// ── Fichiers : type réel contrôlé ───────────────────────────────────────────
+/** Type réel d'un fichier accepté : ['type' => photo|video|audio, 'ext', 'mime'] ou null. */
+function eb80_detect(string $file): ?array
+{
+    $d = prs_detect($file);
+    if ($d) return ['type' => $d['type'], 'ext' => $d['ext'], 'mime' => $d['mime']];
+    $mime = function_exists('finfo_open') ? (string) finfo_file(finfo_open(FILEINFO_MIME_TYPE), $file) : '';
+    return isset(EB80_AUDIO_TYPES[$mime]) ? ['type' => 'audio', 'ext' => EB80_AUDIO_TYPES[$mime], 'mime' => $mime] : null;
+}
+function eb80_max_bytes(string $type): int
+{
+    return match ($type) { 'photo' => PRS_IMAGE_MAX_BYTES, 'audio' => EB80_AUDIO_MAX_BYTES, default => PRS_VIDEO_MAX_BYTES };
+}
+/** Range un fichier contrôlé dans UPLOAD_DIR sous un nom tiré de $base, extension selon son type ; renvoie le nom ou une erreur. */
+function eb80_store(string $src, string $base, bool $uploaded): array
+{
+    $d = eb80_detect($src);
+    if (!$d) return ['error' => 'Format non pris en charge (images, vidéos MP4/MOV/WebM, sons MP3/M4A/WAV/OGG).'];
+    if (filesize($src) > eb80_max_bytes($d['type'])) return ['error' => 'Fichier trop volumineux (' . round(eb80_max_bytes($d['type']) / 1048576) . ' Mo au plus).'];
+    $name = $base . '.' . $d['ext'];
+    if (file_exists(UPLOAD_DIR . $name)) $name = $base . '-' . substr(uniqid(), -4) . '.' . $d['ext'];
+    $ok = $uploaded ? move_uploaded_file($src, UPLOAD_DIR . $name) : @rename($src, UPLOAD_DIR . $name);
+    if (!$ok) return ['error' => 'Erreur déplacement fichier'];
+    @chmod(UPLOAD_DIR . $name, 0644);
+    return ['filename' => $name, 'detect' => $d];
+}
+
+function uploadFile($fieldName = 'file')
+{
+    if (!isset($_FILES[$fieldName])) return ['error' => 'Aucun fichier'];
+    $file = $_FILES[$fieldName];
+    if ($file['error'] !== UPLOAD_ERR_OK) return ['error' => 'Erreur upload: ' . $file['error']];
+    $base = slugifyFilename(pathinfo((string) $file['name'], PATHINFO_FILENAME));
+    $r = eb80_store($file['tmp_name'], $base, true);
+    if (isset($r['error'])) return $r;
+    $urlWeb = null;
+    if ($r['detect']['type'] === 'photo' && function_exists('imagecreatefromjpeg')) {
+        $webFile = generateWebImage(UPLOAD_DIR . $r['filename'], pathinfo($r['filename'], PATHINFO_FILENAME));
+        if ($webFile) $urlWeb = UPLOAD_URL . basename($webFile);
+    }
+    return ['url' => UPLOAD_URL . $r['filename'], 'url_web' => $urlWeb, 'filename' => $r['filename'], 'name' => $file['name'],
+        'size' => filesize(UPLOAD_DIR . $r['filename']), 'mimetype' => $r['detect']['mime']];
+}
+
+/** POST /media/upload-chunk : même contrat qu'electroboy80, morceaux rangés dans data/rs-tmp/ et fichier final contrôlé. */
+function handleUploadChunk()
+{
+    requireAuth(['admin']);
+    $uploadId = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($_POST['upload_id'] ?? ''));
+    $chunkIndex = (int) ($_POST['chunk_index'] ?? 0);
+    $totalChunks = (int) ($_POST['total_chunks'] ?? 1);
+    if ($uploadId === '' || strlen($uploadId) > 64) errorResponse('upload_id requis', 400);
+    if ($totalChunks < 1 || $totalChunks > 2000 || $chunkIndex < 0 || $chunkIndex >= $totalChunks) errorResponse('total_chunks invalide', 400);
+    if (!isset($_FILES['chunk'])) errorResponse('chunk manquant', 400);
+    if ($_FILES['chunk']['error'] !== UPLOAD_ERR_OK) errorResponse('Erreur upload chunk: ' . $_FILES['chunk']['error'], 400);
+    prs_tmp_cleanup();
+    $tmpDir = prs_tmp_dir() . '/eb80-' . tenant_slug() . '-' . $uploadId . '/';
+    if (!is_dir($tmpDir) && !mkdir($tmpDir, 0700, true)) errorResponse('Impossible de créer le répertoire temporaire', 500);
+    $chunkFile = $tmpDir . 'chunk_' . str_pad((string) $chunkIndex, 8, '0', STR_PAD_LEFT);
+    if (!move_uploaded_file($_FILES['chunk']['tmp_name'], $chunkFile)) errorResponse('Erreur déplacement du chunk', 500);
+    $parts = glob($tmpDir . 'chunk_*') ?: [];
+    if (array_sum(array_map('filesize', $parts)) > MAX_FILE_SIZE) {
+        array_map('unlink', $parts);
+        @rmdir($tmpDir);
+        errorResponse('Fichier trop volumineux', 400);
+    }
+    if (count($parts) < $totalChunks) jsonResponse(['done' => false, 'received' => count($parts), 'total' => $totalChunks]);
+    $assembled = $tmpDir . 'assemble';
+    $out = fopen($assembled, 'wb');
+    for ($i = 0; $i < $totalChunks; $i++) {
+        $part = $tmpDir . 'chunk_' . str_pad((string) $i, 8, '0', STR_PAD_LEFT);
+        if (!is_file($part)) { fclose($out); errorResponse("Chunk $i manquant lors du réassemblage", 500); }
+        $in = fopen($part, 'rb');
+        stream_copy_to_stream($in, $out);
+        fclose($in);
+    }
+    fclose($out);
+    $r = eb80_store($assembled, time() . '-' . random_int(100000, 999999), false);
+    foreach (glob($tmpDir . '*') ?: [] as $f) @unlink($f);
+    @rmdir($tmpDir);
+    if (isset($r['error'])) errorResponse($r['error'], 415);
+    jsonResponse(['done' => true, 'filename' => $r['filename'], 'url' => UPLOAD_URL . $r['filename'], 'size' => filesize(UPLOAD_DIR . $r['filename'])]);
+}
+
+/** POST /media/import : téléchargement d'une adresse web, sans jamais joindre le réseau interne (prs_fetch_url()). */
+function handleImportUrl($input)
+{
+    requireAuth(['admin']);
+    $url = trim((string) ($input['url'] ?? ''));
+    if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) errorResponse('URL invalide', 400);
+    try {
+        [$tmp, $name] = prs_fetch_url($url, MAX_FILE_SIZE);
+    } catch (Throwable $e) {
+        errorResponse($e->getMessage(), 400);
+    }
+    if (filesize($tmp) < 100) { @unlink($tmp); errorResponse('Fichier trop petit ou vide', 400); }
+    $r = eb80_store($tmp, slugifyFilename(pathinfo($name, PATHINFO_FILENAME) ?: 'import'), false);
+    if (isset($r['error'])) { @unlink($tmp); errorResponse($r['error'], 400); }
+    if ($r['detect']['type'] === 'photo') generateWebImage(UPLOAD_DIR . $r['filename'], pathinfo($r['filename'], PATHINFO_FILENAME));
+    jsonResponse(['filename' => $r['filename'], 'url' => UPLOAD_URL . $r['filename'], 'size' => filesize(UPLOAD_DIR . $r['filename'])]);
+}
+
+/** POST /media/seo-suggest : texte alternatif, titre et nom de fichier proposés par Gemini (clé et quota de la boutique). */
+function handleSeoSuggest($input)
+{
+    requireAuth(['admin']);
+    $filename = basename(trim((string) ($input['filename'] ?? '')));
+    if ($filename === '') errorResponse('filename requis', 400);
+    $filepath = UPLOAD_DIR . $filename;
+    if (!is_file($filepath)) errorResponse('Fichier introuvable', 404);
+    if (!prs_ai_ready()) errorResponse('Clé Gemini absente : suggestions de l\'IA indisponibles.', 400);
+    if (($gate = ai_gate()) !== null) errorResponse($gate, 402);
+    $shop = (string) get_content()['site_name'];
+    $prompt = 'Tu es un expert SEO pour « ' . $shop . ' », ' . tenant('ai.shop') . '. Analyse cette image et réponds en JSON avec exactement ces 3 champs : '
+        . '"alt" (texte alternatif SEO en français, 120 caractères au plus, décrivant ce que montre l\'image), '
+        . '"title" (attribut title court en français, 60 caractères au plus), '
+        . '"slug" (nom de fichier SEO : minuscules, tirets, sans accents). Réponds uniquement avec le JSON.';
+    $small = downscale_for_ai($filepath) ?? $filepath;
+    $text = gemini_describe_image($small, $prompt);
+    if ($small !== $filepath) @unlink($small);
+    $data = $text ? json_decode((string) preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text)), true) : null;
+    if (!is_array($data) || empty($data['alt'])) errorResponse('Réponse non reconnue, réessayez.', 502);
+    jsonResponse(['alt' => trim((string) $data['alt']), 'title' => trim((string) ($data['title'] ?? '')), 'slug' => trim((string) ($data['slug'] ?? ''))]);
+}
+
+// ── Réseaux sociaux ─────────────────────────────────────────────────────────
+/**
+ * Simulateur local des réseaux (constante EB80_RS_SIMULATEUR, à mettre dans config.local.php d'un poste de test, jamais en ligne) :
+ * aucun appel ne part, chaque appel est noté dans data/com/<boutique>-simulateur.log et reçoit une réponse plausible (identifiant,
+ * page, compte Instagram, statut « FINISHED »…). Sans la constante, les vrais appels d'electroboy80.
+ */
+function eb80_rs_simulated(): bool
+{
+    return defined('EB80_RS_SIMULATEUR') && EB80_RS_SIMULATEUR;
+}
+function apiCurl(string $url, array $opts = []): array
+{
+    if (!eb80_rs_simulated()) return _eb80_orig_apiCurl($url, $opts);
+    $post = $opts[CURLOPT_POSTFIELDS] ?? null;
+    $line = ['at' => date('c'), 'method' => !empty($opts[CURLOPT_POST]) || $post !== null ? 'POST' : 'GET',
+        'url' => preg_replace('/(access_token|client_secret|fb_exchange_token)=[^&]+/', '$1=***', $url),
+        'body' => is_string($post) ? mb_substr($post, 0, 500) : (is_array($post) ? array_keys($post) : null)];
+    @file_put_contents(dirname(EB80_DB_PATH) . '/' . tenant_slug() . '-simulateur.log', json_encode($line, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND | LOCK_EX);
+    $id = 'sim_' . bin2hex(random_bytes(4));
+    $reply = [
+        'id' => $id, 'post_id' => $id, 'success' => true, 'status_code' => 'FINISHED', 'status' => 'FINISHED', 'simulateur' => true,
+        'name' => 'Page simulée', 'username' => 'boutique_simulee', 'access_token' => 'sim_token', 'expires_in' => 5184000,
+        'instagram_business_account' => ['id' => 'sim_ig'], 'permalink_url' => 'https://example.test/' . $id,
+    ];
+    // TikTok répond { data: { publish_id } } ; Meta, pour les listes (pages…), { data: [ … ] }.
+    $reply['data'] = str_contains($url, 'tiktok')
+        ? ['publish_id' => $id, 'status' => 'PUBLISH_COMPLETE']
+        : [['id' => 'sim_page', 'name' => 'Page simulée', 'access_token' => 'sim_token', 'instagram_business_account' => ['id' => 'sim_ig']]];
+    return $reply;
+}
+/** Table des publications programmées : config.php d'electroboy80 la crée avec un ancien schéma (sans next_run) que rs-schedule.php
+ *  ne corrige pas ; vide, on la retire pour qu'il crée la bonne. Appelée avant toute route /rs/schedule et par la tâche planifiée. */
+function eb80_fix_schedule_table(): void
+{
+    $db = getDb();
+    $cols = array_column($db->query('PRAGMA table_info(scheduled_posts)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+    if ($cols && !in_array('next_run', $cols, true) && (int) $db->query('SELECT COUNT(*) FROM scheduled_posts')->fetchColumn() === 0) {
+        $db->exec('DROP TABLE scheduled_posts');
+    }
+}
+function refreshTikTokToken(): bool
+{
+    return eb80_rs_simulated() ? true : _eb80_orig_refreshTikTokToken();
+}
+/** POST /rs/generate-message : texte de publication rédigé par Gemini (clé et quota de la boutique), même réponse qu'electroboy80. */
+function handleGenerateMessage(array $input): void
+{
+    requireAuth(['admin']);
+    if (!prs_ai_ready()) errorResponse('Clé Gemini absente : rédaction par l\'IA indisponible.', 400);
+    if (($gate = ai_gate()) !== null) errorResponse($gate, 402);
+    $networks = array_map('strval', (array) ($input['networks'] ?? []));
+    $type = match (trim((string) ($input['content_type'] ?? 'post'))) { 'story' => 'Story', 'reel' => 'Reel / vidéo courte', default => 'Post' };
+    $ctx = [];
+    foreach (['event_name' => 'Sujet', 'event_date' => 'Date', 'event_venue' => 'Lieu', 'hint' => 'Indications'] as $k => $label) {
+        $v = trim((string) ($input[$k] ?? ''));
+        if ($v !== '') $ctx[] = "$label : " . mb_substr($v, 0, 300);
+    }
+    $prompt = 'Tu es le community manager de « ' . get_content()['site_name'] . ' », ' . tenant('ai.shop') . '. Rédige un ' . $type . ' pour '
+        . ($networks ? implode(', ', array_map('ucfirst', $networks)) : 'les réseaux sociaux') . ' en français.'
+        . ($ctx ? "\nContexte :\n" . implode("\n", $ctx) : '')
+        . "\n\nTon chaleureux et concret, sans formules banales. Pour Instagram et TikTok : 150 caractères au plus et 3 à 5 mots-dièse."
+        . ' Pour Facebook : 280 caractères au plus, sans mots-dièse. Pour Threads : 200 caractères au plus. Si plusieurs réseaux, adapte'
+        . " pour le premier. N'invente ni prix, ni date, ni caractéristique. Réponds uniquement avec le texte, sans guillemets.";
+    $text = gemini_describe_image('', $prompt);
+    if (!$text) errorResponse('Rédaction par l\'IA indisponible pour le moment, réessayez.', 502);
+    jsonResponse(['ok' => true, 'message' => trim($text)]);
+}
+
+/** Outils vidéo d'electroboy80 qui exigent yt-dlp ou ffmpeg sur le serveur : indisponibles sur l'hébergement de la plateforme. */
+function eb80_unavailable(string $what): never
+{
+    jsonResponse(['error' => $what . ' indisponible sur ce serveur (outil vidéo absent).', 'unavailable' => true], 501);
+}
+function handleDownloadVideo(array $input) { requireAuth(['admin']); eb80_unavailable('Téléchargement de vidéo'); }
+function handleMergeAV(array $input) { requireAuth(['admin']); eb80_unavailable('Fusion audio et vidéo'); }
+function handleExtractAudio(array $input) { requireAuth(['admin']); eb80_unavailable('Extraction de la piste audio'); }
+
+/** GET /media : la liste d'electroboy80 (uploads/<boutique>/) suivie des photos des fiches produit, en lecture seule. */
+function handleGetMedia()
+{
+    [$files] = eb80_capture('_eb80_orig_handleGetMedia');
+    $files = is_array($files) ? $files : [];
+    $seen = array_flip(array_column($files, 'filename'));
+    foreach (db()->query('SELECT p.path, p.label, p.created_at, p.type, pr.ref, pr.name FROM product_photos p JOIN products pr ON pr.ref = p.product_ref
+            WHERE p.is_hidden = 0 ORDER BY p.id DESC')->fetchAll(PDO::FETCH_ASSOC) as $ph) {
+        $abs = prs_root() . '/' . $ph['path'];
+        $fn = basename((string) $ph['path']);
+        if (isset($seen[$fn]) || !is_file($abs) || str_contains((string) $ph['path'], '..')) continue;
+        $seen[$fn] = true;
+        $files[] = ['url' => '/' . $ph['path'], 'url_web' => null, 'filename' => $fn, 'name' => $fn, 'size' => filesize($abs),
+            'mimetype' => mime_content_type($abs) ?: 'image/jpeg', 'date' => date('Y-m-d H:i:s', filemtime($abs)),
+            'readonly' => true, 'fiche' => ['ref' => $ph['ref'], 'name' => $ph['name'], 'label' => $ph['label']]];
+    }
+    usort($files, static fn ($a, $b) => strcmp((string) $b['date'], (string) $a['date']));
+    jsonResponse($files);
+}

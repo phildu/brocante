@@ -1,0 +1,17 @@
+{
+  "id": "publication-rs",
+  "name": "Publication réseaux sociaux",
+  "version": "0.1.0",
+  "description": "Publication sur les réseaux sociaux (Facebook, Instagram, Threads, TikTok) : composer un post, une story ou un reel avec un visuel de la médiathèque ou un fichier envoyé, rédiger le message par l'IA, publier tout de suite ou programmer (récurrence comprise), et régler les applications et jetons des réseaux. Code d'electroboy80 porté tel quel (interface d'origine dans un cadre, API adaptée à la boutique).",
+  "table_prefix": "prs_",
+  "pages": [
+    {"id": "publication", "label": "Publication réseaux sociaux", "icon": "cloud", "file": "pages/publication.php", "roles": ["admin", "community_manager"]},
+    {"id": "reseaux", "label": "API & Réseaux", "icon": "gear", "file": "pages/reseaux.php", "roles": ["admin"]}
+  ],
+  "api": [
+    {"id": "eb80", "file": "api/eb80.php", "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"], "roles": ["admin", "community_manager"]}
+  ],
+  "cron": [
+    {"file": "cron/rs-schedule.php"}
+  ]
+}
