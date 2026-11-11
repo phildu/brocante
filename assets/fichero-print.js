@@ -185,6 +185,37 @@
     });
   }
 
+  async function renderPreview(container, refs) {
+    if (!container) return;
+    container.textContent = 'Préparation de l’aperçu…';
+    try {
+      var data = await fetchJobs(refs, 1);
+      var images = await Promise.all(data.jobs.map(async function (job) {
+        return { ref: job.ref, blob: await labelPng(job) };
+      }));
+      container.textContent = '';
+      images.forEach(function (item) {
+        var figure = document.createElement('figure');
+        var image = document.createElement('img');
+        var caption = document.createElement('figcaption');
+        var url = URL.createObjectURL(item.blob);
+        image.src = url;
+        image.alt = 'Étiquette Fichero pour la pièce ' + item.ref;
+        image.addEventListener('load', function () { URL.revokeObjectURL(url); }, { once: true });
+        image.addEventListener('error', function () {
+          URL.revokeObjectURL(url);
+          caption.textContent = 'Aperçu indisponible pour ' + item.ref;
+        }, { once: true });
+        caption.textContent = item.ref;
+        figure.appendChild(image);
+        figure.appendChild(caption);
+        container.appendChild(figure);
+      });
+    } catch (err) {
+      container.textContent = 'Aperçu Fichero indisponible : ' + (err && err.message ? err.message : 'erreur de préparation.');
+    }
+  }
+
   function bindExportButton(btn, getRefs) {
     if (!btn) return;
     var result = document.createElement('div');
@@ -266,6 +297,7 @@
     supported: supported,
     printRefs: printRefs,
     bindButton: bindButton,
-    bindExportButton: bindExportButton
+    bindExportButton: bindExportButton,
+    renderPreview: renderPreview
   };
 })(window);

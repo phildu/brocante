@@ -160,3 +160,29 @@ test('export de plusieurs pièces produit une image distincte par référence', 
   assert.equal(env.urls.length, 2);
   assert.notDeepEqual(env.pixels[0], env.pixels[1]);
 });
+
+test('aperçu utilise les mêmes pixels que l’export et identifie chaque pièce', async () => {
+  const env = setup({ response: { ok: true, jobs: [
+    { ref: 'A1', width: 8, height: 1, raster: 'gQ==' },
+    { ref: 'B2', width: 8, height: 1, raster: 'AA==' }
+  ] } });
+  const preview = new env.Element('div');
+  await env.api.renderPreview(preview, ['A1', 'B2']);
+  assert.equal(preview.children.length, 2);
+  assert.equal(preview.children[0].children[0].alt, 'Étiquette Fichero pour la pièce A1');
+  assert.equal(preview.children[1].children[1].textContent, 'B2');
+  assert.equal(preview.children[0].children[0].src, 'blob:0');
+  assert.equal(env.pixels[0][0], 0);
+  assert.equal(env.pixels[0][4], 255);
+  preview.children[0].children[0].handlers.load();
+  assert.ok(env.calls.includes('revoke:blob:0'));
+});
+
+test('aperçu montre les erreurs de préparation et la limite de 50 pièces', async () => {
+  const env = setup({ response: { ok: false, error: 'Session expirée' } });
+  const preview = new env.Element('div');
+  await env.api.renderPreview(preview, ['A1']);
+  assert.match(preview.textContent, /Session expirée/);
+  await env.api.renderPreview(preview, Array.from({ length: 51 }, (_, i) => String(i)));
+  assert.match(preview.textContent, /50 pièces/);
+});
