@@ -97,6 +97,116 @@ function fichero_raster_from_text(string $text, int $height = FICHERO_LABEL_HEIG
     return $raster;
 }
 
+function fichero_font_path(): string
+{
+    return dirname(__DIR__) . '/assets/fonts/Poppins-SemiBold.ttf';
+}
+
+/** Tronque le texte pour qu'il tienne en largeur (points GD). */
+function fichero_fit_text(string $font, int $maxSize, int $minSize, int $maxWidth, string $text): array
+{
+    $text = trim($text);
+    if ($text === '') {
+        return [$minSize, ''];
+    }
+    for ($size = $maxSize; $size >= $minSize; $size--) {
+        $bb = imagettfbbox($size, 0, $font, $text);
+        if ($bb && abs($bb[2] - $bb[0]) <= $maxWidth) {
+            return [$size, $text];
+        }
+    }
+    $size = $minSize;
+    while (mb_strlen($text) > 1) {
+        $text = mb_substr($text, 0, mb_strlen($text) - 1);
+        $shown = $text . '…';
+        $bb = imagettfbbox($size, 0, $font, $shown);
+        if ($bb && abs($bb[2] - $bb[0]) <= $maxWidth) {
+            return [$size, $shown];
+        }
+    }
+    return [$size, $text];
+}
+
+/**
+ * Étiquette D11s : QR en haut, prix / nom / réf en dessous (comme l'aperçu).
+ */
+function fichero_raster_from_label(string $url, string $name, string $price, string $ref, int $height = FICHERO_LABEL_HEIGHT): string
+{
+    $width = FICHERO_PRINT_WIDTH;
+    $font = fichero_font_path();
+    if (!function_exists('imagecreatetruecolor') || !is_readable($font)) {
+        return fichero_raster_from_text($url, $height);
+    }
+
+    $im = imagecreatetruecolor($width, $height);
+    $white = imagecolorallocate($im, 255, 255, 255);
+    $black = imagecolorallocate($im, 0, 0, 0);
+    imagefilledrectangle($im, 0, 0, $width - 1, $height - 1, $white);
+
+    $qr = QrCode::encodeText($url);
+    $quiet = 2;
+    $mod = $qr->size + $quiet * 2;
+    $textBlock = 72;
+    $scale = max(1, intdiv(min($width - 2, $height - $textBlock - 4), $mod));
+    $drawn = $mod * $scale;
+    $ox = intdiv($width - $drawn, 2);
+    $oy = 1;
+    for ($y = 0; $y < $qr->size; $y++) {
+        for ($x = 0; $x < $qr->size; $x++) {
+            if (!$qr->modules[$y][$x]) {
+                continue;
+            }
+            $px = $ox + ($x + $quiet) * $scale;
+            $py = $oy + ($y + $quiet) * $scale;
+            imagefilledrectangle($im, $px, $py, $px + $scale - 1, $py + $scale - 1, $black);
+        }
+    }
+
+    $maxW = $width - 4;
+    $ty = $oy + $drawn + 12;
+    $lines = [
+        [$price, 13, 8],
+        [$name, 9, 7],
+        [$ref !== '' ? 'Réf. ' . $ref : '', 8, 6],
+    ];
+    foreach ($lines as [$raw, $maxSize, $minSize]) {
+        [$size, $shown] = fichero_fit_text($font, $maxSize, $minSize, $maxW, $raw);
+        if ($shown === '') {
+            continue;
+        }
+        $bb = imagettfbbox($size, 0, $font, $shown);
+        $tw = abs($bb[2] - $bb[0]);
+        $th = abs($bb[1] - $bb[7]);
+        $tx = max(1, intdiv($width - $tw, 2) - (int) $bb[0]);
+        $baseline = $ty - (int) $bb[7];
+        if ($baseline + $th > $height - 1) {
+            break;
+        }
+        imagettftext($im, $size, 0, $tx, $baseline, $black, $font, $shown);
+        $ty += $th + 4;
+    }
+
+    $dark = [];
+    for ($y = 0; $y < $height; $y++) {
+        $row = [];
+        for ($x = 0; $x < $width; $x++) {
+            $rgb = imagecolorat($im, $x, $y);
+            $r = ($rgb >> 16) & 0xff;
+            $g = ($rgb >> 8) & 0xff;
+            $b = $rgb & 0xff;
+            $row[$x] = ($r + $g + $b) < 500;
+        }
+        $dark[$y] = $row;
+    }
+
+    $raster = fichero_pack_bitmap($dark, $width, $height);
+    $expected = FICHERO_BYTES_PER_ROW * $height;
+    if (strlen($raster) !== $expected) {
+        throw new RuntimeException('Bitmap Fichero de taille inattendue.');
+    }
+    return $raster;
+}
+
 /**
  * Job d'impression pour une pièce : URL de paiement si possible, sinon la fiche.
  *
@@ -109,13 +219,16 @@ function fichero_job_for_product(array $product): array
         ? shop_qr_pay_url($product)
         : shop_abs_url('/produit.php?ref=' . rawurlencode((string) $product['ref']));
     $height = FICHERO_LABEL_HEIGHT;
+    $name = (string) ($product['name'] ?? '');
+    $price = function_exists('effective_price') ? (string) effective_price($product) : (string) ($product['price'] ?? '');
+    $ref = (string) $product['ref'];
     return [
-        'ref' => (string) $product['ref'],
-        'name' => (string) ($product['name'] ?? ''),
-        'price' => function_exists('effective_price') ? (string) effective_price($product) : (string) ($product['price'] ?? ''),
+        'ref' => $ref,
+        'name' => $name,
+        'price' => $price,
         'url' => $url,
         'width' => FICHERO_PRINT_WIDTH,
         'height' => $height,
-        'raster' => base64_encode(fichero_raster_from_text($url, $height)),
+        'raster' => base64_encode(fichero_raster_from_label($url, $name, $price, $ref, $height)),
     ];
 }

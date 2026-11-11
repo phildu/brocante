@@ -7,7 +7,7 @@
   var WRITE = '0000ff02-0000-1000-8000-00805f9b34fb';
   var NOTIFY = '0000ff01-0000-1000-8000-00805f9b34fb';
   var NOTIFY_FF03 = '0000ff03-0000-1000-8000-00805f9b34fb';
-  var CHUNK = 180;
+  var CHUNK = 20;
 
   function base() { return global.APP_BASE || ''; }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -26,17 +26,6 @@
     return out;
   }
 
-  function concat() {
-    var total = 0, i, j, off = 0, out;
-    for (i = 0; i < arguments.length; i++) total += arguments[i].length;
-    out = new Uint8Array(total);
-    for (i = 0; i < arguments.length; i++) {
-      out.set(arguments[i], off);
-      off += arguments[i].length;
-    }
-    return out;
-  }
-
   function header(height) {
     var h = new Uint8Array(8);
     h[0] = 0x1d; h[1] = 0x76; h[2] = 0x30; h[3] = 0x00;
@@ -46,11 +35,13 @@
   }
 
   async function writeChunks(char, data) {
+    var withResp = !!(char.properties && char.properties.write);
     for (var i = 0; i < data.length; i += CHUNK) {
       var slice = data.slice(i, i + CHUNK);
-      if (char.writeValueWithoutResponse) await char.writeValueWithoutResponse(slice);
+      if (withResp) await char.writeValue(slice);
+      else if (char.writeValueWithoutResponse) await char.writeValueWithoutResponse(slice);
       else await char.writeValue(slice);
-      await sleep(20);
+      await sleep(withResp ? 10 : 20);
     }
   }
 
@@ -129,8 +120,10 @@
     await writeChunks(char, new Uint8Array(12));
     await sleep(50);
     await writeChunks(char, new Uint8Array([0x10, 0xff, 0xfe, 0x01]));
-    await sleep(50);
-    await writeChunks(char, concat(header(height), raster));
+    await sleep(80);
+    await writeChunks(char, header(height));
+    await sleep(30);
+    await writeChunks(char, raster);
     await writeChunks(char, new Uint8Array([0x1d, 0x0c]));
     await sleep(50);
     await writeChunks(char, new Uint8Array([0x10, 0xff, 0xfe, 0x45]));
