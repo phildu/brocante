@@ -6,6 +6,7 @@
   var SERVICE = '0000ff00-0000-1000-8000-00805f9b34fb';
   var WRITE = '0000ff02-0000-1000-8000-00805f9b34fb';
   var NOTIFY = '0000ff01-0000-1000-8000-00805f9b34fb';
+  var NOTIFY_FF03 = '0000ff03-0000-1000-8000-00805f9b34fb';
   var CHUNK = 180;
 
   function base() { return global.APP_BASE || ''; }
@@ -53,6 +54,38 @@
     }
   }
 
+  function explainBleError(err) {
+    var msg = err && err.message ? String(err.message) : '';
+    var name = err && err.name ? String(err.name) : '';
+    if (/cancel/i.test(msg)) return 'Association annulée.';
+    if (/Unsupported device|GATT|NetworkError|NotFoundError/i.test(msg + ' ' + name)) {
+      return 'Chrome voit l’imprimante mais n’arrive pas à s’y brancher (souvent déjà liée au Mac ou à un autre programme).\n\n'
+        + '1. Réglages Mac → Bluetooth : oublier « FICHERO » si elle y figure, et ne pas la reconnecter là.\n'
+        + '2. Éteindre l’imprimante 5 secondes, puis la rallumer (le voyant clignote).\n'
+        + '3. Dans Chrome, coller chrome://settings/content/bluetoothDevices — retirer ce site.\n'
+        + '4. Recharger la page, recliquer le bouton, choisir l’imprimante dès qu’elle apparaît.';
+    }
+    return msg || 'Impression impossible.';
+  }
+
+  async function gattConnect(device) {
+    var last = null;
+    var attempt;
+    for (attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (device.gatt.connected) {
+          try { device.gatt.disconnect(); } catch (e) {}
+          await sleep(400);
+        }
+        return await device.gatt.connect();
+      } catch (e) {
+        last = e;
+        await sleep(500);
+      }
+    }
+    throw last;
+  }
+
   async function connect() {
     if (!isChrome()) {
       throw new Error('Ouvrez cette page dans Google Chrome (pas Safari) pour imprimer sur l’étiqueteuse Fichero.');
@@ -67,16 +100,21 @@
       filters: [
         { namePrefix: 'FICHERO' },
         { namePrefix: 'Fichero' },
-        { namePrefix: 'D11s' }
+        { namePrefix: 'D11s' },
+        { namePrefix: 'D11' }
       ],
       optionalServices: [SERVICE]
     });
-    var server = await device.gatt.connect();
+    var server = await gattConnect(device);
     var service = await server.getPrimaryService(SERVICE);
     var char = await service.getCharacteristic(WRITE);
     try {
       var n = await service.getCharacteristic(NOTIFY);
       await n.startNotifications();
+    } catch (e) {}
+    try {
+      var n3 = await service.getCharacteristic(NOTIFY_FF03);
+      await n3.startNotifications();
     } catch (e) {}
     return { device: device, char: char };
   }
@@ -111,16 +149,20 @@
     opts = opts || {};
     var copies = Math.max(1, Math.min(20, parseInt(opts.copies, 10) || 1));
     if (!refs || !refs.length) throw new Error('Aucune pièce à imprimer.');
-    var data = await fetchJobs(refs, copies);
-    var printer = await connect();
     try {
-      for (var c = 0; c < (data.copies || copies); c++) {
-        for (var i = 0; i < data.jobs.length; i++) {
-          await printJob(printer.char, data.jobs[i]);
+      var data = await fetchJobs(refs, copies);
+      var printer = await connect();
+      try {
+        for (var c = 0; c < (data.copies || copies); c++) {
+          for (var i = 0; i < data.jobs.length; i++) {
+            await printJob(printer.char, data.jobs[i]);
+          }
         }
+      } finally {
+        try { printer.device.gatt.disconnect(); } catch (e) {}
       }
-    } finally {
-      try { printer.device.gatt.disconnect(); } catch (e) {}
+    } catch (e) {
+      throw new Error(explainBleError(e));
     }
   }
 
@@ -139,7 +181,7 @@
       }).catch(function (err) {
         btn.textContent = prev;
         btn.disabled = false;
-        alert(err && err.message ? err.message : 'Impression impossible.');
+        alert(explainBleError(err));
       });
     });
   }
