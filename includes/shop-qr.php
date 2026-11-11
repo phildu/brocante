@@ -44,7 +44,7 @@ function product_qr_html(array $product): string
         . '<div class="qr-pay-actions">'
         . '<a class="btn btn-ghost" href="' . $h('/payer.php?ref=' . rawurlencode($ref)) . '">Ouvrir la page de paiement</a>'
         . '<button type="button" class="btn btn-ghost" data-qr-print>Imprimer le code</button>'
-        . ($isAdmin ? '<button type="button" class="btn btn-ghost" data-qr-fichero>Imprimer sur Fichero (Bluetooth)</button><button type="button" class="btn btn-ghost" data-qr-export>Exporter vers une application</button>' : '')
+        . ($isAdmin ? '<label>Code Fichero et export <select data-qr-code><option value="qr">QR classique</option><option value="datamatrix">Data Matrix (à tester)</option></select></label><button type="button" class="btn btn-ghost" data-qr-fichero>Imprimer sur Fichero (Bluetooth)</button><button type="button" class="btn btn-ghost" data-qr-export>Exporter vers une application</button>' : '')
         . ($isAdmin ? '<a class="qr-pay-admin" href="' . $h('/admin/catalog.php#produit-' . rawurlencode($ref)) . '">Marquer vendue (administration)</a>' : '')
         . '</div></div></div>'
         . '<script src="/assets/vendor/qrcode-generator.js"></script>'
@@ -87,8 +87,9 @@ function product_qr_html(array $product): string
         . '  var fichero = root.querySelector("[data-qr-fichero]");'
         . '  if (window.FicheroPrint) {'
         . '    var refs = function () { return [root.getAttribute("data-qr-ref")]; };'
-        . '    window.FicheroPrint.bindButton(fichero, refs);'
-        . '    window.FicheroPrint.bindExportButton(root.querySelector("[data-qr-export]"), refs);'
+        . '    var code = function () { return root.querySelector("[data-qr-code]").value; };'
+        . '    window.FicheroPrint.bindButton(fichero, refs, null, code);'
+        . '    window.FicheroPrint.bindExportButton(root.querySelector("[data-qr-export]"), refs, code);'
         . '  } else if (fichero) {'
         . '    fichero.addEventListener("click", function () { alert("Script d’impression introuvable."); });'
         . '  }'

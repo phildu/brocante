@@ -10,7 +10,9 @@
     "ext-pdo": "*",
     "ext-pdo_sqlite": "*",
     "ovh/ovh": "^3.0",
-    "phpoffice/phpspreadsheet": "^2.1"
+    "phpoffice/phpspreadsheet": "^2.1",
+    "tecnickcom/tc-lib-barcode": "^2.4.39 <2.5",
+    "tecnickcom/tc-lib-color": "2.5.0"
   },
   "require-dev": {
     "phpunit/phpunit": "^13.4"
