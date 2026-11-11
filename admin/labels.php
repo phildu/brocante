@@ -16,6 +16,7 @@ $formats = [
     'roll-57x32' => ['label' => 'Rouleau — 57 × 32 mm', 'type' => 'roll', 'w' => 57, 'h' => 32],
     'roll-62x29' => ['label' => 'Rouleau — 62 × 29 mm', 'type' => 'roll', 'w' => 62, 'h' => 29],
     'roll-40x30' => ['label' => 'Rouleau — 40 × 30 mm', 'type' => 'roll', 'w' => 40, 'h' => 30],
+    'roll-fichero' => ['label' => 'Fichero D11s — 15 × 30 mm (Bluetooth)', 'type' => 'roll', 'w' => 15, 'h' => 30],
     'roll-custom' => ['label' => 'Rouleau — dimensions à saisir', 'type' => 'roll', 'w' => 50, 'h' => 30],
 ];
 
@@ -111,9 +112,10 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
   <button type="submit">Actualiser</button>
   <button type="button" id="remember" title="Réutiliser ces réglages la prochaine fois">Mémoriser ce format</button>
   <button type="button" id="print" style="background:#111;color:#fff;">Imprimer / PDF</button>
+  <?php if ($products): ?><button type="button" id="fichero" title="Imprime le QR (paiement ou fiche) sur l’étiqueteuse Fichero, via Bluetooth. Chrome uniquement.">Étiqueteuse Fichero</button><?php endif; ?>
   <span><?= count($products) ?> pièce(s) · <?= count($pages) ?> page(s)</span>
 </form>
-<p class="hint">Faites d'abord un essai sur papier ordinaire, en le superposant à une planche d'étiquettes à la lumière : réglez les décalages si besoin. Dans la fenêtre d'impression : échelle « 100 % » / « taille réelle », marges « aucune ».</p>
+<p class="hint">Faites d'abord un essai sur papier ordinaire, en le superposant à une planche d'étiquettes à la lumière : réglez les décalages si besoin. Dans la fenêtre d'impression : échelle « 100 % » / « taille réelle », marges « aucune ». L’étiqueteuse Fichero (D11s) s’imprime depuis Chrome, imprimante allumée à côté de l’ordinateur.</p>
 
 <?php if (!$products):
     $all = db()->query('SELECT * FROM products ORDER BY name COLLATE NOCASE LIMIT 500')->fetchAll(PDO::FETCH_ASSOC); ?>
@@ -165,7 +167,9 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
   </div></section>
 <?php endforeach; ?>
 
+<script>window.APP_BASE=<?= json_encode(tenant_base_path()) ?>;</script>
 <script src="/assets/vendor/qrcode-generator.js"></script>
+<script src="/assets/fichero-print.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/fichero-print.js') ?>"></script>
 <script>
 (function () {
   document.querySelectorAll('.qr').forEach(function (b) {
@@ -174,6 +178,17 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
   var form = document.getElementById('bar');
   document.getElementById('fmt').addEventListener('change', function () { form.submit(); });
   document.getElementById('print').addEventListener('click', function () { window.print(); });
+  var ficheroBtn = document.getElementById('fichero');
+  if (ficheroBtn && window.FicheroPrint) {
+    FicheroPrint.bindButton(
+      ficheroBtn,
+      function () {
+        var refs = (form.querySelector('[name=refs]') || {}).value || '';
+        return refs.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+      },
+      function () { return parseInt((form.querySelector('[name=copies]') || {}).value, 10) || 1; }
+    );
+  }
   var KEY = 'etiquettes-reglages';
   document.getElementById('remember').addEventListener('click', function () {
     var p = new URLSearchParams(new FormData(form)); p.delete('refs'); p.delete('go');
