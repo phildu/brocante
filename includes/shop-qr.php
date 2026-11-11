@@ -44,10 +44,11 @@ function product_qr_html(array $product): string
         . '<div class="qr-pay-actions">'
         . '<a class="btn btn-ghost" href="' . $h('/payer.php?ref=' . rawurlencode($ref)) . '">Ouvrir la page de paiement</a>'
         . '<button type="button" class="btn btn-ghost" data-qr-print>Imprimer le code</button>'
-        . ($isAdmin ? '<button type="button" class="btn btn-ghost" data-qr-fichero>Imprimer sur Fichero (Chrome)</button>' : '')
+        . ($isAdmin ? '<button type="button" class="btn btn-ghost" data-qr-fichero>Imprimer sur Fichero (Bluetooth)</button><button type="button" class="btn btn-ghost" data-qr-export>Exporter vers une application</button>' : '')
         . ($isAdmin ? '<a class="qr-pay-admin" href="' . $h('/admin/catalog.php#produit-' . rawurlencode($ref)) . '">Marquer vendue (administration)</a>' : '')
         . '</div></div></div>'
         . '<script src="/assets/vendor/qrcode-generator.js"></script>'
+        . ($isAdmin ? '<script src="/assets/fichero-print.js?v=' . (int) @filemtime(__DIR__ . '/../assets/fichero-print.js') . '"></script>' : '')
         . '<script>'
         . '(function () {'
         . '  var root = document.querySelector(".qr-pay");'
@@ -84,14 +85,13 @@ function product_qr_html(array $product): string
         . '  var btn = root.querySelector("[data-qr-print]");'
         . '  if (btn) btn.addEventListener("click", printQr);'
         . '  var fichero = root.querySelector("[data-qr-fichero]");'
-        . '  if (fichero) fichero.addEventListener("click", function () {'
-        . '    function go() { window.FicheroPrint.printRefs([root.getAttribute("data-qr-ref")]).catch(function (e) { alert(e && e.message ? e.message : "Impression impossible."); }); }'
-        . '    if (window.FicheroPrint) { go(); return; }'
-        . '    var s = document.createElement("script");'
-        . '    s.src = (window.APP_BASE || "") + "/assets/fichero-print.js";'
-        . '    s.onload = go; s.onerror = function () { alert("Script d’impression introuvable."); };'
-        . '    document.head.appendChild(s);'
-        . '  });'
+        . '  if (window.FicheroPrint) {'
+        . '    var refs = function () { return [root.getAttribute("data-qr-ref")]; };'
+        . '    window.FicheroPrint.bindButton(fichero, refs);'
+        . '    window.FicheroPrint.bindExportButton(root.querySelector("[data-qr-export]"), refs);'
+        . '  } else if (fichero) {'
+        . '    fichero.addEventListener("click", function () { alert("Script d’impression introuvable."); });'
+        . '  }'
         . '})();'
         . '</script>';
 }

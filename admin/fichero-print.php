@@ -14,15 +14,19 @@ if (!admin_access_ok()) {
     exit(json_encode(['ok' => false, 'error' => 'Session expirée : reconnectez-vous.']));
 }
 
-$refs = array_slice(array_values(array_unique(array_filter(array_map(
+$refs = array_values(array_unique(array_filter(array_map(
     static fn ($r) => preg_replace('/[^A-Za-z0-9_-]/', '', trim((string) $r)),
     explode(',', (string) ($_GET['refs'] ?? ''))
-)))), 0, 50);
+))));
 $copies = max(1, min(20, (int) ($_GET['copies'] ?? 1)));
 
 if (!$refs) {
     http_response_code(400);
     exit(json_encode(['ok' => false, 'error' => 'Aucune pièce à imprimer.']));
+}
+if (count($refs) > 50) {
+    http_response_code(400);
+    exit(json_encode(['ok' => false, 'error' => 'Choisissez au maximum 50 pièces à la fois.']));
 }
 
 $in = implode(',', array_fill(0, count($refs), '?'));
@@ -36,14 +40,10 @@ foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $p) {
 $jobs = [];
 foreach ($refs as $ref) {
     if (!isset($byRef[$ref])) {
-        continue;
+        http_response_code(404);
+        exit(json_encode(['ok' => false, 'error' => 'Une pièce sélectionnée est introuvable. Actualisez la sélection.']));
     }
     $jobs[] = fichero_job_for_product($byRef[$ref]);
-}
-
-if (!$jobs) {
-    http_response_code(404);
-    exit(json_encode(['ok' => false, 'error' => 'Pièce introuvable.']));
 }
 
 echo json_encode([

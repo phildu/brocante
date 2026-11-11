@@ -34,6 +34,9 @@ jobs:
       - name: Tests PHPUnit
         run: vendor/bin/phpunit --no-coverage --colors=never
 
+      - name: Tests impression navigateur
+        run: node --test tests/fichero-print.test.js
+
       - name: Aucun secret suivi par git
         run: |
           if git ls-files | grep -qE '(^|/)\.env|\.(key|pem|p12)$|(^|/)config\.local\.php$'; then
