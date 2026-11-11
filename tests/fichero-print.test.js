@@ -11,6 +11,7 @@ function setup(options = {}) {
   const pixels = [];
   const shared = [];
   const urls = [];
+  const writes = [];
   class Element {
     constructor(tag) {
       this.tag = tag;
@@ -33,7 +34,7 @@ function setup(options = {}) {
   }
   const characteristic = {
     properties: { write: true },
-    writeValue: async () => {}
+    writeValue: async data => { writes.push(Array.from(data)); }
   };
   const service = {
     getCharacteristic: async uuid => uuid.includes('ff02') ? characteristic : { startNotifications: async () => {} }
@@ -83,7 +84,7 @@ function setup(options = {}) {
     setTimeout: callback => callback()
   };
   vm.runInNewContext(script, context);
-  return { api: context.window.FicheroPrint, calls, alerts, pixels, shared, urls, Element, gatt };
+  return { api: context.window.FicheroPrint, calls, alerts, pixels, shared, urls, writes, Element, gatt };
 }
 
 test('Bluetooth est demandé pendant le clic, avant le chargement des étiquettes', async () => {
@@ -95,6 +96,7 @@ test('Bluetooth est demandé pendant le clic, avant le chargement des étiquette
   await new Promise(resolve => setImmediate(resolve));
   assert.ok(env.calls.indexOf('fetch') > env.calls.indexOf('requestDevice'));
   assert.ok(env.calls.includes('disconnect'));
+  assert.deepEqual(env.writes[0], [0x10, 0xff, 0x10, 0x00, 0x02]);
   assert.equal(btn.disabled, false);
   assert.deepEqual(env.alerts, []);
 });

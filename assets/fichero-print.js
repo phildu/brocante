@@ -8,6 +8,7 @@
   var NOTIFY = '0000ff01-0000-1000-8000-00805f9b34fb';
   var NOTIFY_FF03 = '0000ff03-0000-1000-8000-00805f9b34fb';
   var CHUNK = 20;
+  var PRINT_DENSITY = 2;
 
   function base() { return global.APP_BASE || ''; }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -106,7 +107,7 @@
   async function printJob(char, job) {
     var height = job.height || 240;
     var raster = b64ToBytes(job.raster);
-    await writeChunks(char, new Uint8Array([0x10, 0xff, 0x10, 0x00, 0x01]));
+    await writeChunks(char, new Uint8Array([0x10, 0xff, 0x10, 0x00, PRINT_DENSITY]));
     await sleep(50);
     await writeChunks(char, new Uint8Array([0x10, 0xff, 0x84, 0x00]));
     await sleep(50);
