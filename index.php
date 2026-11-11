@@ -1,6 +1,16 @@
 <?php
 require_once __DIR__ . '/includes/tenant.php';
 
+// Liens courts imprimés sur les étiquettes Fichero : ?p=référence (fiche),
+// ?b=référence (paiement). Ils évitent un QR trop dense sur la tête 96 px.
+if (array_key_exists('p', $_GET) || array_key_exists('b', $_GET)) {
+    $payment = array_key_exists('b', $_GET);
+    $ref = $_GET[$payment ? 'b' : 'p'];
+    $_GET['ref'] = is_string($ref) && preg_match('/^[A-Za-z0-9_-]+$/', $ref) ? $ref : '';
+    require __DIR__ . ($payment ? '/payer.php' : '/produit.php');
+    return;
+}
+
 // Déploiement portail : la racine du domaine du portail ouvre l'accueil de la
 // plateforme. Le domaine propre d'un commerce (site_url sans chemin, ex.
 // brocante.arrimage.com) ouvre sa boutique, comme sous /<identifiant>/.

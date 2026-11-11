@@ -144,7 +144,7 @@ function fichero_raster_from_label(string $url, string $name, string $price, str
     imagefilledrectangle($im, 0, 0, $width - 1, $height - 1, $white);
 
     $qr = QrCode::encodeText($url);
-    $quiet = 2;
+    $quiet = 1;
     $mod = $qr->size + $quiet * 2;
     $textBlock = 72;
     $scale = max(1, intdiv(min($width - 2, $height - $textBlock - 4), $mod));
@@ -194,7 +194,7 @@ function fichero_raster_from_label(string $url, string $name, string $price, str
             $r = ($rgb >> 16) & 0xff;
             $g = ($rgb >> 8) & 0xff;
             $b = $rgb & 0xff;
-            $row[$x] = ($r + $g + $b) < 500;
+            $row[$x] = ($r + $g + $b) < 650;
         }
         $dark[$y] = $row;
     }
@@ -215,13 +215,13 @@ function fichero_raster_from_label(string $url, string $name, string $price, str
  */
 function fichero_job_for_product(array $product): array
 {
-    $url = (function_exists('shop_qr_payable') && shop_qr_payable($product))
-        ? shop_qr_pay_url($product)
-        : shop_abs_url('/produit.php?ref=' . rawurlencode((string) $product['ref']));
+    $ref = (string) $product['ref'];
+    $payable = function_exists('shop_qr_payable') && shop_qr_payable($product);
+    $base = function_exists('tenant_base_path') ? tenant_base_path() : '';
+    $url = share_origin() . $base . '?' . ($payable ? 'b' : 'p') . '=' . rawurlencode($ref);
     $height = FICHERO_LABEL_HEIGHT;
     $name = (string) ($product['name'] ?? '');
     $price = function_exists('effective_price') ? (string) effective_price($product) : (string) ($product['price'] ?? '');
-    $ref = (string) $product['ref'];
     return [
         'ref' => $ref,
         'name' => $name,

@@ -50,12 +50,26 @@ final class FicheroLabelTest extends TestCase
             self::markTestSkipped('GD ou police Poppins indisponible.');
         }
         $raster = fichero_raster_from_label(
-            'https://exemple.fr/produit.php?ref=ABC12',
+            'https://petit-chalet.brocante.test?p=ABC12',
             'Chaise cannage',
             '25,00 €',
             'ABC12'
         );
         self::assertSame(FICHERO_BYTES_PER_ROW * FICHERO_LABEL_HEIGHT, strlen($raster));
+
+        $minX = FICHERO_PRINT_WIDTH;
+        $maxX = -1;
+        for ($y = 0; $y < 100; $y++) {
+            for ($x = 0; $x < FICHERO_PRINT_WIDTH; $x++) {
+                $byte = ord($raster[$y * FICHERO_BYTES_PER_ROW + intdiv($x, 8)]);
+                if (($byte & (1 << (7 - ($x % 8)))) !== 0) {
+                    $minX = min($minX, $x);
+                    $maxX = max($maxX, $x);
+                }
+            }
+        }
+        self::assertGreaterThan(80, $maxX - $minX, 'Le QR doit utiliser presque toute la largeur imprimable.');
+
         $underQr = substr($raster, FICHERO_BYTES_PER_ROW * 80, FICHERO_BYTES_PER_ROW * 50);
         $ink = 0;
         for ($i = 0, $n = strlen($underQr); $i < $n; $i++) {
