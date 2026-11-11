@@ -43,4 +43,38 @@ final class FicheroLabelTest extends TestCase
         self::assertCount(FICHERO_LABEL_HEIGHT, $dark);
         self::assertCount(FICHERO_PRINT_WIDTH, $dark[0]);
     }
+
+    public function testPreparedLabelHasTextBelowQr(): void
+    {
+        if (!function_exists('imagecreatetruecolor') || !is_readable(fichero_font_path())) {
+            self::markTestSkipped('GD ou police Poppins indisponible.');
+        }
+        $raster = fichero_raster_from_label(
+            'https://petit-chalet.brocante.test?p=ABC12',
+            'Chaise cannage',
+            '25,00 €',
+            'ABC12'
+        );
+        self::assertSame(FICHERO_BYTES_PER_ROW * FICHERO_LABEL_HEIGHT, strlen($raster));
+
+        $minX = FICHERO_PRINT_WIDTH;
+        $maxX = -1;
+        for ($y = 0; $y < 100; $y++) {
+            for ($x = 0; $x < FICHERO_PRINT_WIDTH; $x++) {
+                $byte = ord($raster[$y * FICHERO_BYTES_PER_ROW + intdiv($x, 8)]);
+                if (($byte & (1 << (7 - ($x % 8)))) !== 0) {
+                    $minX = min($minX, $x);
+                    $maxX = max($maxX, $x);
+                }
+            }
+        }
+        self::assertGreaterThan(80, $maxX - $minX, 'Le QR doit utiliser presque toute la largeur imprimable.');
+
+        $underQr = substr($raster, FICHERO_BYTES_PER_ROW * 80, FICHERO_BYTES_PER_ROW * 50);
+        $ink = 0;
+        for ($i = 0, $n = strlen($underQr); $i < $n; $i++) {
+            $ink += substr_count(decbin(ord($underQr[$i])), '1');
+        }
+        self::assertGreaterThan(30, $ink, 'Le nom et le prix doivent s’imprimer sous le QR.');
+    }
 }

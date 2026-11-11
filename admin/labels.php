@@ -86,7 +86,19 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
   .lab .qr svg { width: 100%; height: 100%; display: block; }
   .guides .lab { outline: 0.2mm dashed #bbb; outline-offset: -0.2mm; }
   .empty { display: block; }
-  @media print { body { background: #fff; } .bar, .hint { display: none; } .page { margin: 0; box-shadow: none; page-break-after: always; break-after: page; } .guides .lab { outline: none; } }
+  .preview-note { max-width: 760px; margin: 18px auto 0; padding: 0 14px; font-size: 13px; }
+  .fichero-previews { display: flex; flex-wrap: wrap; gap: 16px; padding: 12px 14px; }
+  .fichero-previews figure { margin: 0; text-align: center; font-size: 12px; }
+  .fichero-previews img { display: block; width: 192px; height: auto; max-width: 100%; background: #fff; image-rendering: pixelated; box-shadow: 0 1px 6px rgba(0,0,0,.25); }
+  .fichero-previews figcaption { margin-top: 5px; overflow-wrap: anywhere; }
+  @media screen and (max-width: 700px) {
+    .bar { position: static; align-items: stretch; }
+    .bar label, .bar select { max-width: 100%; }
+    .bar .checks { flex-wrap: wrap; }
+    .bar button { min-height: 44px; }
+    body { overflow-x: auto; }
+  }
+  @media print { body { background: #fff; } .bar, .hint, .preview-note, .fichero-previews { display: none; } .page { margin: 0; box-shadow: none; page-break-after: always; break-after: page; } .guides .lab { outline: none; } }
 </style>
 </head>
 <body>
@@ -112,10 +124,13 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
   <button type="submit">Actualiser</button>
   <button type="button" id="remember" title="Réutiliser ces réglages la prochaine fois">Mémoriser ce format</button>
   <button type="button" id="print" style="background:#111;color:#fff;">Imprimer / PDF</button>
-  <?php if ($products): ?><button type="button" id="fichero" style="background:#0b57d0;color:#fff;" title="Envoie le QR à l’étiqueteuse Fichero depuis Chrome (Bluetooth). Pas la fenêtre Imprimer / PDF.">Imprimer sur Fichero (Chrome)</button><?php endif; ?>
+  <?php if ($products): ?>
+    <button type="button" id="fichero" style="background:#0b57d0;color:#fff;">Imprimer sur Fichero (Bluetooth)</button>
+    <button type="button" id="export-labels">Exporter vers une application</button>
+  <?php endif; ?>
   <span><?= count($products) ?> pièce(s) · <?= count($pages) ?> page(s)</span>
 </form>
-<p class="hint">« Imprimer / PDF » ouvre la fenêtre d’impression de Chrome (planche A4, PDF). « Imprimer sur Fichero (Chrome) » envoie le QR à l’étiqueteuse Bluetooth — ouvrez cette page dans <strong>Google Chrome</strong>, imprimante allumée à côté. Pour une planche papier : essai à la lumière, échelle 100 %, marges « aucune ».</p>
+<p class="hint">« Imprimer / PDF » utilise l’impression de l’appareil, y compris AirPrint si l’imprimante est compatible. Pour la Fichero en Bluetooth, utilisez Chrome sur ordinateur ou Android, en HTTPS. Sur iPhone ou avec une autre marque, exportez les images puis importez-les dans l’application de l’imprimante : vérifiez le format et scannez le QR après impression. Chaque image correspond à une étiquette Fichero 15 × 30 mm et contient le QR, le prix, le nom et la référence. Les réglages de cette page ne modifient pas les images exportées : choisissez les copies dans l’application. Limite : 50 pièces par export ou impression Bluetooth.</p>
 
 <?php if (!$products):
     $all = db()->query('SELECT * FROM products ORDER BY name COLLATE NOCASE LIMIT 500')->fetchAll(PDO::FETCH_ASSOC); ?>
@@ -149,6 +164,16 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
     </script>
     <?php endif; ?>
   </section>
+<?php endif; ?>
+<?php if ($products && $fmtKey === 'roll-fichero'): ?>
+  <section class="preview-note" aria-labelledby="fichero-preview-title">
+    <h2 id="fichero-preview-title">Aperçu de l’étiquette Fichero</h2>
+    <p>Image agrandie de l’étiquette envoyée en Bluetooth et exportée. Une image par pièce, quel que soit le nombre d’exemplaires. Les options de la planche ne changent pas cette étiquette. Le résultat imprimé dépend aussi de l’imprimante et du papier.</p>
+    <div id="fichero-preview" class="fichero-previews" aria-live="polite">Préparation de l’aperçu…</div>
+  </section>
+<?php endif; ?>
+<?php if ($products): ?>
+  <p class="preview-note">Aperçu pour « Imprimer / PDF » : différent de l’étiquette Bluetooth Fichero.<?php if ($fmtKey !== 'roll-fichero'): ?> Pour voir celle-ci, choisissez le format Fichero.<?php endif; ?></p>
 <?php endif; ?>
 <?php foreach ($pages as $page): ?>
   <section class="page guides"><div class="grid">
@@ -188,6 +213,20 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
       },
       function () { return parseInt((form.querySelector('[name=copies]') || {}).value, 10) || 1; }
     );
+  }
+  if (window.FicheroPrint) {
+    FicheroPrint.bindExportButton(document.getElementById('export-labels'), function () {
+      var refs = (form.querySelector('[name=refs]') || {}).value || '';
+      return refs.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+    });
+    var preview = document.getElementById('fichero-preview');
+    if (preview) {
+      var previewRefs = (form.querySelector('[name=refs]') || {}).value || '';
+      FicheroPrint.renderPreview(preview, previewRefs.split(',').map(function (r) { return r.trim(); }).filter(Boolean));
+    }
+  } else {
+    var preview = document.getElementById('fichero-preview');
+    if (preview) preview.textContent = 'Aperçu Fichero indisponible : script d’impression introuvable.';
   }
   var KEY = 'etiquettes-reglages';
   document.getElementById('remember').addEventListener('click', function () {
