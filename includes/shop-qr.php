@@ -44,7 +44,7 @@ function product_qr_html(array $product): string
         . '<div class="qr-pay-actions">'
         . '<a class="btn btn-ghost" href="' . $h('/payer.php?ref=' . rawurlencode($ref)) . '">Ouvrir la page de paiement</a>'
         . '<button type="button" class="btn btn-ghost" data-qr-print>Imprimer le code</button>'
-        . ($isAdmin ? '<button type="button" class="btn btn-ghost" data-qr-fichero>Étiqueteuse Fichero</button>' : '')
+        . ($isAdmin ? '<button type="button" class="btn btn-ghost" data-qr-fichero>Imprimer sur Fichero (Chrome)</button>' : '')
         . ($isAdmin ? '<a class="qr-pay-admin" href="' . $h('/admin/catalog.php#produit-' . rawurlencode($ref)) . '">Marquer vendue (administration)</a>' : '')
         . '</div></div></div>'
         . '<script src="/assets/vendor/qrcode-generator.js"></script>'

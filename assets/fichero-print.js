@@ -10,7 +10,13 @@
 
   function base() { return global.APP_BASE || ''; }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  function supported() { return typeof navigator !== 'undefined' && !!navigator.bluetooth; }
+  function isChrome() {
+    var ua = navigator.userAgent || '';
+    return /Chrome\//.test(ua) && !/Edg\/|OPR\/|SamsungBrowser/.test(ua);
+  }
+  function supported() {
+    return typeof navigator !== 'undefined' && !!navigator.bluetooth && !!window.isSecureContext;
+  }
 
   function b64ToBytes(b64) {
     var bin = atob(b64);
@@ -48,8 +54,14 @@
   }
 
   async function connect() {
-    if (!supported()) {
-      throw new Error('Ouvrez cette page dans Chrome pour imprimer sur l’étiqueteuse Fichero.');
+    if (!isChrome()) {
+      throw new Error('Ouvrez cette page dans Google Chrome (pas Safari) pour imprimer sur l’étiqueteuse Fichero.');
+    }
+    if (!window.isSecureContext) {
+      throw new Error('Chrome n’autorise le Bluetooth que sur une page https (cadenas dans la barre d’adresse).');
+    }
+    if (!navigator.bluetooth) {
+      throw new Error('Bluetooth indisponible dans ce Chrome. Activez-le dans chrome://flags si besoin.');
     }
     var device = await navigator.bluetooth.requestDevice({
       filters: [

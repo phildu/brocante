@@ -112,10 +112,10 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
   <button type="submit">Actualiser</button>
   <button type="button" id="remember" title="Réutiliser ces réglages la prochaine fois">Mémoriser ce format</button>
   <button type="button" id="print" style="background:#111;color:#fff;">Imprimer / PDF</button>
-  <?php if ($products): ?><button type="button" id="fichero" title="Imprime le QR (paiement ou fiche) sur l’étiqueteuse Fichero, via Bluetooth. Chrome uniquement.">Étiqueteuse Fichero</button><?php endif; ?>
+  <?php if ($products): ?><button type="button" id="fichero" style="background:#0b57d0;color:#fff;" title="Envoie le QR à l’étiqueteuse Fichero depuis Chrome (Bluetooth). Pas la fenêtre Imprimer / PDF.">Imprimer sur Fichero (Chrome)</button><?php endif; ?>
   <span><?= count($products) ?> pièce(s) · <?= count($pages) ?> page(s)</span>
 </form>
-<p class="hint">Faites d'abord un essai sur papier ordinaire, en le superposant à une planche d'étiquettes à la lumière : réglez les décalages si besoin. Dans la fenêtre d'impression : échelle « 100 % » / « taille réelle », marges « aucune ». L’étiqueteuse Fichero (D11s) s’imprime depuis Chrome, imprimante allumée à côté de l’ordinateur.</p>
+<p class="hint">« Imprimer / PDF » ouvre la fenêtre d’impression de Chrome (planche A4, PDF). « Imprimer sur Fichero (Chrome) » envoie le QR à l’étiqueteuse Bluetooth — ouvrez cette page dans <strong>Google Chrome</strong>, imprimante allumée à côté. Pour une planche papier : essai à la lumière, échelle 100 %, marges « aucune ».</p>
 
 <?php if (!$products):
     $all = db()->query('SELECT * FROM products ORDER BY name COLLATE NOCASE LIMIT 500')->fetchAll(PDO::FETCH_ASSOC); ?>
