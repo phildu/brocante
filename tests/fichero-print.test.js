@@ -186,3 +186,15 @@ test('aperçu montre les erreurs de préparation et la limite de 50 pièces', as
   await env.api.renderPreview(preview, Array.from({ length: 51 }, (_, i) => String(i)));
   assert.match(preview.textContent, /50 pièces/);
 });
+
+test('Data Matrix est demandé pour l’impression, l’export et l’aperçu', async () => {
+  const env = setup();
+  await env.api.printRefs(['A1'], { code: 'datamatrix' });
+  const btn = new env.Element('button');
+  env.api.bindExportButton(btn, () => ['A1'], () => 'datamatrix');
+  await btn.click();
+  await env.api.renderPreview(new env.Element('div'), ['A1'], 'datamatrix');
+  const urls = env.calls.filter(call => typeof call === 'string' && call.includes('/admin/fichero-print.php'));
+  assert.equal(urls.length, 3);
+  assert.ok(urls.every(url => url.includes('&code=datamatrix')));
+});

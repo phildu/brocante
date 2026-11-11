@@ -127,14 +127,43 @@ function fichero_fit_text(string $font, int $maxSize, int $minSize, int $maxWidt
     return [$size, $text];
 }
 
+/** @return array<int,array<int,bool>> */
+function fichero_datamatrix(string $url): array
+{
+    $vendor = dirname(__DIR__) . '/vendor/tecnickcom';
+    if (!is_file($vendor . '/tc-lib-barcode/src/Barcode.php') || !is_file($vendor . '/tc-lib-color/src/Model.php')) {
+        throw new RuntimeException('Bibliothèque Data Matrix indisponible sur ce serveur.');
+    }
+    static $registered = false;
+    if (!$registered) {
+        // Le déploiement exclut l'autoload Composer ; seules ces deux bibliothèques sont chargées ici.
+        spl_autoload_register(static function (string $class) use ($vendor): void {
+            foreach (['Com\\Tecnick\\Barcode\\' => 'tc-lib-barcode', 'Com\\Tecnick\\Color\\' => 'tc-lib-color'] as $prefix => $package) {
+                if (str_starts_with($class, $prefix)) {
+                    $file = $vendor . '/' . $package . '/src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
+                    if (is_file($file)) require_once $file;
+                    return;
+                }
+            }
+        });
+        $registered = true;
+    }
+    $barcode = (new \Com\Tecnick\Barcode\Barcode())->getBarcodeObj('DATAMATRIX', $url);
+    return array_map(static fn (array $row): array => array_map(static fn ($pixel): bool => $pixel === '1', $row), $barcode->getGridArray());
+}
+
 /**
  * Étiquette D11s : QR en haut, prix / nom / réf en dessous (comme l'aperçu).
  */
-function fichero_raster_from_label(string $url, string $name, string $price, string $ref, int $height = FICHERO_LABEL_HEIGHT): string
+function fichero_raster_from_label(string $url, string $name, string $price, string $ref, int $height = FICHERO_LABEL_HEIGHT, string $code = 'qr'): string
 {
+    if (!in_array($code, ['qr', 'datamatrix'], true)) {
+        throw new InvalidArgumentException('Type de code inconnu.');
+    }
     $width = FICHERO_PRINT_WIDTH;
     $font = fichero_font_path();
     if (!function_exists('imagecreatetruecolor') || !is_readable($font)) {
+        if ($code !== 'qr') throw new RuntimeException('GD ou la police nécessaire à l’étiquette est indisponible.');
         return fichero_raster_from_text($url, $height);
     }
 
@@ -143,17 +172,22 @@ function fichero_raster_from_label(string $url, string $name, string $price, str
     $black = imagecolorallocate($im, 0, 0, 0);
     imagefilledrectangle($im, 0, 0, $width - 1, $height - 1, $white);
 
-    $qr = QrCode::encodeText($url);
+    $qr = $code === 'qr' ? QrCode::encodeText($url) : null;
+    $matrix = $qr ? $qr->modules : fichero_datamatrix($url);
+    $rows = count($matrix);
+    $cols = count($matrix[0]);
     $quiet = 1;
-    $mod = $qr->size + $quiet * 2;
     $textBlock = 72;
-    $scale = max(1, intdiv(min($width - 2, $height - $textBlock - 4), $mod));
-    $drawn = $mod * $scale;
-    $ox = intdiv($width - $drawn, 2);
+    $scale = min(intdiv($width - 2, $cols + 2 * $quiet), intdiv($height - $textBlock - 4, $rows + 2 * $quiet));
+    if ($scale < 2 && $code === 'datamatrix') throw new InvalidArgumentException('Lien trop long pour imprimer ce code lisiblement sur une Fichero.');
+    $scale = max(1, $scale);
+    $drawnW = ($cols + 2 * $quiet) * $scale;
+    $drawnH = ($rows + 2 * $quiet) * $scale;
+    $ox = intdiv($width - $drawnW, 2);
     $oy = 1;
-    for ($y = 0; $y < $qr->size; $y++) {
-        for ($x = 0; $x < $qr->size; $x++) {
-            if (!$qr->modules[$y][$x]) {
+    for ($y = 0; $y < $rows; $y++) {
+        for ($x = 0; $x < $cols; $x++) {
+            if (!$matrix[$y][$x]) {
                 continue;
             }
             $px = $ox + ($x + $quiet) * $scale;
@@ -163,7 +197,7 @@ function fichero_raster_from_label(string $url, string $name, string $price, str
     }
 
     $maxW = $width - 4;
-    $ty = $oy + $drawn + 12;
+    $ty = $oy + $drawnH + 12;
     $lines = [
         [$price, 13, 8],
         [$name, 9, 7],
@@ -213,7 +247,7 @@ function fichero_raster_from_label(string $url, string $name, string $price, str
  * @param array<string,mixed> $product
  * @return array{ref:string,name:string,price:string,url:string,width:int,height:int,raster:string}
  */
-function fichero_job_for_product(array $product): array
+function fichero_job_for_product(array $product, string $code = 'qr'): array
 {
     $ref = (string) $product['ref'];
     $payable = function_exists('shop_qr_payable') && shop_qr_payable($product);
@@ -229,6 +263,6 @@ function fichero_job_for_product(array $product): array
         'url' => $url,
         'width' => FICHERO_PRINT_WIDTH,
         'height' => $height,
-        'raster' => base64_encode(fichero_raster_from_label($url, $name, $price, $ref, $height)),
+        'raster' => base64_encode(fichero_raster_from_label($url, $name, $price, $ref, $height, $code)),
     ];
 }
