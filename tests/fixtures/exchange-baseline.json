@@ -92,6 +92,7 @@
         "mcp_oauth_clients",
         "mcp_oauth_codes",
         "mcp_oauth_tokens",
+        "mcp_trash",
         "media_library",
         "media_links",
         "media_states",

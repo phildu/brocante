@@ -80,12 +80,23 @@ final class McpTest extends TestCase
         $names = array_keys(mcp_tools());
         foreach ($names as $n) self::assertDoesNotMatchRegularExpression('/delete|drop|remove|purge/', $n);
         // Les outils d'écriture sont tous déclarés comme tels (pour la sauvegarde et le journal).
-        foreach (['product_update', 'product_create', 'content_update', 'setting_set', 'discount_add', 'discount_set_active'] as $w) {
+        foreach (['product_update', 'product_create', 'content_update', 'setting_set', 'discount_add', 'discount_set_active', 'trash_item', 'trash_restore',
+            'shipping_carrier_add', 'shipping_carrier_set', 'shipping_rate_add', 'shipping_rate_update', 'order_set_fulfillment', 'product_photo_add', 'product_photo_update'] as $w) {
             self::assertTrue(mcp_tools()[$w]['write'], $w);
         }
-        foreach (['orders_list', 'order_get', 'products_list', 'product_get', 'audit_log'] as $r) {
+        foreach (['orders_list', 'order_get', 'products_list', 'product_get', 'audit_log', 'trash_list', 'shipping_get', 'media_list', 'product_photos_get'] as $r) {
             self::assertFalse(mcp_tools()[$r]['write'], $r);
         }
+    }
+
+    public function testSensitiveActionsAreNotExposed(): void
+    {
+        // Remboursement, annulation, comptes, clés de paiement : administration uniquement.
+        foreach (array_keys(mcp_tools()) as $n) self::assertDoesNotMatchRegularExpression('/refund|cancel|account|password|stripe|key|secret/i', $n);
+        self::assertSame(['kind', 'id'], mcp_tools()['trash_item']['schema']['required']);
+        // Les champs produit modifiables n'incluent ni photo ni identifiants externes.
+        self::assertArrayNotHasKey('photo', mcp_product_fields());
+        self::assertArrayHasKey('cost_price', mcp_product_fields());
     }
 
     public function testNoSecretSettingIsWritable(): void

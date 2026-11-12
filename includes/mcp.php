@@ -198,6 +198,7 @@ function mcp_product_fields(): array
         'weight_grams' => 'Poids en grammes (frais de port)',
         'lot_qty' => 'Pièces vendues ensemble (1 = pièce seule)',
         'negotiable' => 'true = bouton « Faire une offre »',
+        'cost_price' => 'Prix d\'achat en euros (sert au calcul de marge, jamais affiché) ; vide = non renseigné',
     ];
 }
 
@@ -224,6 +225,14 @@ function mcp_product_clean(array $in, array $current = []): array
                 $keys = array_column(category_list(), 'key');
                 if (!in_array($v, $keys, true)) throw new McpToolError('Univers inconnu : « ' . mcp_str($v, 60) . ' ». Univers valides : ' . implode(', ', $keys) . '.');
                 $out[$k] = $v;
+                break;
+            case 'cost_price':
+                require_once __DIR__ . '/analytics.php';
+                analytics_ensure_schema();
+                if (trim((string) $v) === '') { $out['cost_cents'] = null; break; }
+                $euros = parse_euros(mcp_str($v, 20));
+                if ($euros === null || $euros >= 10000000) throw new McpToolError('cost_price : montant en euros attendu (ex. 12 ou 12,50).');
+                $out['cost_cents'] = (int) round($euros * 100);
                 break;
             case 'materials': $out[$k] = mcp_str($v, 300); break;
             case 'colors': $out[$k] = product_colors_clean(mcp_str($v, 200)); break;
@@ -256,7 +265,7 @@ function mcp_product_clean(array $in, array $current = []): array
 
 function mcp_product_public(array $p): array
 {
-    $keep = array_merge(['ref', 'photo', 'sort_order', 'created_at', 'source_id', 'external_url', 'synced_at'], array_keys(mcp_product_fields()));
+    $keep = array_merge(['ref', 'photo', 'sort_order', 'created_at', 'source_id', 'external_url', 'synced_at', 'cost_cents'], array_keys(mcp_product_fields()));
     $o = [];
     foreach ($keep as $k) if (array_key_exists($k, $p)) $o[$k] = $p[$k];
     return $o;
@@ -288,7 +297,18 @@ function mcp_setting_keys(): array
     ];
 }
 
+/** Tous les outils : cœur (produits, contenus, remises, commandes en lecture) + outils supplémentaires (corbeille, port, suivi, photos). */
 function mcp_tools(): array
+{
+    static $all = null;
+    if ($all === null) {
+        require_once __DIR__ . '/mcp-tools-extra.php';
+        $all = mcp_tools_core() + mcp_tools_extra();
+    }
+    return $all;
+}
+
+function mcp_tools_core(): array
 {
     $id = ['type' => 'string', 'description' => 'Référence du produit (ex. « 042 »).'];
     return [
