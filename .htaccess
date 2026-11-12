@@ -40,6 +40,13 @@ RewriteRule ^\.well-known/oauth-protected-resource(?:/([a-z0-9][a-z0-9_-]*)/mcp\
 RewriteRule ^\.well-known/(?:oauth-authorization-server|openid-configuration)(?:/([a-z0-9][a-z0-9_-]*))?$ mcp-oauth-meta.php?doc=server&t=$1 [L,QSA]
 RewriteRule ^([a-z0-9][a-z0-9_-]*)/\.well-known/(?:oauth-authorization-server|openid-configuration)$ mcp-oauth-meta.php?doc=server&t=$1 [L,QSA]
 
+# Variante « chemin ajouté à la ressource » (/<commerce>/mcp.php/.well-known/…) et adresses par défaut que certains clients OAuth essaient
+# quand la découverte échoue : /authorize, /token, /register (à la racine et sous /<commerce>/, via la règle de commerce ci-dessous).
+RewriteRule ^([a-z0-9][a-z0-9_-]*)/mcp\.php/\.well-known/oauth-protected-resource$ mcp-oauth-meta.php?doc=resource&t=$1 [L,QSA]
+RewriteRule ^authorize$ mcp-authorize.php [L,QSA]
+RewriteRule ^token$ mcp-token.php [L,QSA]
+RewriteRule ^register$ mcp-register.php [L,QSA]
+
 # Un commerce servi sous le domaine du portail : /<identifiant>/… affiche la
 # boutique de tenants/<identifiant>/ (le PHP reconnaît le commerce à l'adresse
 # demandée, voir tenant_from_path() dans includes/tenant.php). Un dossier réel

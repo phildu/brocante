@@ -12,6 +12,7 @@ try {
 } catch (McpToolError $e) {
     mcp_oauth_json(400, ['error' => 'invalid_redirect_uri', 'error_description' => $e->getMessage()]);
 }
+mcp_audit('oauth', null, 'client enregistré (' . ($c['client_name'] !== '' ? $c['client_name'] : $c['client_id']) . ')');
 mcp_oauth_json(201, $c + [
     'grant_types' => ['authorization_code', 'refresh_token'],
     'response_types' => ['code'],
