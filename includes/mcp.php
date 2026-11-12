@@ -303,7 +303,8 @@ function mcp_tools(): array
     static $all = null;
     if ($all === null) {
         require_once __DIR__ . '/mcp-tools-extra.php';
-        $all = mcp_tools_core() + mcp_tools_extra();
+        require_once __DIR__ . '/mcp-tools-campaign.php';
+        $all = mcp_tools_core() + mcp_tools_extra() + mcp_tools_campaign();
     }
     return $all;
 }

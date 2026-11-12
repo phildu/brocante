@@ -81,10 +81,10 @@ final class McpTest extends TestCase
         foreach ($names as $n) self::assertDoesNotMatchRegularExpression('/delete|drop|remove|purge/', $n);
         // Les outils d'écriture sont tous déclarés comme tels (pour la sauvegarde et le journal).
         foreach (['product_update', 'product_create', 'content_update', 'setting_set', 'discount_add', 'discount_set_active', 'trash_item', 'trash_restore',
-            'shipping_carrier_add', 'shipping_carrier_set', 'shipping_rate_add', 'shipping_rate_update', 'order_set_fulfillment', 'product_photo_add', 'product_photo_update'] as $w) {
+            'shipping_carrier_add', 'shipping_carrier_set', 'shipping_rate_add', 'shipping_rate_update', 'order_set_fulfillment', 'product_photo_add', 'product_photo_update', 'campaign_send'] as $w) {
             self::assertTrue(mcp_tools()[$w]['write'], $w);
         }
-        foreach (['orders_list', 'order_get', 'products_list', 'product_get', 'audit_log', 'trash_list', 'shipping_get', 'media_list', 'product_photos_get'] as $r) {
+        foreach (['orders_list', 'order_get', 'products_list', 'product_get', 'audit_log', 'trash_list', 'shipping_get', 'media_list', 'product_photos_get', 'campaign_audience', 'campaign_preview', 'campaign_history'] as $r) {
             self::assertFalse(mcp_tools()[$r]['write'], $r);
         }
     }

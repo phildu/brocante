@@ -25,6 +25,20 @@ Fichiers : `mcp-oauth-meta.php` (découverte, aussi servie sous `/.well-known/�
 `mcp-token.php`, `includes/mcp-oauth.php`. Tables : `mcp_oauth_clients`, `mcp_oauth_codes`, `mcp_oauth_tokens`. Les règles `/.well-known` sont propres à Apache (OVH) ;
 en local, `/mcp-oauth-meta.php?doc=resource|server` donne les mêmes documents.
 
+## Campagnes de promo (SMS, e-mail, WhatsApp…)
+
+Annoncer un ou plusieurs articles via le module **Notifications** (`includes/notifications.php`), donc avec ses règles : `campaign_audience` (combien de personnes
+joignables, sans aucune coordonnée), `campaign_preview` (message proposé et modifiable, destinataires par canal, segments SMS, report aux heures calmes,
+avertissements) puis `campaign_send` (envoi réel, **après accord de l'utilisateur**, avec le `confirm_token` de l'aperçu), `campaign_history`.
+
+- **Consentement** : seules les personnes **abonnées à une rubrique marketing** (opt-in explicite, avec preuve) sont visées. Ce MCP ne peut abonner personne ; l'abonnement se
+  fait sur la page de préférences de la personne ou par l'administration (Notifications → Utilisateurs). Les imports (clients, newsletter) ne créent aucun abonnement.
+- Chaque message porte le lien de désinscription ; SMS et WhatsApp marketing sont différés hors des heures calmes (20 h–8 h et dimanche par défaut) ; un canal coupé ou un STOP est respecté.
+- **Garde-fous** : aperçu obligatoire (jeton à usage unique, lié au message exact), 500 destinataires au plus par envoi, pas de renvoi du même message pendant 24 h
+  (`resend=true`), produit masqué ou épuisé refusé (`allow_unavailable=true`), aucune liste de contacts renvoyée à l'assistant (comptes et exemples masqués).
+- **Avant de lancer** : canaux configurés (Administration → Notifications → Canaux : e-mail, Twilio pour SMS / WhatsApp…), au moins un abonné, et promo fixée sur les
+  articles (`product_update` : `promo_price`). Le coût des SMS est facturé par votre compte Twilio.
+
 ## Corbeille, confirmation en deux temps
 
 - **« Supprimer » = corbeille** (`trash_item`) : produit, remise du panier, palier ou transporteur de frais de port, photo de produit. Restaurable 30 jours
@@ -46,6 +60,7 @@ en local, `/mcp-oauth-meta.php?doc=resource|server` donne les mêmes documents.
 | `discounts_list`, `discount_add`, `discount_set_active` | remises du panier (on désactive, on ne supprime pas) |
 | `orders_list`, `order_get` | commandes (lecture) |
 | `order_set_fulfillment` | statut de préparation et n° de suivi (e-mail client : confirmation en deux temps) |
+| `campaign_audience`, `campaign_preview`, `campaign_send`, `campaign_history` | campagne de promo sur un ou plusieurs articles (abonnés marketing seulement, confirmation en deux temps) |
 | `trash_item`, `trash_list`, `trash_restore` | suppression = corbeille réversible (30 jours) |
 | `shipping_get`, `shipping_carrier_add`, `shipping_carrier_set`, `shipping_rate_add`, `shipping_rate_update` | transporteurs et paliers de frais de port |
 | `media_list`, `product_photos_get`, `product_photo_add`, `product_photo_update` | photos et vidéos : choisir dans la médiathèque ou importer une image https ; masquer, ordonner |
@@ -79,4 +94,4 @@ vendor/bin/phpunit tests/McpTest.php
 
 ## Fichiers
 
-`mcp.php` (entrée HTTP) · `includes/mcp.php` (outils de base, jeton, journal, sauvegarde, JSON-RPC) · `includes/mcp-tools-extra.php` (corbeille, port, suivi, photos) · `admin/mcp.php` (jeton + journal).
+`mcp.php` (entrée HTTP) · `includes/mcp.php` (outils de base, jeton, journal, sauvegarde, JSON-RPC) · `includes/mcp-tools-extra.php` (corbeille, port, suivi, photos) · `includes/mcp-tools-campaign.php` (campagnes de promo) · `admin/mcp.php` (jeton + journal).
