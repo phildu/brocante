@@ -378,7 +378,7 @@ function nt_channel_ready(string $channel, string $address = ''): bool
             if (!filter_var(nt_cfg('email.from_email'), FILTER_VALIDATE_EMAIL)) return false;
             return nt_cfg('email.transport') !== 'smtp' || (nt_cfg('email.smtp_host') !== '' && (int) nt_cfg('email.smtp_port') > 0);
         case 'sms':
-            return nt_twilio_ready() && (nt_cfg('sms.from') !== '' || nt_cfg('sms.messaging_service_sid') !== '');
+            return nt_twilio_sms_ready() || nt_platform_sms_ready();
         case 'whatsapp':
             return nt_twilio_ready() && nt_normalize_phone((string) nt_cfg('whatsapp.from')) !== null;
         case 'discord':
@@ -395,6 +395,48 @@ function nt_channel_ready(string $channel, string $address = ''): bool
 function nt_twilio_ready(): bool
 {
     return nt_cfg('twilio.account_sid') !== '' && nt_cfg('twilio.auth_token') !== '';
+}
+
+/** Twilio propre au module (.secrets/notifications.json) complet pour les SMS ? */
+function nt_twilio_sms_ready(): bool
+{
+    return nt_twilio_ready() && (nt_cfg('sms.from') !== '' || nt_cfg('sms.messaging_service_sid') !== '');
+}
+
+/**
+ * SMS de la plateforme (includes/sms.php) : compte OVH ou Twilio réglé une fois
+ * dans le portail (/portail/sms.php), ou propre à la boutique. Sert de repli quand
+ * le module n'a pas son propre Twilio : une boutique n'a rien à ressaisir.
+ */
+function nt_platform_sms_load(): bool
+{
+    if (function_exists('sms_provider_name')) return true;
+    $file = __DIR__ . '/sms.php';
+    if (!is_file($file)) return false;
+    try {
+        require_once $file;
+    } catch (Throwable $e) {
+        return false;
+    }
+    return function_exists('sms_provider_name');
+}
+
+function nt_platform_sms_ready(): bool
+{
+    if (!nt_platform_sms_load()) return false;
+    try {
+        return sms_provider_name() !== '';
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/** Envoi d'un SMS par le compte de la plateforme (crédit SMS de la boutique décompté). */
+function nt_send_platform_sms(string $to, string $text): array
+{
+    if (!nt_platform_sms_ready()) return nt_fail('SMS non configuré', true);
+    if (!sms_credit_ok(sms_segments($text))) return nt_fail('Crédit SMS de la boutique épuisé', true);
+    return sms_send($to, $text) ? nt_ok() : nt_fail('SMS : envoi refusé par le fournisseur de la plateforme');
 }
 
 /** Canaux utilisables d'après la configuration (webhook Discord compris) : pour les tableaux de bord. */
@@ -1072,7 +1114,7 @@ function nt_driver_send(string $channel, string $address, array $msg): array
 {
     switch ($channel) {
         case 'email': return nt_send_email($address, $msg);
-        case 'sms': return nt_send_twilio('sms', $address, $msg['text']);
+        case 'sms': return nt_twilio_sms_ready() ? nt_send_twilio('sms', $address, $msg['text']) : nt_send_platform_sms($address, $msg['text']);
         case 'whatsapp': return nt_send_twilio('whatsapp', $address, $msg['text']);
         case 'discord': return nt_send_discord($address, $msg['text']);
         case 'telegram': return nt_send_telegram($address, $msg['text']);
