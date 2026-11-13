@@ -106,6 +106,7 @@ function lp_render(array $p): void
           <div class="actions">
             <a class="btn light" href="<?= lp_e($create) ?>"<?= cta_attrs('lp_hero_create', (string) $V['create_cta']) ?>><?= lp_e(cta_label('lp_hero_create', (string) $V['create_cta'])) ?></a>
             <a class="btn ghost" href="#tarifs"<?= cta_attrs('lp_hero_pricing') ?>><?= lp_e(cta_label('lp_hero_pricing')) ?></a>
+            <?php if (!empty($p['demo']['url'])): ?><a class="btn ghost" href="<?= lp_e($p['demo']['url']) ?>"><?= lp_e($p['demo']['label'] ?? 'Voir un exemple') ?></a><?php endif; ?>
             <?php if ($live): ?><a class="btn ghost" href="#exemples"<?= cta_attrs('lp_hero_live', $type['name'] . ' déjà en ligne') ?>><?= lp_e(cta_label('lp_hero_live', $type['name'] . ' déjà en ligne')) ?></a><?php endif; ?>
           </div>
           <ul class="stats">
