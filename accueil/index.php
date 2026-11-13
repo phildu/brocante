@@ -8,6 +8,13 @@ if (!empty($_SERVER['HTTP_HOST'])) {
         require __DIR__ . '/../galerie/index.php';
         exit;
     }
+    // Vitrine propre à un domaine (aux-puces.com : page de vente des marketplaces de marché aux puces).
+    require_once __DIR__ . '/../includes/vitrine-host.php';
+    $vitrinePage = vitrine_page_for_host((string) $_SERVER['HTTP_HOST']);
+    if ($vitrinePage !== null) {
+        require __DIR__ . '/../' . $vitrinePage;
+        exit;
+    }
 }
 // Page d'accueil de la plateforme (racine du domaine du portail) : quatre parcours (vendre, organiser, exposer, découvrir), les types de galerie
 // comparés, les options à la carte, les formules d'une boutique, les galeries, les commerces à la une.
