@@ -40,6 +40,11 @@ Les identifiants sont dans `.secrets/notifications.json` (droits 0600, jamais
 dans la base ni dans Git, exclus du déploiement comme les clés Stripe/Gemini).
 Ils ne sont jamais réaffichés ; un champ secret laissé vide conserve la valeur.
 
+**SMS** : si le module n'a pas son propre Twilio, le canal SMS reprend le compte
+de la plateforme (OVH ou Twilio, réglé une fois dans le portail, `/portail/sms.php`,
+ou propre à la boutique) ; le crédit SMS de la boutique est décompté. Le Twilio du
+module, quand il est complet, reste prioritaire.
+
 **WhatsApp** : un message libre n'est possible que dans les 24 h suivant la
 dernière réponse de la personne ; au-delà il faut un modèle approuvé par Meta
 (non géré : l'envoi échoue avec un message explicite).

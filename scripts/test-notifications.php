@@ -607,6 +607,28 @@ db()->prepare("INSERT INTO nt_deliveries (message_id, user_id, channel, address,
 check('purge à 90 jours : supprime l\'historique terminé, garde les envois en file ou en cours', [nt_purge(90) > 0, db()->query("SELECT group_concat(status) FROM (SELECT status FROM nt_deliveries ORDER BY status)")->fetchColumn()], [true, 'queued,sending']);
 check('statistiques', array_keys(nt_stats()), ['users', 'without_channel', 'pending', 'sent', 'failed', 'by_channel']);
 
+// SMS du portail : sans Twilio propre au module, le canal SMS reprend le compte réglé dans /portail/sms.php.
+$cfgBackup = nt_config();
+$noTwilio = $cfgBackup;
+$noTwilio['twilio'] = ['account_sid' => '', 'auth_token' => ''];
+$noTwilio['sms'] = ['from' => '', 'messaging_service_sid' => ''];
+nt_config_save($noTwilio);
+$sharedFile = sys_get_temp_dir() . '/brocante-nt-sms-partage-' . getmypid() . '.json';
+putenv('SMS_SHARED_FILE=' . $sharedFile);
+@unlink($sharedFile);
+foreach (['SMS_PROVIDER', 'OVH_SMS_ACCOUNT', 'OVH_SMS_LOGIN', 'OVH_SMS_PASSWORD', 'OVH_SMS_FROM', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM'] as $envName) putenv($envName);
+check('SMS portail : ni module ni portail -> canal non configuré', nt_channel_ready('sms'), false);
+check('SMS portail : envoi refusé et définitif sans configuration', array_values(array_intersect_key(nt_driver_send('sms', '+33612345678', ['text' => 'Salut']), ['ok' => 1, 'permanent' => 1])), [false, true]);
+file_put_contents($sharedFile, json_encode(['sms_provider' => 'ovh', 'ovh_sms_account' => 'sms-ab123-1', 'ovh_sms_login' => 'user', 'ovh_sms_password' => 'pw', 'ovh_sms_from' => 'FRIPERIE']));
+check('SMS portail : compte du portail complet -> canal prêt', nt_channel_ready('sms'), true);
+check('SMS portail : le module sait qu\'il n\'a pas son propre Twilio', nt_twilio_sms_ready(), false);
+file_put_contents($sharedFile, json_encode(['sms_provider' => 'ovh', 'ovh_sms_account' => 'sms-ab123-1']));
+check('SMS portail : compte incomplet -> canal non configuré', nt_channel_ready('sms'), false);
+@unlink($sharedFile);
+putenv('SMS_SHARED_FILE');
+nt_config_save($cfgBackup);
+check('SMS : Twilio du module de nouveau prioritaire', [nt_twilio_sms_ready(), nt_channel_ready('sms')], [true, true]);
+
 echo "\n";
 if ($failures > 0) {
     echo "ÉCHEC : $failures vérification(s) sur $checks.\n";
