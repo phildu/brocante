@@ -112,6 +112,7 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
   <?php endif; ?>
   <?php if ($fmt['type'] === 'sheet'): ?><label>Étiquettes déjà utilisées<input type="number" name="skip" value="<?= (int) $skip ?>" min="0" max="200" style="width:80px"></label><?php endif; ?>
   <label>Exemplaires<input type="number" name="copies" value="<?= (int) $copies ?>" min="1" max="20" style="width:70px"></label>
+  <label>Code Fichero et export<select id="fichero-code"><option value="qr">QR classique</option><option value="datamatrix">Data Matrix (à tester)</option></select></label>
   <label>Décalage ← → (mm)<input type="number" name="dx" value="<?= $h($dx) ?>" min="-10" max="10" step="0.5" style="width:80px"></label>
   <label>Décalage ↑ ↓ (mm)<input type="number" name="dy" value="<?= $h($dy) ?>" min="-10" max="10" step="0.5" style="width:80px"></label>
   <span class="checks">
@@ -130,7 +131,7 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
   <?php endif; ?>
   <span><?= count($products) ?> pièce(s) · <?= count($pages) ?> page(s)</span>
 </form>
-<p class="hint">« Imprimer / PDF » utilise l’impression de l’appareil, y compris AirPrint si l’imprimante est compatible. Pour la Fichero en Bluetooth, utilisez Chrome sur ordinateur ou Android, en HTTPS. Sur iPhone ou avec une autre marque, exportez les images puis importez-les dans l’application de l’imprimante : vérifiez le format et scannez le QR après impression. Chaque image correspond à une étiquette Fichero 15 × 30 mm et contient le QR, le prix, le nom et la référence. Les réglages de cette page ne modifient pas les images exportées : choisissez les copies dans l’application. Limite : 50 pièces par export ou impression Bluetooth.</p>
+<p class="hint">« Imprimer / PDF » utilise l’impression de l’appareil, y compris AirPrint si l’imprimante est compatible, et conserve le QR classique. Le choix du code concerne la Fichero et l’export : la lecture du Data Matrix dépend de l’appareil et reste à tester. Pour la Fichero, utilisez Chrome sur ordinateur ou Android, en HTTPS. Sur iPhone ou avec une autre marque, exportez les images puis importez-les dans l’application de l’imprimante. Chaque image correspond à une étiquette Fichero 15 × 30 mm ; choisissez les copies dans l’application. Limite : 50 pièces par export ou impression Bluetooth.</p>
 
 <?php if (!$products):
     $all = db()->query('SELECT * FROM products ORDER BY name COLLATE NOCASE LIMIT 500')->fetchAll(PDO::FETCH_ASSOC); ?>
@@ -168,7 +169,7 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
 <?php if ($products && $fmtKey === 'roll-fichero'): ?>
   <section class="preview-note" aria-labelledby="fichero-preview-title">
     <h2 id="fichero-preview-title">Aperçu de l’étiquette Fichero</h2>
-    <p>Image agrandie de l’étiquette envoyée en Bluetooth et exportée. Une image par pièce, quel que soit le nombre d’exemplaires. Les options de la planche ne changent pas cette étiquette. Le résultat imprimé dépend aussi de l’imprimante et du papier.</p>
+    <p>Image agrandie de l’étiquette envoyée en Bluetooth et exportée. Une image par pièce, quel que soit le nombre d’exemplaires. Seul le choix du code modifie cet aperçu ; les options de la planche ne changent pas cette étiquette. Le résultat imprimé dépend aussi de l’imprimante et du papier.</p>
     <div id="fichero-preview" class="fichero-previews" aria-live="polite">Préparation de l’aperçu…</div>
   </section>
 <?php endif; ?>
@@ -201,28 +202,30 @@ $qrMm = max(8, min($fmt['h'] - 4, $fmt['w'] * 0.32));
     var q = qrcode(0, 'M'); q.addData(b.dataset.url); q.make(); b.innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
   });
   var form = document.getElementById('bar');
+  var codeSelect = document.getElementById('fichero-code');
+  function getCode() { return codeSelect.value; }
+  function refsForFichero() {
+    var refs = (form.querySelector('[name=refs]') || {}).value || '';
+    return refs.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+  }
   document.getElementById('fmt').addEventListener('change', function () { form.submit(); });
   document.getElementById('print').addEventListener('click', function () { window.print(); });
   var ficheroBtn = document.getElementById('fichero');
   if (ficheroBtn && window.FicheroPrint) {
     FicheroPrint.bindButton(
       ficheroBtn,
-      function () {
-        var refs = (form.querySelector('[name=refs]') || {}).value || '';
-        return refs.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
-      },
-      function () { return parseInt((form.querySelector('[name=copies]') || {}).value, 10) || 1; }
+      refsForFichero,
+      function () { return parseInt((form.querySelector('[name=copies]') || {}).value, 10) || 1; },
+      getCode
     );
   }
   if (window.FicheroPrint) {
-    FicheroPrint.bindExportButton(document.getElementById('export-labels'), function () {
-      var refs = (form.querySelector('[name=refs]') || {}).value || '';
-      return refs.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
-    });
+    FicheroPrint.bindExportButton(document.getElementById('export-labels'), refsForFichero, getCode);
     var preview = document.getElementById('fichero-preview');
     if (preview) {
-      var previewRefs = (form.querySelector('[name=refs]') || {}).value || '';
-      FicheroPrint.renderPreview(preview, previewRefs.split(',').map(function (r) { return r.trim(); }).filter(Boolean));
+      function updatePreview() { FicheroPrint.renderPreview(preview, refsForFichero(), getCode()); }
+      codeSelect.addEventListener('change', updatePreview);
+      updatePreview();
     }
   } else {
     var preview = document.getElementById('fichero-preview');

@@ -124,9 +124,9 @@
     await sleep(800);
   }
 
-  async function fetchJobs(refs, copies) {
+  async function fetchJobs(refs, copies, code) {
     if (refs.length > 50) throw new Error('Choisissez au maximum 50 pièces à la fois.');
-    var url = base() + '/admin/fichero-print.php?refs=' + encodeURIComponent(refs.join(',')) + '&copies=' + encodeURIComponent(copies || 1);
+    var url = base() + '/admin/fichero-print.php?refs=' + encodeURIComponent(refs.join(',')) + '&copies=' + encodeURIComponent(copies || 1) + '&code=' + encodeURIComponent(code || 'qr');
     var res = await fetch(url, { credentials: 'same-origin' });
     var data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Préparation des étiquettes impossible.');
@@ -141,7 +141,7 @@
     try {
       var printer = await connect();
       try {
-        var data = await fetchJobs(refs, copies);
+        var data = await fetchJobs(refs, copies, opts.code);
         for (var c = 0; c < (data.copies || copies); c++) {
           for (var i = 0; i < data.jobs.length; i++) {
             await printJob(printer.char, data.jobs[i]);
@@ -185,14 +185,17 @@
     });
   }
 
-  async function renderPreview(container, refs) {
+  async function renderPreview(container, refs, code) {
     if (!container) return;
+    var request = {};
+    container.ficheroPreviewRequest = request;
     container.textContent = 'Préparation de l’aperçu…';
     try {
-      var data = await fetchJobs(refs, 1);
+      var data = await fetchJobs(refs, 1, code);
       var images = await Promise.all(data.jobs.map(async function (job) {
         return { ref: job.ref, blob: await labelPng(job) };
       }));
+      if (container.ficheroPreviewRequest !== request) return;
       container.textContent = '';
       images.forEach(function (item) {
         var figure = document.createElement('figure');
@@ -212,11 +215,11 @@
         container.appendChild(figure);
       });
     } catch (err) {
-      container.textContent = 'Aperçu Fichero indisponible : ' + (err && err.message ? err.message : 'erreur de préparation.');
+      if (container.ficheroPreviewRequest === request) container.textContent = 'Aperçu Fichero indisponible : ' + (err && err.message ? err.message : 'erreur de préparation.');
     }
   }
 
-  function bindExportButton(btn, getRefs) {
+  function bindExportButton(btn, getRefs, getCode) {
     if (!btn) return;
     var result = document.createElement('div');
     result.setAttribute('aria-live', 'polite');
@@ -230,7 +233,7 @@
       objectUrls.forEach(function (url) { URL.revokeObjectURL(url); });
       objectUrls = [];
       try {
-        var data = await fetchJobs(refs, 1);
+        var data = await fetchJobs(refs, 1, getCode ? getCode() : 'qr');
         var files = await Promise.all(data.jobs.map(async function (job) {
           var blob = await labelPng(job);
           return { ref: job.ref, name: 'etiquette-' + job.ref + '.png', blob: blob };
@@ -273,7 +276,7 @@
     });
   }
 
-  function bindButton(btn, getRefs, getCopies) {
+  function bindButton(btn, getRefs, getCopies, getCode) {
     if (!btn) return;
     btn.addEventListener('click', function () {
       var refs = getRefs() || [];
@@ -282,7 +285,7 @@
       btn.disabled = true;
       var prev = btn.textContent;
       btn.textContent = 'Impression…';
-      printRefs(refs, { copies: copies }).then(function () {
+      printRefs(refs, { copies: copies, code: getCode ? getCode() : 'qr' }).then(function () {
         btn.textContent = prev;
         btn.disabled = false;
       }).catch(function (err) {

@@ -19,6 +19,11 @@ $refs = array_values(array_unique(array_filter(array_map(
     explode(',', (string) ($_GET['refs'] ?? ''))
 ))));
 $copies = max(1, min(20, (int) ($_GET['copies'] ?? 1)));
+$code = $_GET['code'] ?? 'qr';
+if (!is_string($code) || !in_array($code, ['qr', 'datamatrix'], true)) {
+    http_response_code(400);
+    exit(json_encode(['ok' => false, 'error' => 'Type de code inconnu.']));
+}
 
 if (!$refs) {
     http_response_code(400);
@@ -43,7 +48,16 @@ foreach ($refs as $ref) {
         http_response_code(404);
         exit(json_encode(['ok' => false, 'error' => 'Une pièce sélectionnée est introuvable. Actualisez la sélection.']));
     }
-    $jobs[] = fichero_job_for_product($byRef[$ref]);
+    try {
+        $jobs[] = fichero_job_for_product($byRef[$ref], $code);
+    } catch (InvalidArgumentException $e) {
+        http_response_code(400);
+        exit(json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE));
+    } catch (Throwable $e) {
+        error_log('fichero-print: ' . $e->getMessage());
+        http_response_code(500);
+        exit(json_encode(['ok' => false, 'error' => 'Impossible de préparer cette étiquette.'], JSON_UNESCAPED_UNICODE));
+    }
 }
 
 echo json_encode([

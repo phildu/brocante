@@ -77,4 +77,29 @@ final class FicheroLabelTest extends TestCase
         }
         self::assertGreaterThan(30, $ink, 'Le nom et le prix doivent s’imprimer sous le QR.');
     }
+
+    public function testDataMatrixIsGeneratedForAnUrl(): void
+    {
+        $matrix = fichero_datamatrix('https://www.bricbrok.com?p=ABC12');
+        self::assertCount(22, $matrix);
+        self::assertCount(22, $matrix[0]);
+        self::assertTrue($matrix[0][0]);
+        self::assertFalse($matrix[0][1]);
+        $raster = fichero_raster_from_label('https://www.bricbrok.com?p=ABC12', 'Chaise', '25 €', 'ABC12', 240, 'datamatrix');
+        self::assertSame(FICHERO_BYTES_PER_ROW * FICHERO_LABEL_HEIGHT, strlen($raster));
+        self::assertNotSame(fichero_raster_from_label('https://www.bricbrok.com?p=ABC12', 'Chaise', '25 €', 'ABC12'), $raster);
+    }
+
+    public function testDataMatrixRejectsOversizedUrlRatherThanPrintingTinyCode(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Lien trop long');
+        fichero_raster_from_label('https://example.com/' . str_repeat('a', 200), '', '', '', 240, 'datamatrix');
+    }
+
+    public function testUnknownCodeIsRejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        fichero_raster_from_label('https://example.com/', '', '', '', 240, 'micro');
+    }
 }

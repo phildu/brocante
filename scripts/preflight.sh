@@ -56,6 +56,13 @@ else
   say "SKIP" "vendor/bin/phpunit absent"
 fi
 
+if [[ -f vendor/tecnickcom/tc-lib-barcode/src/Barcode.php && -f vendor/tecnickcom/tc-lib-color/src/Model.php ]]; then
+  say "OK" "bibliothèques Data Matrix présentes"
+else
+  say "KO" "bibliothèques Data Matrix absentes : installer les dépendances Composer avant déploiement"
+  fail=1
+fi
+
 if git ls-files | grep -qE '(^|/)\.env|\.(key|pem|p12)$|(^|/)config\.local\.php$'; then
   say "KO" "un secret semble suivi par git"
   fail=1
