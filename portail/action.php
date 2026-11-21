@@ -47,6 +47,28 @@ switch ($_POST['action'] ?? '') {
         }
         break;
 
+    case 'lien-admin':
+        require_once PORTAIL_ROOT . '/includes/unified-auth.php';
+        $email = trim((string) ($_POST['email'] ?? ''));
+        $why = ua_shop_admin_reset_send($slug, $email);
+        if ($why !== null) {
+            portail_flash($why, 'error');
+            header('Location: /portail/?voir=' . rawurlencode($slug) . '&lien=' . rawurlencode($slug));
+            exit;
+        }
+        $kept = '';
+        if (!empty($_POST['retenir'])) {
+            try {
+                set_tenant_admin_email($slug, $email);
+                $kept = ' Cette adresse est retenue pour « mot de passe oublié ».';
+            } catch (InvalidArgumentException | RuntimeException $ex) {
+                $kept = ' Adresse non retenue : ' . $ex->getMessage();
+            }
+        }
+        saas_event('admin_reset_sent', ['slug' => $slug, 'note' => 'lien envoyé à ' . $email]);
+        portail_flash('Lien de réinitialisation envoyé à ' . $email . ' (valable 1 heure).' . $kept);
+        break;
+
     case 'supprimer':
         if (($why = tenant_delete_blocker($slug)) !== null) {
             portail_flash($why, 'error');

@@ -246,3 +246,32 @@ function create_tenant_from_form(array $f, ?array $logoUpload): string
     }
     return $slug;
 }
+
+/**
+ * Retient l'adresse de contact de l'administration (admin_email dans tenants/<slug>/tenant.php) : c'est elle que
+ * « mot de passe oublié » utilise quand l'identifiant admin n'est pas une adresse. Une adresse vide retire la ligne.
+ */
+function set_tenant_admin_email(string $slug, string $email): void
+{
+    $email = mb_strtolower(trim($email));
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Adresse e-mail invalide.');
+    $file = tenant_dir($slug) . '/tenant.php';
+    $php = (string) file_get_contents($file);
+    $valuePattern = "(?:'(?:[^'\\\\]|\\\\.)*'|\"(?:[^\"\\\\]|\\\\.)*\")";
+    $line = "'admin_email' => " . var_export($email, true) . ',';
+    if (preg_match("/^\\s*'admin_email'\\s*=>\\s*$valuePattern\\s*,/m", $php)) {
+        $php = preg_replace("/^(\\s*)'admin_email'\\s*=>\\s*$valuePattern\\s*,/m", '$1' . str_replace('$', '\\$', $line), $php, 1);
+    } elseif (preg_match("/^(\\s*)'admin_password'\\s*=>/m", $php)) {
+        // Juste avant la ligne du mot de passe, avec la même marge.
+        $php = preg_replace("/^(\\s*)('admin_password'\\s*=>)/m", '$1' . str_replace('$', '\\$', $line) . "\n" . '$1$2', $php, 1);
+    } else {
+        throw new RuntimeException("Impossible de modifier $file : ajoutez-y admin_email à la main.");
+    }
+    $tmp = "$file.tmp";
+    file_put_contents($tmp, $php);
+    rename($tmp, $file);
+    if (function_exists('opcache_invalidate')) opcache_invalidate($file, true);
+    if ((string) (tenant_load($slug)['admin_email'] ?? '') !== $email) {
+        throw new RuntimeException("La modification de $file n'a pas été enregistrée correctement.");
+    }
+}
