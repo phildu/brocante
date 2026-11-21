@@ -701,6 +701,8 @@ a.btn.danger:not(.btn-primary) { color: var(--danger); }
 .shopcard .confirm .field { margin-top: 4px; }
 .shopcard .confirm input { background: var(--panel); }
 .shopcard .confirm .actions { margin-top: 2px; }
+/* Le menu « Gérer » de la dernière boutique dépasse du cadre de la liste : on lève le rognage tant qu'il est ouvert. */
+.app .panel.dash-panel:has(.shop-more[open]) { overflow: visible; }
 .shop-more { position: relative; }
 .shop-more > summary { list-style: none; cursor: pointer; }
 .shop-more > summary::-webkit-details-marker { display: none; }
