@@ -36,8 +36,8 @@ const EXCHANGE_SHOP_CONFIG_KEYS = ['name', 'tagline', 'presence_mode', 'logo', '
 /** Réglages d'une galerie qui voyagent. */
 const EXCHANGE_GALLERY_KEYS = ['name', 'tagline', 'description', 'presence_mode', 'accent', 'style', 'app_icons', 'members', 'type', 'event', 'map', 'promos'];
 
-/** Fichiers annexes d'une galerie (data/galeries/<id>…) qui voyagent : les horaires et les sponsors (sans leur note interne). Les autres (inscriptions, attente, messages, fidélité, journal, base) restent sur place. */
-const EXCHANGE_GALLERY_FILES_CARRIED = ['.hours.json', '.sponsors.json'];
+/** Fichiers annexes d'une galerie (data/galeries/<id>…) qui voyagent : les horaires, les sponsors (sans leur note interne) et les réglages de la visite guidée. Les autres (inscriptions, attente, messages, fidélité, journal, base) restent sur place. */
+const EXCHANGE_GALLERY_FILES_CARRIED = ['.hours.json', '.sponsors.json', '.visite.json'];
 
 /** Tables de contenu d'une boutique, dans l'ordre d'écriture. */
 const EXCHANGE_SHOP_TABLES = ['content', 'products', 'product_photos', 'hero_slides', 'slideshow_slides', 'page_banners', 'media_library', 'shipping_carriers', 'shipping_rates', 'cart_discounts', 'settings'];
@@ -556,6 +556,11 @@ function exchange_gallery_export(string $slug): array
         require_once __DIR__ . '/gallery-sponsors.php';
         $package['sponsors'] = array_map(static fn (array $f): array => array_diff_key($f, ['note' => 1]), gsp_load($slug));
     }
+    // Visite guidée (mot d'accueil, mots des étapes, bouton affiché ou non) : contenu de présentation, sans donnée personnelle.
+    if (is_file(galleries_dir() . '/' . $slug . '.visite.json')) {
+        require_once __DIR__ . '/gallery-visit.php';
+        $package['visite'] = gv_load($slug);
+    }
     $files = $missing = [];
     foreach (exchange_scan_paths($package) as $path) {
         if (is_file(exchange_root() . '/' . $path)) $files[] = $path; else $missing[] = $path;
@@ -600,6 +605,12 @@ function exchange_gallery_import(array $package): array
         if ($sponsorsFile !== '' && is_file($sponsorsFile)) copy($sponsorsFile, $sponsorsFile . '.bak-' . date('Ymd-His'));
         $list = array_map(static fn ($f) => is_array($f) ? array_diff_key($f, ['note' => 1]) + ['note' => (string) ($notes[$f['id'] ?? ''] ?? '')] : $f, $package['sponsors']);
         if (!gsp_save($slug, $list)) $warnings[] = 'sponsors non enregistrés (droits sur data/galeries)';
+    }
+    if (isset($package['visite']) && is_array($package['visite'])) {
+        require_once __DIR__ . '/gallery-visit.php';
+        $visitFile = gv_file($slug);
+        if ($visitFile !== '' && is_file($visitFile)) copy($visitFile, $visitFile . '.bak-' . date('Ymd-His'));
+        if (!gv_save($slug, $package['visite'])) $warnings[] = 'visite guidée non enregistrée (droits sur data/galeries)';
     }
     foreach ((array) ($merged['members'] ?? []) as $member) {
         if (($member['type'] ?? '') === 'local' && !is_file(tenant_dir((string) $member['slug']) . '/tenant.php')) {

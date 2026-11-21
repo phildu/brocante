@@ -360,6 +360,8 @@ function gallery_delete(string $slug): bool
     foreach (['.db', '.db-wal', '.db-shm', '.db-journal'] as $suffix) @unlink(galleries_dir() . '/' . $slug . $suffix);
     require_once __DIR__ . '/gallery-sponsors.php';
     gsp_delete_all($slug);   // fiches et logos de l'extension « Sponsors & partenaires » (includes/gallery-sponsors.php)
+    require_once __DIR__ . '/gallery-visit.php';
+    gv_delete_all($slug);   // réglages de l'extension « Visite guidée » (includes/gallery-visit.php)
     @unlink(galleries_dir() . '/' . $slug . '.hours.json');   // horaires et journal des alertes de fermeture (includes/gallery-hours.php)
     gallery_cache_clear($slug);
     return true;
