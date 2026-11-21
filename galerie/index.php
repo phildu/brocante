@@ -427,6 +427,7 @@ $metaDescription = $sector ? ($sector['note'] !== '' ? $sector['note'] : $sector
               <span>
                 <?php if ($s['featured']): ?><span class="star">★ À la une</span><br><?php endif; ?>
                 <h3><?= e($s['name']) ?></h3>
+                <?php $shopSector = $sectors ? gallery_map_shop_sector($gallery['map'] ?? null, (string) $key) : null; if ($shopSector): ?><span class="star" style="color:var(--ink-soft)">▣ <?= e($shopSector['name']) ?></span><br><?php endif; ?>
                 <p><?= e($s['tagline'] !== '' ? $s['tagline'] : '') ?><?= $s['tagline'] !== '' ? ' · ' : '' ?><?= (int) $s['count'] ?> pièce<?= $s['count'] > 1 ? 's' : '' ?></p>
               </span>
             </a>

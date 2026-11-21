@@ -298,3 +298,11 @@ function gallery_map_sector(?array $map, string $slug): ?array
     foreach (gallery_map_sectors($map) as $sec) if ($sec['slug'] === $slug) return $sec;
     return null;
 }
+
+/** Le secteur (hall, bâtiment…) où se trouve le commerce $shopKey d'après le plan, ou null s'il n'est posé dans aucun. -> entrée de gallery_map_sectors() */
+function gallery_map_shop_sector(?array $map, string $shopKey): ?array
+{
+    if ($shopKey === '') return null;
+    foreach (gallery_map_sectors($map) as $sec) if (in_array($shopKey, $sec['shops'], true)) return $sec;
+    return null;
+}

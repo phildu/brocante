@@ -143,6 +143,12 @@ function shop_locate_section_html(array $options = []): string
             . ($hasContact ? 'Écrivez-nous ou appelez-nous pour préparer votre visite.' : 'Contactez la boutique pour connaître le lieu de retrait.') . '</p>';
     }
     $meta = [];
+    if (!function_exists('shop_member_galleries')) require_once __DIR__ . '/galleries.php';
+    foreach (shop_member_galleries() as $g) {
+        $where = '<a href="' . $h($g['url']) . '">' . $h($g['name']) . '</a>'
+            . (($g['sector'] ?? '') !== '' ? ' · <a href="' . $h($g['sector_url']) . '">' . $h($g['sector']) . '</a>' : '');
+        $meta[] = '<li><b>Dans la galerie</b><span>' . $where . '</span></li>';
+    }
     if ($i['access'] !== '') $meta[] = '<li class="shop-locate-access"><b>Accès</b><span>' . nl2br($h($i['access'])) . '</span></li>';
     if ($i['hours'] !== '') $meta[] = '<li><b>Horaires</b><span>' . nl2br($h($i['hours'])) . '</span></li>';
     if ($i['delivery'] !== '') $meta[] = '<li><b>Livraison</b><span>' . $h($i['delivery']) . '</span></li>';

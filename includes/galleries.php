@@ -789,7 +789,10 @@ function shop_member_galleries(): array
         if (empty($g['published']) || !go_is_live($g)) continue;
         foreach ($g['members'] as $m) {
             if ($m['type'] === 'local' && $m['slug'] === $me) {
-                $cache[] = ['name' => $g['name'], 'url' => gallery_public_url($g, $origin)];
+                $url = gallery_public_url($g, $origin);
+                // Hall / bâtiment du plan où est posé le commerce : « Galerie X · Hall Louis la brocante »
+                $sec = gallery_map_shop_sector($g['map'] ?? null, $me);
+                $cache[] = ['name' => $g['name'], 'url' => $url, 'sector' => $sec ? $sec['name'] : '', 'sector_url' => $sec ? $url . '?secteur=' . rawurlencode($sec['slug']) . '#contenu' : ''];
                 break;
             }
         }
