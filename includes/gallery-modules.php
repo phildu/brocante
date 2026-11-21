@@ -5,6 +5,7 @@
 //   carte         Carte interactive : plan IGN, zones, emplacements numérotés, choix de l'emplacement par les exposants ;
 //   organisateur  Espace organisateur : événement (date, lieu, places ou mètres), numérotation automatique des places, tableau de bord
 //                 des inscriptions et registre de police (Excel / PDF) ;
+//   visite        Visite guidée : parcours pas à pas du marché (halls et marchands) pour les visiteurs (voir includes/gallery-visit.php).
 //   attente       File d'attente des exposants et alertes de voisinage : prévenir les inscrits dès qu'une place se libère, proposer
 //                 une place vide à côté d'un stand à prix réduit pour l'agrandir (voir includes/gallery-waitlist.php).
 //
@@ -94,6 +95,13 @@ function gm_defaults(): array
             'name' => 'Sponsors & partenaires', 'emoji' => '🤝', 'active' => true, 'order' => 8,
             'description' => "Présentez ceux qui soutiennent votre événement (sponsor principal, sponsors, partenaires, soutiens institutionnels, médias) : logo, lien et mot de présentation, rangés par niveau sur la page publique de la galerie. Vous masquez ou réordonnez une fiche en un clic.",
             'types' => [],                       // tous les types de galerie
+            'default_mode' => 'included',
+            'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 0,
+        ],
+        'visite' => [
+            'name' => 'Visite guidée', 'emoji' => '🧭', 'active' => true, 'order' => 9,
+            'description' => "Un parcours pas à pas pour vos visiteurs : une étape par hall ou bâtiment du plan, avec les marchands qui s'y trouvent, et un bouton « Visite guidée » sur la page publique. Bâtie toute seule à partir du plan ; vous ajoutez un mot d'accueil et, si vous voulez, un mot par étape.",
+            'types' => ['puces'],                // proposée d'office aux marchés aux puces ; les autres types la règlent dans « Types de galerie »
             'default_mode' => 'included',
             'month_cents' => 0, 'year_cents' => 0, 'trial_days' => 0,
         ],

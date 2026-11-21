@@ -153,6 +153,7 @@ const GA_PAGES = ['galeries.php', 'galerie-tableau.php', 'galerie-prospects.php'
     'galerie-comptage.php',   // extension « Comptage de foule » (portail/galerie-comptage.php)
     'galerie-annulation.php',   // extension « Annulation & remboursements » (portail/galerie-annulation.php)
     'galerie-sponsors.php',   // extension « Sponsors & partenaires » (portail/galerie-sponsors.php)
+    'galerie-visite.php',   // extension « Visite guidée » (portail/galerie-visite.php)
     'galerie-adresse.php', 'galerie-adresse-action.php',   // adresse de la galerie : sous-domaine, domaine existant ou acheté (portail/galerie-adresse.php)
     'galerie-horaires.php',   // horaires, fermetures exceptionnelles et alerte aux visiteurs d'une galerie (portail/galerie-horaires.php)
     'galerie-invendus.php',   // extension « Invendus & dons » (portail/galerie-invendus.php)

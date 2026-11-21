@@ -982,7 +982,7 @@ aussi « modules ». Pour ne pas les nommer de trois façons, le portail règle 
   remplace les jetons de toute la page ; ailleurs (messages JSON, e-mails, libellés), on appelle `ext_t('…')`.
   Test : `php scripts/test-vocabulary.php`.
 
-## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule, Annulation & remboursements, Sponsors & partenaires
+## Extensions de galerie : Buvette, Invendus & dons, Comptage de foule, Annulation & remboursements, Sponsors & partenaires, Visite guidée
 
 Les anciennes « options » d'une galerie (carte interactive, espace organisateur, file d'attente : `includes/gallery-modules.php`) sont des
 **extensions de galerie** : l'organisateur les active depuis l'onglet « Extensions » de son espace (essai gratuit, puis abonnement Stripe ou
@@ -1016,6 +1016,14 @@ principal aux partenaires médias (`GSP_TIERS`). Page d'administration `portail/
 supprimer) ; la page publique de la galerie affiche la rubrique `#partenaires` dès qu'une fiche est affichée. Pas de base SQL : les fiches sont dans
 `data/galeries/<id>.sponsors.json` (jamais déployé, supprimé avec la galerie) et les logos sous `uploads/galeries/` (logos locaux uniquement, jamais d'adresse
 externe ; liens sortants en `rel="noopener nofollow sponsored"`). Code : `includes/gallery-sponsors.php` ; test : `tests/GallerySponsorsTest.php`.
+
+**Visite guidée** (`visite`, proposée d'office aux marchés aux puces, incluse ; réglable par type dans *Types de galerie*) : un parcours pas à pas pour les
+visiteurs, bâti tout seul depuis le plan : une étape par secteur (nature « Sous-zone », hall ou bâtiment) avec les marchands qui s'y trouvent, une étape
+« Ailleurs sur le site » pour ceux posés hors secteur, ou une étape par marchand si le plan n'a aucun secteur ; un accueil et une conclusion l'encadrent.
+Page publique `galerie/visite.php?g=<id>&etape=<n>` ; bouton « 🧭 Visite guidée » sous l'en-tête de la galerie (`galerie/index.php`) tant que l'extension est
+ouverte, la case « afficher le bouton » cochée et qu'au moins un marchand est présent. Page d'administration `portail/galerie-visite.php` : bouton affiché ou
+non, mot d'accueil, un mot facultatif par étape (par défaut : la note du secteur ou l'accroche du marchand). Réglages dans `data/galeries/<id>.visite.json`
+(supprimé avec la galerie, **repris par l'échange prod/préprod**). Code : `includes/gallery-visit.php` ; test : `tests/GalleryVisitTest.php`.
 
 ## Horaires et alerte de fermeture d'une galerie
 

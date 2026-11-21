@@ -27,6 +27,7 @@ if ($navG && $navMod('comptage')) $navBtn('galerie-comptage.php', 'Comptage de f
 // Annulation & remboursements : bouton tant que l'extension est active, et aussi tant qu'un événement annulé attend ses remboursements (suivi).
 if ($navG && ($navMod('annulation') || !empty($navG['event']['cancelled']['at']))) $navBtn('galerie-annulation.php', 'Annulation');
 if ($navG && $navMod('sponsors')) $navBtn('galerie-sponsors.php', 'Sponsors & partenaires');
+if ($navG && $navMod('visite')) $navBtn('galerie-visite.php', 'Visite guidée');
 if ($navOn('horaires')) $navBtn('galerie-horaires.php', 'Horaires');
 $navBtn('galerie-adresse.php', 'Adresse');
 if ($navOn('bourse')) $navBtn('galerie-bourse.php', 'Bourse d’échanges');

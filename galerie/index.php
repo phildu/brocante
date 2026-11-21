@@ -10,6 +10,7 @@ require_once __DIR__ . '/../includes/gallery-hours.php';
 require_once __DIR__ . '/../includes/gallery-bourse.php';
 require_once __DIR__ . '/../includes/gallery-modules.php';
 require_once __DIR__ . '/../includes/gallery-sponsors.php';
+require_once __DIR__ . '/../includes/gallery-visit.php';
 require_once __DIR__ . '/../includes/share.php';
 require_once __DIR__ . '/../includes/promo.php';
 require_once __DIR__ . '/../includes/banner-slides.php';
@@ -388,6 +389,9 @@ $metaDescription = $sector ? ($sector['note'] !== '' ? $sector['note'] : $sector
         <?php else: ?><details class="app-pick"><summary class="app-btn">📱 Application visiteurs · fidélité, alertes, billets</summary>
           <ul><?php foreach ($vApps as $vs): ?><li><a href="<?= e($vs['visitor_url']) ?>" target="_blank" rel="noopener"><?= e($vs['name']) ?> ↗</a></li><?php endforeach; ?></ul></details><?php endif; ?>
       </div>
+    <?php endif; ?>
+    <?php if (gv_visible($gallery, $data['shops'])): /* extension « Visite guidée » (includes/gallery-visit.php) */ ?>
+      <div class="hero-app"><a class="app-btn" href="/galerie/visite.php?g=<?= e($gallery['slug']) ?>">🧭 Visite guidée · <?= $sectors ? 'hall après hall' : e($vocab['members'] ?? 'commerces') . ' après ' . e($vocab['member'] ?? 'commerce') ?></a></div>
     <?php endif; ?>
     <?php if ($canSignup && $gallery['published'] && $st['show_cta']): ?>
       <p class="hero-cta"><a class="btn-cta" href="/inscription/?galerie=<?= e($gallery['slug']) ?>"><?= e($st['cta_label'] !== '' ? $st['cta_label'] : 'Je veux vendre en ligne') ?></a>
