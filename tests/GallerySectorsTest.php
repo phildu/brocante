@@ -64,4 +64,14 @@ final class GallerySectorsTest extends TestCase
         self::assertSame(['paul'], $by['halle']);
         self::assertSame([], $by['site']);
     }
+
+    public function testSectorOfAShopForNavigation(): void
+    {
+        $plan = $this->plan();
+        self::assertSame('Halle A', gallery_map_shop_sector($plan, 'paul')['name']);
+        self::assertSame('halle-a-2', gallery_map_shop_sector($plan, 'lea')['slug']);
+        self::assertNull(gallery_map_shop_sector($plan, 'zoe'));
+        self::assertNull(gallery_map_shop_sector($plan, ''));
+        self::assertNull(gallery_map_shop_sector(null, 'paul'));
+    }
 }

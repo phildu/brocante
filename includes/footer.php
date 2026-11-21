@@ -23,7 +23,7 @@
         <li><a href="/index.php#contact">Contact</a></li>
         <li><a href="/nous-trouver.php">Carte et itinéraire</a></li>
         <?php if (!function_exists('shop_member_galleries')) require_once __DIR__ . '/galleries.php'; foreach (shop_member_galleries() as $g): ?>
-          <li><a href="<?= h($g['url']) ?>">Galerie « <?= h($g['name']) ?> »</a></li>
+          <li><a href="<?= h($g['url']) ?>">Galerie « <?= h($g['name']) ?> »</a><?php if (($g['sector'] ?? '') !== ''): ?> · <a href="<?= h($g['sector_url']) ?>"><?= h($g['sector']) ?></a><?php endif; ?></li>
         <?php endforeach; ?>
         <li><a href="/admin/" class="footer-admin-link">Administration</a></li>
       </ul>
