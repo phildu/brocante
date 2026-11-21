@@ -482,13 +482,10 @@ $metaDescription = $sector ? ($sector['note'] !== '' ? $sector['note'] : $sector
       <?php if ($evPrice !== null && !$evCancelled): ?>
         <p class="lede">Tarif : <strong><?= e(gb_eur($evPrice)) ?></strong> la place<?= $evPricePro !== null && $evPricePro !== $evPrice ? ' · <strong>' . e(gb_eur($evPricePro)) . '</strong> pour les entreprises' : '' ?>.</p>
       <?php endif; ?>
-      <?php if ($evPlaces): ?>
-        <?php if ($galleryBooking['source'] === 'event'): ?>
-          <?php if ($galleryBooking['intro'] !== ''): ?><p class="lede"><?= nl2br(e($galleryBooking['intro'])) ?></p><?php endif; ?>
-          <p class="lede" style="margin:6px 0 0;">Choisissez une place libre : votre demande la réserve <?= (int) $galleryBooking['hold_days'] ?> jour(s), le temps que l'organisateur la valide.</p>
-        <?php else: ?>
-          <p class="lede" style="margin:6px 0 0;">Les réservations en ligne ne sont pas ouvertes pour le moment : les places ci-dessous montrent l'occupation de la manifestation.</p>
-        <?php endif; ?>
+      <?php /* Réservations fermées : la grille des places ne servirait qu'à montrer l'occupation, on ne l'affiche pas. */ ?>
+      <?php if ($evPlaces && $galleryBooking['source'] === 'event'): ?>
+        <?php if ($galleryBooking['intro'] !== ''): ?><p class="lede"><?= nl2br(e($galleryBooking['intro'])) ?></p><?php endif; ?>
+        <p class="lede" style="margin:6px 0 0;">Choisissez une place libre : votre demande la réserve <?= (int) $galleryBooking['hold_days'] ?> jour(s), le temps que l'organisateur la valide.</p>
         <style>
           #ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;margin:12px 0 0;max-width:760px;}
           .ev-place{font:600 .9rem/1 system-ui,sans-serif;padding:13px 4px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2,#f3efe7);color:var(--ink);cursor:default;}
