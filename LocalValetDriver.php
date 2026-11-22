@@ -130,6 +130,12 @@ class LocalValetDriver extends BasicValetDriver
             return $this->run($sitePath, '/portail/vente/' . (($m[2] ?? '') === '' ? 'prospects' : $m[2]) . '.php', 'g=' . $_GET['g'] . ($query !== '' ? '&' . $query : ''));
         }
 
+        // Adresses publiques choisies (includes/adresses-publiques.php, même règle que le .htaccess) : index.php décide selon le domaine.
+        require_once $sitePath . '/includes/adresses-publiques.php';
+        if (in_array(rtrim($uri, '/'), adresse_chemins(), true)) {
+            return $this->run($sitePath, '/index.php', $query, $uri);
+        }
+
         // Galeries commerciales : /galerie/ et /galerie/<identifiant>/
         if (preg_match('#^/galerie(?:/([A-Za-z0-9][A-Za-z0-9-]*))?/?$#', $uri, $m)) {
             $_GET['g'] = strtolower($m[1] ?? '');

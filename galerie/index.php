@@ -38,6 +38,9 @@ $origin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 $slug = strtolower((string) ($_GET['g'] ?? ''));
 $testRequest = null;
 
+// Adresse publique choisie (includes/adresses-publiques.php) : /galerie/<id>/ redirige vers elle sur les domaines de production.
+adresse_rediriger_si_besoin();
+
 // Nom de domaine propre : une galerie qui a réservé l'adresse du visiteur est servie à la racine.
 $hostGallery = $slug === '' ? gallery_from_host((string) ($_SERVER['HTTP_HOST'] ?? '')) : null;
 if ($hostGallery) { $slug = (string) $hostGallery['slug']; $_GET['g'] = $slug; }
