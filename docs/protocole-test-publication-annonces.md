@@ -1,6 +1,6 @@
 # Protocole de test : publication d'annonces (Leboncoin, Vinted, Facebook Marketplace)
 
-Pack concerné : `packs/annonces-marche` (extension Chrome 1.2.0). Boutique d'essai : `la-fripe-a-naty`.
+Pack concerné : `packs/annonces-marche` (extension Chrome 1.3.6). Boutique d'essai : `la-fripe-a-naty`.
 Les publications partent du navigateur du commerçant, jamais du serveur. Faire les tests avec un compte dont on accepte
 le risque de restriction.
 
@@ -21,7 +21,7 @@ le risque de restriction.
 ## 1. Extension
 
 1. `chrome://extensions` → mode développeur → « Charger l'extension non empaquetée » → `packs/annonces-marche/extension`.
-   Version attendue : 1.2.0.
+   Version attendue : 1.3.6.
 2. Réglages : adresse `https://brocante.test/la-fripe-a-naty/boutique.php` + jeton, puis **Tester**.
 3. Attendu : connexion confirmée ; le hoodie apparaît dans la recherche.
 

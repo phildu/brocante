@@ -313,6 +313,14 @@ async function skipAuto() {
   return updated;
 }
 
+/** Met à jour le message de la file (affiché dans la popup) : sans cela, la popup reste figée sur « File démarrée » pendant tout le traitement. */
+async function progress(message) {
+  try {
+    const q = await getQueue();
+    if (q && q.status === 'running') await setQueue({ ...q, lastMessage: message });
+  } catch (_) {}
+}
+
 async function processNext() {
   const queue = await getQueue();
   if (!queue || queue.status !== 'running') return;
@@ -344,6 +352,7 @@ async function processNext() {
   }
 
   try {
+    await progress('Lecture de la fiche ' + ref + '…');
     const data = await api('/produit/' + encodeURIComponent(ref));
     const product = data.product;
     if (!product) throw new Error('Produit introuvable.');
@@ -351,12 +360,16 @@ async function processNext() {
     if (!tabId) {
       const depositUrl = (settings.depositUrls[queue.channel] || '').trim() ||
         AUTO_DEFAULTS.depositUrls[queue.channel];
-      const tab = await chrome.tabs.create({ url: depositUrl, active: false });
+      // Onglet au premier plan : une page ouverte en arrière-plan est ralentie par Chrome et Leboncoin y affiche un écran de chargement interminable.
+      await progress('Ouverture de la page de dépôt…');
+      const tab = await chrome.tabs.create({ url: depositUrl, active: true });
       tabId = tab.id;
     }
     await setQueue({ ...(await getQueue()), activeTabId: tabId });
 
-    await waitForContent(tabId, queue.channel, 45000);
+    await progress('Attente de la page de dépôt (jusqu’à 90 s)…');
+    await waitForContent(tabId, queue.channel, 90000);
+    await progress('Remplissage de ' + ref + '…');
     const result = await runAutoInTab(tabId, queue.channel, product, {
       dryRun: !!settings.dryRun,
       runId: queue.runId,
@@ -367,14 +380,44 @@ async function processNext() {
   }
 }
 
+/**
+ * Injecte les scripts de la page de dépôt dans l'onglet. Nécessaire quand l'onglet était déjà ouvert à l'installation ou au
+ * rechargement de l'extension : Chrome n'y injecte pas les scripts tout seul (« Receiving end does not exist »).
+ */
+async function injectContent(tabId, channel) {
+  const files = ['content/fill.js', channel === 'vinted' ? 'content/vinted.js' : 'content/leboncoin.js'];
+  await chrome.scripting.executeScript({ target: { tabId }, files });
+}
+
+function isNoReceiver(error) {
+  return /Receiving end does not exist|Could not establish connection/i.test((error && error.message) || '');
+}
+
+/** Envoie un message à la page de dépôt ; si aucun script n'y écoute, l'injecte puis réessaie une fois. */
+async function sendToDeposit(tabId, channel, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (error) {
+    if (!isNoReceiver(error)) throw error;
+    await injectContent(tabId, channel);
+    await sleep(400);
+    return await chrome.tabs.sendMessage(tabId, message);
+  }
+}
+
 async function waitForContent(tabId, channel, timeoutMs) {
   const started = Date.now();
+  let injected = false;
   while (Date.now() - started < timeoutMs) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-ping' });
       if (res && res.ready && res.channel === channel) return true;
-    } catch (_) {
-      // Le content script n'est pas encore injecté (navigation en cours).
+    } catch (error) {
+      // Pas de script dans l'onglet : navigation en cours, ou onglet ouvert avant le rechargement de l'extension.
+      if (!injected && isNoReceiver(error) && Date.now() - started > 4000) {
+        injected = true;
+        try { await injectContent(tabId, channel); } catch (_) {}
+      }
     }
     await sleep(600);
   }
@@ -388,6 +431,7 @@ async function runAutoInTab(tabId, channel, product, options) {
   for (let step = 0; step < MAX_STEPS; step++) {
     const res = await sendWithRetry(tabId, { type: 'am-auto-step', channel, product, options });
     if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
+    await progress('Étape ' + (step + 1) + ' : ' + res.action + (res.reason ? ' — ' + res.reason : ''));
     if (['blocked', 'prepared', 'published'].includes(res.action)) return res;
     if (res.action === 'publish-clicked') {
       publishClicks++;
@@ -563,7 +607,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         amSelectedProduct: { product, channel, selectedAt: Date.now() },
         amFillStatus: 'Préremplissage en cours…',
       });
-      const result = await chrome.tabs.sendMessage(tabId, { type: 'am-fill', channel, product });
+      const result = await sendToDeposit(tabId, channel, { type: 'am-fill', channel, product });
       if (!result || !result.ok) {
         throw new Error((result && result.error) || 'Le formulaire n’a pas répondu. Rechargez la page et réessayez.');
       }
