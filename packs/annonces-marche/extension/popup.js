@@ -9,6 +9,28 @@
   const btnSearch = $('btn-search');
   const store = chrome.storage.local;
 
+  /* ---------- Cases à cocher : articles de la file automatique ---------- */
+  const picked = new Set();
+  let shownRefs = [];
+
+  function updatePickBar() {
+    const bar = $('pick-bar');
+    if (!bar) return;
+    bar.hidden = !shownRefs.length && !picked.size;
+    $('pick-hint').hidden = bar.hidden;
+    $('pick-count').textContent = String(picked.size);
+  }
+
+  async function savePicked() {
+    await store.set({ amPicked: Array.from(picked) });
+    updatePickBar();
+  }
+
+  store.get('amPicked').then((data) => {
+    (Array.isArray(data.amPicked) ? data.amPicked : []).forEach((ref) => picked.add(String(ref)));
+    updatePickBar();
+  });
+
   /**
    * Accepte l’URL boutique, …/api ou …/api/annonces et renvoie toujours …/api/annonces.
    * Ex. https://host/slug/api → https://host/slug/api/annonces
@@ -149,6 +171,63 @@
     }
   }
 
+  /* ---------- Contrôle des fiches ---------- */
+  const CHANNEL_NAMES = { leboncoin: 'Leboncoin', vinted: 'Vinted' };
+
+  function qualityChip(item) {
+    if (!globalThis.AmQuality) return null;
+    const results = ['leboncoin', 'vinted'].map((ch) => ({ ch, r: AmQuality.check(item, ch) }));
+    const blocks = results.filter((x) => x.r.block.length);
+    const warns = results.filter((x) => x.r.warn.length);
+    if (!blocks.length && !warns.length) return null;
+    const chip = document.createElement('span');
+    chip.className = 'chip ' + (blocks.length ? 'block' : 'warn');
+    chip.textContent = blocks.length ? '⛔' : '⚠';
+    chip.title = results.map((x) => CHANNEL_NAMES[x.ch] + ' : ' + (AmQuality.lines(x.r).join(' | ') || 'rien à signaler')).join('\n');
+    return chip;
+  }
+
+  function qualityBox(product) {
+    const box = document.createElement('div');
+    box.className = 'check';
+    const title = document.createElement('h3');
+    title.textContent = 'Contrôle avant remplissage';
+    box.appendChild(title);
+    if (!globalThis.AmQuality) return box;
+    for (const ch of ['leboncoin', 'vinted']) {
+      const r = AmQuality.check(product, ch);
+      const head = document.createElement('div');
+      head.innerHTML = '<strong></strong>';
+      head.querySelector('strong').textContent = CHANNEL_NAMES[ch] + ' ';
+      if (!r.block.length && !r.warn.length) {
+        const ok = document.createElement('span');
+        ok.className = 'ok';
+        ok.textContent = '✓ fiche complète';
+        head.appendChild(ok);
+        box.appendChild(head);
+        continue;
+      }
+      box.appendChild(head);
+      const ul = document.createElement('ul');
+      for (const item of r.block.concat(r.warn)) {
+        const li = document.createElement('li');
+        li.className = r.block.includes(item) ? 'block' : 'warn';
+        li.textContent = (r.block.includes(item) ? '⛔ ' : '⚠ ') + item.field + ' : ' + item.message;
+        ul.appendChild(li);
+      }
+      box.appendChild(ul);
+    }
+    return box;
+  }
+
+  /** Avant un remplissage : si la fiche a des points bloquants, on demande confirmation (l'utilisateur peut corriger la fiche d'abord). */
+  function confirmQuality(product, channel) {
+    if (!globalThis.AmQuality) return true;
+    const r = AmQuality.check(product, channel);
+    if (!r.block.length) return true;
+    return confirm('Cette fiche a des points bloquants pour ' + CHANNEL_NAMES[channel] + ' :\n\n' + AmQuality.lines({ block: r.block, warn: [] }).join('\n') + '\n\nRemplir quand même ?');
+  }
+
   function renderList(items) {
     list.innerHTML = '';
     detail.hidden = true;
@@ -156,13 +235,26 @@
       list.innerHTML = '<li class="empty">Aucun article.</li>';
       return;
     }
+    shownRefs = items.map((item) => String(item.ref));
+    updatePickBar();
     items.forEach((item) => {
       const li = document.createElement('li');
       const thumb = item.photos && item.photos[0] ? item.photos[0].url : '';
       li.innerHTML =
+        '<label class="pick"><input type="checkbox" aria-label="Cocher pour la file automatique"></label>' +
         (thumb ? '<img src="' + thumb + '" alt="">' : '<span class="ph"></span>') +
         '<span class="meta"><strong></strong><small></small></span>';
+      const box = li.querySelector('.pick input');
+      box.checked = picked.has(String(item.ref));
+      box.addEventListener('click', (event) => event.stopPropagation());
+      li.querySelector('.pick').addEventListener('click', (event) => event.stopPropagation());
+      box.addEventListener('change', () => {
+        if (box.checked) picked.add(String(item.ref)); else picked.delete(String(item.ref));
+        savePicked();
+      });
       li.querySelector('strong').textContent = item.title || item.name;
+      const chip = qualityChip(item);
+      if (chip) li.querySelector('strong').appendChild(chip);
       li.querySelector('small').textContent =
         (item.price != null ? item.price.toFixed(2).replace('.', ',') + ' €' : item.price_text || '') +
         ' · réf. ' +
@@ -226,7 +318,7 @@
         download.addEventListener('click', () => downloadPhotos(p, download, note));
         actions.appendChild(download);
       }
-      detail.append(title, desc, actions, note);
+      detail.append(title, qualityBox(p), desc, actions, note);
     } catch (e) {
       detail.innerHTML = '<p class="msg">' + (e.message || 'Erreur') + '</p>';
     }
@@ -352,6 +444,7 @@
   }
 
   async function fillTab(channel, product) {
+    if (!confirmQuality(product, channel)) return;
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.id) {
       alert('Aucun onglet actif.');
@@ -432,6 +525,51 @@
     $('settings-msg').textContent = result.ok ? 'OK — ' + result.message : 'Échec : ' + result.message;
   });
 
+  $('pick-all').addEventListener('click', () => {
+    shownRefs.forEach((ref) => picked.add(ref));
+    list.querySelectorAll('.pick input').forEach((box) => { box.checked = true; });
+    savePicked();
+  });
+  $('pick-none').addEventListener('click', () => {
+    picked.clear();
+    list.querySelectorAll('.pick input').forEach((box) => { box.checked = false; });
+    savePicked();
+  });
+
+  /* ---------- Alerte persistante (formulaire modifié, fiche écartée…) ---------- */
+  const alertBar = $('alert-bar');
+  function showAlert(a) {
+    if (!a || !a.message) { alertBar.hidden = true; return; }
+    $('alert-text').textContent = a.message;
+    alertBar.className = 'alert-bar' + (a.level === 'warn' ? ' warn' : '');
+    alertBar.hidden = false;
+  }
+  store.get('amAlert').then((data) => showAlert(data.amAlert));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.amAlert) showAlert(changes.amAlert.newValue);
+  });
+  $('alert-close').addEventListener('click', () => { store.remove('amAlert'); alertBar.hidden = true; });
+
+  /* ---------- Contrôle du formulaire ouvert (détecte un changement de la plateforme) ---------- */
+  $('btn-selftest').addEventListener('click', async () => {
+    const msg = $('selftest-msg');
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    let host = '';
+    try { host = new URL((tab && tab.url) || '').hostname; } catch (_) {}
+    const channel = /leboncoin\.fr$/i.test(host) ? 'leboncoin' : /vinted\.fr$/i.test(host) ? 'vinted' : '';
+    if (!tab || !channel) {
+      msg.textContent = 'Ouvrez d’abord la page de dépôt Leboncoin ou Vinted, puis recliquez.';
+      return;
+    }
+    msg.textContent = 'Contrôle…';
+    const res = await new Promise((resolve) => chrome.runtime.sendMessage({ type: 'am-selftest', tabId: tab.id, channel }, (r) => resolve(chrome.runtime.lastError ? { ok: false, error: chrome.runtime.lastError.message } : r)));
+    if (!res || !res.ok) { msg.textContent = res && res.error || 'Contrôle impossible.'; return; }
+    const name = CHANNEL_NAMES[channel];
+    msg.textContent = res.missing.length
+      ? '⚠ ' + name + ' (' + res.page + ') : repères absents : ' + res.missing.join(', ') + '. La plateforme a peut-être changé son formulaire : remplissez à la main et signalez-le.'
+      : '✓ ' + name + ' (' + res.page + ') : ' + res.found.length + ' repère(s) reconnus, le remplissage peut fonctionner.';
+  });
+
   btnSearch.addEventListener('click', () => search(q.value));
   q.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') search(q.value);
@@ -492,6 +630,7 @@
     return [
       s.published ? s.published + ' publiée(s)' : '',
       s.prepared ? s.prepared + ' simulée(s)' : '',
+      s.rejected ? s.rejected + ' écartée(s)' : '',
       s.blocked ? s.blocked + ' arrêt(s)' : '',
       s.error ? s.error + ' erreur(s)' : '',
     ].filter(Boolean).join(' · ') || 'aucune pièce traitée';
@@ -576,6 +715,7 @@
       const right = document.createElement('span');
       right.className = 'act ' + entry.action;
       right.textContent = ({
+        rejected: 'écartée (fiche)',
         published: 'publiée',
         prepared: 'simulée',
         blocked: 'arrêt',

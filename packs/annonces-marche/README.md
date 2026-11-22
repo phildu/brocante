@@ -50,7 +50,7 @@ Après avoir cliqué sur **Remplir Leboncoin** ou **Remplir Vinted**, un panneau
 
 Le mode automatique publie **depuis le navigateur du commerçant**, jamais depuis le serveur de la boutique. Il est désarmé par défaut et doit être activé par une confirmation explicite dans l’extension. La simulation (remplissage et progression sans clic sur « Publier ») est cochée par défaut : elle déroule toute la file et classe chaque pièce « simulée » sans rien mettre en ligne.
 
-Garde-fous : un article à la fois, file d’attente enregistrée dans le navigateur (reprise après fermeture de la popup ou redémarrage), intervalle aléatoire (2 à 30 minutes, 5 par défaut), plafond quotidien (10 par défaut), arrêt immédiat en cas de captcha, vérification d’identité, téléphone ou message de sécurité, et pause après un article incomplet ou deux erreurs consécutives. L’extension enregistre chaque résultat dans l’historique (`/marquer`) et consulte `/publications` pour ne jamais republier une référence déjà en ligne.
+Garde-fous : un article à la fois, plage horaire de travail (8 h–21 h) et plafond de 3 publications par heure en publication réelle, délais variables, pause de 6 h après toute vérification demandée par la plateforme, file d’attente enregistrée dans le navigateur (reprise après fermeture de la popup ou redémarrage), intervalle aléatoire (2 à 30 minutes, 5 par défaut), plafond quotidien (10 par défaut), arrêt immédiat en cas de captcha, vérification d’identité, téléphone ou message de sécurité, et pause après un article incomplet ou deux erreurs consécutives. L’extension enregistre chaque résultat dans l’historique (`/marquer`) et consulte `/publications` pour ne jamais republier une référence déjà en ligne.
 
 Quand une pièce exige une action humaine (choix de catégorie dans l’arbre de la plateforme, photos refusées, vérification), la file se met en pause et **l’onglet reste ouvert** : complétez sur place, puis **Reprendre** retente la même pièce, ou **Passer** l’ignore. Une pièce publiée à la main hors mode automatique n’est pas détectée : décochez-la dans la sélection avant de lancer un passage.
 
@@ -66,6 +66,14 @@ Quand une pièce exige une action humaine (choix de catégorie dans l’arbre de
 | `GET /selection` | jeton + option active | sélection faite dans l’administration |
 | `GET /publications?channel=` | jeton + option active | références déjà publiées (anti-doublon) |
 | `POST /marquer` | jeton + option active | historique publication |
+
+### Alertes (fiches et formulaires)
+
+Avant le remplissage, `extension/quality.js` contrôle chaque fiche pour Leboncoin et pour Vinted : pastille ⚠ / ⛔ dans la liste de la popup, boîte « Contrôle avant remplissage » dans la fiche, confirmation avant un remplissage manuel bloquant, et **écartement** automatique des fiches bloquantes dans la file. Pendant le remplissage, les choix par défaut et les champs non remplis sont signalés ; le bouton « Contrôler le formulaire ouvert » et la détection de repères absents préviennent quand une plateforme change son formulaire (bannière persistante dans la popup). Un **état absent de la fiche** n'est pas bloquant : l'extension choisit « Bon état » (milieu de l'échelle) sur les deux plateformes et le signale. Ajouter ou ajuster une règle : `quality.js` et `tests/quality.test.js`.
+
+### Cases à cocher dans l'extension
+
+La liste d'articles de la popup propose une case à cocher par article, avec « Tout cocher » et « Tout décocher » ; le choix est mémorisé dans le navigateur. Au lancement de la file automatique, les articles cochés dans l'extension priment ; si rien n'est coché, c'est la sélection de l'administration de la boutique (ci-dessous) qui est utilisée.
 
 ### Sélection pour l'application locale
 

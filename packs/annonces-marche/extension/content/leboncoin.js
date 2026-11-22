@@ -284,7 +284,13 @@
     jobs.push(
       [size.label.toLowerCase(), () => F.chooseMenuOption([size.label], size.values)],
       ['couleur', () => F.chooseMenuOption(['Couleur'], colorCandidates(p), { keepExisting: true })],
-      ['état', () => F.chooseMenuOption(['État', 'Etat'], etatCandidates(p))],
+      ['état', () => {
+        const candidates = etatCandidates(p);
+        if (candidates.length) return F.chooseMenuOption(['État', 'Etat'], candidates);
+        // État absent de la fiche : repli « Bon état » (milieu de l'échelle), signalé à l'utilisateur.
+        F.noteIssue('état non renseigné dans la fiche : « Bon état » choisi par défaut, à corriger.');
+        return F.chooseMenuOption(['État', 'Etat'], ['Bon état', 'État correct', 'État satisfaisant']);
+      }],
     );
     for (const [name, run] of jobs) {
       await F.sleep(180 + Math.floor(Math.random() * 320));
@@ -324,11 +330,20 @@
     const done = [];
     const retries = [];
     const record = (name, res, run) => {
-      if (res && res.ok) { done.push(name); return; }
+      if (res && res.ok) {
+        done.push(name);
+        if (res.fallback) F.noteIssue(name + ' : valeur de la fiche absente de la liste du site, « ' + (res.value || res.fallback) + ' » choisi par défaut.');
+        return;
+      }
       if (res && (res.absent || res.skipped)) return;   // champ absent sur cette page : pas une erreur
       retries.push([name, run]);
+      // Titre, description et prix sont répartis sur plusieurs pages : leur absence ponctuelle est normale. Seuls les menus comptent.
+      if (!['titre', 'catégorie', 'description', 'prix'].includes(name)) {
+        F.noteIssue(name + ' : non rempli (valeur de la fiche absente de la liste du site, ou champ modifié).');
+      }
     };
-    const pause = () => F.sleep(180 + Math.floor(Math.random() * 320));
+    // Pause variable entre deux champs, avec de temps en temps un temps de relecture plus long.
+    const pause = () => F.sleep(180 + Math.floor(Math.random() * 320) + (Math.random() < 0.08 ? 1000 + Math.floor(Math.random() * 1500) : 0));
 
     record('titre', await stepTitle(product, F).catch((e) => { note('titre : erreur ' + (e && e.message || e)); return { ok: false }; }), () => stepTitle(product, F));
     await pause();
@@ -337,7 +352,7 @@
     if (category.ok && category.guessed) {
       // Aucune suggestion ne correspond à la fiche : on a pris la première, à vérifier par le vendeur.
       done[done.indexOf('catégorie')] = 'catégorie (1re suggestion du site : ' + (category.text || '?') + ')';
-      try { sessionStorage.setItem('amLbcCategoryGuess', category.text || '?'); } catch (_) {}
+      F.noteIssue('catégorie prise par défaut (1re suggestion du site) : ' + (category.text || '?') + '.');
     }
     await pause();
 
@@ -389,6 +404,27 @@
     watcher.observe(document.body, { childList: true, subtree: true });
   }
 
+  /** Les repères du formulaire attendus sur la page affichée (pour détecter un changement du site). */
+  function selftest(F) {
+    if (/\/options/.test(location.pathname)) {
+      return F.probeAnchors('écran « Boostez votre annonce »', [['bouton « Déposer sans booster »', () => F.findPublishButton()]]);
+    }
+    if (findBody(F)) {
+      return F.probeAnchors('aperçu final', [
+        ['titre', () => findTitle(F)], ['description', () => findBody(F)], ['prix', () => findPrice(F)], ['bouton « Continuer »', () => F.findNextButton()],
+      ]);
+    }
+    if (visible(findTitle(F))) return F.probeAnchors('titre et catégorie', [['champ titre', () => findTitle(F)]]);
+    if (document.querySelector('input[type=file]')) {
+      const anchors = [['champ photos', () => document.querySelector('input[type=file]')], ['bouton « Continuer »', () => F.findNextButton()]];
+      if (Array.from(document.querySelectorAll('button')).some((b) => /Retirer la photo/i.test(b.getAttribute('aria-label') || ''))) {
+        anchors.push(['listes déroulantes', () => MENU_LABELS.map((l) => F.findCombo([l]) || F.findMenuTrigger([l])).find(Boolean)]);
+      }
+      return F.probeAnchors('photos et attributs', anchors);
+    }
+    return { page: 'page non reconnue', found: [], missing: ['page de dépôt reconnue'] };
+  }
+
   globalThis.AmLbc = {
     etatCandidates, brandCandidate, sizeInfo, colorCandidates, universCandidate, categoryWords, priceText, fillFields,
   };
@@ -408,21 +444,30 @@
           options: msg.options || {},
           fill: (p, quiet) => fillFields(p, F, quiet),
         });
-        // La catégorie prise par défaut (aucune suggestion ne correspondait) doit apparaître dans l'historique de la file.
-        let guess = '';
-        try { guess = sessionStorage.getItem('amLbcCategoryGuess') || ''; } catch (_) {}
+        const terminal = res && ['prepared', 'publish-clicked', 'blocked', 'published'].includes(res.action);
         if (res && res.action === 'blocked') {
           let steps = '';
           try { steps = sessionStorage.getItem('amLbcTrace') || ''; } catch (_) {}
           if (steps) res.reason = (res.reason ? res.reason + ' · ' : '') + 'détail : ' + steps;
+          const probe = selftest(F);
+          if (probe.missing.length >= 2) {
+            res.drift = probe.missing;
+            res.reason = (res.reason ? res.reason + ' · ' : '') + 'le formulaire Leboncoin a peut-être changé (repères absents : ' + probe.missing.join(', ') + ')';
+            F.raiseAlert('block', 'Leboncoin : le formulaire semble avoir changé (page « ' + probe.page + ' », repères absents : ' + probe.missing.join(', ') + '). Remplissez à la main et mettez l’extension à jour.');
+          }
         }
-        if (guess && res && ['prepared', 'publish-clicked', 'blocked', 'published'].includes(res.action)) {
-          res.reason = (res.reason ? res.reason + ' · ' : '') + 'catégorie prise par défaut (1re suggestion) : ' + guess;
-          try { sessionStorage.removeItem('amLbcCategoryGuess'); } catch (_) {}
+        if (terminal) {
+          const issues = F.takeIssues();
+          if (issues.length) res.reason = (res.reason ? res.reason + ' · ' : '') + '⚠ ' + issues.join(' ; ');
         }
         sendResponse(res);
       })().catch((e) => sendResponse({ ok: false, error: String(e) }));
       return true;
+    }
+    if (msg.type === 'am-selftest' && msg.channel === 'leboncoin') {
+      const F = globalThis.AmFill;
+      sendResponse(F ? { ok: true, ...selftest(F) } : { ok: false, error: 'Helpers absents : rechargez l’extension.' });
+      return;
     }
     if (msg.type === 'am-auto-verify' && msg.channel === 'leboncoin') {
       const F = globalThis.AmFill;
@@ -454,10 +499,16 @@
       if (photoRes.ok > 0) photoMsg = ' · ' + photoRes.ok + ' photo(s) jointe(s)';
       else if (photos.length) photoMsg = ' · photos à ajouter à la main (le site refuse l’injection automatique)';
 
+      const issues = F.takeIssues();
+      const probe = selftest(F);
+      if (!done.length && probe.missing.length >= 2) {
+        F.raiseAlert('block', 'Leboncoin : le formulaire semble avoir changé (page « ' + probe.page + ' », repères absents : ' + probe.missing.join(', ') + '). Remplissez à la main et mettez l’extension à jour.');
+      }
       F.toast(
         (done.length ? 'Champs remplis : ' + done.join(', ') : 'Aucun champ reconnu sur cette page') +
           (pending.length ? ' · à venir quand le champ apparaît : ' + pending.join(', ') : '') +
           photoMsg +
+          (issues.length ? ' · ⚠ ' + issues.join(' ; ') : '') +
           '. Vérifiez la catégorie et publiez vous-même.'
       );
       sendResponse({ ok: true, filled: done, photos: photoRes });

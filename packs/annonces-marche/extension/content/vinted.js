@@ -216,8 +216,12 @@
     const input = document.getElementById('condition');
     if (!input || !visible(input)) return { ok: true, absent: true };
     if (String(input.value || '').trim()) return { ok: true, already: true };
-    const wanted = etatCandidates(p).map(squash);
-    if (!wanted.length) return { ok: true, skipped: true };
+    let wanted = etatCandidates(p).map(squash);
+    if (!wanted.length) {
+      // État absent de la fiche : repli « Bon état » (milieu de l'échelle), signalé à l'utilisateur.
+      wanted = [squash('Bon état')];
+      F.noteIssue('état non renseigné dans la fiche : « Bon état » choisi par défaut, à corriger.');
+    }
     await openField(F, 'condition');
     const radios = await F.waitFor(() => {
       const list = Array.from(document.querySelectorAll('input[id^="condition-radio"]'));
@@ -308,10 +312,18 @@
     const done = [];
     const retries = [];
     const record = (name, res, run) => {
-      if (res && res.ok) { if (!res.skipped && !res.absent) done.push(name + (res.guessed ? ' (1er choix du site : ' + (res.text || '?') + ')' : '') + (res.fallback ? ' (repli « ' + res.fallback + ' »)' : '')); return; }
+      if (res && res.ok) {
+        if (!res.skipped && !res.absent) done.push(name + (res.guessed ? ' (1er choix du site : ' + (res.text || '?') + ')' : '') + (res.fallback ? ' (repli « ' + res.fallback + ' »)' : ''));
+        if (res.guessed) F.noteIssue('catégorie prise par défaut (1re suggestion du site) : ' + (res.text || '?') + '.');
+        if (res.fallback) F.noteIssue(name + ' : « ' + res.fallback + ' » choisi, la valeur de la fiche n’existe pas chez Vinted.');
+        if (res.skipped && res.missing) F.noteIssue(name + ' : « ' + res.missing + ' » introuvable chez Vinted, champ laissé vide.');
+        return;
+      }
       retries.push([name, run]);
+      F.noteIssue(name + ' : non rempli (valeur de la fiche absente de la liste du site, ou champ modifié).');
     };
-    const pause = () => F.sleep(180 + Math.floor(Math.random() * 320));
+    // Pause variable entre deux champs, avec de temps en temps un temps de relecture plus long.
+    const pause = () => F.sleep(180 + Math.floor(Math.random() * 320) + (Math.random() < 0.08 ? 1000 + Math.floor(Math.random() * 1500) : 0));
     const run = async (name, step) => {
       let res;
       try { res = await step(); } catch (e) { res = { ok: false, error: (e && e.message) || String(e) }; }
@@ -369,6 +381,23 @@
     watcher.observe(document.body, { childList: true, subtree: true });
   }
 
+  /** Les repères du formulaire Vinted (une seule page) : leur absence signale un changement du site. */
+  function selftest(F) {
+    const anchors = [
+      ['titre', () => document.getElementById('title')],
+      ['description', () => document.getElementById('description')],
+      ['catégorie', () => document.getElementById('category')],
+      ['prix', () => document.getElementById('price')],
+      ['photos', () => document.querySelector('input[type="file"]')],
+      ['bouton « Ajouter »', () => F.findPublishButton()],
+    ];
+    const cat = document.getElementById('category');
+    if (cat && String(cat.value || '').trim()) {
+      anchors.push(['état', () => document.getElementById('condition')], ['marque', () => document.getElementById('brand')]);
+    }
+    return F.probeAnchors('formulaire « Vends ton article »', anchors);
+  }
+
   globalThis.AmVinted = { etatCandidates, sizeTokens, colorNames, categoryWords, genderWord, fillFields };
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -386,9 +415,26 @@
           options: msg.options || {},
           fill: (prod, quiet) => fillFields(prod, F, quiet),
         });
+        if (res && res.action === 'blocked') {
+          const probe = selftest(F);
+          if (probe.missing.length >= 2) {
+            res.drift = probe.missing;
+            res.reason = (res.reason ? res.reason + ' · ' : '') + 'le formulaire Vinted a peut-être changé (repères absents : ' + probe.missing.join(', ') + ')';
+            F.raiseAlert('block', 'Vinted : le formulaire semble avoir changé (repères absents : ' + probe.missing.join(', ') + '). Remplissez à la main et mettez l’extension à jour.');
+          }
+        }
+        if (res && ['prepared', 'publish-clicked', 'blocked', 'published'].includes(res.action)) {
+          const issues = F.takeIssues();
+          if (issues.length) res.reason = (res.reason ? res.reason + ' · ' : '') + '⚠ ' + issues.join(' ; ');
+        }
         sendResponse(res);
       })().catch((e) => sendResponse({ ok: false, error: String(e) }));
       return true;
+    }
+    if (msg.type === 'am-selftest' && msg.channel === 'vinted') {
+      const F = globalThis.AmFill;
+      sendResponse(F ? { ok: true, ...selftest(F) } : { ok: false, error: 'Helpers absents : rechargez l’extension.' });
+      return;
     }
     if (msg.type === 'am-auto-verify' && msg.channel === 'vinted') {
       const F = globalThis.AmFill;
@@ -409,10 +455,16 @@
       let photoMsg = '';
       if (photoRes.ok > 0) photoMsg = ' · ' + photoRes.ok + ' photo(s) jointe(s)';
       else if (photos.length) photoMsg = ' · photos à ajouter à la main (le site refuse l’injection automatique)';
+      const issues = F.takeIssues();
+      const probe = selftest(F);
+      if (!done.length && probe.missing.length >= 2) {
+        F.raiseAlert('block', 'Vinted : le formulaire semble avoir changé (repères absents : ' + probe.missing.join(', ') + '). Remplissez à la main et mettez l’extension à jour.');
+      }
       F.toast(
         (done.length ? 'Champs remplis : ' + done.join(', ') : 'Aucun champ reconnu sur cette page') +
           (pending.length ? ' · à compléter : ' + pending.join(', ') : '') +
           photoMsg +
+          (issues.length ? ' · ⚠ ' + issues.join(' ; ') : '') +
           '. Vérifiez catégorie / livraison et ajoutez vous-même.'
       );
       sendResponse({ ok: true, filled: done, photos: photoRes });

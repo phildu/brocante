@@ -1,6 +1,6 @@
 # Protocole de test : publication sur Vinted
 
-Pack : `packs/annonces-marche` (extension Chrome 1.4.3). Boutique d'essai : `la-fripe-a-naty`.
+Pack : `packs/annonces-marche` (extension Chrome 1.6.1). Boutique d'essai : `la-fripe-a-naty`.
 Complète `protocole-test-publication-annonces.md` (version commune, préparation et extension).
 Les publications partent du navigateur du vendeur, jamais du serveur. Utiliser un compte Vinted dont on accepte le risque
 de restriction (Vinted interdit l'automatisation dans ses conditions).

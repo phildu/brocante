@@ -736,7 +736,50 @@
     el._t = setTimeout(() => el.remove(), 6000);
   }
 
+  // --- Alertes du remplissage : ce qui a été choisi par défaut ou n'a pas pu être rempli, remonté à l'utilisateur ---
+  function noteIssue(text) {
+    try {
+      const list = JSON.parse(sessionStorage.getItem('amIssues') || '[]');
+      if (!list.includes(text)) list.push(text);
+      sessionStorage.setItem('amIssues', JSON.stringify(list.slice(-12)));
+    } catch (_) {}
+  }
+
+  function takeIssues() {
+    try {
+      const list = JSON.parse(sessionStorage.getItem('amIssues') || '[]');
+      sessionStorage.removeItem('amIssues');
+      return Array.isArray(list) ? list : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /** Alerte persistante affichée en haut de la popup (« le formulaire a changé », etc.). */
+  function raiseAlert(level, message) {
+    try { chrome.storage.local.set({ amAlert: { level, message, at: Date.now() } }); } catch (_) {}
+  }
+
+  /**
+   * Contrôle des repères du formulaire : retourne { page, found, missing }.
+   * `anchors` : [[nom, fonction → élément ou null]]. Moins de repères que prévu = la plateforme a probablement changé son formulaire.
+   */
+  function probeAnchors(page, anchors) {
+    const found = [];
+    const missing = [];
+    for (const [name, find] of anchors) {
+      let el = null;
+      try { el = find(); } catch (_) { el = null; }
+      if (el) found.push(name); else missing.push(name);
+    }
+    return { page, found, missing };
+  }
+
   global.AmFill = {
+    noteIssue,
+    takeIssues,
+    raiseAlert,
+    probeAnchors,
     fillText,
     fillPrice,
     tryAttachPhotos,

@@ -1,6 +1,6 @@
 # Protocole de test : publication d'annonces (Leboncoin, Vinted, Facebook Marketplace)
 
-Pack concerné : `packs/annonces-marche` (extension Chrome 1.4.3). Boutique d'essai : `la-fripe-a-naty`.
+Pack concerné : `packs/annonces-marche` (extension Chrome 1.6.1). Boutique d'essai : `la-fripe-a-naty`.
 Les publications partent du navigateur du commerçant, jamais du serveur. Faire les tests avec un compte dont on accepte
 le risque de restriction.
 
@@ -21,7 +21,7 @@ le risque de restriction.
 ## 1. Extension
 
 1. `chrome://extensions` → mode développeur → « Charger l'extension non empaquetée » → `packs/annonces-marche/extension`.
-   Version attendue : 1.4.3.
+   Version attendue : 1.6.1.
 2. Réglages : adresse `https://brocante.test/la-fripe-a-naty/boutique.php` + jeton, puis **Tester**.
 3. Attendu : connexion confirmée ; le hoodie apparaît dans la recherche.
 
@@ -75,3 +75,31 @@ Champs non reconnus, catégorie (auto ou à la main), photos (jointes ou refusé
 | Date | Plateforme | Test (A/B/C) | Résultat | Remarques |
 |---|---|---|---|---|
 | | | | | |
+
+## 6. Essai de série (simulation, puis petit lot réel)
+
+Rythme de la publication réelle (la simulation n'est jamais freinée) :
+- plage horaire de travail **8 h – 21 h** (heure locale) : en dehors, la file attend la plage suivante, sans se mettre en pause ;
+- **3 publications par heure** au plus (heure glissante) et 10 par jour ;
+- délai entre deux pièces : réglage de la popup (5 min par défaut, 2 à 30), rendu variable (de 0,8 à 1,4 fois, avec une pause plus longue de temps en temps) ;
+- pauses variables entre deux champs, avec parfois un temps de relecture plus long ;
+- **vérification, captcha ou téléphone demandés par la plateforme** : arrêt immédiat de la file, et **pas de reprise automatique pendant 6 h** (la simulation reste possible).
+
+Essai en simulation :
+1. Choisir 3 à 4 fiches complètes (prix, état, taille, couleur, photos), au choix : **dans la popup de l'extension** (cases à cocher à gauche de chaque article de la liste ; « Tout cocher » / « Tout décocher » ; le choix est mémorisé), ou dans l'administration de la boutique (« Sélectionner les articles »). Si des articles sont cochés dans l'extension, ils priment sur la sélection de la boutique.
+2. Popup : **Simulation seule** cochée, intervalle 2 min, « J'assume le risque » cochée, puis **Lancer Leboncoin** (ou Vinted).
+3. Attendu : chaque pièce passe à « prepared — prête (simulation) », l'une après l'autre, sans qu'aucun bouton final soit cliqué ; le message de la popup indique la pièce en cours.
+4. Tester **Pause** puis **Reprendre** au milieu de la série, puis **Arrêter**.
+
+Petit lot réel : 2 ou 3 pièces maximum, sur un compte dont on accepte le risque, jamais le même jour qu'un autre essai. Les plateformes interdisent l'automatisation : aucun rythme ne supprime le risque de restriction du compte.
+
+## 7. Alertes : fiches et formulaires
+
+L'extension prévient avant et pendant le remplissage :
+- **Contrôle des fiches** (avant) : une pastille ⚠ ou ⛔ apparaît à côté du titre de chaque article de la popup, avec le détail au survol ; la fiche ouverte affiche « Contrôle avant remplissage » pour Leboncoin et pour Vinted. ⛔ = la plateforme refusera ou le remplissage ne peut pas aboutir (prix absent, aucune photo, taille manquante pour un vêtement) ; ⚠ = à vérifier (**état non renseigné : « Bon état » est alors choisi par défaut** sur Leboncoin comme sur Vinted ; titre en majuscules, se terminant par « - Vendeur », trop court ; coordonnées dans la description ; taille « probable » ; prix décimal arrondi par Leboncoin ; peu de photos…).
+- **File automatique** : une fiche ⛔ est **écartée** (« rejected » dans l'historique) avant même d'ouvrir la page ; la file passe à la suivante en quelques secondes. Une bannière rouge ou orange reste en haut de la popup jusqu'à ce qu'on clique sur « OK ».
+- **Pendant le remplissage** : ce qui a été pris par défaut (catégorie : 1re suggestion ; marque : « Autre » ou « Inconnu » ; menu dont la valeur n'existe pas chez la plateforme) est signalé par ⚠ dans la bulle (mode manuel) ou dans le message de la file (mode automatique).
+- **Changement de formulaire** : le bouton **« Contrôler le formulaire ouvert »** de la popup vérifie, sur la page de dépôt affichée, que les repères attendus sont là (titre, prix, photos, bouton final…). Si le remplissage échoue et que plusieurs repères manquent, l'extension affiche une bannière « le formulaire semble avoir changé » et l'indique dans la file.
+
+Règles de contrôle : `extension/quality.js` ; tests : `node extension/tests/quality.test.js` (lancé aussi par la suite PHPUnit quand Node est installé).
+
