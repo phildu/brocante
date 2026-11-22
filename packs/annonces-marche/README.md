@@ -67,6 +67,10 @@ Quand une pièce exige une action humaine (choix de catégorie dans l’arbre de
 | `GET /publications?channel=` | jeton + option active | références déjà publiées (anti-doublon) |
 | `POST /marquer` | jeton + option active | historique publication |
 
+### Cases à cocher dans l'extension
+
+La liste d'articles de la popup propose une case à cocher par article, avec « Tout cocher » et « Tout décocher » ; le choix est mémorisé dans le navigateur. Au lancement de la file automatique, les articles cochés dans l'extension priment ; si rien n'est coché, c'est la sélection de l'administration de la boutique (ci-dessous) qui est utilisée.
+
 ### Sélection pour l'application locale
 
 Dans l'administration du plug-in, ouvrez les modales **Sélectionner les articles pour l’application** et **Clé API et connexion Python**. L'application locale peut aussi ouvrir ces fenêtres dans le navigateur par défaut, en ouvrant l'URL d'administration et en ajoutant `&modal=selection` ou `&modal=token` (alias `&modal=api`). La connexion admin du navigateur reste nécessaire ; la clé n'est jamais délivrée par une route publique.

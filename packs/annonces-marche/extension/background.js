@@ -254,10 +254,16 @@ async function startAuto(channel) {
       .map((h) => h.ref),
   ]);
 
-  const refs = items
-    .map((item) => item && item.product && item.product.ref)
+  // Articles cochés dans la popup de l'extension ; à défaut, sélection faite dans l'administration de la boutique.
+  const { amPicked } = await chrome.storage.local.get('amPicked');
+  const picked = (Array.isArray(amPicked) ? amPicked : []).map(String).filter(Boolean);
+  const candidates = picked.length
+    ? picked
+    : items.map((item) => item && item.product && item.product.ref);
+  const refs = candidates
     .filter((ref) => ref && !seen.has(ref))
     .slice(0, Math.max(0, settings.dailyCap - dayCount));
+  const source = picked.length ? ' (cochées dans l’extension)' : ' (sélection de la boutique)';
 
   if (!refs.length) {
     throw new Error('Aucune pièce à traiter : la sélection est vide ou déjà publiée sur ce canal.');
@@ -275,7 +281,7 @@ async function startAuto(channel) {
     lockAt: 0,
     activeTabId: null,
     activeRef: '',
-    lastMessage: 'File démarrée : ' + refs.length + ' pièce(s).',
+    lastMessage: 'File démarrée : ' + refs.length + ' pièce(s)' + source + '.',
   };
   await setQueue(queue);
   await ensureWatchdog();

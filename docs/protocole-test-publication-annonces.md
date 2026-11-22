@@ -1,6 +1,6 @@
 # Protocole de test : publication d'annonces (Leboncoin, Vinted, Facebook Marketplace)
 
-Pack concerné : `packs/annonces-marche` (extension Chrome 1.5.0). Boutique d'essai : `la-fripe-a-naty`.
+Pack concerné : `packs/annonces-marche` (extension Chrome 1.5.1). Boutique d'essai : `la-fripe-a-naty`.
 Les publications partent du navigateur du commerçant, jamais du serveur. Faire les tests avec un compte dont on accepte
 le risque de restriction.
 
@@ -21,7 +21,7 @@ le risque de restriction.
 ## 1. Extension
 
 1. `chrome://extensions` → mode développeur → « Charger l'extension non empaquetée » → `packs/annonces-marche/extension`.
-   Version attendue : 1.5.0.
+   Version attendue : 1.5.1.
 2. Réglages : adresse `https://brocante.test/la-fripe-a-naty/boutique.php` + jeton, puis **Tester**.
 3. Attendu : connexion confirmée ; le hoodie apparaît dans la recherche.
 
@@ -86,7 +86,7 @@ Rythme de la publication réelle (la simulation n'est jamais freinée) :
 - **vérification, captcha ou téléphone demandés par la plateforme** : arrêt immédiat de la file, et **pas de reprise automatique pendant 6 h** (la simulation reste possible).
 
 Essai en simulation :
-1. Boutique : cocher 3 à 4 fiches complètes (prix, état, taille, couleur, photos) dans « Sélectionner les articles ».
+1. Choisir 3 à 4 fiches complètes (prix, état, taille, couleur, photos), au choix : **dans la popup de l'extension** (cases à cocher à gauche de chaque article de la liste ; « Tout cocher » / « Tout décocher » ; le choix est mémorisé), ou dans l'administration de la boutique (« Sélectionner les articles »). Si des articles sont cochés dans l'extension, ils priment sur la sélection de la boutique.
 2. Popup : **Simulation seule** cochée, intervalle 2 min, « J'assume le risque » cochée, puis **Lancer Leboncoin** (ou Vinted).
 3. Attendu : chaque pièce passe à « prepared — prête (simulation) », l'une après l'autre, sans qu'aucun bouton final soit cliqué ; le message de la popup indique la pièce en cours.
 4. Tester **Pause** puis **Reprendre** au milieu de la série, puis **Arrêter**.

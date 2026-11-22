@@ -34,6 +34,12 @@
       <input type="search" id="q" placeholder="Chercher un article…" disabled>
       <button type="button" id="btn-search" disabled>OK</button>
     </div>
+    <div id="pick-bar" class="pick-bar" hidden>
+      <span><strong id="pick-count">0</strong> coché(s) pour la file automatique</span>
+      <button type="button" id="pick-all" class="link small">Tout cocher</button>
+      <button type="button" id="pick-none" class="link small">Tout décocher</button>
+    </div>
+    <p id="pick-hint" class="hint" hidden>Cochez les articles à publier en série. Si rien n’est coché, la sélection de l’administration de la boutique est utilisée.</p>
     <ul id="list" class="list"></ul>
     <div id="detail" class="detail" hidden></div>
   </section>

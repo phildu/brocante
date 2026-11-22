@@ -9,6 +9,28 @@
   const btnSearch = $('btn-search');
   const store = chrome.storage.local;
 
+  /* ---------- Cases à cocher : articles de la file automatique ---------- */
+  const picked = new Set();
+  let shownRefs = [];
+
+  function updatePickBar() {
+    const bar = $('pick-bar');
+    if (!bar) return;
+    bar.hidden = !shownRefs.length && !picked.size;
+    $('pick-hint').hidden = bar.hidden;
+    $('pick-count').textContent = String(picked.size);
+  }
+
+  async function savePicked() {
+    await store.set({ amPicked: Array.from(picked) });
+    updatePickBar();
+  }
+
+  store.get('amPicked').then((data) => {
+    (Array.isArray(data.amPicked) ? data.amPicked : []).forEach((ref) => picked.add(String(ref)));
+    updatePickBar();
+  });
+
   /**
    * Accepte l’URL boutique, …/api ou …/api/annonces et renvoie toujours …/api/annonces.
    * Ex. https://host/slug/api → https://host/slug/api/annonces
@@ -156,12 +178,23 @@
       list.innerHTML = '<li class="empty">Aucun article.</li>';
       return;
     }
+    shownRefs = items.map((item) => String(item.ref));
+    updatePickBar();
     items.forEach((item) => {
       const li = document.createElement('li');
       const thumb = item.photos && item.photos[0] ? item.photos[0].url : '';
       li.innerHTML =
+        '<label class="pick"><input type="checkbox" aria-label="Cocher pour la file automatique"></label>' +
         (thumb ? '<img src="' + thumb + '" alt="">' : '<span class="ph"></span>') +
         '<span class="meta"><strong></strong><small></small></span>';
+      const box = li.querySelector('.pick input');
+      box.checked = picked.has(String(item.ref));
+      box.addEventListener('click', (event) => event.stopPropagation());
+      li.querySelector('.pick').addEventListener('click', (event) => event.stopPropagation());
+      box.addEventListener('change', () => {
+        if (box.checked) picked.add(String(item.ref)); else picked.delete(String(item.ref));
+        savePicked();
+      });
       li.querySelector('strong').textContent = item.title || item.name;
       li.querySelector('small').textContent =
         (item.price != null ? item.price.toFixed(2).replace('.', ',') + ' €' : item.price_text || '') +
@@ -430,6 +463,17 @@
     $('settings-msg').textContent = 'Test…';
     const result = await refreshConn(cfg);
     $('settings-msg').textContent = result.ok ? 'OK — ' + result.message : 'Échec : ' + result.message;
+  });
+
+  $('pick-all').addEventListener('click', () => {
+    shownRefs.forEach((ref) => picked.add(ref));
+    list.querySelectorAll('.pick input').forEach((box) => { box.checked = true; });
+    savePicked();
+  });
+  $('pick-none').addEventListener('click', () => {
+    picked.clear();
+    list.querySelectorAll('.pick input').forEach((box) => { box.checked = false; });
+    savePicked();
   });
 
   btnSearch.addEventListener('click', () => search(q.value));
