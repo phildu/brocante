@@ -335,11 +335,13 @@ function gallery_from_host(string $host): ?array
     return $cache[$host];
 }
 
-/** Adresse publique d'une galerie : son domaine propre s'il est réglé, sinon le chemin /galerie/<identifiant>/. */
+/** Adresse publique d'une galerie : son domaine propre s'il est réglé, puis l'adresse choisie (includes/adresses-publiques.php), sinon /galerie/<identifiant>/. */
 function gallery_public_url(array $gallery, string $origin = ''): string
 {
     $domain = (string) ($gallery['domain'] ?? '');
     if ($domain !== '') return 'https://' . $domain . '/';
+    $chosen = adresse_galerie((string) ($gallery['slug'] ?? ''));   // adresse publique choisie (includes/adresses-publiques.php)
+    if ($chosen !== '') return $chosen;
     $origin = $origin !== '' ? $origin : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
     return rtrim($origin, '/') . '/galerie/' . rawurlencode((string) ($gallery['slug'] ?? '')) . '/';
 }
@@ -653,6 +655,9 @@ function gallery_local_shop_url(string $slug, array $config, string $requestOrig
     $host = strtolower((string) parse_url($url, PHP_URL_HOST));
     $placeholder = $host === '' || $host === 'localhost' || $host === '127.0.0.1' || str_ends_with($host, '.test') || str_ends_with($host, '.example.com');
     $dev = is_file(dirname(__DIR__) . '/config.local.php');
+    // Adresse publique choisie (includes/adresses-publiques.php) : seulement vue d'un domaine de production.
+    $chosen = adresse_boutique_origine($slug);
+    if ($chosen !== '' && !$dev && adresse_hote_prod((string) parse_url($requestOrigin, PHP_URL_HOST))) return $chosen;
     if (!$placeholder && !$dev) return $url;
 
     $p = parse_url($requestOrigin);

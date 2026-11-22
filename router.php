@@ -96,6 +96,13 @@ if (preg_match('#^/galerie/([a-z0-9][a-z0-9-]*)/vente(?:/|/(prospects|prospect-a
     return true;
 }
 
+// Adresses publiques choisies (includes/adresses-publiques.php, même règle que dans le .htaccess) : index.php décide selon le domaine.
+if (in_array(rtrim($path, '/'), adresse_chemins(), true)) {
+    $_SERVER['SCRIPT_NAME'] = '/index.php';
+    require __DIR__ . '/index.php';
+    return true;
+}
+
 // Galeries commerciales : /galerie/ et /galerie/<identifiant>/ (même règle que dans le .htaccess).
 if (preg_match('#^/galerie(?:/([a-z0-9][a-z0-9-]*))?/?$#', $path, $m)) {
     $_GET['g'] = $m[1] ?? '';

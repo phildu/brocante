@@ -27,6 +27,7 @@ require_once __DIR__ . '/edge-proxy.php'; // hôte et IP réels derrière Cloudf
 require_once __DIR__ . '/business-presence.php';
 require_once __DIR__ . '/domain-custom.php';
 require_once __DIR__ . '/domain-sub.php';
+require_once __DIR__ . '/adresses-publiques.php';
 
 /**
  * Commerce désigné par le sous-domaine de l'hôte (« naty » pour
@@ -171,6 +172,10 @@ function tenant_site_url(): string
     if ($customHost !== '') return 'https://' . $customHost;
     $subLabel = domain_sub_active_label(tenant_slug());
     if ($subLabel !== '') return domain_sub_url($subLabel);
+    // Adresse publique choisie (includes/adresses-publiques.php) : en production ou sous son propre domaine (pas en préprod ni en local).
+    $chosen = adresse_boutique_origine(tenant_slug());
+    $reqHostN = adresse_host_normalize((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    if ($chosen !== '' && (adresse_hote_prod($reqHostN) || adresse_host_normalize((string) parse_url($chosen, PHP_URL_HOST)) === $reqHostN)) return $chosen;
     $url = rtrim((string) tenant('site_url'), '/');
     $host = strtolower((string) parse_url($url, PHP_URL_HOST));
     $placeholder = $host === '' || $host === 'localhost' || $host === '127.0.0.1' || str_ends_with($host, '.test') || str_ends_with($host, '.example.com');

@@ -1,6 +1,22 @@
 <?php
 require_once __DIR__ . '/includes/tenant.php';
 
+// Adresses publiques choisies (includes/adresses-publiques.php) : anciennes adresses → nouvelles (301), galerie servie à son adresse,
+// boutique servie à l'accueil choisi sur son domaine. Un chemin d'adresse demandé sur un autre domaine n'existe pas.
+adresse_rediriger_si_besoin();
+$adressePath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+$adresseCible = adresse_publique_cible((string) ($_SERVER['HTTP_HOST'] ?? ''), $adressePath);
+if ($adresseCible !== null && $adresseCible['type'] === 'galerie') {
+    $_GET['g'] = $adresseCible['slug'];
+    require __DIR__ . '/galerie/index.php';
+    return;
+}
+if ($adresseCible === null && in_array(adresse_path_normalize($adressePath), adresse_chemins(), true)) {
+    http_response_code(404);
+    echo 'Page introuvable.';
+    return;
+}
+
 // Liens courts imprimés sur les étiquettes Fichero : ?p=référence (fiche),
 // ?b=référence (paiement). Ils évitent un QR trop dense sur la tête 96 px.
 if (array_key_exists('p', $_GET) || array_key_exists('b', $_GET)) {
