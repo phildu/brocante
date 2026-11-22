@@ -206,8 +206,41 @@ async function ensureWatchdog() {
   if (!existing) await chrome.alarms.create(ALARM_WATCHDOG, { periodInMinutes: 1 });
 }
 
+/** Texte d'une note de publication → empreinte du contenu publié ('' si absente). Format : « [h:0123abcd…] … ». */
+function hashFromNote(note) {
+  const m = /\[h:([0-9a-f]{8,32})\]/.exec(String(note || ''));
+  return m ? m[1] : '';
+}
+
+/**
+ * Compare la fiche actuelle à ce qui a été publié. Renvoie 'same' (inchangée), 'changed' (modifiée) ;
+ * une publication sans empreinte (faite avant cette fonction) est adoptée telle quelle : on enregistre l'empreinte actuelle.
+ */
+async function compareWithPublished(ref, channel, listing) {
+  let product = null;
+  try {
+    product = (await api('/produit/' + encodeURIComponent(ref))).product;
+  } catch (_) {
+    return 'same'; // fiche illisible : on ne touche à rien
+  }
+  if (!product || !globalThis.AmQuality) return 'same';
+  const current = AmQuality.fingerprint(product, channel);
+  const before = hashFromNote(listing.note);
+  if (!before) {
+    try {
+      await api('/marquer', {
+        method: 'POST',
+        json: { product_ref: ref, channel, status: 'published', listing_url: listing.listing_url || '', external_id: listing.external_id || '', note: '[h:' + current + '] empreinte enregistrée' },
+      });
+    } catch (_) {}
+    return 'same';
+  }
+  return before === current ? 'same' : 'changed';
+}
+
 function actionLabel(action) {
   return {
+    'to-update': 'à mettre à jour',
     published: 'publiée',
     prepared: 'prête (simulation)',
     rejected: 'écartée (contrôle de la fiche)',
@@ -243,13 +276,16 @@ async function startAuto(channel) {
   const items = Array.isArray(selection.items) ? selection.items : [];
 
   let published = [];
+  let listings = [];
   try {
     const res = await api('/publications?channel=' + encodeURIComponent(channel));
     published = Array.isArray(res.refs) ? res.refs : [];
+    listings = Array.isArray(res.listings) ? res.listings : [];
   } catch (_) {
     // Ancienne version du serveur : l'historique local reste la seule protection anti-doublon.
   }
   const history = await getHistory();
+  const known = new Map(listings.map((l) => [String(l.ref), l]));
   const seen = new Set([
     ...published,
     ...history
@@ -263,13 +299,29 @@ async function startAuto(channel) {
   const candidates = picked.length
     ? picked
     : items.map((item) => item && item.product && item.product.ref);
+  // Pièces déjà en ligne : inchangées → on passe à la suivante ; modifiées depuis la publication → à mettre à jour.
+  const unchanged = [];
+  const toUpdate = [];
+  for (const ref of candidates) {
+    const listing = ref && known.get(String(ref));
+    if (!listing) continue;
+    const state = await compareWithPublished(ref, channel, listing);
+    if (state === 'changed') toUpdate.push(ref);
+    else unchanged.push(ref);
+  }
+  const alreadyOnline = new Set([...unchanged, ...toUpdate]);
   const refs = candidates
-    .filter((ref) => ref && !seen.has(ref))
+    .filter((ref) => ref && !seen.has(ref) && !alreadyOnline.has(ref))
     .slice(0, Math.max(0, settings.dailyCap - dayCount));
   const source = picked.length ? ' (cochées dans l’extension)' : ' (sélection de la boutique)';
+  const skipNote = (unchanged.length ? ' ' + unchanged.length + ' inchangée(s) passée(s).' : '') +
+    (toUpdate.length ? ' ' + toUpdate.length + ' à mettre à jour (' + toUpdate.join(', ') + ').' : '');
+  for (const ref of toUpdate) {
+    await pushHistory({ ref, channel, action: 'to-update', reason: 'contenu modifié depuis la publication', dryRun: !!settings.dryRun, at: Date.now() });
+  }
 
   if (!refs.length) {
-    throw new Error('Aucune pièce à traiter : la sélection est vide ou déjà publiée sur ce canal.');
+    throw new Error('Aucune pièce à publier : sélection vide ou déjà en ligne sur ce canal.' + skipNote);
   }
 
   const queue = {
@@ -284,7 +336,7 @@ async function startAuto(channel) {
     lockAt: 0,
     activeTabId: null,
     activeRef: '',
-    lastMessage: 'File démarrée : ' + refs.length + ' pièce(s)' + source + '.',
+    lastMessage: 'File démarrée : ' + refs.length + ' pièce(s)' + source + '.' + skipNote,
   };
   await setQueue(queue);
   await ensureWatchdog();
@@ -615,7 +667,9 @@ async function finalizeItem(product, result, tabId, settings) {
 
   const action = result.action;
   const ref = product.ref || current.activeRef || '';
-  const note = action + (result.reason ? ' — ' + result.reason : '') + (settings.dryRun ? ' [simulation]' : '');
+  const hashMark = action === 'published' && !settings.dryRun && globalThis.AmQuality && (product.title !== undefined || product.name !== undefined)
+    ? '[h:' + AmQuality.fingerprint(product, current.channel) + '] ' : '';
+  const note = hashMark + action + (result.reason ? ' — ' + result.reason : '') + (settings.dryRun ? ' [simulation]' : '');
   const status = action === 'published' ? 'published' : action === 'error' ? 'error' : 'draft';
 
   try {

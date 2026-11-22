@@ -81,11 +81,26 @@ if ($path === '/annonces/publications' && $method === 'GET') {
         ORDER BY last_id DESC
         LIMIT 2000");
     $stmt->execute([$channel]);
+    $refs = array_map(static function (array $row): string {
+        return (string) $row['product_ref'];
+    }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+    // Dernière ligne publiée par pièce, avec l'adresse de l'annonce et la note (l'extension y range l'empreinte du contenu « [h:…] »).
+    $last = db()->prepare("SELECT product_ref, listing_url, external_id, note, published_at FROM am_listings
+        WHERE id IN (SELECT MAX(id) FROM am_listings WHERE channel = ? AND status IN ('published', 'sold') GROUP BY product_ref)
+        LIMIT 2000");
+    $last->execute([$channel]);
     plugin_json([
         'channel' => $channel,
-        'refs' => array_map(static function (array $row): string {
-            return (string) $row['product_ref'];
-        }, $stmt->fetchAll(PDO::FETCH_ASSOC)),
+        'refs' => $refs,
+        'listings' => array_map(static function (array $row): array {
+            return [
+                'ref' => (string) $row['product_ref'],
+                'listing_url' => (string) $row['listing_url'],
+                'external_id' => (string) $row['external_id'],
+                'note' => (string) $row['note'],
+                'published_at' => $row['published_at'],
+            ];
+        }, $last->fetchAll(PDO::FETCH_ASSOC)),
     ]);
 }
 

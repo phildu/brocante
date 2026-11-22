@@ -70,4 +70,13 @@ assert.doesNotThrow(() => Q.check({ ...good, mapped: [] }, 'vinted'));
 // Résumé lisible.
 assert.strictEqual(Q.summary({ block: [], warn: [] }), '');
 assert.strictEqual(Q.summary({ block: [{}, {}], warn: [{}] }), '⛔ 2 bloquants, ⚠ 1 à vérifier');
+// Empreinte : stable, change avec le contenu, insensible aux espaces en trop.
+const fp = Q.fingerprint(good, 'vinted');
+assert.match(fp, /^[0-9a-f]{16}$/);
+assert.strictEqual(Q.fingerprint({ ...good }, 'vinted'), fp);
+assert.strictEqual(Q.fingerprint({ ...good, title: '  ' + good.title + '  ' }, 'vinted'), fp);
+assert.notStrictEqual(Q.fingerprint({ ...good, price: Number(good.price) + 1 }, 'vinted'), fp);
+assert.notStrictEqual(Q.fingerprint({ ...good, description: good.description + ' !' }, 'vinted'), fp);
+assert.notStrictEqual(Q.fingerprint({ ...good, photos: photos(1) }, 'vinted'), fp);
+
 console.log('quality.test.js : tous les tests passent');

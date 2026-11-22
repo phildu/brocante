@@ -742,6 +742,7 @@
         prepared: 'simulée',
         blocked: 'arrêt',
         skipped: 'passée',
+        'to-update': 'à mettre à jour',
         error: 'erreur',
       }[entry.action] || entry.action) + (entry.dryRun ? ' (sim.)' : '');
       li.append(left, right);
