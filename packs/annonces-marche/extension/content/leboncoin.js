@@ -328,7 +328,8 @@
       if (res && (res.absent || res.skipped)) return;   // champ absent sur cette page : pas une erreur
       retries.push([name, run]);
     };
-    const pause = () => F.sleep(180 + Math.floor(Math.random() * 320));
+    // Pause variable entre deux champs, avec de temps en temps un temps de relecture plus long.
+    const pause = () => F.sleep(180 + Math.floor(Math.random() * 320) + (Math.random() < 0.08 ? 1000 + Math.floor(Math.random() * 1500) : 0));
 
     record('titre', await stepTitle(product, F).catch((e) => { note('titre : erreur ' + (e && e.message || e)); return { ok: false }; }), () => stepTitle(product, F));
     await pause();

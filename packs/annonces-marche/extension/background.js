@@ -13,6 +13,10 @@ const AUTO_DEFAULTS = {
   dryRun: true,
   intervalMin: 5,
   dailyCap: 10,
+  hourlyCap: 3,        // publications réelles par heure glissante au plus
+  activeFrom: 8,       // plage horaire locale de travail (publication réelle uniquement)
+  activeTo: 21,
+  cooldownHours: 6,    // pause obligatoire après une vérification demandée par la plateforme
   keepTabs: false,
   depositUrls: {
     leboncoin: 'https://www.leboncoin.fr/deposer-une-annonce',
@@ -85,6 +89,61 @@ async function bumpDayCount() {
   return count;
 }
 
+/* ---------- Rythme (publication réelle uniquement) ---------- */
+
+async function getStamps() {
+  const { amAutoStamps } = await chrome.storage.local.get('amAutoStamps');
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  return (Array.isArray(amAutoStamps) ? amAutoStamps : []).filter((t) => t > hourAgo);
+}
+
+async function pushStamp() {
+  const stamps = await getStamps();
+  stamps.push(Date.now());
+  await chrome.storage.local.set({ amAutoStamps: stamps });
+}
+
+/** Un délai aléatoire (minutes → ms) : jamais deux écarts identiques, et de temps en temps une vraie pause. */
+function humanDelay(minutes) {
+  let factor = 0.8 + Math.random() * 0.6;
+  if (Math.random() < 0.15) factor += 0.5 + Math.random();   // « pause café » occasionnelle
+  return Math.round(minutes * 60000 * factor);
+}
+
+function hhmm(ts) {
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
+}
+
+/**
+ * Garde de rythme avant chaque pièce en publication réelle : plage horaire, plafond par heure.
+ * Retourne null (on peut y aller) ou { until, message } : la file attend, sans se mettre en pause.
+ */
+async function pacingHold(settings) {
+  if (settings.dryRun) return null;
+  const now = new Date();
+  const from = Math.max(0, Math.min(23, Number(settings.activeFrom)));
+  const to = Math.max(from + 1, Math.min(24, Number(settings.activeTo)));
+  const hour = now.getHours();
+  if (hour < from || hour >= to) {
+    const start = new Date(now);
+    if (hour >= to) start.setDate(start.getDate() + 1);
+    start.setHours(from, Math.floor(Math.random() * 40), 0, 0);
+    return { until: start.getTime(), message: 'Hors de la plage horaire (' + from + 'h–' + to + 'h) : reprise à ' + hhmm(start.getTime()) + '.' };
+  }
+  const stamps = await getStamps();
+  if (stamps.length >= Math.max(1, Number(settings.hourlyCap) || 3)) {
+    const until = Math.min(...stamps) + 60 * 60 * 1000 + Math.floor(Math.random() * 6 * 60000);
+    return { until, message: 'Plafond horaire atteint (' + stamps.length + ') : reprise à ' + hhmm(until) + '.' };
+  }
+  return null;
+}
+
+async function getCooldown() {
+  const { amAutoCooldown } = await chrome.storage.local.get('amAutoCooldown');
+  return Number(amAutoCooldown) > Date.now() ? Number(amAutoCooldown) : 0;
+}
+
 async function getHistory() {
   const { amAutoHistory } = await chrome.storage.local.get('amAutoHistory');
   return Array.isArray(amAutoHistory) ? amAutoHistory : [];
@@ -135,7 +194,7 @@ async function clearAlarms() {
 async function scheduleNext(settings) {
   // En simulation, on enchaîne plus vite (mais jamais en rafale) ; en réel, respect du réglage.
   const minutes = settings.dryRun ? 0.6 : Math.max(2, Math.min(30, Number(settings.intervalMin) || 5));
-  const delay = Math.round(minutes * 60000 * (0.85 + Math.random() * 0.3));
+  const delay = settings.dryRun ? Math.round(minutes * 60000 * (0.85 + Math.random() * 0.3)) : humanDelay(minutes);
   await chrome.alarms.clear(ALARM_NEXT);
   await chrome.alarms.create(ALARM_NEXT, { when: Date.now() + delay });
 }
@@ -161,6 +220,12 @@ async function startAuto(channel) {
   const settings = await getSettings();
   if (!settings.armed) {
     throw new Error('Cochez « J’assume le risque » avant de lancer la publication automatique.');
+  }
+  if (!settings.dryRun) {
+    const cooldown = await getCooldown();
+    if (cooldown) {
+      throw new Error('Une vérification a été demandée par la plateforme : pas de publication automatique avant ' + hhmm(cooldown) + '. Vérifiez votre compte à la main (la simulation reste possible).');
+    }
   }
   const existing = await getQueue();
   if (existing && (existing.status === 'running' || existing.status === 'paused')) {
@@ -239,6 +304,12 @@ async function resumeAuto() {
   const settings = await getSettings();
   if (!settings.armed) throw new Error('Cochez « J’assume le risque » pour reprendre.');
   if (queue.index >= queue.refs.length) throw new Error('Cette file est terminée : relancez un nouveau passage.');
+  if (!settings.dryRun) {
+    const cooldown = await getCooldown();
+    if (cooldown) {
+      throw new Error('Une vérification a été demandée par la plateforme : pas de publication automatique avant ' + hhmm(cooldown) + '. Vérifiez votre compte à la main (la simulation reste possible).');
+    }
+  }
   const resumed = {
     ...queue,
     status: 'running',
@@ -334,6 +405,14 @@ async function processNext() {
   const settings = await getSettings();
   if ((await getDayCount()) >= settings.dailyCap) {
     await pauseAuto('Quota quotidien atteint (' + settings.dailyCap + ').');
+    return;
+  }
+
+  const hold = await pacingHold(settings);
+  if (hold) {
+    if (queue.lastMessage !== hold.message) await setQueue({ ...queue, lastMessage: hold.message });
+    await chrome.alarms.clear(ALARM_NEXT);
+    await chrome.alarms.create(ALARM_NEXT, { when: hold.until });
     return;
   }
 
@@ -538,7 +617,7 @@ async function finalizeItem(product, result, tabId, settings) {
     dryRun: !!settings.dryRun,
     at: Date.now(),
   });
-  if (action === 'published' && !settings.dryRun) await bumpDayCount();
+  if (action === 'published' && !settings.dryRun) { await bumpDayCount(); await pushStamp(); }
 
   if (tabId && (action === 'published' || action === 'prepared') && !settings.keepTabs) {
     try { await chrome.tabs.remove(tabId); } catch (_) {}
@@ -556,6 +635,12 @@ async function finalizeItem(product, result, tabId, settings) {
     activeRef: advanced ? '' : ref,
     lastMessage: ref + ' : ' + actionLabel(action) + (result.reason ? ' — ' + result.reason : ''),
   };
+
+  if (action === 'blocked' && !settings.dryRun && /v[ée]rification|captcha/i.test(result.reason || '')) {
+    // La plateforme demande une vérification : on arrête tout et on ne relance pas en automatique avant plusieurs heures.
+    const hours = Math.max(1, Number(settings.cooldownHours) || 6);
+    await chrome.storage.local.set({ amAutoCooldown: Date.now() + hours * 3600 * 1000 });
+  }
 
   if (action === 'blocked') {
     // L'onglet passe au premier plan : le commerçant voit l'étape à compléter avant de reprendre.

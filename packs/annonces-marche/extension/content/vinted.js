@@ -311,7 +311,8 @@
       if (res && res.ok) { if (!res.skipped && !res.absent) done.push(name + (res.guessed ? ' (1er choix du site : ' + (res.text || '?') + ')' : '') + (res.fallback ? ' (repli « ' + res.fallback + ' »)' : '')); return; }
       retries.push([name, run]);
     };
-    const pause = () => F.sleep(180 + Math.floor(Math.random() * 320));
+    // Pause variable entre deux champs, avec de temps en temps un temps de relecture plus long.
+    const pause = () => F.sleep(180 + Math.floor(Math.random() * 320) + (Math.random() < 0.08 ? 1000 + Math.floor(Math.random() * 1500) : 0));
     const run = async (name, step) => {
       let res;
       try { res = await step(); } catch (e) { res = { ok: false, error: (e && e.message) || String(e) }; }
