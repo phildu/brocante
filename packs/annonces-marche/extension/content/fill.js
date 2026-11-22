@@ -388,6 +388,23 @@
     return true;
   }
 
+  /** Clic complet (survol, appui, relâchement, clic) : certains composants du site ignorent un simple click(). */
+  function pressEl(el) {
+    if (!el) return false;
+    try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (_) {}
+    const rect = el.getBoundingClientRect();
+    const init = { bubbles: true, cancelable: true, view: window, button: 0, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+    try {
+      for (const type of ['pointerover', 'pointerenter', 'pointerdown']) el.dispatchEvent(new PointerEvent(type, { ...init, pointerType: 'mouse', isPrimary: true }));
+      for (const type of ['mouseover', 'mousedown']) el.dispatchEvent(new MouseEvent(type, init));
+      try { el.focus({ preventScroll: true }); } catch (_) {}
+      el.dispatchEvent(new PointerEvent('pointerup', { ...init, pointerType: 'mouse', isPrimary: true }));
+      el.dispatchEvent(new MouseEvent('mouseup', init));
+    } catch (_) {}
+    el.click();
+    return true;
+  }
+
   function buttonLabel(el) {
     const text = el.innerText || el.textContent || el.value ||
       el.getAttribute('aria-label') || el.getAttribute('title') || '';
@@ -653,6 +670,7 @@
     sleep,
     isVisible,
     clickEl,
+    pressEl,
     findPublishButton,
     findNextButton,
     detectChallenge,

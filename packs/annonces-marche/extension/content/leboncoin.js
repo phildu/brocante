@@ -132,6 +132,14 @@
     return String(Math.round(n));
   }
 
+  // Trace des étapes (affichée dans l'historique de la file quand la pièce est bloquée) : sans elle, impossible de savoir où ça coince.
+  const trace = [];
+  function note(message) {
+    trace.push(message);
+    if (trace.length > 12) trace.shift();
+    try { sessionStorage.setItem('amLbcTrace', trace.join(' | ')); } catch (_) {}
+  }
+
   // --- Étapes de remplissage ---
 
   const TITLE_SELECTOR = "input[name='subject'], input[data-qa-id='adplus-title-input']";
@@ -162,8 +170,18 @@
 
   async function stepTitle(p, F) {
     const el = findTitle(F);
-    if (!el) return { ok: false };
-    return { ok: await F.typeInto(el, p.title || p.name) };
+    if (!el) { note('titre : champ introuvable'); return { ok: false }; }
+    const wanted = p.title || p.name;
+    const unchanged = squash(el.value) === squash(wanted);
+    const before = suggestionRows().map((r) => r.text).join('|');
+    const ok = await F.typeInto(el, wanted);
+    if (ok && !unchanged) {
+      // Laisse le site recalculer les catégories suggérées pour ce nouveau titre (sinon on cliquerait sur d'anciennes lignes).
+      await F.waitFor(() => suggestionRows().map((r) => r.text).join('|') !== before, 4000, 250);
+      await F.sleep(900);
+    }
+    note('titre : ' + (ok ? 'saisi' : 'saisie non confirmée'));
+    return { ok };
   }
 
   /**
@@ -195,17 +213,27 @@
     // Le titre n'est affiché que sur la première étape : ailleurs, la catégorie est déjà choisie.
     if (!visible(findTitle(F))) return { ok: true, already: true };
     if (formExpanded(F)) return { ok: true, already: true };
-    let choice = await F.waitFor(() => pickSuggestion(p), 8000, 300);
-    if (!choice) {
-      // Pas de boutons-radio : repli sur un texte cliquable (autre présentation du site).
-      const target = await F.waitFor(() => F.findClickableByText(categoryWords(p)), 2000, 300);
-      if (!target) return { ok: false };
-      choice = { el: target, text: '', guessed: false };
+    // La page « avance » quand le titre disparaît ou que le formulaire se déploie.
+    const moved = () => !visible(findTitle(F)) || formExpanded(F);
+    let choice = null;
+    for (let attempt = 0; attempt < 3 && !moved(); attempt++) {
+      let fresh = await F.waitFor(() => pickSuggestion(p), attempt ? 3000 : 8000, 300);   // relu à chaque essai : le site réaffiche les lignes
+      let target = fresh && fresh.el;
+      if (fresh) choice = fresh;
+      if (!target) {
+        // Pas de boutons-radio : repli sur un texte cliquable (autre présentation du site).
+        target = await F.waitFor(() => F.findClickableByText(categoryWords(p)), 2000, 300);
+        if (!target) { note('catégorie : aucune suggestion affichée'); break; }
+        choice = { el: target, text: '', guessed: false };
+      }
+      const radio = target.querySelector ? target.querySelector('input[type="radio"]') : null;
+      F.pressEl(attempt === 1 && radio ? radio : target);
+      note('catégorie : clic ' + (attempt + 1) + ' sur « ' + ((choice && choice.text) || '?') + ' »');
+      if (await F.waitFor(moved, 4000, 250)) break;
     }
-    F.clickEl(choice.el);
-    // La page passe à l'étape suivante (le titre disparaît) ou le formulaire se déploie.
-    const moved = await F.waitFor(() => !visible(findTitle(F)) || formExpanded(F) || document.querySelector('input[type=file]'), 10000, 300);
-    return { ok: !!moved, guessed: choice.guessed, text: choice.text };
+    const ok = !!moved();
+    if (!ok) note('catégorie : la page n’a pas avancé');
+    return { ok, guessed: !!(choice && choice.guessed), text: (choice && choice.text) || '' };
   }
 
   async function stepMenus(p, F) {
@@ -346,6 +374,11 @@
         // La catégorie prise par défaut (aucune suggestion ne correspondait) doit apparaître dans l'historique de la file.
         let guess = '';
         try { guess = sessionStorage.getItem('amLbcCategoryGuess') || ''; } catch (_) {}
+        if (res && res.action === 'blocked') {
+          let steps = '';
+          try { steps = sessionStorage.getItem('amLbcTrace') || ''; } catch (_) {}
+          if (steps) res.reason = (res.reason ? res.reason + ' · ' : '') + 'détail : ' + steps;
+        }
         if (guess && res && ['prepared', 'publish-clicked', 'blocked', 'published'].includes(res.action)) {
           res.reason = (res.reason ? res.reason + ' · ' : '') + 'catégorie prise par défaut (1re suggestion) : ' + guess;
           try { sessionStorage.removeItem('amLbcCategoryGuess'); } catch (_) {}
