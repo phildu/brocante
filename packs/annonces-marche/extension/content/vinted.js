@@ -251,11 +251,19 @@
     const wanted = squash(String(p.materials || '').split(/[,;/]/)[0]);
     if (!wanted) return { ok: true, skipped: true };
     await openField(F, 'material');
-    const cell = Array.from(document.querySelectorAll('[role="checkbox"][data-testid^="material-"]')).filter(visible)
-      .find((e) => squash(e.innerText) === wanted);
+    const cells = Array.from(document.querySelectorAll('[role="checkbox"][data-testid^="material-"]')).filter(visible);
+    // « Métal peint » → « Métal » : à défaut d'une entrée identique, un mot de la fiche qui est une entrée de la liste.
+    const words = wanted.split(/\s+/);
+    const cell = cells.find((e) => squash(e.innerText) === wanted) || cells.find((e) => words.includes(squash(e.innerText)));
     if (cell) { F.pressEl(cell); await F.sleep(500); }
     await closeDropdowns(F);
     return { ok: true, skipped: !cell };   // matériau recommandé mais facultatif
+  }
+
+  /** Montant lu dans le champ prix de Vinted (« 10,00 € ») ; NaN si le champ est vide ou cassé (« NaN € »). */
+  function readAmount(el) {
+    const cleaned = String(el.value || '').replace(/[^\d,.-]/g, '').replace(',', '.');
+    return cleaned === '' ? NaN : Number(cleaned);
   }
 
   async function stepPrice(p, F) {
@@ -263,7 +271,12 @@
     if (p.price == null || p.price === '' || !Number.isFinite(n)) return { ok: false };
     const el = document.getElementById('price');
     if (!el || !visible(el)) return { ok: false };
-    return { ok: await F.typeInto(el, n.toLocaleString('fr-FR', { useGrouping: false, maximumFractionDigits: 2 })) };
+    // Vinted met le champ en forme (« 10,00 € ») : on compare les montants, sinon on retaperait le prix à chaque passage (jusqu'à « NaN € »).
+    if (Math.abs(readAmount(el) - n) < 0.005) return { ok: true, already: true };
+    if (/nan/i.test(String(el.value || ''))) await F.typeInto(el, '');
+    const typed = await F.typeInto(el, n.toLocaleString('fr-FR', { useGrouping: false, maximumFractionDigits: 2 }));
+    await F.sleep(300);
+    return { ok: typed || Math.abs(readAmount(el) - n) < 0.005 };
   }
 
   /** Format du colis : celui que Vinted recommande pour la catégorie (à défaut, « Moyen »). */
