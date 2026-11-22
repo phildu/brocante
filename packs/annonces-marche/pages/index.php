@@ -14,6 +14,7 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
 <div class="am-page" id="am-page"
      data-api-status="<?= h($pluginApi('status')) ?>"
      data-api-token="<?= $role === 'admin' ? h($pluginApi('token')) : '' ?>"
+     data-shop-url="<?= h(rtrim(shop_abs_url('/'), '/')) ?>"
      data-api-selection="<?= h($pluginApi('selection')) ?>"
      data-csrf="<?= h($pluginCsrf) ?>"
      data-entitled="<?= $ent['entitled'] ? '1' : '0' ?>"
@@ -119,7 +120,7 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
         </div>
         <button type="button" class="am-modal-close" data-close-modal aria-label="Fermer">×</button>
       </div>
-      <p class="hint">La clé autorise l’accès aux données de cette boutique. Elle est affichée une seule fois lors de sa création. Vous pourrez la copier tant que cette fenêtre reste ouverte. Ne la partagez pas.</p>
+      <p class="hint">Après création, cliquez sur « Copier le code de connexion », puis collez-le dans l’extension : l’adresse et la clé se remplissent et se testent toutes seules. La clé autorise l’accès aux données de cette boutique. Elle est affichée une seule fois lors de sa création. Vous pourrez la copier tant que cette fenêtre reste ouverte. Ne la partagez pas.</p>
       <section class="am-card">
         <h3>Clé API</h3>
         <?php if ($ent['has_token']): ?>
@@ -129,7 +130,7 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
         <?php endif; ?>
         <div class="am-actions">
           <button type="button" class="btn-small" id="am-token" <?= $ent['entitled'] ? '' : 'disabled' ?>><?= $ent['has_token'] ? 'Régénérer la clé API' : 'Créer la clé API' ?></button>
-          <button type="button" class="btn-small" id="am-token-copy" hidden>Copier la clé</button>
+          <button type="button" class="btn-small" id="am-token-copy" hidden>Copier le code de connexion</button>
         </div>
         <pre class="am-token" id="am-token-out" hidden></pre>
         <p class="am-status" id="am-token-status" role="status" aria-live="polite"></p>

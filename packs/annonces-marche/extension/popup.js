@@ -498,6 +498,28 @@
     return 'Adresse et jeton requis.';
   }
 
+  /**
+   * Un « code de connexion » = adresse de la boutique + jeton am_… collés ensemble (dans l'un ou l'autre champ).
+   * Renvoie { url, token } ou null si le texte ne contient pas les deux.
+   */
+  function parseConnectionCode(text) {
+    const raw = String(text || '');
+    const token = (raw.match(/\bam_[A-Za-z0-9_-]{8,}/) || [])[0];
+    const url = (raw.match(/https?:\/\/[^\s"'<>]+/i) || [])[0];
+    return token && url ? { url, token } : null;
+  }
+
+  async function applyConnectionCode(field) {
+    const code = parseConnectionCode(field.value);
+    if (!code) return;
+    $('shop-url').value = code.url;
+    $('token').value = code.token;
+    $('btn-save').click();
+  }
+  ['shop-url', 'token'].forEach((id) => {
+    $(id).addEventListener('paste', () => setTimeout(() => applyConnectionCode($(id)), 0));
+  });
+
   $('btn-save').addEventListener('click', async () => {
     const cfg = readFormConfig();
     if (!cfg.apiBase || !cfg.token) {

@@ -24,6 +24,7 @@
   var tokenOut = document.getElementById('am-token-out');
   var tokenStatus = document.getElementById('am-token-status');
   var currentToken = '';
+  var connectionCode = '';
   var selectionSection = document.getElementById('am-selection-dialog');
 
   document.querySelectorAll('[data-open-modal]').forEach(function (button) {
@@ -66,6 +67,7 @@
           return;
         }
         currentToken = data.token;
+        connectionCode = (page.dataset.shopUrl || '') + ' ' + data.token;
         tokenOut.hidden = false;
         tokenOut.textContent = data.token;
         tokenCopyBtn.hidden = false;
@@ -84,12 +86,13 @@
   if (tokenCopyBtn) {
     tokenCopyBtn.addEventListener('click', function () {
       if (!currentToken) return;
+      var toCopy = connectionCode || currentToken;
       var copyPromise;
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        copyPromise = navigator.clipboard.writeText(currentToken);
+        copyPromise = navigator.clipboard.writeText(toCopy);
       } else {
         var temporaryInput = document.createElement('textarea');
-        temporaryInput.value = currentToken;
+        temporaryInput.value = toCopy;
         temporaryInput.setAttribute('readonly', '');
         temporaryInput.style.position = 'fixed';
         temporaryInput.style.opacity = '0';
@@ -100,7 +103,7 @@
         copyPromise = copied ? Promise.resolve() : Promise.reject(new Error('Copie dans le presse-papiers indisponible.'));
       }
       copyPromise.then(function () {
-        tokenStatus.textContent = 'Clé copiée dans le presse-papiers.';
+        tokenStatus.textContent = 'Code de connexion copié : collez-le dans l’extension.';
       }).catch(function (error) {
         tokenStatus.textContent = error.message || 'Impossible de copier la clé.';
       });
