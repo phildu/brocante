@@ -113,6 +113,12 @@
   async function closeDropdowns(F) {
     try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) {}
     await F.sleep(300);
+    // Les listes à choix multiple (couleur, matériau) restent ouvertes après Échap : seul un clic à l'extérieur les referme.
+    try {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      document.body.click();
+    } catch (_) {}
+    await F.sleep(400);
   }
 
   async function openField(F, id) {
