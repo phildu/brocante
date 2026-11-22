@@ -105,3 +105,10 @@ for item in selection["items"]:
 La création ou la régénération du jeton reste réservée à un administrateur connecté. Appliquez les mises à jour du plug-in après déploiement.
 
 En-tête : `Authorization: Bearer am_…` ou `X-Annonces-Token: am_…`.
+
+## Départ de session (extension 1.7.0)
+
+En mode automatique, l'extension ouvre l'accueil du site (leboncoin.fr / vinted.fr) puis clique elle-même sur
+« Déposer une annonce » (Leboncoin) ou « Vends tes articles » (Vinted), comme le vendeur. Si le bouton est introuvable
+après 12 s, elle rejoint le formulaire par son adresse. Une adresse de dépôt personnalisée dans les réglages est
+respectée telle quelle (pas de passage par l'accueil).

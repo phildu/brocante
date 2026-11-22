@@ -453,12 +453,20 @@ async function processNext() {
     }
     if (quality.warn.length) await progress('Fiche ' + ref + ' : ' + AmQuality.summary(quality) + '…');
 
+    let openDeposit = false;
     if (!tabId) {
       const depositUrl = (settings.depositUrls[queue.channel] || '').trim() ||
         AUTO_DEFAULTS.depositUrls[queue.channel];
+      // Départ de session comme le vendeur : accueil du site, puis clic sur « Déposer une annonce » / « Vends ton article ».
+      // Une adresse de dépôt personnalisée (réglages) est respectée telle quelle.
+      let startUrl = depositUrl;
+      if (depositUrl === AUTO_DEFAULTS.depositUrls[queue.channel]) {
+        startUrl = new URL(depositUrl).origin + '/';
+        openDeposit = true;
+      }
       // Onglet au premier plan : une page ouverte en arrière-plan est ralentie par Chrome et Leboncoin y affiche un écran de chargement interminable.
-      await progress('Ouverture de la page de dépôt…');
-      const tab = await chrome.tabs.create({ url: depositUrl, active: true });
+      await progress(openDeposit ? 'Ouverture du site, puis clic sur « Déposer une annonce »…' : 'Ouverture de la page de dépôt…');
+      const tab = await chrome.tabs.create({ url: startUrl, active: true });
       tabId = tab.id;
     }
     await setQueue({ ...(await getQueue()), activeTabId: tabId });
@@ -469,6 +477,7 @@ async function processNext() {
     const result = await runAutoInTab(tabId, queue.channel, product, {
       dryRun: !!settings.dryRun,
       runId: queue.runId,
+      openDeposit,
     });
     if (quality.warn.length) result.reason = (result.reason ? result.reason + ' · ' : '') + 'fiche : ' + quality.warn.map((i) => i.field + ' (' + i.message.split(/[:.(]/)[0].trim() + ')').join(', ');
     await finalizeItem(product, result, tabId, settings);
@@ -526,7 +535,8 @@ async function waitForContent(tabId, channel, timeoutMs) {
 async function runAutoInTab(tabId, channel, product, options) {
   let publishClicks = 0;
   for (let step = 0; step < MAX_STEPS; step++) {
-    const res = await sendWithRetry(tabId, { type: 'am-auto-step', channel, product, options });
+    // Le clic de départ n'a lieu qu'à la première étape d'un onglet neuf.
+    const res = await sendWithRetry(tabId, { type: 'am-auto-step', channel, product, options: { ...options, openDeposit: !!options.openDeposit && step === 0 } });
     if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
     await progress('Étape ' + (step + 1) + ' : ' + res.action + (res.reason ? ' — ' + res.reason : ''));
     if (['blocked', 'prepared', 'published'].includes(res.action)) return res;
