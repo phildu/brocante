@@ -367,14 +367,44 @@ async function processNext() {
   }
 }
 
+/**
+ * Injecte les scripts de la page de dépôt dans l'onglet. Nécessaire quand l'onglet était déjà ouvert à l'installation ou au
+ * rechargement de l'extension : Chrome n'y injecte pas les scripts tout seul (« Receiving end does not exist »).
+ */
+async function injectContent(tabId, channel) {
+  const files = ['content/fill.js', channel === 'vinted' ? 'content/vinted.js' : 'content/leboncoin.js'];
+  await chrome.scripting.executeScript({ target: { tabId }, files });
+}
+
+function isNoReceiver(error) {
+  return /Receiving end does not exist|Could not establish connection/i.test((error && error.message) || '');
+}
+
+/** Envoie un message à la page de dépôt ; si aucun script n'y écoute, l'injecte puis réessaie une fois. */
+async function sendToDeposit(tabId, channel, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (error) {
+    if (!isNoReceiver(error)) throw error;
+    await injectContent(tabId, channel);
+    await sleep(400);
+    return await chrome.tabs.sendMessage(tabId, message);
+  }
+}
+
 async function waitForContent(tabId, channel, timeoutMs) {
   const started = Date.now();
+  let injected = false;
   while (Date.now() - started < timeoutMs) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-ping' });
       if (res && res.ready && res.channel === channel) return true;
-    } catch (_) {
-      // Le content script n'est pas encore injecté (navigation en cours).
+    } catch (error) {
+      // Pas de script dans l'onglet : navigation en cours, ou onglet ouvert avant le rechargement de l'extension.
+      if (!injected && isNoReceiver(error) && Date.now() - started > 4000) {
+        injected = true;
+        try { await injectContent(tabId, channel); } catch (_) {}
+      }
     }
     await sleep(600);
   }
@@ -563,7 +593,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         amSelectedProduct: { product, channel, selectedAt: Date.now() },
         amFillStatus: 'Préremplissage en cours…',
       });
-      const result = await chrome.tabs.sendMessage(tabId, { type: 'am-fill', channel, product });
+      const result = await sendToDeposit(tabId, channel, { type: 'am-fill', channel, product });
       if (!result || !result.ok) {
         throw new Error((result && result.error) || 'Le formulaire n’a pas répondu. Rechargez la page et réessayez.');
       }
