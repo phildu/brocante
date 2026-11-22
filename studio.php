@@ -299,12 +299,13 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
       <label class="qa-field">Étiquette<input type="text" id="sr-badge" maxlength="30" placeholder="Chiné, Rare, Coup de cœur…"></label>
       <label class="qa-switch"><input type="checkbox" id="sr-publish"> <span>Visible dans la boutique<br><small class="qa-note">Sinon la fiche reste masquée.</small></span></label>
       <details class="sr-pack" id="sp">
-        <summary>📦 Pack d'annonce (Vinted, Leboncoin)</summary>
+        <summary>📦 Export formaté pour plateformes de seconde main</summary>
         <div class="sp-body">
-          <p class="qa-note">Vinted et Leboncoin n'ont pas d'import : copiez le texte, puis ajoutez les photos depuis la galerie du téléphone. Le pack reprend vos <b>vraies photos</b> (pas les images générées) et les valeurs affichées ci-dessus, même non enregistrées.</p>
-          <div class="sp-tabs" id="sp-tabs" role="group" aria-label="Plateforme">
-            <button type="button" data-platform="vinted" aria-pressed="true">Vinted</button>
-            <button type="button" data-platform="leboncoin" aria-pressed="false">Leboncoin</button>
+          <p class="qa-note">Les plateformes de seconde main n'ont pas d'import : copiez le texte, puis ajoutez les photos depuis la galerie du téléphone. Le pack reprend vos <b>vraies photos</b> (pas les images générées) et les valeurs affichées ci-dessus, même non enregistrées.</p>
+          <p class="qa-note">Export indépendant, non affilié, non mandaté et non sponsorisé par les plateformes. Vous restez seul responsable du respect de leurs conditions d'utilisation et de la conformité de vos annonces.</p>
+          <div class="sp-tabs" id="sp-tabs" role="group" aria-label="Format d'export">
+            <button type="button" data-platform="vinted" aria-pressed="true">Format Vinted</button>
+            <button type="button" data-platform="leboncoin" aria-pressed="false">Format Leboncoin</button>
           </div>
           <p class="qa-note" id="sp-status" role="status">Chargement…</p>
           <div id="sp-text" hidden>
@@ -320,7 +321,7 @@ $shareAttrs = ' data-share-url="' . h($studioUrl) . '" data-share-title="' . h($
           <div id="sp-photos-box" hidden>
             <p class="eyebrow" id="sp-photos-title"></p>
             <div class="sp-photos" id="sp-photos"></div>
-            <button type="button" class="btn btn-primary" id="sp-share" hidden>Envoyer les photos vers Vinted / Leboncoin…</button>
+            <button type="button" class="btn btn-primary" id="sp-share" hidden>Envoyer les photos vers la plateforme choisie…</button>
             <button type="button" class="btn btn-ghost" id="sp-zip">Télécharger le pack (.zip : photos + textes)</button>
           </div>
         </div>

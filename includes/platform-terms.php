@@ -5,7 +5,7 @@
 // la vente des pièces. Texte de départ à faire relire par un conseil juridique :
 // l'identité de l'éditeur reste à compléter dans platform_terms_identity().
 
-const PLATFORM_TERMS_VERSION = '2026-11-02';
+const PLATFORM_TERMS_VERSION = '2026-11-09';
 
 function platform_terms_version(): string
 {
@@ -125,17 +125,25 @@ HTML];
 <p>Si le client est un consommateur ou une association non professionnelle, les garanties légales applicables s'appliquent et les clauses ci-dessus s'interprètent sans le priver de ses droits.</p>
 HTML];
 
-    $sections[] = ['resiliation', '10. Suspension et résiliation', <<<HTML
+    $sections[] = ['tiers', '10. Outils de publication vers des plateformes tierces', <<<HTML
+<p>La plateforme peut proposer des modules d'assistance, de préparation, d'export ou de synchronisation d'annonces vers des places de marché tierces (notamment Leboncoin, Vinted ou tout autre service de vente). Ces modules sont des outils techniques indépendants : ils ne sont ni affiliés, ni mandatés, ni sponsorisés par les plateformes tierces, et ils ne constituent ni un partenariat ni une représentation de celles-ci.</p>
+<p>L'utilisation d'un module de publication vers une plateforme tierce se fait sous la seule responsabilité du client. Le client est seul responsable du respect des conditions générales d'utilisation, des politiques de publication et des règles de modération de chaque plateforme tierce, ainsi que de l'exactitude, de la licéité et de la conformité de ses annonces, prix, photos et mentions. Il lui appartient de vérifier, avant toute utilisation, que l'automatisation ou l'assistance au dépôt est autorisée par la plateforme concernée.</p>
+<p>La plateforme ne garantit ni l'interopérabilité continue, ni la disponibilité, ni la compatibilité des modules avec les interfaces, formulaires, API ou mesures techniques des plateformes tierces, qui peuvent évoluer, restreindre ou interdire l'automatisation à tout moment et sans préavis. Un module peut cesser de fonctionner, partiellement ou totalement, sans que cela ouvre droit à un remboursement, à un crédit de service ou à une indemnité.</p>
+<p>Dans les limites permises par la loi, la plateforme ne peut être tenue responsable d'un avertissement, d'une restriction, d'une suspension, d'un blocage ou d'une fermeture de compte prononcés par une plateforme tierce, ni des pertes de chiffre d'affaires, de clientèle, de visibilité, d'image ou de données qui en résultent. Le client renonce à toute réclamation à ce titre, sans préjudice des droits impératifs que la loi lui reconnaît.</p>
+<p>Les marques, noms commerciaux et logos des plateformes tierces appartiennent à leurs titulaires respectifs. Leur mention éventuelle est purement descriptive et n'implique aucune affiliation, approbation ou parrainage.</p>
+HTML];
+
+    $sections[] = ['resiliation', '11. Suspension et résiliation', <<<HTML
 <p>Le client peut résilier son abonnement à tout moment depuis son espace ou en écrivant à <a href="mailto:{$mail}">{$mail}</a> ; la résiliation prend effet à la fin de la période en cours. Ses données restent accessibles 30 jours pour l'export, puis sont supprimées selon l'article 8.</p>
 <p>L'éditeur peut suspendre immédiatement l'accès en cas de non-paiement, de contenu manifestement illicite, d'usage abusif, d'atteinte à la sécurité ou de manquement grave. Lorsque le manquement peut être corrigé, une mise en demeure préalable est adressée. L'éditeur peut résilier sans motif avec un préavis de 30 jours ; dans ce cas, les mois annuels non consommés sont remboursés au prorata. La résiliation ne remet pas en cause les crédits déjà accordés ni les sommes dues.</p>
 HTML];
 
-    $sections[] = ['support', '11. Support, médiation et droit applicable', <<<HTML
+    $sections[] = ['support', '12. Support, médiation et droit applicable', <<<HTML
 <p>Le support est joignable à <a href="mailto:{$mail}">{$mail}</a>, du lundi au vendredi. Délais indicatifs de première réponse : 72 h pour l'offre Découverte, 48 h pour Standard, galeries et plugins, 24 h pour Premium. Une réclamation reçoit une réponse sous 10 jours ouvrés.</p>
 <p>En cas de litige, écrivez-nous d'abord pour rechercher une solution amiable. {$mediation} Les présentes conditions sont soumises au droit français. Les tribunaux français sont compétents, sans préjudice des règles impératives protégeant les consommateurs.</p>
 HTML];
 
-    $sections[] = ['evolution', '12. Évolution des conditions', <<<HTML
+    $sections[] = ['evolution', '13. Évolution des conditions', <<<HTML
 <p>Nous pouvons modifier les présentes conditions pour tenir compte de l'évolution du service ou de la loi. La version applicable est celle publiée en ligne au moment de l'utilisation. Les changements substantiels sont notifiés au moins 30 jours avant leur entrée en vigueur ; la poursuite de l'utilisation après cette date vaut acceptation. La date de version figure en tête de page.</p>
 HTML];
 

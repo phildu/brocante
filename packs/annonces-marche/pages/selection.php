@@ -11,9 +11,9 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
      data-api-selection="<?= h($pluginApi('selection')) ?>"
      data-csrf="<?= h($pluginCsrf) ?>"
      data-entitled="<?= $ent['entitled'] ? '1' : '0' ?>">
-  <p class="eyebrow"><a href="<?= h(plugin_page_url('annonces-marche', 'index')) ?>">← Annonces Leboncoin &amp; Vinted</a></p>
+  <p class="eyebrow"><a href="<?= h(plugin_page_url('annonces-marche', 'index')) ?>">← Synchronisation multi-plateformes</a></p>
   <h1 style="font-size:1.8rem;margin:12px 0 8px;">Sélection pour l’application locale</h1>
-  <p class="hint" style="max-width:68ch">Cochez les produits que votre application Python doit préparer. La sélection est enregistrée automatiquement et l’application peut la consulter via l’API sécurisée.</p>
+  <p class="hint" style="max-width:68ch">Cochez les produits que votre application locale ou l’extension doit préparer. La sélection est enregistrée automatiquement et l’application peut la consulter via l’API sécurisée.</p>
 
   <section class="am-card<?= $ent['entitled'] ? '' : ' is-dim' ?>" id="am-export-selection">
     <div class="am-selection-toolbar">

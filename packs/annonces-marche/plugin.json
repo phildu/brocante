@@ -1,12 +1,12 @@
 {
   "id": "annonces-marche",
-  "name": "Annonces places de marché",
-  "version": "1.4.0",
-  "description": "{Ext} payant{e} : publier plus vite sur Leboncoin et Vinted depuis le catalogue de la boutique, via une extension Chrome (préremplissage assisté, validation humaine).",
+  "name": "Synchronisation multi-plateformes",
+  "version": "1.6.0",
+  "description": "{Ext} payant{e} : préparez et publiez vos annonces vers les plateformes de seconde main depuis votre navigateur, avec une extension locale. Outil indépendant, sans affiliation ; publication automatique en opt-in.",
   "table_prefix": "am_",
   "pages": [
-    { "id": "index", "label": "Annonces LBC / Vinted", "icon": "cloud", "file": "pages/index.php", "roles": ["admin", "community_manager"] },
-    { "id": "mappings", "label": "Correspondances LBC / Vinted", "icon": "cloud", "file": "pages/mappings.php", "roles": ["admin", "community_manager"], "menu": false },
+    { "id": "index", "label": "Synchronisation multi-plateformes", "icon": "cloud", "file": "pages/index.php", "roles": ["admin", "community_manager"] },
+    { "id": "mappings", "label": "Correspondances des champs", "icon": "cloud", "file": "pages/mappings.php", "roles": ["admin", "community_manager"], "menu": false },
     { "id": "merci", "label": "Paiement", "icon": "cloud", "file": "pages/merci.php", "roles": ["admin"], "menu": false }
   ],
   "api": [

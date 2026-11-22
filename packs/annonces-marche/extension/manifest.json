@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Annonces places de marché",
-  "description": "Préremplit Leboncoin et Vinted depuis le catalogue de votre boutique (validation humaine).",
-  "version": "1.1.0",
+  "name": "Synchronisation multi-plateformes",
+  "description": "Prépare et publie vos annonces sur les plateformes de seconde main depuis votre navigateur. Outil indépendant, sans affiliation ; publication automatique en opt-in.",
+  "version": "1.2.0",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Annonces catalogue",
+    "default_title": "Synchronisation multi-plateformes",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
@@ -20,7 +20,7 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "activeTab", "scripting", "sidePanel"],
+  "permissions": ["storage", "activeTab", "scripting", "sidePanel", "alarms"],
   "host_permissions": [
     "https://www.leboncoin.fr/*",
     "https://leboncoin.fr/*",

@@ -7,17 +7,17 @@ defined('PLUGIN_RUNTIME') || exit;
      data-api="<?= h($pluginApi('mappings')) ?>"
      data-csrf="<?= h($pluginCsrf) ?>">
   <p class="eyebrow">Option · <?= h($plugin['name']) ?></p>
-  <h1 style="font-size:1.8rem;margin:12px 0 8px;">Correspondances Leboncoin &amp; Vinted</h1>
+  <h1 style="font-size:1.8rem;margin:12px 0 8px;">Correspondances des champs</h1>
   <p class="hint" style="max-width:68ch;">
     Dites quelle valeur du site correspond à une valeur de la boutique (état, catégorie, taille, couleur, marque, matière).
-    Le bot l'utilise en priorité ; sans correspondance, il se rabat sur ses règles intégrées.
-    Les champs et valeurs qu'il n'a pas su remplir arrivent dans « À renseigner ».
+    Le module l’utilise en priorité ; sans correspondance, il se rabat sur ses règles intégrées.
+    Les champs et valeurs qu’il n’a pas su remplir arrivent dans « À renseigner ».
   </p>
   <p><a href="<?= h(plugin_page_url('annonces-marche', 'index')) ?>">← Retour aux annonces</a></p>
 
   <section class="am-card" id="am-map-unknown-card">
     <h2>À renseigner <span class="am-pill" id="am-map-unknown-count">0</span></h2>
-    <p class="hint">Remontés par le bot lors des dernières publications. Choisissez la valeur du site à utiliser, puis « Enregistrer ».</p>
+    <p class="hint">Remontés par le module lors des dernières publications. Choisissez la valeur du site à utiliser, puis « Enregistrer ».</p>
     <div id="am-map-unknown"></div>
   </section>
 
