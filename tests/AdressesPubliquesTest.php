@@ -41,6 +41,23 @@ final class AdressesPubliquesTest extends TestCase
         $this->assertSame('', adresse_redirection('aux-puces.com', '/', self::G, self::B));
     }
 
+    public function testBoutiquesMembresRecoiventLeurAdresse(): void
+    {
+        $b = adresse_boutiques(['lespuces' => ['petit-chalet', 'la-fripe-a-naty', 'avec_souligne']]);
+        $this->assertSame('https://petit-chalet.aux-puces.com/de-villeurbanne', $b['petit-chalet']);
+        $this->assertSame('https://la-fripe-a-naty.aux-puces.com/de-villeurbanne', $b['la-fripe-a-naty']);
+        $this->assertArrayNotHasKey('avec_souligne', $b);   // « _ » interdit dans un nom de domaine
+        $this->assertSame(['type' => 'boutique', 'slug' => 'la-fripe-a-naty'], adresse_publique_cible('la-fripe-a-naty.aux-puces.com', '/de-villeurbanne', self::G, $b));
+        $this->assertSame('https://la-fripe-a-naty.aux-puces.com/de-villeurbanne', adresse_redirection('www.bricbrok.com', '/la-fripe-a-naty/', self::G, $b));
+        $this->assertContains('aux-puces.com', adresse_domaines_boutiques());
+    }
+
+    public function testSousDomaineInconnuVersLaGalerie(): void
+    {
+        $this->assertSame('https://aux-puces.com/de-villeurbanne', adresse_redirection('inconnu.aux-puces.com', '/produit.php', self::G, self::B));
+        $this->assertSame('', adresse_redirection('petit-chalet.aux-puces.com', '/produit.php', self::G, self::B));
+    }
+
     public function testCheminsDeclares(): void
     {
         // Le .htaccess route ces chemins vers index.php : la liste doit le suivre.
