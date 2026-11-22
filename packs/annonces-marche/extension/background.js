@@ -313,6 +313,14 @@ async function skipAuto() {
   return updated;
 }
 
+/** Met à jour le message de la file (affiché dans la popup) : sans cela, la popup reste figée sur « File démarrée » pendant tout le traitement. */
+async function progress(message) {
+  try {
+    const q = await getQueue();
+    if (q && q.status === 'running') await setQueue({ ...q, lastMessage: message });
+  } catch (_) {}
+}
+
 async function processNext() {
   const queue = await getQueue();
   if (!queue || queue.status !== 'running') return;
@@ -344,6 +352,7 @@ async function processNext() {
   }
 
   try {
+    await progress('Lecture de la fiche ' + ref + '…');
     const data = await api('/produit/' + encodeURIComponent(ref));
     const product = data.product;
     if (!product) throw new Error('Produit introuvable.');
@@ -351,12 +360,16 @@ async function processNext() {
     if (!tabId) {
       const depositUrl = (settings.depositUrls[queue.channel] || '').trim() ||
         AUTO_DEFAULTS.depositUrls[queue.channel];
-      const tab = await chrome.tabs.create({ url: depositUrl, active: false });
+      // Onglet au premier plan : une page ouverte en arrière-plan est ralentie par Chrome et Leboncoin y affiche un écran de chargement interminable.
+      await progress('Ouverture de la page de dépôt…');
+      const tab = await chrome.tabs.create({ url: depositUrl, active: true });
       tabId = tab.id;
     }
     await setQueue({ ...(await getQueue()), activeTabId: tabId });
 
-    await waitForContent(tabId, queue.channel, 45000);
+    await progress('Attente de la page de dépôt (jusqu’à 90 s)…');
+    await waitForContent(tabId, queue.channel, 90000);
+    await progress('Remplissage de ' + ref + '…');
     const result = await runAutoInTab(tabId, queue.channel, product, {
       dryRun: !!settings.dryRun,
       runId: queue.runId,
@@ -418,6 +431,7 @@ async function runAutoInTab(tabId, channel, product, options) {
   for (let step = 0; step < MAX_STEPS; step++) {
     const res = await sendWithRetry(tabId, { type: 'am-auto-step', channel, product, options });
     if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
+    await progress('Étape ' + (step + 1) + ' : ' + res.action + (res.reason ? ' — ' + res.reason : ''));
     if (['blocked', 'prepared', 'published'].includes(res.action)) return res;
     if (res.action === 'publish-clicked') {
       publishClicks++;
