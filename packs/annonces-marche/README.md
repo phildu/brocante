@@ -69,7 +69,7 @@ Quand une pièce exige une action humaine (choix de catégorie dans l’arbre de
 
 ### Alertes (fiches et formulaires)
 
-Avant le remplissage, `extension/quality.js` contrôle chaque fiche pour Leboncoin et pour Vinted : pastille ⚠ / ⛔ dans la liste de la popup, boîte « Contrôle avant remplissage » dans la fiche, confirmation avant un remplissage manuel bloquant, et **écartement** automatique des fiches bloquantes dans la file. Pendant le remplissage, les choix par défaut et les champs non remplis sont signalés ; le bouton « Contrôler le formulaire ouvert » et la détection de repères absents préviennent quand une plateforme change son formulaire (bannière persistante dans la popup). Ajouter ou ajuster une règle : `quality.js` et `tests/quality.test.js`.
+Avant le remplissage, `extension/quality.js` contrôle chaque fiche pour Leboncoin et pour Vinted : pastille ⚠ / ⛔ dans la liste de la popup, boîte « Contrôle avant remplissage » dans la fiche, confirmation avant un remplissage manuel bloquant, et **écartement** automatique des fiches bloquantes dans la file. Pendant le remplissage, les choix par défaut et les champs non remplis sont signalés ; le bouton « Contrôler le formulaire ouvert » et la détection de repères absents préviennent quand une plateforme change son formulaire (bannière persistante dans la popup). Un **état absent de la fiche** n'est pas bloquant : l'extension choisit « Bon état » (milieu de l'échelle) sur les deux plateformes et le signale. Ajouter ou ajuster une règle : `quality.js` et `tests/quality.test.js`.
 
 ### Cases à cocher dans l'extension
 

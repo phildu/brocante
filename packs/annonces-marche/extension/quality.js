@@ -83,10 +83,9 @@
     if (!photos.length) add(block, 'photos', 'Aucune photo : ' + name + ' exige au moins une photo.');
     else if (photos.length < 3) add(warn, 'photos', 'Seulement ' + photos.length + ' photo' + (photos.length > 1 ? 's' : '') + ' : une annonce avec 3 photos ou plus est bien plus vue.');
 
-    // --- État ---
+    // --- État : absent → « Bon état » (milieu de l'échelle) choisi par défaut, à corriger dans la fiche ---
     if (!conditionKnown(p, platform)) {
-      if (platform === 'vinted') add(block, 'état', 'État non renseigné : Vinted l’exige pour publier.');
-      else add(warn, 'état', 'État non renseigné : le menu « État » restera vide sur Leboncoin.');
+      add(warn, 'état', 'État non renseigné : « Bon état » sera choisi par défaut sur ' + name + ' (renseignez l’état dans la fiche).');
     }
 
     // --- Taille / pointure ---

@@ -216,8 +216,12 @@
     const input = document.getElementById('condition');
     if (!input || !visible(input)) return { ok: true, absent: true };
     if (String(input.value || '').trim()) return { ok: true, already: true };
-    const wanted = etatCandidates(p).map(squash);
-    if (!wanted.length) return { ok: true, skipped: true };
+    let wanted = etatCandidates(p).map(squash);
+    if (!wanted.length) {
+      // État absent de la fiche : repli « Bon état » (milieu de l'échelle), signalé à l'utilisateur.
+      wanted = [squash('Bon état')];
+      F.noteIssue('état non renseigné dans la fiche : « Bon état » choisi par défaut, à corriger.');
+    }
     await openField(F, 'condition');
     const radios = await F.waitFor(() => {
       const list = Array.from(document.querySelectorAll('input[id^="condition-radio"]'));

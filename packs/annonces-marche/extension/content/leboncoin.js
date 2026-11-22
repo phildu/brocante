@@ -284,7 +284,13 @@
     jobs.push(
       [size.label.toLowerCase(), () => F.chooseMenuOption([size.label], size.values)],
       ['couleur', () => F.chooseMenuOption(['Couleur'], colorCandidates(p), { keepExisting: true })],
-      ['état', () => F.chooseMenuOption(['État', 'Etat'], etatCandidates(p))],
+      ['état', () => {
+        const candidates = etatCandidates(p);
+        if (candidates.length) return F.chooseMenuOption(['État', 'Etat'], candidates);
+        // État absent de la fiche : repli « Bon état » (milieu de l'échelle), signalé à l'utilisateur.
+        F.noteIssue('état non renseigné dans la fiche : « Bon état » choisi par défaut, à corriger.');
+        return F.chooseMenuOption(['État', 'Etat'], ['Bon état', 'État correct', 'État satisfaisant']);
+      }],
     );
     for (const [name, run] of jobs) {
       await F.sleep(180 + Math.floor(Math.random() * 320));

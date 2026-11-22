@@ -33,11 +33,13 @@ assert.ok(fields(r).includes('taille'));
 // Un objet de décoration n'a pas besoin de taille.
 assert.deepStrictEqual(Q.check({ ...good, nature_label: 'Décoration', subcategory_label: '', category_label: 'Maison', size_text: '15x15x5 cm (estimé)', brand: 'x', colors: '' }, 'vinted').block, []);
 
-// État absent : bloquant sur Vinted, simple avertissement sur Leboncoin.
+// État absent : jamais bloquant (repli « Bon état »), mais signalé sur les deux plateformes.
 const noEtat = { ...good, condition: { leboncoin: { key: '', label: '', channel_label: '' }, vinted: { key: '', label: '', channel_label: '' } } };
-assert.deepStrictEqual(Q.check(noEtat, 'vinted').block.map((i) => i.field), ['état']);
-assert.deepStrictEqual(Q.check(noEtat, 'leboncoin').block, []);
-assert.ok(fields(Q.check(noEtat, 'leboncoin')).includes('état'));
+for (const ch of ['vinted', 'leboncoin']) {
+  const res = Q.check(noEtat, ch);
+  assert.deepStrictEqual(res.block, []);
+  assert.ok(res.warn.some((i) => i.field === 'état' && /Bon état/.test(i.message)));
+}
 
 // Forme du titre.
 const titleWarn = (t) => Q.check({ ...good, title: t, name: t }, 'leboncoin').warn.filter((i) => i.field === 'titre').map((i) => i.message);
