@@ -289,8 +289,11 @@
     for (const [name, run] of jobs) {
       await F.sleep(180 + Math.floor(Math.random() * 320));
       let res = null;
-      try { res = await run(); } catch (_) { res = { ok: false }; }
+      try { res = await run(); } catch (e) { res = { ok: false, error: (e && e.message) || String(e) }; }
       results[name] = res;
+      if (!(res && res.absent)) {
+        note(name + ' : ' + (res && res.ok ? (res.already ? 'déjà ' : res.kept ? 'conservé ' : 'ok ') + (res.value || '') + (res.fallback ? ' (repli)' : '') : res && res.skipped ? 'pas de valeur' : 'échec' + (res && res.error ? ' (' + res.error + ')' : '')));
+      }
     }
     return results;
   }
