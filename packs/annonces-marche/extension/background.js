@@ -1,5 +1,7 @@
 /* Service worker : préremplissage manuel + file de publication locale (opt-in, locale uniquement). */
 
+try { importScripts('quality.js'); } catch (_) { /* contrôle des fiches indisponible : la file reste utilisable */ }
+
 const CHANNELS = ['leboncoin', 'vinted'];
 const ALARM_NEXT = 'am-auto-next';
 const ALARM_WATCHDOG = 'am-auto-watchdog';
@@ -191,10 +193,10 @@ async function clearAlarms() {
   await chrome.alarms.clear(ALARM_WATCHDOG);
 }
 
-async function scheduleNext(settings) {
+async function scheduleNext(settings, fixedDelay) {
   // En simulation, on enchaîne plus vite (mais jamais en rafale) ; en réel, respect du réglage.
   const minutes = settings.dryRun ? 0.6 : Math.max(2, Math.min(30, Number(settings.intervalMin) || 5));
-  const delay = settings.dryRun ? Math.round(minutes * 60000 * (0.85 + Math.random() * 0.3)) : humanDelay(minutes);
+  const delay = fixedDelay != null ? fixedDelay : settings.dryRun ? Math.round(minutes * 60000 * (0.85 + Math.random() * 0.3)) : humanDelay(minutes);
   await chrome.alarms.clear(ALARM_NEXT);
   await chrome.alarms.create(ALARM_NEXT, { when: Date.now() + delay });
 }
@@ -208,6 +210,7 @@ function actionLabel(action) {
   return {
     published: 'publiée',
     prepared: 'prête (simulation)',
+    rejected: 'écartée (contrôle de la fiche)',
     blocked: 'arrêtée',
     error: 'erreur',
   }[action] || action;
@@ -442,6 +445,14 @@ async function processNext() {
     const product = data.product;
     if (!product) throw new Error('Produit introuvable.');
 
+    // Contrôle de la fiche avant d'ouvrir quoi que ce soit : une fiche qui bloquera la plateforme est écartée, la file continue.
+    const quality = globalThis.AmQuality ? AmQuality.check(product, queue.channel) : { block: [], warn: [] };
+    if (quality.block.length) {
+      await finalizeItem(product, { action: 'rejected', reason: AmQuality.lines({ block: quality.block, warn: [] }).join(' ; ') }, tabId, settings);
+      return;
+    }
+    if (quality.warn.length) await progress('Fiche ' + ref + ' : ' + AmQuality.summary(quality) + '…');
+
     if (!tabId) {
       const depositUrl = (settings.depositUrls[queue.channel] || '').trim() ||
         AUTO_DEFAULTS.depositUrls[queue.channel];
@@ -459,6 +470,7 @@ async function processNext() {
       dryRun: !!settings.dryRun,
       runId: queue.runId,
     });
+    if (quality.warn.length) result.reason = (result.reason ? result.reason + ' · ' : '') + 'fiche : ' + quality.warn.map((i) => i.field + ' (' + i.message.split(/[:.(]/)[0].trim() + ')').join(', ');
     await finalizeItem(product, result, tabId, settings);
   } catch (error) {
     await finalizeItem({ ref }, { action: 'error', reason: error.message || 'erreur inconnue' }, tabId, settings);
@@ -611,7 +623,7 @@ async function finalizeItem(product, result, tabId, settings) {
     // L'historique local suffit pour éviter un doublon immédiat.
   }
 
-  const key = ['published', 'prepared', 'blocked'].includes(action) ? action : 'error';
+  const key = ['published', 'prepared', 'blocked', 'rejected'].includes(action) ? action : 'error';
   const stats = { ...(current.stats || {}) };
   stats[key] = (stats[key] || 0) + 1;
 
@@ -629,7 +641,7 @@ async function finalizeItem(product, result, tabId, settings) {
     try { await chrome.tabs.remove(tabId); } catch (_) {}
   }
 
-  const advanced = action === 'published' || action === 'prepared';
+  const advanced = action === 'published' || action === 'prepared' || action === 'rejected';
   const updated = {
     ...current,
     // En cas d'arrêt ou d'erreur, la même pièce est retentée à la reprise (l'onglet reste ouvert).
@@ -678,9 +690,14 @@ async function finalizeItem(product, result, tabId, settings) {
     return;
   }
 
+  if (action === 'rejected') {
+    await chrome.storage.local.set({ amAlert: { level: 'warn', message: 'Fiche ' + ref + ' écartée avant remplissage :\n' + (result.reason || '').replace(/ ; /g, '\n'), at: Date.now() } });
+  }
+
   await setQueue(updated);
   await ensureWatchdog();
-  await scheduleNext(settings);
+  // Une fiche écartée n'a rien publié : on enchaîne vite, sans attendre l'intervalle entre publications.
+  await scheduleNext(settings, action === 'rejected' ? 8000 + Math.floor(Math.random() * 6000) : undefined);
 }
 
 /* ---------- Messages ---------- */
@@ -726,6 +743,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       await chrome.storage.local.set({ amFillStatus: text });
       sendResponse({ ok: false, error: text });
     });
+    return true;
+  }
+
+  if (message.type === 'am-selftest') {
+    (async () => {
+      const { tabId, channel } = message;
+      if (!Number.isInteger(tabId) || !CHANNELS.includes(channel)) throw new Error('Onglet invalide.');
+      const res = await sendToDeposit(tabId, channel, { type: 'am-selftest', channel });
+      sendResponse(res && res.ok ? res : { ok: false, error: (res && res.error) || 'Le formulaire n’a pas répondu. Rechargez la page.' });
+    })().catch((error) => sendResponse({ ok: false, error: error.message || 'Contrôle impossible.' }));
     return true;
   }
 

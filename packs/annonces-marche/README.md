@@ -67,6 +67,10 @@ Quand une pièce exige une action humaine (choix de catégorie dans l’arbre de
 | `GET /publications?channel=` | jeton + option active | références déjà publiées (anti-doublon) |
 | `POST /marquer` | jeton + option active | historique publication |
 
+### Alertes (fiches et formulaires)
+
+Avant le remplissage, `extension/quality.js` contrôle chaque fiche pour Leboncoin et pour Vinted : pastille ⚠ / ⛔ dans la liste de la popup, boîte « Contrôle avant remplissage » dans la fiche, confirmation avant un remplissage manuel bloquant, et **écartement** automatique des fiches bloquantes dans la file. Pendant le remplissage, les choix par défaut et les champs non remplis sont signalés ; le bouton « Contrôler le formulaire ouvert » et la détection de repères absents préviennent quand une plateforme change son formulaire (bannière persistante dans la popup). Ajouter ou ajuster une règle : `quality.js` et `tests/quality.test.js`.
+
 ### Cases à cocher dans l'extension
 
 La liste d'articles de la popup propose une case à cocher par article, avec « Tout cocher » et « Tout décocher » ; le choix est mémorisé dans le navigateur. Au lancement de la file automatique, les articles cochés dans l'extension priment ; si rien n'est coché, c'est la sélection de l'administration de la boutique (ci-dessous) qui est utilisée.
