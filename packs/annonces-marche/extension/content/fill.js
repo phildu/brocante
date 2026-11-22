@@ -623,6 +623,39 @@
   }
 
   /**
+   * Départ de session : si la page affichée n'est pas le formulaire de dépôt (accueil du site), clique le bouton
+   * « Déposer une annonce » (Leboncoin) / « Vends ton article » (Vinted) comme le ferait le vendeur.
+   * Renvoie null quand on est déjà sur le formulaire ; sinon { clicked, via } ou { clicked:false, reason }.
+   */
+  async function openDepositIfNeeded() {
+    const vinted = /(^|\.)vinted\./i.test(location.hostname);
+    const onForm = vinted ? /^\/items\/new/.test(location.pathname) : /\/deposer-une-annonce/.test(location.pathname);
+    if (onForm) return null;
+    // Pages qui ne sont pas l'accueil (annonce publiée, compte…) : on ne touche à rien, le service worker gère.
+    if (vinted ? /^\/items\/\d+/.test(location.pathname) : false) return null;
+    const label = vinted ? /^(vends (ton article|tes articles)|vendre maintenant)$/ : /^deposer une annonce$/;
+    const find = () => Array.from(document.querySelectorAll('a, button, [role="button"]'))
+      .find((el) => isVisible(el) && !el.disabled && !/\/help\//.test(el.getAttribute('href') || '') && label.test(squash(el.innerText || el.textContent || '')));
+    let el = null;
+    for (let i = 0; i < 12 && !el; i++) {
+      el = find();
+      if (!el) await sleep(1000);
+    }
+    if (!el) {
+      // Bouton introuvable (bandeau, changement du site) : on rejoint le formulaire par son adresse.
+      location.assign(vinted ? '/items/new' : '/deposer-une-annonce');
+      return { clicked: false, reason: 'bouton de dépôt introuvable : accès direct au formulaire' };
+    }
+    pressEl(el);
+    // Navigation du site (script détruit) ou changement de route sans rechargement : on laisse le temps de l'un ou l'autre.
+    for (let i = 0; i < 15; i++) {
+      await sleep(1000);
+      if (vinted ? /^\/items\/new/.test(location.pathname) : /\/deposer-une-annonce/.test(location.pathname)) break;
+    }
+    return { clicked: true, via: (el.innerText || '').trim().slice(0, 40) };
+  }
+
+  /**
    * Une étape atomique : remplit, vérifie, puis clique « Continuer » ou « Publier ».
    * Le service worker orchestre les étapes suivantes (la navigation recrée le content script).
    * Plusieurs tentatives courtes : un formulaire monopage peut afficher ses champs après coup.
@@ -634,6 +667,11 @@
     let filled = [];
     let missing = [];
     let photos = { ok: 0, total: photoUrls.length, reason: 'none' };
+
+    if (opts.openDeposit) {
+      const started = await openDepositIfNeeded();
+      if (started) return { ok: true, action: 'next', reason: started.clicked ? 'clic sur « ' + started.via + ' »' : started.reason, filled, photos };
+    }
 
     for (let attempt = 0; attempt < 5; attempt++) {
       if (attempt) await sleep(1200);
@@ -793,6 +831,7 @@
     findCombo,
     chooseMenuOption,
     findClickableByText,
+    openDepositIfNeeded,
     sleep,
     isVisible,
     clickEl,
