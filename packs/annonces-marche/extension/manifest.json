@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Synchronisation multi-plateformes",
   "description": "Prépare et publie vos annonces sur les plateformes de seconde main depuis votre navigateur. Outil indépendant, sans affiliation ; publication automatique en opt-in.",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "action": {
     "default_popup": "popup.html",
     "default_title": "Synchronisation multi-plateformes",

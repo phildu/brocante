@@ -134,10 +134,36 @@
 
   // Trace des étapes (affichée dans l'historique de la file quand la pièce est bloquée) : sans elle, impossible de savoir où ça coince.
   const trace = [];
+  function renderTrace() {
+    // Petit panneau resté affiché (contrairement à la bulle qui disparaît) : on y lit où le remplissage en est ou s'arrête.
+    let box = document.getElementById('am-ext-trace');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'am-ext-trace';
+      Object.assign(box.style, {
+        position: 'fixed', zIndex: '2147483646', left: '16px', bottom: '16px', maxWidth: '420px', maxHeight: '45vh', overflow: 'auto',
+        padding: '10px 12px', background: '#1d1a16', color: '#fffaf2', font: '12px/1.4 ui-monospace, Menlo, monospace',
+        borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,.25)', whiteSpace: 'pre-wrap',
+      });
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = '×';
+      close.setAttribute('aria-label', 'Fermer');
+      Object.assign(close.style, { position: 'absolute', top: '2px', right: '6px', background: 'none', border: '0', color: 'inherit', fontSize: '16px', cursor: 'pointer' });
+      close.addEventListener('click', () => box.remove());
+      const text = document.createElement('div');
+      text.id = 'am-ext-trace-text';
+      box.append(close, text);
+      document.documentElement.appendChild(box);
+    }
+    const text = box.querySelector('#am-ext-trace-text');
+    if (text) text.textContent = 'Synchronisation — étapes\n' + trace.map((t) => '• ' + t).join('\n');
+  }
   function note(message) {
     trace.push(message);
-    if (trace.length > 12) trace.shift();
+    if (trace.length > 14) trace.shift();
     try { sessionStorage.setItem('amLbcTrace', trace.join(' | ')); } catch (_) {}
+    try { renderTrace(); } catch (_) {}
   }
 
   // --- Étapes de remplissage ---
@@ -284,6 +310,7 @@
    */
   async function fillFields(p, F, quiet) {
     const product = p || {};
+    note('début du remplissage : ' + (product.title || product.name || '?'));
     const done = [];
     const retries = [];
     const record = (name, res, run) => {
@@ -293,9 +320,9 @@
     };
     const pause = () => F.sleep(180 + Math.floor(Math.random() * 320));
 
-    record('titre', await stepTitle(product, F).catch(() => ({ ok: false })), () => stepTitle(product, F));
+    record('titre', await stepTitle(product, F).catch((e) => { note('titre : erreur ' + (e && e.message || e)); return { ok: false }; }), () => stepTitle(product, F));
     await pause();
-    const category = await stepCategory(product, F).catch(() => ({ ok: false }));
+    const category = await stepCategory(product, F).catch((e) => { note('catégorie : erreur ' + (e && e.message || e)); return { ok: false }; });
     record('catégorie', category, () => stepCategory(product, F));
     if (category.ok && category.guessed) {
       // Aucune suggestion ne correspond à la fiche : on a pris la première, à vérifier par le vendeur.
