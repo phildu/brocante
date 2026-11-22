@@ -115,6 +115,30 @@
     return result.block.map((i) => '⛔ ' + i.field + ' : ' + i.message).concat(result.warn.map((i) => '⚠ ' + i.field + ' : ' + i.message));
   }
 
-  global.AmQuality = { check, summary, lines, needsSize, hasSize };
+  /**
+   * Empreinte du contenu d'une fiche pour un canal : change quand le titre, la description, le prix, l'état, la taille,
+   * la marque, la couleur, la catégorie ou les photos changent. Sert à savoir si une annonce déjà en ligne est à mettre à jour.
+   */
+  function fingerprint(product, channel) {
+    const p = product || {};
+    const cond = (p.condition && p.condition[channel]) || {};
+    const photos = (Array.isArray(p.photos) ? p.photos : []).map((x) => x && x.url).filter(Boolean);
+    const parts = [
+      p.title || p.name, p.description, Number(p.price) || 0,
+      cond.channel_label || cond.key || cond.label || '',
+      p.size_text, p.brand, p.colors, p.nature_label, p.subcategory_label, photos.join('|'),
+    ];
+    const text = parts.map((v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim()).join('\u241F');
+    let h1 = 0x811c9dc5;
+    let h2 = 0x01000193;
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+      h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+    }
+    return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
+  }
+
+  global.AmQuality = { check, summary, lines, needsSize, hasSize, fingerprint };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.AmQuality;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

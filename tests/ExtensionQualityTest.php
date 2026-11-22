@@ -19,6 +19,20 @@ final class ExtensionQualityTest extends TestCase
         self::assertStringContainsString('tous les tests passent', implode("\n", $output));
     }
 
+    public function testPublishedComparisonPassesInNode(): void
+    {
+        $node = trim((string) @shell_exec('command -v node 2>/dev/null'));
+        if ($node === '') {
+            self::markTestSkipped('Node n’est pas installé.');
+        }
+        $dir = dirname(__DIR__) . '/packs/annonces-marche/extension';
+        $output = [];
+        $code = 0;
+        exec(escapeshellarg($node) . ' ' . escapeshellarg($dir . '/tests/sync.test.js') . ' 2>&1', $output, $code);
+        self::assertSame(0, $code, implode("\n", $output));
+        self::assertStringContainsString('sync-test OK', implode("\n", $output));
+    }
+
     public function testExtensionScriptsAreSyntacticallyValid(): void
     {
         $node = trim((string) @shell_exec('command -v node 2>/dev/null'));

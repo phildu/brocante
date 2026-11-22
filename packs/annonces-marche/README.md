@@ -112,3 +112,12 @@ En mode automatique, l'extension ouvre l'accueil du site (leboncoin.fr / vinted.
 « Déposer une annonce » (Leboncoin) ou « Vends tes articles » (Vinted), comme le vendeur. Si le bouton est introuvable
 après 12 s, elle rejoint le formulaire par son adresse. Une adresse de dépôt personnalisée dans les réglages est
 respectée telle quelle (pas de passage par l'accueil).
+
+## Pièces déjà en ligne (extension 1.8.0)
+
+À chaque publication réelle, l'extension range une empreinte du contenu (titre, description, prix, état, taille, marque,
+couleur, catégorie, photos) dans la note de la ligne d'historique (`[h:…]`). Au lancement d'une file :
+- pièce déjà en ligne et **inchangée** → passée, sans rien ouvrir ;
+- pièce déjà en ligne mais **modifiée** depuis → signalée « à mettre à jour » dans l'historique (la modification de
+  l'annonce existante n'est pas encore automatique) ;
+- pièce publiée avant cette version (sans empreinte) → l'empreinte actuelle est enregistrée, la pièce est passée.
