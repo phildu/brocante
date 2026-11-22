@@ -25,6 +25,8 @@ ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 Dossier `extension/` (téléchargeable en ZIP depuis l’admin). Chargement : `chrome://extensions` → mode développeur → « Charger l’extension non empaquetée ».
 
+Identifiant fixe : le manifeste contient une clé publique (`key`), donc l'extension garde le même identifiant (`idcomcikoeeadimpadaeihhaahaagkge`) quel que soit le dossier d'où elle est chargée. Ses réglages (adresse, jeton) restent en place au rechargement ; seule une suppression de l'extension les efface. Changer cette clé change l'identifiant et vide les réglages.
+
 Réglages : URL de la boutique (par exemple `https://<domaine>/<boutique>/boutique.php`) + jeton `am_…` créé dans l’admin. L’extension accepte aussi directement l’URL API `https://<domaine>/<boutique>/api/annonces`.
 
 Dans la fiche d’un article, **Télécharger les photos** permet de choisir le Bureau : l’extension y crée un dossier avec les photos, prêtes à être importées en lot.
