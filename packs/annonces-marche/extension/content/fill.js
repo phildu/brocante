@@ -298,9 +298,86 @@
    * Retourne { ok, absent, value } : « absent » = le champ n'existe pas sur cette page (pas une erreur).
    * options.search : saisit la valeur dans le champ de recherche du menu (marques) ; options.fallback : valeurs de repli (« Autre »).
    */
+  /**
+   * Liste déroulante « combobox » (Leboncoin) : un <label>, un champ role="combobox", un bouton « Ouvrir la liste » et une
+   * <ul role="listbox"> dont les options sont toujours dans la page (même fermée, elles ont une hauteur : on s'en remet à aria-expanded).
+   */
+  function findCombo(labels) {
+    const wanted = labels.map(squash).filter(Boolean);
+    const label = Array.from(document.querySelectorAll('label'))
+      .find((l) => isVisible(l) && wanted.includes(squash(l.textContent).replace(/\s*\*$/, '')));
+    if (!label) return null;
+    let box = label.parentElement;
+    for (let depth = 0; depth < 3 && box; depth++, box = box.parentElement) {
+      const listbox = box.querySelector('[role="listbox"]');
+      const input = box.querySelector('input[role="combobox"]');
+      if (listbox && input) {
+        return { box, input, listbox, toggle: box.querySelector('button[aria-label*="liste" i], button[aria-controls], button[aria-haspopup]') };
+      }
+    }
+    return null;
+  }
+
+  async function chooseComboOption(combo, wanted, opts) {
+    const { input, listbox, toggle } = combo;
+    const current = squash(input.value);
+    if (current && opts.keepExisting) return { ok: true, value: input.value, already: true, kept: true };
+    if (current && wanted.some((w) => squash(w) === current)) return { ok: true, value: input.value, already: true };
+
+    const isOpen = () => input.getAttribute('aria-expanded') === 'true';
+    const open = async () => {
+      if (isOpen()) return true;
+      pressEl(toggle || input);
+      if (await waitFor(isOpen, 1500, 150)) return true;
+      if (toggle) { pressEl(input); return !!(await waitFor(isOpen, 1500, 150)); }
+      return false;
+    };
+    const close = async () => {
+      if (isOpen()) { pressEl(toggle || input); await sleep(250); }
+    };
+    const options = () => Array.from(listbox.querySelectorAll('[role="option"]'));
+
+    if (!(await open())) return { ok: false, absent: false };
+    let found = null;
+    if (!opts.search && wanted.length) found = bestOption(options(), wanted);
+    if (!found && wanted.length) {
+      // Longue liste (marques) : on filtre en tapant dans le champ.
+      await typeInto(input, String(wanted[0]));
+      await sleep(800);
+      if (!isOpen()) await open();
+      found = bestOption(options(), wanted);
+    }
+    let usedFallback = false;
+    if (!found && (opts.fallback || []).length) {
+      // La liste n'affiche qu'un extrait : on tape chaque valeur de repli (« Sans marque », « Autre ») pour la faire apparaître.
+      for (const value of opts.fallback) {
+        await typeInto(input, String(value));
+        await sleep(800);
+        if (!isOpen()) await open();
+        found = bestOption(options(), [value]);
+        if (found) { usedFallback = true; break; }
+      }
+    }
+    if (!found) {
+      try { await typeInto(input, ''); } catch (_) {}
+      await close();
+      return { ok: false, absent: false };
+    }
+    try { found.el.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+    pressEl(found.el);
+    await sleep(500);
+    if (isOpen()) await close();
+    return { ok: !!squash(input.value), value: input.value, fallback: usedFallback };
+  }
+
   async function chooseMenuOption(labels, wantedList, options) {
     const opts = options || {};
     const wanted = (wantedList || []).filter((v) => v != null && String(v).trim() !== '');
+    const combo = findCombo(labels);
+    if (combo) {
+      if (!wanted.length && !(opts.fallback || []).length) return { ok: false, absent: false, skipped: true };
+      return chooseComboOption(combo, wanted, opts);
+    }
     const trigger = findMenuTrigger(labels);
     if (!trigger) return { ok: false, absent: true };
     if (!wanted.length && !(opts.fallback || []).length) return { ok: false, absent: false, skipped: true };
@@ -665,6 +742,7 @@
     waitFor,
     squash,
     findMenuTrigger,
+    findCombo,
     chooseMenuOption,
     findClickableByText,
     sleep,

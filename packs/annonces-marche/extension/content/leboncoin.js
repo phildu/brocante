@@ -271,12 +271,19 @@
       ['univers', () => F.chooseMenuOption(['Univers'], [universCandidate(p)])],
       ['marque', () => F.chooseMenuOption(['Marque', 'Brand'], brand ? [brand] : [], { search: !!brand, fallback: ['Sans marque', 'Autre'] })],
     ];
+    if (nature.includes('chaussure')) {
+      // Leboncoin pré-remplit parfois ce menu d'après le titre : on ne l'écrase pas.
+      const kinds = unique([autre(p, 'type de chaussures')].concat(
+        [p.subcategory_label].flatMap((v) => (v ? String(v).split(/[,/]| et /).concat([String(v)]) : [])).map((v) => v.trim()).filter((v) => v.length > 3)
+      ));
+      jobs.push(['type de chaussures', () => F.chooseMenuOption(['Type de chaussures'], kinds, { keepExisting: true })]);
+    }
     if (nature.includes('livre')) {
       jobs.push(['genre', () => F.chooseMenuOption(['Genre'], unique([p.genre, autre(p, 'genre')]), { fallback: ['Autre'] })]);
     }
     jobs.push(
       [size.label.toLowerCase(), () => F.chooseMenuOption([size.label], size.values)],
-      ['couleur', () => F.chooseMenuOption(['Couleur'], colorCandidates(p))],
+      ['couleur', () => F.chooseMenuOption(['Couleur'], colorCandidates(p), { keepExisting: true })],
       ['état', () => F.chooseMenuOption(['État', 'Etat'], etatCandidates(p))],
     );
     for (const [name, run] of jobs) {
@@ -432,6 +439,14 @@
       const photos = (p.photos || []).map((x) => x.url).filter(Boolean);
       await F.waitFor(() => document.querySelector('input[type=file]'), 6000, 300);
       const photoRes = await F.tryAttachPhotos(photos);
+      if (photoRes.ok > 0) {
+        // Sur Leboncoin, les menus (Univers, Pointure, Marque, État…) n'apparaissent qu'après l'ajout d'une photo : seconde passe.
+        await F.sleep(3500);
+        const second = await fillFields(p, F, false);
+        for (const name of second.done) if (!done.includes(name)) done.push(name);
+        pending.length = 0;
+        second.pending.forEach((n) => pending.push(n));
+      }
       let photoMsg = '';
       if (photoRes.ok > 0) photoMsg = ' · ' + photoRes.ok + ' photo(s) jointe(s)';
       else if (photos.length) photoMsg = ' · photos à ajouter à la main (le site refuse l’injection automatique)';
