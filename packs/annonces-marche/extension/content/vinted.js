@@ -163,23 +163,32 @@
     return { ok: false };
   }
 
+  /** Ouvre la liste des marques, cherche `name` et clique l'entrée identique ; null si Vinted ne la connaît pas. */
+  async function chooseBrand(F, input, name) {
+    const search = await F.waitFor(() => document.getElementById('brand-search-input'), 3000, 200);
+    if (!search) return false;
+    await F.typeInto(search, name, { keepFocus: true });
+    await F.sleep(1500);
+    const rows = Array.from(document.querySelectorAll('input[id^="brand-radio"]'));
+    const hit = rows.find((r) => rowText(r.closest('li') || r) === squash(name));
+    if (!hit) return false;
+    F.pressEl(hit.closest('label') || hit.closest('li') || hit);
+    await F.sleep(800);
+    return !!String(input.value || '').trim();
+  }
+
   async function stepBrand(p, F) {
     const brand = String(p.brand || vt(p).marque || '').trim();
-    if (!brand) return { ok: true, skipped: true };
     const input = document.getElementById('brand');
     if (!input || !visible(input)) return { ok: true, absent: true };
     if (String(input.value || '').trim()) return { ok: true, already: true };
     await openField(F, 'brand');
-    const search = await F.waitFor(() => document.getElementById('brand-search-input'), 3000, 200);
-    if (!search) { await closeDropdowns(F); return { ok: false }; }
-    await F.typeInto(search, brand, { keepFocus: true });
-    await F.sleep(1500);
-    const rows = Array.from(document.querySelectorAll('input[id^="brand-radio"]'));
-    const hit = rows.find((r) => rowText(r.closest('li') || r) === squash(brand));
-    if (!hit) { await closeDropdowns(F); return { ok: true, skipped: true, missing: brand }; }   // marque inconnue de Vinted : on ne met jamais une marque voisine
-    F.pressEl(hit.closest('label') || hit.closest('li') || hit);
-    await F.sleep(800);
-    return { ok: !!String(input.value || '').trim(), value: input.value };
+    // Jamais une marque voisine : la marque de la fiche à l'identique, sinon « Inconnu » (Vinted refuse l'annonce sans marque dans la plupart des catégories).
+    if (brand && (await chooseBrand(F, input, brand))) return { ok: true, value: input.value };
+    if (!document.getElementById('brand-search-input')) await openField(F, 'brand');
+    if (await chooseBrand(F, input, 'Inconnu')) return { ok: true, value: input.value, fallback: 'Inconnu' };
+    await closeDropdowns(F);
+    return { ok: true, skipped: true, missing: brand };
   }
 
   async function stepSize(p, F) {
@@ -299,7 +308,7 @@
     const done = [];
     const retries = [];
     const record = (name, res, run) => {
-      if (res && res.ok) { if (!res.skipped && !res.absent) done.push(name + (res.guessed ? ' (1er choix du site : ' + (res.text || '?') + ')' : '')); return; }
+      if (res && res.ok) { if (!res.skipped && !res.absent) done.push(name + (res.guessed ? ' (1er choix du site : ' + (res.text || '?') + ')' : '') + (res.fallback ? ' (repli « ' + res.fallback + ' »)' : '')); return; }
       retries.push([name, run]);
     };
     const pause = () => F.sleep(180 + Math.floor(Math.random() * 320));
