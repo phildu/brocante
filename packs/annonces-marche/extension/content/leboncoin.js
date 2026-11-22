@@ -117,8 +117,9 @@
   }
 
   /** Mots à repérer dans les suggestions de catégorie proposées après le titre. */
-  function categoryWords(p) {
-    const parts = [lbc(p).categorie, p.nature_label, p.subcategory_label, p.category_label]
+  function categoryWords(p, withParent) {
+    // La catégorie « parente » (Maison, Mode…) revient dans toutes les suggestions : elle ne sert que de dernier recours.
+    const parts = [lbc(p).categorie, p.nature_label, p.subcategory_label].concat(withParent === false ? [] : [p.category_label])
       .flatMap((v) => (v ? String(v).split(/[,/]| et /) : []).concat(v ? [String(v)] : []))
       .map((v) => v.trim())
       .filter((v) => v.length > 3);
@@ -165,14 +166,46 @@
     return { ok: await F.typeInto(el, p.title || p.name) };
   }
 
+  /**
+   * Lignes de catégories suggérées sous le titre : des boutons-radio (« Maison & Jardin › Décoration »), chacun dans un
+   * conteneur role="button". Retourne [{ el, text }] dans l'ordre d'affichage (la première est la meilleure estimation du site).
+   */
+  function suggestionRows() {
+    const rows = [];
+    for (const radio of document.querySelectorAll('main input[type="radio"], input[type="radio"]')) {
+      const row = radio.closest('[role="button"], li, label');
+      if (!row || rows.some((r) => r.el === row) || !visible(row)) continue;
+      rows.push({ el: row, text: squash(row.innerText || row.textContent || '') });
+    }
+    return rows;
+  }
+
+  /** Choisit la ligne qui correspond aux mots de la fiche ; à défaut la première suggestion (signalée à l'utilisateur). */
+  function pickSuggestion(p) {
+    const rows = suggestionRows();
+    if (!rows.length) return null;
+    for (const word of categoryWords(p, false).map(squash)) {
+      const hit = rows.find((r) => r.text.includes(word));
+      if (hit) return { el: hit.el, text: hit.text, guessed: false };
+    }
+    return { el: rows[0].el, text: rows[0].text, guessed: true };
+  }
+
   async function stepCategory(p, F) {
+    // Le titre n'est affiché que sur la première étape : ailleurs, la catégorie est déjà choisie.
+    if (!visible(findTitle(F))) return { ok: true, already: true };
     if (formExpanded(F)) return { ok: true, already: true };
-    const words = categoryWords(p);
-    const target = await F.waitFor(() => F.findClickableByText(words), 7000, 300);
-    if (!target) return { ok: false };
-    F.clickEl(target);
-    const expanded = await F.waitFor(() => formExpanded(F), 9000, 300);
-    return { ok: !!expanded };
+    let choice = await F.waitFor(() => pickSuggestion(p), 8000, 300);
+    if (!choice) {
+      // Pas de boutons-radio : repli sur un texte cliquable (autre présentation du site).
+      const target = await F.waitFor(() => F.findClickableByText(categoryWords(p)), 2000, 300);
+      if (!target) return { ok: false };
+      choice = { el: target, text: '', guessed: false };
+    }
+    F.clickEl(choice.el);
+    // La page passe à l'étape suivante (le titre disparaît) ou le formulaire se déploie.
+    const moved = await F.waitFor(() => !visible(findTitle(F)) || formExpanded(F) || document.querySelector('input[type=file]'), 10000, 300);
+    return { ok: !!moved, guessed: choice.guessed, text: choice.text };
   }
 
   async function stepMenus(p, F) {
@@ -234,7 +267,13 @@
 
     record('titre', await stepTitle(product, F).catch(() => ({ ok: false })), () => stepTitle(product, F));
     await pause();
-    record('catégorie', await stepCategory(product, F).catch(() => ({ ok: false })), () => stepCategory(product, F));
+    const category = await stepCategory(product, F).catch(() => ({ ok: false }));
+    record('catégorie', category, () => stepCategory(product, F));
+    if (category.ok && category.guessed) {
+      // Aucune suggestion ne correspond à la fiche : on a pris la première, à vérifier par le vendeur.
+      done[done.indexOf('catégorie')] = 'catégorie (1re suggestion du site : ' + (category.text || '?') + ')';
+      try { sessionStorage.setItem('amLbcCategoryGuess', category.text || '?'); } catch (_) {}
+    }
     await pause();
 
     const menus = await stepMenus(product, F);
@@ -304,6 +343,13 @@
           options: msg.options || {},
           fill: (p, quiet) => fillFields(p, F, quiet),
         });
+        // La catégorie prise par défaut (aucune suggestion ne correspondait) doit apparaître dans l'historique de la file.
+        let guess = '';
+        try { guess = sessionStorage.getItem('amLbcCategoryGuess') || ''; } catch (_) {}
+        if (guess && res && ['prepared', 'publish-clicked', 'blocked', 'published'].includes(res.action)) {
+          res.reason = (res.reason ? res.reason + ' · ' : '') + 'catégorie prise par défaut (1re suggestion) : ' + guess;
+          try { sessionStorage.removeItem('amLbcCategoryGuess'); } catch (_) {}
+        }
         sendResponse(res);
       })().catch((e) => sendResponse({ ok: false, error: String(e) }));
       return true;

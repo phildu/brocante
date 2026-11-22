@@ -536,7 +536,7 @@
     let missing = [];
     let photos = { ok: 0, total: photoUrls.length, reason: 'none' };
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       if (attempt) await sleep(1200);
 
       const challenge = detectChallenge();
@@ -549,6 +549,8 @@
       } catch (_) {}
 
       photos = await attachPhotosIfNeeded(opts.runId, photoUrls);
+      // Laisse le site téléverser les photos avant de chercher le bouton « Continuer » (il reste grisé pendant l'envoi).
+      if (photos.ok > 0 && photos.reason !== 'already') await sleep(3500);
 
       missing = missingRequired(p);
       if (missing.length) continue;
