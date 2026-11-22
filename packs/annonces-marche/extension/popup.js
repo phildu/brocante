@@ -520,21 +520,41 @@
     $(id).addEventListener('paste', () => setTimeout(() => applyConnectionCode($(id)), 0));
   });
 
+  /**
+   * Garde chaque champ dès qu'il est rempli : la fenêtre de l'extension se ferme quand on va copier la clé dans l'admin,
+   * et ce qui était collé ne doit pas être perdu. Renvoie la configuration complète après fusion avec l'existante.
+   */
+  async function saveDraft() {
+    const form = readFormConfig();
+    const prev = await loadConfig();
+    const next = { apiBase: form.apiBase || prev.apiBase, token: form.token || prev.token };
+    if (next.apiBase !== prev.apiBase || next.token !== prev.token) await saveConfig(next.apiBase, next.token);
+    return next;
+  }
+  ['shop-url', 'token'].forEach((id) => {
+    $(id).addEventListener('change', () => { saveDraft().catch(() => {}); });
+    $(id).addEventListener('paste', () => setTimeout(() => { saveDraft().catch(() => {}); }, 50));
+  });
+
   $('btn-save').addEventListener('click', async () => {
-    const cfg = readFormConfig();
+    const cfg = await saveDraft();
     if (!cfg.apiBase || !cfg.token) {
-      $('settings-msg').textContent = missingConfigMessage(cfg);
+      $('settings-msg').textContent = cfg.apiBase
+        ? 'Adresse enregistrée. Collez maintenant le jeton (ou le code de connexion).'
+        : cfg.token
+          ? 'Jeton enregistré. Collez maintenant l’adresse de la boutique.'
+          : missingConfigMessage(cfg);
       return;
     }
     $('shop-url').value = cfg.apiBase;
-    await saveConfig(cfg.apiBase, cfg.token);
+    $('token').value = cfg.token;
     $('settings-msg').textContent = 'Enregistrement…';
     const result = await refreshConn(cfg);
     $('settings-msg').textContent = result.ok ? 'Enregistré — ' + result.message : result.message;
   });
 
   $('btn-ping').addEventListener('click', async () => {
-    const cfg = readFormConfig();
+    const cfg = await saveDraft();
     if (!cfg.apiBase || !cfg.token) {
       $('settings-msg').textContent = missingConfigMessage(cfg);
       lockSearch('Configurez la boutique dans Réglages.');
