@@ -181,6 +181,198 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /** Attend qu'une condition devienne vraie (retourne sa valeur) ou que le délai expire (null). */
+  async function waitFor(fn, timeoutMs, stepMs) {
+    const end = Date.now() + (timeoutMs || 4000);
+    for (;;) {
+      let value = null;
+      try { value = fn(); } catch (_) { value = null; }
+      if (value) return value;
+      if (Date.now() >= end) return null;
+      await sleep(stepMs || 150);
+    }
+  }
+
+  function squash(value) {
+    return normalizeLabel(value).replace(/\s+/g, ' ').trim();
+  }
+
+  function readValue(el) {
+    return el.isContentEditable ? (el.textContent || '') : String(el.value || '');
+  }
+
+  /**
+   * Saisie dans un champ contrôlé (React) : focus, sélection du contenu, puis insertion de texte par le navigateur
+   * (événements « input » natifs). Repli sur l'écriture directe de la valeur. Termine par un blur : le site valide alors le champ.
+   */
+  async function typeInto(el, text) {
+    if (!el) return false;
+    const wanted = String(text == null ? '' : text);
+    if (wanted !== '' && squash(readValue(el)) === squash(wanted)) return true;
+    try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (_) {}
+    try { el.focus(); } catch (_) {}
+    try {
+      if (el.isContentEditable) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else if (typeof el.select === 'function') {
+        el.select();
+      }
+    } catch (_) {}
+    let inserted = false;
+    try { inserted = document.execCommand('insertText', false, wanted); } catch (_) { inserted = false; }
+    if (!inserted || squash(readValue(el)) !== squash(wanted)) setNativeValue(el, wanted);
+    await sleep(120);
+    // Dans un onglet ouvert en arrière-plan, la page n'a pas le focus : le navigateur ne déclenche alors pas blur / focusout.
+    let blurred = false;
+    const onBlur = () => { blurred = true; };
+    el.addEventListener('focusout', onBlur, { once: true });
+    try { el.blur(); } catch (_) {}
+    el.removeEventListener('focusout', onBlur);
+    if (!blurred) {
+      el.dispatchEvent(new FocusEvent('blur', { bubbles: false, relatedTarget: null }));
+      el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    }
+    return squash(readValue(el)) === squash(wanted);
+  }
+
+  const TRIGGER_SELECTOR = 'button, [role="combobox"], [role="button"], [aria-haspopup]';
+
+  /**
+   * Bouton qui ouvre un menu déroulant, repéré par son aria-label / ses attributs de test, ou à défaut par le libellé visible
+   * placé juste avant lui (« Marque », « Taille »…).
+   */
+  function findMenuTrigger(labels) {
+    const wanted = labels.map(squash).filter(Boolean);
+    if (!wanted.length) return null;
+    const candidates = Array.from(document.querySelectorAll(TRIGGER_SELECTOR))
+      .filter((el) => isVisible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true');
+    for (const el of candidates) {
+      const own = squash([
+        el.getAttribute('aria-label'), el.getAttribute('name'), el.id,
+        el.getAttribute('data-test-id'), el.getAttribute('data-qa-id'), el.getAttribute('data-testid'),
+      ].filter(Boolean).join(' '));
+      if (wanted.some((w) => own.includes(w))) return el;
+    }
+    const labelNodes = Array.from(document.querySelectorAll('label, legend, span, p, div, h3, h4'))
+      .filter((el) => isVisible(el) && el.children.length <= 1 && wanted.includes(squash(el.textContent).replace(/\s*\*$/, '')));
+    for (const label of labelNodes) {
+      let scope = label;
+      for (let depth = 0; depth < 3 && scope; depth++) {
+        scope = scope.parentElement;
+        if (!scope) break;
+        const trigger = Array.from(scope.querySelectorAll(TRIGGER_SELECTOR)).find((el) =>
+          el !== label && isVisible(el) && !label.contains(el) &&
+          (label.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
+        if (trigger) return trigger;
+      }
+    }
+    return null;
+  }
+
+  const OPTION_SELECTOR = '[role="option"], [role="menuitem"], [role="radio"], li, button, a';
+
+  function visibleOptionSet() {
+    return new Set(Array.from(document.querySelectorAll(OPTION_SELECTOR)).filter(isVisible));
+  }
+
+  function bestOption(options, wantedList) {
+    const items = options.map((el) => ({ el, text: squash(el.innerText || el.textContent || '') })).filter((o) => o.text);
+    for (const wantedRaw of wantedList) {
+      const wanted = squash(wantedRaw);
+      if (!wanted) continue;
+      const exact = items.find((o) => o.text === wanted);
+      if (exact) return { el: exact.el, wanted: wantedRaw };
+      const short = wanted.replace(/ - /g, '-').split('/')[0].trim();
+      const near = items.find((o) => o.text.length <= wanted.length + 25 && (o.text.includes(wanted) || (short && o.text.replace(/ - /g, '-').includes(short))));
+      if (near) return { el: near.el, wanted: wantedRaw };
+    }
+    return null;
+  }
+
+  /**
+   * Ouvre un menu déroulant et y choisit la première valeur proposée trouvée dans la liste.
+   * Retourne { ok, absent, value } : « absent » = le champ n'existe pas sur cette page (pas une erreur).
+   * options.search : saisit la valeur dans le champ de recherche du menu (marques) ; options.fallback : valeurs de repli (« Autre »).
+   */
+  async function chooseMenuOption(labels, wantedList, options) {
+    const opts = options || {};
+    const wanted = (wantedList || []).filter((v) => v != null && String(v).trim() !== '');
+    const trigger = findMenuTrigger(labels);
+    if (!trigger) return { ok: false, absent: true };
+    if (!wanted.length && !(opts.fallback || []).length) return { ok: false, absent: false, skipped: true };
+
+    const current = squash(trigger.innerText || trigger.textContent || '');
+    if (wanted.some((w) => squash(w) && current === squash(w))) return { ok: true, value: current, already: true };
+
+    const before = visibleOptionSet();
+    try { trigger.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (_) {}
+    trigger.click();
+    await sleep(500);
+
+    let box = null;
+    if (opts.search && wanted.length) {
+      box = Array.from(document.querySelectorAll('input[type="search"], input[placeholder*="echercher" i], input[placeholder*="earch" i]'))
+        .find((el) => isVisible(el) && !el.closest('header, nav')) || null;
+      if (box) {
+        await typeInto(box, String(wanted[0]));
+        box.focus();
+        await sleep(800);
+      }
+    }
+
+    const listed = () => Array.from(visibleOptionSet()).filter((el) => !before.has(el) && el !== trigger && !trigger.contains(el));
+    let found = bestOption(listed(), wanted);
+    if (!found) found = bestOption(Array.from(visibleOptionSet()).filter((el) => el !== trigger && !trigger.contains(el)), wanted);
+    let usedFallback = false;
+    if (!found && (opts.fallback || []).length) {
+      found = bestOption(listed(), opts.fallback);
+      if (!found && box) {
+        // La recherche n'a rien donné : on vide le champ pour retrouver « Autre » / « Sans marque » dans la liste complète.
+        await typeInto(box, '');
+        box.focus();
+        await sleep(800);
+        found = bestOption(listed(), opts.fallback);
+      }
+      usedFallback = !!found;
+    }
+    if (!found) {
+      try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) {}
+      await sleep(250);
+      if (listed().length) { try { trigger.click(); } catch (_) {} }
+      return { ok: false, absent: false };
+    }
+    clickEl(found.el);
+    await sleep(450);
+    return { ok: true, value: String(found.wanted), fallback: usedFallback };
+  }
+
+  /** Élément cliquable dont le texte visible correspond à l'un des libellés (suggestions de catégorie…). */
+  function findClickableByText(texts, root) {
+    const wanted = texts.map(squash).filter(Boolean);
+    if (!wanted.length) return null;
+    const scope = root || document.querySelector('main, [role="main"]') || document;
+    const candidates = Array.from(scope.querySelectorAll(
+      'button, [role="button"], [role="radio"], [role="option"], [role="menuitem"], a, label, li, [tabindex]'
+    )).filter((el) => isVisible(el) && !el.disabled && el.getAttribute('aria-disabled') !== 'true' &&
+      !el.closest('header, nav, footer'));
+    const items = candidates
+      .map((el) => ({ el, text: squash(el.innerText || el.textContent || '') }))
+      .filter((o) => o.text && o.text.length <= 80 && !BLOCKED_BUTTON.test(o.text));
+    for (const w of wanted) {
+      const exact = items.find((o) => o.text === w);
+      if (exact) return exact.el;
+    }
+    for (const w of wanted) {
+      const near = items.find((o) => o.text.includes(w));
+      if (near) return near.el;
+    }
+    return null;
+  }
+
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
     const style = getComputedStyle(el);
@@ -226,6 +418,9 @@
       /^mettre en ligne$/,
       /^deposer l['’]annonce$/,
       /^valider et publier$/,
+      // Leboncoin : écran « Boostez votre annonce » — on ne choisit jamais d'option payante.
+      /^deposer sans booster( mon annonce| l['’]annonce)?$/,
+      /^deposer mon annonce$/,
     ]);
   }
 
@@ -447,6 +642,12 @@
     toast,
     setNativeValue,
     findByLabels,
+    typeInto,
+    waitFor,
+    squash,
+    findMenuTrigger,
+    chooseMenuOption,
+    findClickableByText,
     sleep,
     isVisible,
     clickEl,
