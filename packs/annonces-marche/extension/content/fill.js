@@ -205,7 +205,7 @@
    * Saisie dans un champ contrôlé (React) : focus, sélection du contenu, puis insertion de texte par le navigateur
    * (événements « input » natifs). Repli sur l'écriture directe de la valeur. Termine par un blur : le site valide alors le champ.
    */
-  async function typeInto(el, text) {
+  async function typeInto(el, text, opts) {
     if (!el) return false;
     const wanted = String(text == null ? '' : text);
     if (wanted !== '' && squash(readValue(el)) === squash(wanted)) return true;
@@ -226,6 +226,7 @@
     try { inserted = document.execCommand('insertText', false, wanted); } catch (_) { inserted = false; }
     if (!inserted || squash(readValue(el)) !== squash(wanted)) setNativeValue(el, wanted);
     await sleep(120);
+    if (opts && opts.keepFocus) return squash(readValue(el)) === squash(wanted);   // champ de recherche : un blur refermerait la liste de résultats
     // Dans un onglet ouvert en arrière-plan, la page n'a pas le focus : le navigateur ne déclenche alors pas blur / focusout.
     let blurred = false;
     const onBlur = () => { blurred = true; };
@@ -504,7 +505,9 @@
   }
 
   function findPublishButton() {
-    return findButton([
+    // Vinted : le bouton de mise en ligne s'appelle simplement « Ajouter » (le brouillon est « Sauvegarder le brouillon », exclu plus haut).
+    const vintedExtra = /(^|\.)vinted\./i.test(location.hostname) ? [/^ajouter$/] : [];
+    return findButton(vintedExtra.concat([
       /^publier$/,
       /^publier l['’]annonce$/,
       /^publier mon annonce$/,
@@ -515,7 +518,7 @@
       // Leboncoin : écran « Boostez votre annonce » — on ne choisit jamais d'option payante.
       /^deposer sans booster( mon annonce| l['’]annonce)?$/,
       /^deposer mon annonce$/,
-    ]);
+    ]));
   }
 
   function findNextButton() {
@@ -552,6 +555,8 @@
 
   function detectPublished() {
     if (/\/(confirmation|success|merci|annonce-publiee|published)/i.test(location.href)) return true;
+    // Vinted : après la mise en ligne, on arrive sur la page de l'article (/items/<numéro>-<titre>), plus sur /items/new.
+    if (/(^|\.)vinted\./i.test(location.hostname) && /^\/items\/\d+/.test(location.pathname)) return true;
     const text = normalizeLabel(document.body ? document.body.innerText.slice(0, 20000) : '');
     return /(annonce (est )?(en ligne|publiee|visible)|votre annonce a bien ete publiee|felicitations[^.]{0,40}annonce|article (est )?(en ligne|publie))/.test(text);
   }

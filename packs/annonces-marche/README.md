@@ -25,6 +25,8 @@ ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 Dossier `extension/` (téléchargeable en ZIP depuis l’admin). Chargement : `chrome://extensions` → mode développeur → « Charger l’extension non empaquetée ».
 
+Sur Vinted (formulaire d'une seule page), l'extension remplit titre, description, catégorie (recherche dans l'arbre, première entrée « Femmes / Hommes / Enfants » selon la fiche ; à défaut la première suggestion, signalée), puis marque (celle de la fiche si elle existe à l'identique chez Vinted, jamais une marque voisine ; sinon « Inconnu », car Vinted refuse l'annonce sans marque dans la plupart des catégories), taille, état, couleurs (2 au plus), matériau, prix et format de colis recommandé. Le bouton de mise en ligne est « Ajouter » ; la simulation s'arrête avant.
+
 Identifiant fixe : le manifeste contient une clé publique (`key`), donc l'extension garde le même identifiant (`idcomcikoeeadimpadaeihhaahaagkge`) quel que soit le dossier d'où elle est chargée. Ses réglages (adresse, jeton) restent en place au rechargement ; seule une suppression de l'extension les efface. Changer cette clé change l'identifiant et vide les réglages.
 
 Réglages : URL de la boutique (par exemple `https://<domaine>/<boutique>/boutique.php`) + jeton `am_…` créé dans l’admin. L’extension accepte aussi directement l’URL API `https://<domaine>/<boutique>/api/annonces`.
