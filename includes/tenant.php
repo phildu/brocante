@@ -44,6 +44,11 @@ function tenant_from_host(?string $host = null): string
     if (!preg_match('/^[a-z0-9][a-z0-9_-]*$/', $candidate)) {
         return '';
     }
+    // Domaine dont les sous-domaines sont réservés aux boutiques d'une galerie (includes/adresses-publiques.php) :
+    // seules ses boutiques membres y sont servies.
+    if (in_array(adresse_host_normalize(substr($host, strlen($candidate) + 1)), adresse_domaines_boutiques(), true)) {
+        return isset(adresse_boutiques()[$candidate]) && is_file(tenant_dir($candidate) . '/tenant.php') ? $candidate : '';
+    }
     // Adresse en sous-domaine achetée par un commerce (data/domaines/sub/) : le nom
     // choisi par le marchand désigne sa boutique, quel que soit son identifiant.
     $alias = domain_sub_hosts()[$candidate] ?? '';
