@@ -340,7 +340,14 @@
 
     if (!(await open())) return { ok: false, absent: false };
     let found = null;
+    const listedTexts = () => options().map((o) => String(o.innerText || o.textContent || '').trim()).filter(Boolean);
+    const seen = listedTexts();   // liste complète lue avant tout filtrage par saisie
     if (!opts.search && wanted.length) found = bestOption(options(), wanted);
+    if (!found && typeof opts.nearest === 'function') {
+      // Aucune valeur de la fiche dans la liste : on laisse l'appelant choisir l'entrée la plus proche de la pièce.
+      const near = opts.nearest(seen);
+      if (near) { found = bestOption(options(), [near]); if (found) found.nearest = true; }
+    }
     if (!found && wanted.length) {
       // Longue liste (marques) : on filtre en tapant dans le champ.
       await typeInto(input, String(wanted[0]));
@@ -362,26 +369,27 @@
     if (!found) {
       try { await typeInto(input, ''); } catch (_) {}
       await close();
-      return { ok: false, absent: false };
+      return { ok: false, absent: false, options: seen };
     }
     try { found.el.scrollIntoView({ block: 'nearest' }); } catch (_) {}
     pressEl(found.el);
     await sleep(500);
     if (isOpen()) await close();
-    return { ok: !!squash(input.value), value: input.value, fallback: usedFallback };
+    return { ok: !!squash(input.value), value: input.value, fallback: usedFallback, nearest: !!found.nearest };
   }
 
   async function chooseMenuOption(labels, wantedList, options) {
     const opts = options || {};
     const wanted = (wantedList || []).filter((v) => v != null && String(v).trim() !== '');
     const combo = findCombo(labels);
+    const canGuess = typeof opts.nearest === 'function';
     if (combo) {
-      if (!wanted.length && !(opts.fallback || []).length) return { ok: false, absent: false, skipped: true };
+      if (!wanted.length && !(opts.fallback || []).length && !canGuess) return { ok: false, absent: false, skipped: true };
       return chooseComboOption(combo, wanted, opts);
     }
     const trigger = findMenuTrigger(labels);
     if (!trigger) return { ok: false, absent: true };
-    if (!wanted.length && !(opts.fallback || []).length) return { ok: false, absent: false, skipped: true };
+    if (!wanted.length && !(opts.fallback || []).length && !canGuess) return { ok: false, absent: false, skipped: true };
 
     const current = squash(trigger.innerText || trigger.textContent || '');
     if (wanted.some((w) => squash(w) && current === squash(w))) return { ok: true, value: current, already: true };
@@ -405,6 +413,11 @@
     const listed = () => Array.from(visibleOptionSet()).filter((el) => !before.has(el) && el !== trigger && !trigger.contains(el));
     let found = bestOption(listed(), wanted);
     if (!found) found = bestOption(Array.from(visibleOptionSet()).filter((el) => el !== trigger && !trigger.contains(el)), wanted);
+    const seen = listed().map((el) => String(el.innerText || el.textContent || '').trim()).filter(Boolean);
+    if (!found && canGuess) {
+      const near = opts.nearest(seen);
+      if (near) { found = bestOption(listed(), [near]); if (found) found.nearest = true; }
+    }
     let usedFallback = false;
     if (!found && (opts.fallback || []).length) {
       found = bestOption(listed(), opts.fallback);
@@ -421,11 +434,11 @@
       try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) {}
       await sleep(250);
       if (listed().length) { try { trigger.click(); } catch (_) {} }
-      return { ok: false, absent: false };
+      return { ok: false, absent: false, options: seen };
     }
     clickEl(found.el);
     await sleep(450);
-    return { ok: true, value: String(found.wanted), fallback: usedFallback };
+    return { ok: true, value: String(found.wanted), fallback: usedFallback, nearest: !!found.nearest };
   }
 
   /** Élément cliquable dont le texte visible correspond à l'un des libellés (suggestions de catégorie…). */
@@ -683,6 +696,8 @@
       try {
         const result = await fill(p, true);
         filled = (result && result.done) || filled;
+        // Un menu obligatoire sans valeur utilisable (ex. Univers) : inutile d'insister, on passe à la pièce suivante.
+        if (result && result.skip) return { ok: true, action: 'skipped', reason: result.skip, filled, photos };
       } catch (_) {}
 
       photos = await attachPhotosIfNeeded(opts.runId, photoUrls);

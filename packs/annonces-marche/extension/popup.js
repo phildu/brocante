@@ -673,6 +673,7 @@
       s.published ? s.published + ' publiée(s)' : '',
       s.prepared ? s.prepared + ' simulée(s)' : '',
       s.rejected ? s.rejected + ' écartée(s)' : '',
+      s.skipped ? s.skipped + ' passée(s)' : '',
       s.blocked ? s.blocked + ' arrêt(s)' : '',
       s.error ? s.error + ' erreur(s)' : '',
     ].filter(Boolean).join(' · ') || 'aucune pièce traitée';

@@ -245,6 +245,7 @@ function actionLabel(action) {
     prepared: 'prête (simulation)',
     rejected: 'écartée (contrôle de la fiche)',
     blocked: 'arrêtée',
+    skipped: 'passée',
     error: 'erreur',
   }[action] || action;
 }
@@ -591,7 +592,7 @@ async function runAutoInTab(tabId, channel, product, options) {
     const res = await sendWithRetry(tabId, { type: 'am-auto-step', channel, product, options: { ...options, openDeposit: !!options.openDeposit && step === 0 } });
     if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
     await progress('Étape ' + (step + 1) + ' : ' + res.action + (res.reason ? ' — ' + res.reason : ''));
-    if (['blocked', 'prepared', 'published'].includes(res.action)) return res;
+    if (['blocked', 'prepared', 'published', 'skipped'].includes(res.action)) return res;
     if (res.action === 'publish-clicked') {
       publishClicks++;
       const verified = await verifyPublished(tabId, channel);
@@ -687,7 +688,7 @@ async function finalizeItem(product, result, tabId, settings) {
     // L'historique local suffit pour éviter un doublon immédiat.
   }
 
-  const key = ['published', 'prepared', 'blocked', 'rejected'].includes(action) ? action : 'error';
+  const key = ['published', 'prepared', 'blocked', 'rejected', 'skipped'].includes(action) ? action : 'error';
   const stats = { ...(current.stats || {}) };
   stats[key] = (stats[key] || 0) + 1;
 
@@ -701,11 +702,11 @@ async function finalizeItem(product, result, tabId, settings) {
   });
   if (action === 'published' && !settings.dryRun) { await bumpDayCount(); await pushStamp(); }
 
-  if (tabId && (action === 'published' || action === 'prepared') && !settings.keepTabs) {
+  if (tabId && (action === 'published' || action === 'prepared' || action === 'skipped') && !settings.keepTabs) {
     try { await chrome.tabs.remove(tabId); } catch (_) {}
   }
 
-  const advanced = action === 'published' || action === 'prepared' || action === 'rejected';
+  const advanced = action === 'published' || action === 'prepared' || action === 'rejected' || action === 'skipped';
   const updated = {
     ...current,
     // En cas d'arrêt ou d'erreur, la même pièce est retentée à la reprise (l'onglet reste ouvert).
@@ -757,11 +758,14 @@ async function finalizeItem(product, result, tabId, settings) {
   if (action === 'rejected') {
     await chrome.storage.local.set({ amAlert: { level: 'warn', message: 'Fiche ' + ref + ' écartée avant remplissage :\n' + (result.reason || '').replace(/ ; /g, '\n'), at: Date.now() } });
   }
+  if (action === 'skipped') {
+    await chrome.storage.local.set({ amAlert: { level: 'warn', message: 'Pièce ' + ref + ' passée, la file continue :\n' + (result.reason || ''), at: Date.now() } });
+  }
 
   await setQueue(updated);
   await ensureWatchdog();
   // Une fiche écartée n'a rien publié : on enchaîne vite, sans attendre l'intervalle entre publications.
-  await scheduleNext(settings, action === 'rejected' ? 8000 + Math.floor(Math.random() * 6000) : undefined);
+  await scheduleNext(settings, action === 'rejected' || action === 'skipped' ? 8000 + Math.floor(Math.random() * 6000) : undefined);
 }
 
 /* ---------- Messages ---------- */
@@ -817,6 +821,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const res = await sendToDeposit(tabId, channel, { type: 'am-selftest', channel });
       sendResponse(res && res.ok ? res : { ok: false, error: (res && res.error) || 'Le formulaire n’a pas répondu. Rechargez la page.' });
     })().catch((error) => sendResponse({ ok: false, error: error.message || 'Contrôle impossible.' }));
+    return true;
+  }
+
+  if (message.type === 'am-report-unknown') {
+    // Valeur du site introuvable (ex. Univers) : elle rejoint la liste « À renseigner » de la page Correspondances du portail.
+    (async () => {
+      const items = Array.isArray(message.items) ? message.items.slice(0, 20) : [];
+      if (!CHANNELS.includes(message.channel) || !items.length) { sendResponse({ ok: false }); return; }
+      await api('/champs-inconnus', { method: 'POST', json: { channel: message.channel, items } });
+      sendResponse({ ok: true });
+    })().catch(() => sendResponse({ ok: false }));
     return true;
   }
 

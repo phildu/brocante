@@ -121,3 +121,7 @@ couleur, catégorie, photos) dans la note de la ligne d'historique (`[h:…]`). 
 - pièce déjà en ligne mais **modifiée** depuis → signalée « à mettre à jour » dans l'historique (la modification de
   l'annonce existante n'est pas encore automatique) ;
 - pièce publiée avant cette version (sans empreinte) → l'empreinte actuelle est enregistrée, la pièce est passée.
+
+## Menu « Univers » de Leboncoin (extension 1.8.2)
+
+L'extension lit la liste réelle des univers proposés par le site et choisit l'entrée la plus proche de la pièce (valeur imposée par la table de correspondances, puis Femme / Homme pour la mode, puis comparaison des mots de la catégorie, du titre et de la description). Sans choix assez sûr, la pièce est **passée** (la file continue, ce n'est plus un arrêt) et le manque est inscrit dans « À renseigner » de la page Correspondances, avec la liste des univers du site. Une correspondance « Autre champ » peut maintenant porter une catégorie de la boutique (ex. Univers = « Maison » pour les paniers) sans toucher aux autres pièces.
