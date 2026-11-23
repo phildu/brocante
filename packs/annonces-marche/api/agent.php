@@ -89,9 +89,16 @@ if ($path === '/annonces/publications' && $method === 'GET') {
         WHERE id IN (SELECT MAX(id) FROM am_listings WHERE channel = ? AND status IN ('published', 'sold') GROUP BY product_ref)
         LIMIT 2000");
     $last->execute([$channel]);
+    // Pièces dont la dernière trace sur ce canal est un brouillon enregistré sur la plateforme (pour ne pas en créer un doublon).
+    $dr = db()->prepare("SELECT product_ref FROM am_listings
+        WHERE id IN (SELECT MAX(id) FROM am_listings WHERE channel = ? GROUP BY product_ref)
+          AND status = 'draft' AND note LIKE '%drafted%'
+        LIMIT 2000");
+    $dr->execute([$channel]);
     plugin_json([
         'channel' => $channel,
         'refs' => $refs,
+        'drafts' => array_map('strval', $dr->fetchAll(PDO::FETCH_COLUMN)),
         'listings' => array_map(static function (array $row): array {
             return [
                 'ref' => (string) $row['product_ref'],

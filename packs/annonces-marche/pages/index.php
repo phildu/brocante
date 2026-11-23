@@ -24,6 +24,7 @@ $apiBase = rtrim(shop_abs_url('/'), '/') . '/api/annonces';
 
   <p class="eyebrow">Module · <?= h($plugin['name']) ?> · v<?= h($plugin['version']) ?></p>
   <p><a href="<?= h(plugin_page_url('annonces-marche', 'mappings')) ?>">Correspondances des champs (état, catégorie, taille, couleur…) →</a></p>
+  <p><a href="<?= h(plugin_page_url('annonces-marche', 'prix')) ?>">Prix suggérés par les plateformes (rapport pour repricer) →</a></p>
   <h1 style="font-size:1.8rem;margin:12px 0 8px;">Synchronisation multi-plateformes</h1>
   <p class="hint" style="max-width:62ch;">
     Préparez et exportez vos annonces depuis le catalogue de <strong><?= h($content['site_name']) ?></strong>

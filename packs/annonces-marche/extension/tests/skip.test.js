@@ -20,17 +20,17 @@ vm.runInContext(fs.readFileSync(dir + '/background.js', 'utf8') + ';this.__t={fi
 const T = ctx.__t;
 
 (async () => {
-  assert.strictEqual(T.actionLabel('skipped'), 'passée');
+  assert.ok(/passée/.test(T.actionLabel('no-match')));
   store.amQueue = { status: 'running', channel: 'leboncoin', refs: ['006', '007'], index: 0, stats: {}, consecutiveErrors: 0, activeRef: '006' };
-  await T.finalizeItem({ ref: '006' }, { action: 'skipped', reason: 'menu « Univers » : aucune entrée ne correspond' }, 42, { dryRun: false });
+  await T.finalizeItem({ ref: '006' }, { action: 'no-match', reason: 'menu « Univers » : aucune entrée ne correspond' }, 42, { dryRun: false });
   const q = store.amQueue;
   assert.strictEqual(q.status, 'running', 'la file continue');
   assert.strictEqual(q.index, 1, 'on passe à la pièce suivante');
-  assert.strictEqual(q.stats.skipped, 1);
+  assert.strictEqual(q.stats['no-match'], 1);
   assert.deepStrictEqual(removed, [42], 'l’onglet est refermé');
   assert.ok(store.__alarm && store.__alarm.n, 'la pièce suivante est programmée');
   const mark = calls.find((c) => /marquer/.test(c.url));
-  assert.ok(mark && mark.body.product_ref === '006' && mark.body.status === 'draft' && /^skipped — /.test(mark.body.note), 'inscrite au portail comme non publiée');
+  assert.ok(mark && mark.body.product_ref === '006' && mark.body.status === 'draft' && /^no-match — /.test(mark.body.note), 'inscrite au portail comme non publiée');
   assert.ok(store.amAlert && /006/.test(store.amAlert.message), 'alerte affichée dans la popup');
   console.log('skip-test OK');
 })().catch((e) => { console.error(e); process.exit(1); });

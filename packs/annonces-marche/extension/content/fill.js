@@ -534,6 +534,32 @@
     ]));
   }
 
+  /** Bouton « Sauvegarder le brouillon » (Vinted). Leboncoin n'en propose pas : null. */
+  function findDraftButton() {
+    const candidates = Array.from(document.querySelectorAll('button, [role="button"], a, input[type="submit"], input[type="button"]'));
+    for (const el of candidates) {
+      if (!isVisible(el) || el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+      if (/^(sauvegarder|enregistrer)( le| un| mon| en)? brouillon$/.test(buttonLabel(el))) return el;
+    }
+    return null;
+  }
+
+  /** Prix proposé par la plateforme (fourchette ou valeur) affiché sur le formulaire, ou null. */
+  function readSuggestedPrice() {
+    if (!globalThis.AmQuality || !document.body) return null;
+    return AmQuality.parseSuggestedPrice(document.body.innerText.slice(0, 40000));
+  }
+
+  /** La suggestion s'affiche après coup (catégorie, marque, état renseignés) : on lui laisse quelques secondes. */
+  async function waitSuggestedPrice() {
+    for (let i = 0; i < 4; i++) {
+      const s = readSuggestedPrice();
+      if (s && s.min != null) return s;
+      await sleep(1000);
+    }
+    return readSuggestedPrice();
+  }
+
   function findNextButton() {
     return findButton([
       /^continuer$/,
@@ -697,7 +723,7 @@
         const result = await fill(p, true);
         filled = (result && result.done) || filled;
         // Un menu obligatoire sans valeur utilisable (ex. Univers) : inutile d'insister, on passe à la pièce suivante.
-        if (result && result.skip) return { ok: true, action: 'skipped', reason: result.skip, filled, photos };
+        if (result && result.skip) return { ok: true, action: 'no-match', reason: result.skip, filled, photos };
       } catch (_) {}
 
       photos = await attachPhotosIfNeeded(opts.runId, photoUrls);
@@ -731,11 +757,27 @@
             };
           }
         }
+        const suggested = await waitSuggestedPrice();
+        if (opts.draft) {
+          const draftBtn = findDraftButton();
+          if (draftBtn) {
+            clickEl(draftBtn);
+            return { ok: true, action: 'draft-clicked', filled, photos, suggested };
+          }
+          return {
+            ok: true,
+            action: 'blocked',
+            reason: 'cette plateforme n’a pas de brouillon : la fiche est remplie, vérifiez-la et publiez à la main, puis passez à la suivante',
+            filled,
+            photos,
+            suggested,
+          };
+        }
         if (opts.dryRun) {
-          return { ok: true, action: 'prepared', reason: 'prêt à publier (simulation)', filled, photos };
+          return { ok: true, action: 'prepared', reason: 'prêt à publier (simulation)', filled, photos, suggested };
         }
         clickEl(publish);
-        return { ok: true, action: 'publish-clicked', filled, photos };
+        return { ok: true, action: 'publish-clicked', filled, photos, suggested };
       }
 
       const next = findNextButton();
@@ -756,7 +798,16 @@
     };
   }
 
-  function verifyAuto() {
+  /** Vinted confirme un brouillon par un message (et quitte souvent le formulaire). */
+  function detectDrafted() {
+    const text = normalizeLabel(document.body ? document.body.innerText.slice(0, 20000) : '');
+    return /(brouillon (a ete |est )?(enregistre|sauvegarde|ajoute)|(enregistre|sauvegarde)e? (en|comme) brouillon|ton article a ete (enregistre|sauvegarde))/.test(text);
+  }
+
+  function verifyAuto(opts) {
+    if (opts && opts.draft) {
+      return detectDrafted() ? { ok: true, action: 'drafted' } : { ok: true, action: 'still-open' };
+    }
     if (detectPublished()) return { ok: true, action: 'published', listing_url: location.href };
     const challenge = detectChallenge();
     if (challenge) return { ok: true, action: 'blocked', reason: 'vérification demandée (' + challenge + ')' };
@@ -852,6 +903,9 @@
     clickEl,
     pressEl,
     findPublishButton,
+    findDraftButton,
+    readSuggestedPrice,
+    detectDrafted,
     findNextButton,
     detectChallenge,
     detectPublished,
