@@ -438,7 +438,7 @@
     }
     if (msg.type === 'am-auto-verify' && msg.channel === 'vinted') {
       const F = globalThis.AmFill;
-      sendResponse(F ? F.verifyAuto() : { ok: false, error: 'Helpers absents : rechargez l’extension.' });
+      sendResponse(F ? F.verifyAuto(msg) : { ok: false, error: 'Helpers absents : rechargez l’extension.' });
       return;
     }
     if (msg.type !== 'am-fill' || msg.channel !== 'vinted') return;

@@ -7,6 +7,7 @@
   "pages": [
     { "id": "index", "label": "Synchronisation multi-plateformes", "icon": "cloud", "file": "pages/index.php", "roles": ["admin", "community_manager"] },
     { "id": "mappings", "label": "Correspondances des champs", "icon": "cloud", "file": "pages/mappings.php", "roles": ["admin", "community_manager"], "menu": false },
+    { "id": "prix", "label": "Prix suggérés", "icon": "cloud", "file": "pages/prix.php", "roles": ["admin", "community_manager"], "menu": false },
     { "id": "merci", "label": "Paiement", "icon": "cloud", "file": "pages/merci.php", "roles": ["admin"], "menu": false }
   ],
   "api": [

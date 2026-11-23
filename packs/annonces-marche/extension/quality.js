@@ -139,6 +139,46 @@
     return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
   }
 
-  global.AmQuality = { check, summary, lines, needsSize, hasSize, fingerprint };
+  const toEuros = (s) => Number(String(s).replace(/[\s  ]/g, '').replace(',', '.'));
+  const AMOUNT = '(\\d[\\d ]*(?:[.,]\\d{1,2})?)';
+  const KEY = '(prix\\s+(?:suggere|recommande|conseille|estime|moyen|habituel)|prix du marche|estimation|fourchette(?: de prix)?)';
+  const RANGE = new RegExp(KEY + '[^0-9]{0,60}' + AMOUNT + '\\s*(?:€|eur)?\\s*(?:-|–|—|a|et|jusqu\'a)\\s*' + AMOUNT + '\\s*(?:€|eur)');
+  const SINGLE = new RegExp(KEY + '[^0-9]{0,60}' + AMOUNT + '\\s*(?:€|eur)');
+
+  /**
+   * Prix proposé par la plateforme, lu dans le texte de la page : { min, max, text } ; { min: null, max: null, text } quand
+   * la plateforme parle d'un prix suggéré sans qu'on sache en lire le montant (le texte sert alors à ajuster la lecture) ;
+   * null quand rien n'est affiché. Fonction pure : le texte est passé en paramètre.
+   */
+  function parseSuggestedPrice(pageText) {
+    const flat = squash(String(pageText || '').replace(/[  ]/g, ' '));
+    let m = RANGE.exec(flat);
+    if (m) {
+      const a = toEuros(m[2]);
+      const b = toEuros(m[3]);
+      if (a > 0 && b > 0 && a < 100000 && b < 100000) return { min: Math.min(a, b), max: Math.max(a, b), text: m[0].slice(0, 120) };
+    }
+    m = SINGLE.exec(flat);
+    if (m) {
+      const a = toEuros(m[2]);
+      if (a > 0 && a < 100000) return { min: a, max: a, text: m[0].slice(0, 120) };
+    }
+    const k = new RegExp(KEY).exec(flat);
+    return k ? { min: null, max: null, text: flat.slice(k.index, k.index + 120) } : null;
+  }
+
+  /** Étiquette rangée dans la note de publication : « [s:8-15] » (ou « [s:?] » quand le montant n'est pas lisible). */
+  function suggestionTag(s) {
+    if (!s) return '';
+    if (s.min == null || s.max == null) return '[s:?] ';
+    return '[s:' + s.min + '-' + s.max + '] ';
+  }
+
+  function suggestionFromNote(note) {
+    const m = /\[s:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)\]/.exec(String(note || ''));
+    return m ? { min: Number(m[1]), max: Number(m[2]) } : null;
+  }
+
+  global.AmQuality = { check, summary, lines, needsSize, hasSize, fingerprint, parseSuggestedPrice, suggestionTag, suggestionFromNote };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.AmQuality;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

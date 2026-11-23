@@ -121,3 +121,9 @@ couleur, catégorie, photos) dans la note de la ligne d'historique (`[h:…]`). 
 - pièce déjà en ligne mais **modifiée** depuis → signalée « à mettre à jour » dans l'historique (la modification de
   l'annonce existante n'est pas encore automatique) ;
 - pièce publiée avant cette version (sans empreinte) → l'empreinte actuelle est enregistrée, la pièce est passée.
+
+## Brouillon et prix suggérés (extension 1.9.0)
+
+- **Brouillon** : réglage « Enregistrer en brouillon au lieu de publier » (prioritaire sur la simulation). Sur Vinted, l'extension remplit la fiche puis clique « Sauvegarder le brouillon » ; le vendeur vérifie sur le site avant de publier. Leboncoin n'a pas de brouillon : la fiche est remplie, la file s'arrête sur la pièce (publier à la main, puis « Passer »). Un brouillon ne compte pas dans les plafonds ni dans la plage horaire. `/annonces/publications` renvoie `drafts` (pièces dont la dernière trace est un brouillon enregistré) : relancer une série ne crée pas de doublon de brouillons.
+- **Prix suggérés** : à chaque remplissage (simulation, brouillon ou publication), l'extension lit le prix proposé par la plateforme (`AmQuality.parseSuggestedPrice`) et le range dans la note de la ligne `am_listings` sous la forme `[s:min-max]` (`[s:?]` quand la plateforme en parle sans montant lisible). Aucune migration SQL. La page « Prix suggérés » (`pages/prix.php`, `lib/pricing.php`) compare ces fourchettes au prix de la boutique (tolérance 10 %) et exporte un CSV. Rien n'est modifié automatiquement.
+- La lecture s'appuie sur des libellés (« prix suggéré », « recommandé », « estimation »…) : elle n'a pas pu être essayée sur un formulaire réel avec suggestion. Un montant illisible laisse le texte relevé dans l'historique de l'extension pour ajuster la lecture.

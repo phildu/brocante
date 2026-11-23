@@ -79,4 +79,23 @@ assert.notStrictEqual(Q.fingerprint({ ...good, price: Number(good.price) + 1 }, 
 assert.notStrictEqual(Q.fingerprint({ ...good, description: good.description + ' !' }, 'vinted'), fp);
 assert.notStrictEqual(Q.fingerprint({ ...good, photos: photos(1) }, 'vinted'), fp);
 
+// Prix proposé par la plateforme : fourchette, valeur seule, texte sans montant, rien.
+const sp = (t) => Q.parseSuggestedPrice(t);
+assert.deepStrictEqual({ ...sp('Prix suggéré : 8,50 € - 15 €') }.min, 8.5);
+assert.strictEqual(sp('Prix suggéré : 8,50 € - 15 €').max, 15);
+assert.strictEqual(sp('Prix recommandé\u00a010\u00a0€ à 25\u00a0€ selon l’état').max, 25);
+assert.strictEqual(sp('Fourchette de prix : 1 200 € et 1 500 €').min, 1200);
+assert.deepStrictEqual([sp('Estimation 12 €').min, sp('Estimation 12 €').max], [12, 12]);
+assert.deepStrictEqual([sp('Prix suggéré bientôt disponible').min, sp('Prix suggéré bientôt disponible').max], [null, null]);
+assert.ok(sp('Prix suggéré bientôt disponible').text.length > 0);
+assert.strictEqual(sp('Ajoute des photos. Prix 20 €'), null);
+assert.strictEqual(sp(''), null);
+assert.strictEqual(sp('prix suggere 15 - 8 €').min, 8);
+// Étiquette de note et relecture.
+assert.strictEqual(Q.suggestionTag({ min: 8.5, max: 15 }), '[s:8.5-15] ');
+assert.strictEqual(Q.suggestionTag({ min: null, max: null, text: 'x' }), '[s:?] ');
+assert.strictEqual(Q.suggestionTag(null), '');
+assert.deepStrictEqual(Q.suggestionFromNote('[h:0123456789abcdef] [s:8.5-15] published'), { min: 8.5, max: 15 });
+assert.strictEqual(Q.suggestionFromNote('[s:?] prepared'), null);
+
 console.log('quality.test.js : tous les tests passent');
