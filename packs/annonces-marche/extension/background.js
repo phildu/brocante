@@ -13,6 +13,7 @@ const AUTO_DEFAULTS = {
   armed: false,
   armedAt: 0,
   dryRun: true,
+  saveDraft: false,    // enregistre un brouillon sur la plateforme au lieu de publier (prioritaire sur la simulation)
   intervalMin: 5,
   dailyCap: 10,
   hourlyCap: 3,        // publications réelles par heure glissante au plus
@@ -25,6 +26,11 @@ const AUTO_DEFAULTS = {
     vinted: 'https://www.vinted.fr/items/new',
   },
 };
+
+/** Publication réelle : ni simulation, ni brouillon. Seule elle est soumise aux plafonds, à la plage horaire et au délai de repos. */
+const isLive = (settings) => !settings.dryRun && !settings.saveDraft;
+/** Simulation pure (rien n'est cliqué sur la plateforme). */
+const isSimulation = (settings) => !!settings.dryRun && !settings.saveDraft;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -122,7 +128,7 @@ function hhmm(ts) {
  * Retourne null (on peut y aller) ou { until, message } : la file attend, sans se mettre en pause.
  */
 async function pacingHold(settings) {
-  if (settings.dryRun) return null;
+  if (!isLive(settings)) return null;
   const now = new Date();
   const from = Math.max(0, Math.min(23, Number(settings.activeFrom)));
   const to = Math.max(from + 1, Math.min(24, Number(settings.activeTo)));
@@ -195,8 +201,8 @@ async function clearAlarms() {
 
 async function scheduleNext(settings, fixedDelay) {
   // En simulation, on enchaîne plus vite (mais jamais en rafale) ; en réel, respect du réglage.
-  const minutes = settings.dryRun ? 0.6 : Math.max(2, Math.min(30, Number(settings.intervalMin) || 5));
-  const delay = fixedDelay != null ? fixedDelay : settings.dryRun ? Math.round(minutes * 60000 * (0.85 + Math.random() * 0.3)) : humanDelay(minutes);
+  const minutes = !isLive(settings) ? 0.6 : Math.max(2, Math.min(30, Number(settings.intervalMin) || 5));
+  const delay = fixedDelay != null ? fixedDelay : !isLive(settings) ? Math.round(minutes * 60000 * (0.85 + Math.random() * 0.3)) : humanDelay(minutes);
   await chrome.alarms.clear(ALARM_NEXT);
   await chrome.alarms.create(ALARM_NEXT, { when: Date.now() + delay });
 }
@@ -243,6 +249,7 @@ function actionLabel(action) {
     'to-update': 'à mettre à jour',
     published: 'publiée',
     prepared: 'prête (simulation)',
+    drafted: 'enregistrée en brouillon',
     rejected: 'écartée (contrôle de la fiche)',
     blocked: 'arrêtée',
     error: 'erreur',
@@ -257,7 +264,7 @@ async function startAuto(channel) {
   if (!settings.armed) {
     throw new Error('Cochez « J’assume le risque » avant de lancer la publication automatique.');
   }
-  if (!settings.dryRun) {
+  if (isLive(settings)) {
     const cooldown = await getCooldown();
     if (cooldown) {
       throw new Error('Une vérification a été demandée par la plateforme : pas de publication automatique avant ' + hhmm(cooldown) + '. Vérifiez votre compte à la main (la simulation reste possible).');
@@ -277,10 +284,12 @@ async function startAuto(channel) {
 
   let published = [];
   let listings = [];
+  let drafted = [];
   try {
     const res = await api('/publications?channel=' + encodeURIComponent(channel));
     published = Array.isArray(res.refs) ? res.refs : [];
     listings = Array.isArray(res.listings) ? res.listings : [];
+    drafted = Array.isArray(res.drafts) ? res.drafts.map(String) : [];
   } catch (_) {
     // Ancienne version du serveur : l'historique local reste la seule protection anti-doublon.
   }
@@ -310,14 +319,18 @@ async function startAuto(channel) {
     else unchanged.push(ref);
   }
   const alreadyOnline = new Set([...unchanged, ...toUpdate]);
+  // En mode brouillon, une pièce déjà enregistrée en brouillon sur ce canal n'est pas redéposée (sinon doublon de brouillons).
+  const alreadyDrafted = settings.saveDraft ? new Set(drafted) : new Set();
+  const draftSkipped = candidates.filter((ref) => ref && alreadyDrafted.has(String(ref)) && !seen.has(ref) && !alreadyOnline.has(ref));
   const refs = candidates
-    .filter((ref) => ref && !seen.has(ref) && !alreadyOnline.has(ref))
+    .filter((ref) => ref && !seen.has(ref) && !alreadyOnline.has(ref) && !alreadyDrafted.has(String(ref)))
     .slice(0, Math.max(0, settings.dailyCap - dayCount));
   const source = picked.length ? ' (cochées dans l’extension)' : ' (sélection de la boutique)';
   const skipNote = (unchanged.length ? ' ' + unchanged.length + ' inchangée(s) passée(s).' : '') +
-    (toUpdate.length ? ' ' + toUpdate.length + ' à mettre à jour (' + toUpdate.join(', ') + ').' : '');
+    (toUpdate.length ? ' ' + toUpdate.length + ' à mettre à jour (' + toUpdate.join(', ') + ').' : '') +
+    (draftSkipped.length ? ' ' + draftSkipped.length + ' déjà en brouillon sur la plateforme (' + draftSkipped.join(', ') + ').' : '');
   for (const ref of toUpdate) {
-    await pushHistory({ ref, channel, action: 'to-update', reason: 'contenu modifié depuis la publication', dryRun: !!settings.dryRun, at: Date.now() });
+    await pushHistory({ ref, channel, action: 'to-update', reason: 'contenu modifié depuis la publication', dryRun: isSimulation(settings), at: Date.now() });
   }
 
   if (!refs.length) {
@@ -331,7 +344,7 @@ async function startAuto(channel) {
     index: 0,
     status: 'running',
     startedAt: Date.now(),
-    stats: { published: 0, prepared: 0, blocked: 0, error: 0 },
+    stats: { published: 0, drafted: 0, prepared: 0, blocked: 0, error: 0 },
     consecutiveErrors: 0,
     lockAt: 0,
     activeTabId: null,
@@ -365,7 +378,7 @@ async function resumeAuto() {
   const settings = await getSettings();
   if (!settings.armed) throw new Error('Cochez « J’assume le risque » pour reprendre.');
   if (queue.index >= queue.refs.length) throw new Error('Cette file est terminée : relancez un nouveau passage.');
-  if (!settings.dryRun) {
+  if (isLive(settings)) {
     const cooldown = await getCooldown();
     if (cooldown) {
       throw new Error('Une vérification a été demandée par la plateforme : pas de publication automatique avant ' + hhmm(cooldown) + '. Vérifiez votre compte à la main (la simulation reste possible).');
@@ -420,7 +433,7 @@ async function skipAuto() {
     channel: queue.channel,
     action: 'skipped',
     reason: 'ignorée manuellement',
-    dryRun: !!settings.dryRun,
+    dryRun: isSimulation(settings),
     at: Date.now(),
   });
 
@@ -527,7 +540,8 @@ async function processNext() {
     await waitForContent(tabId, queue.channel, 90000);
     await progress('Remplissage de ' + ref + '…');
     const result = await runAutoInTab(tabId, queue.channel, product, {
-      dryRun: !!settings.dryRun,
+      dryRun: isSimulation(settings),
+      draft: !!settings.saveDraft,
       runId: queue.runId,
       openDeposit,
     });
@@ -543,7 +557,7 @@ async function processNext() {
  * rechargement de l'extension : Chrome n'y injecte pas les scripts tout seul (« Receiving end does not exist »).
  */
 async function injectContent(tabId, channel) {
-  const files = ['content/fill.js', channel === 'vinted' ? 'content/vinted.js' : 'content/leboncoin.js'];
+  const files = ['quality.js', 'content/fill.js', channel === 'vinted' ? 'content/vinted.js' : 'content/leboncoin.js'];
   await chrome.scripting.executeScript({ target: { tabId }, files });
 }
 
@@ -586,16 +600,27 @@ async function waitForContent(tabId, channel, timeoutMs) {
 
 async function runAutoInTab(tabId, channel, product, options) {
   let publishClicks = 0;
+  let suggested = null; // prix proposé par la plateforme, relevé à l'étape du formulaire
+  const withSuggestion = (res) => (suggested && res && !res.suggested ? { ...res, suggested } : res);
   for (let step = 0; step < MAX_STEPS; step++) {
     // Le clic de départ n'a lieu qu'à la première étape d'un onglet neuf.
     const res = await sendWithRetry(tabId, { type: 'am-auto-step', channel, product, options: { ...options, openDeposit: !!options.openDeposit && step === 0 } });
     if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
     await progress('Étape ' + (step + 1) + ' : ' + res.action + (res.reason ? ' — ' + res.reason : ''));
-    if (['blocked', 'prepared', 'published'].includes(res.action)) return res;
+    if (res.suggested) suggested = res.suggested;
+    if (['blocked', 'prepared', 'published'].includes(res.action)) return withSuggestion(res);
+    if (res.action === 'draft-clicked') {
+      const saved = await verifyDrafted(tabId, channel);
+      return withSuggestion(saved || {
+        ok: true,
+        action: 'blocked',
+        reason: 'clic sur « Sauvegarder le brouillon » envoyé, mais l’enregistrement n’est pas confirmé. Vérifiez l’onglet.',
+      });
+    }
     if (res.action === 'publish-clicked') {
       publishClicks++;
       const verified = await verifyPublished(tabId, channel);
-      if (verified) return verified;
+      if (verified) return withSuggestion(verified);
       if (publishClicks >= 2) {
         return {
           ok: true,
@@ -630,6 +655,25 @@ async function sendWithRetry(tabId, message, attempts = 6) {
     await sleep(700);
   }
   throw new Error((lastError && lastError.message) || 'La page ne répond pas.');
+}
+
+/** Brouillon enregistré : message de confirmation du site, ou formulaire quitté (le site renvoie vers ses brouillons). */
+async function verifyDrafted(tabId, channel) {
+  for (let i = 0; i < 6; i++) {
+    await sleep(i === 0 ? 1500 : 2000);
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-verify', channel, draft: true });
+      if (res && res.action === 'drafted') return { ok: true, action: 'drafted' };
+    } catch (_) {
+      // Navigation en cours : on contrôle l'adresse ci-dessous.
+    }
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      const path = new URL(tab.url || 'about:blank').pathname;
+      if (channel === 'vinted' && tab.url && !/^\/items\/new/.test(path)) return { ok: true, action: 'drafted' };
+    } catch (_) {}
+  }
+  return null;
 }
 
 async function verifyPublished(tabId, channel) {
@@ -667,9 +711,17 @@ async function finalizeItem(product, result, tabId, settings) {
 
   const action = result.action;
   const ref = product.ref || current.activeRef || '';
-  const hashMark = action === 'published' && !settings.dryRun && globalThis.AmQuality && (product.title !== undefined || product.name !== undefined)
+  if (result.suggested) {
+    const sg = result.suggested;
+    const seen = sg.min != null
+      ? 'prix proposé ' + sg.min + (sg.max !== sg.min ? '–' + sg.max : '') + ' €'
+      : 'prix proposé non lu (« ' + String(sg.text || '').slice(0, 60) + ' »)';
+    result = { ...result, reason: (result.reason ? result.reason + ' · ' : '') + seen };
+  }
+  const hashMark = action === 'published' && isLive(settings) && globalThis.AmQuality && (product.title !== undefined || product.name !== undefined)
     ? '[h:' + AmQuality.fingerprint(product, current.channel) + '] ' : '';
-  const note = hashMark + action + (result.reason ? ' — ' + result.reason : '') + (settings.dryRun ? ' [simulation]' : '');
+  const suggestionMark = globalThis.AmQuality ? AmQuality.suggestionTag(result.suggested) : '';
+  const note = hashMark + suggestionMark + action + (result.reason ? ' — ' + result.reason : '') + (isSimulation(settings) ? ' [simulation]' : '');
   const status = action === 'published' ? 'published' : action === 'error' ? 'error' : 'draft';
 
   try {
@@ -687,7 +739,7 @@ async function finalizeItem(product, result, tabId, settings) {
     // L'historique local suffit pour éviter un doublon immédiat.
   }
 
-  const key = ['published', 'prepared', 'blocked', 'rejected'].includes(action) ? action : 'error';
+  const key = ['published', 'drafted', 'prepared', 'blocked', 'rejected'].includes(action) ? action : 'error';
   const stats = { ...(current.stats || {}) };
   stats[key] = (stats[key] || 0) + 1;
 
@@ -696,16 +748,16 @@ async function finalizeItem(product, result, tabId, settings) {
     channel: current.channel,
     action,
     reason: result.reason || '',
-    dryRun: !!settings.dryRun,
+    dryRun: isSimulation(settings),
     at: Date.now(),
   });
-  if (action === 'published' && !settings.dryRun) { await bumpDayCount(); await pushStamp(); }
+  if (action === 'published' && isLive(settings)) { await bumpDayCount(); await pushStamp(); }
 
-  if (tabId && (action === 'published' || action === 'prepared') && !settings.keepTabs) {
+  if (tabId && (action === 'published' || action === 'prepared' || action === 'drafted') && !settings.keepTabs) {
     try { await chrome.tabs.remove(tabId); } catch (_) {}
   }
 
-  const advanced = action === 'published' || action === 'prepared' || action === 'rejected';
+  const advanced = action === 'published' || action === 'prepared' || action === 'drafted' || action === 'rejected';
   const updated = {
     ...current,
     // En cas d'arrêt ou d'erreur, la même pièce est retentée à la reprise (l'onglet reste ouvert).
@@ -718,7 +770,7 @@ async function finalizeItem(product, result, tabId, settings) {
     lastMessage: ref + ' : ' + actionLabel(action) + (result.reason ? ' — ' + result.reason : ''),
   };
 
-  if (action === 'blocked' && !settings.dryRun && /v[ée]rification|captcha/i.test(result.reason || '')) {
+  if (action === 'blocked' && isLive(settings) && /v[ée]rification|captcha/i.test(result.reason || '')) {
     // La plateforme demande une vérification : on arrête tout et on ne relance pas en automatique avant plusieurs heures.
     const hours = Math.max(1, Number(settings.cooldownHours) || 6);
     await chrome.storage.local.set({ amAutoCooldown: Date.now() + hours * 3600 * 1000 });

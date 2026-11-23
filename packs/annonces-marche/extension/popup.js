@@ -624,6 +624,7 @@
     armed: $('auto-armed'),
     armedAt: $('auto-armed-at'),
     dry: $('auto-dry'),
+    draft: $('auto-draft'),
     interval: $('auto-interval'),
     cap: $('auto-cap'),
     keepTabs: $('auto-keep-tabs'),
@@ -671,6 +672,7 @@
     const s = (queue && queue.stats) || {};
     return [
       s.published ? s.published + ' publiée(s)' : '',
+      s.drafted ? s.drafted + ' en brouillon' : '',
       s.prepared ? s.prepared + ' simulée(s)' : '',
       s.rejected ? s.rejected + ' écartée(s)' : '',
       s.blocked ? s.blocked + ' arrêt(s)' : '',
@@ -692,6 +694,7 @@
       ? 'Risque accepté le ' + new Date(s.armedAt).toLocaleString('fr-FR') + '.'
       : 'Sans cette case, aucune publication automatique n’est possible.';
     fillIfIdle(auto.dry, s.dryRun !== false, 'checked');
+    fillIfIdle(auto.draft, !!s.saveDraft, 'checked');
     fillIfIdle(auto.keepTabs, !!s.keepTabs, 'checked');
     fillIfIdle(auto.interval, String(s.intervalMin || 5));
     fillIfIdle(auto.cap, String(s.dailyCap || 10));
@@ -713,7 +716,9 @@
       auto.status.className = 'msg err';
     } else if (!queue || status === 'idle') {
       auto.status.textContent = s.armed
-        ? (s.dryRun !== false
+        ? (s.saveDraft
+          ? 'Prêt (brouillon) : les fiches seront enregistrées en brouillon, sans être publiées.'
+          : s.dryRun !== false
           ? 'Prêt (simulation) : choisissez une plateforme.'
           : 'Prêt : choisissez une plateforme. La publication réelle cliquera « Publier ».')
         : 'Publication automatique désactivée : cochez « J’assume le risque » pour l’autoriser.';
@@ -760,6 +765,7 @@
         rejected: 'écartée (fiche)',
         published: 'publiée',
         prepared: 'simulée',
+        drafted: 'brouillon',
         blocked: 'arrêt',
         skipped: 'passée',
         'to-update': 'à mettre à jour',
@@ -800,7 +806,7 @@
       auto.status.className = 'msg err';
       return;
     }
-    if (autoState.settings.dryRun === false) {
+    if (autoState.settings.dryRun === false && !autoState.settings.saveDraft) {
       const label = channel === 'leboncoin' ? 'Leboncoin' : 'Vinted';
       if (!confirm('Publier automatiquement sur ' + label + ' ?\n\nLe navigateur remplira puis cliquera « Publier » à votre place. Vous restez responsable du respect des CGU de la plateforme.')) {
         return;
@@ -819,6 +825,7 @@
 
   auto.armed.addEventListener('change', () => patchAuto({ armed: auto.armed.checked }));
   auto.dry.addEventListener('change', () => patchAuto({ dryRun: auto.dry.checked }));
+  auto.draft.addEventListener('change', () => patchAuto({ saveDraft: auto.draft.checked }));
   auto.keepTabs.addEventListener('change', () => patchAuto({ keepTabs: auto.keepTabs.checked }));
   auto.interval.addEventListener('change', () => {
     const value = intInRange(auto.interval.value, 2, 30, 5);
