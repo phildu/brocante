@@ -17,6 +17,7 @@ foreach ($shops as $shop) {
 $confirmReset = $_GET['reinitialiser'] ?? '';
 $confirmDelete = $_GET['supprimer'] ?? '';
 $editAccess = $_GET['acces'] ?? '';
+$editLink = $_GET['lien'] ?? '';
 
 // Adresse d'un commerce : <slug>.brocenstock.test en local, <portail>/<slug> en ligne (voir portail_shop_url()).
 $viewing = (string) ($_GET['voir'] ?? active_slug());
@@ -195,6 +196,7 @@ $tdTasks = td_tasks('todo', '', 6);
                     <a href="<?= e($shopUrl($slug)) ?>/<?= e($shopPreview) ?>" target="_blank" rel="noopener">Ouvrir la boutique ↗</a>
                     <a href="/portail/boutique-statut.php?slug=<?= e(rawurlencode($slug)) ?>">Statut &amp; geste commercial — <?= $shopLive ? 'publiée' : (($shopState['status'] ?? '') === 'paused' ? 'en pause' : 'en test') ?></a>
                     <a href="/portail/?voir=<?= e($viewing) ?>&amp;acces=<?= e($slug) ?>">Changer l’accès admin</a>
+                    <a href="/portail/?voir=<?= e($viewing) ?>&amp;lien=<?= e($slug) ?>">Envoyer un lien de mot de passe à l’admin</a>
                     <?php if ($slug !== TENANT_DEFAULT): ?>
                       <a href="/portail/?voir=<?= e($viewing) ?>&amp;reinitialiser=<?= e($slug) ?>">Réinitialiser les données</a>
                     <?php endif; ?>
@@ -217,6 +219,24 @@ $tdTasks = td_tasks('todo', '', 6);
                   </label>
                   <span class="actions" style="margin:0;">
                     <button class="btn small btn-primary" type="submit">Enregistrer</button>
+                    <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>">Annuler</a>
+                  </span>
+                </form>
+              <?php endif; ?>
+
+              <?php if ($editLink === $slug):
+                $contact = trim((string) ($shop['admin_email'] ?? ''));
+                if ($contact === '' && filter_var($shop['admin_user'] ?? '', FILTER_VALIDATE_EMAIL)) $contact = (string) $shop['admin_user'];
+              ?>
+                <form class="confirm access" method="post" action="/portail/action.php" autocomplete="off">
+                  <span>Envoyer à l’administrateur de <strong><?= e($shop['name']) ?></strong> (identifiant « <?= e($shop['admin_user']) ?> ») un lien pour choisir un nouveau mot de passe :</span>
+                  <input type="hidden" name="csrf" value="<?= e(csrf_token()) ?>">
+                  <input type="hidden" name="action" value="lien-admin">
+                  <input type="hidden" name="slug" value="<?= e($slug) ?>">
+                  <label class="field">Adresse e-mail<input type="email" name="email" required maxlength="120" autocapitalize="none" value="<?= e($contact) ?>"></label>
+                  <label class="field"><span><input type="checkbox" name="retenir" value="1" checked> Retenir cette adresse pour « mot de passe oublié »</span></label>
+                  <span class="actions" style="margin:0;">
+                    <button class="btn small btn-primary" type="submit">Envoyer le lien</button>
                     <a class="btn small" href="/portail/?voir=<?= e($viewing) ?>">Annuler</a>
                   </span>
                 </form>

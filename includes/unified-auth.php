@@ -302,6 +302,28 @@ function ua_shop_reset_link(array $config, string $email, ?int $accountId = null
     return ua_shop_origin($config) . '/admin/reinitialiser.php?token=' . $token;
 }
 
+/**
+ * Envoie, depuis le portail, un lien de réinitialisation du mot de passe du compte principal d'une boutique
+ * (admin_user de tenant.php) à l'adresse donnée. Sert quand « mot de passe oublié » ne trouve aucune adresse
+ * à qui écrire. Retourne null si le message est parti, sinon la raison de l'échec (affichable).
+ */
+function ua_shop_admin_reset_send(string $slug, string $email): ?string
+{
+    $email = trim($email);
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return 'Adresse e-mail invalide.';
+    $config = tenant_load($slug);
+    $link = ua_shop_reset_link($config, $email, null);
+    if ($link === null) return 'Lien non créé : base de la boutique absente, ou trop de demandes pour cette adresse (3 par quart d\'heure).';
+    $site = (string) ($config['name'] ?? $slug);
+    $body = "Bonjour,\n\nLa plateforme vous envoie ce lien pour choisir un nouveau mot de passe de l'administration de « $site ».\n\n"
+        . "Choisissez-le ici (lien valable 1 heure, utilisable une seule fois) :\n$link\n\n"
+        . "Si vous n'attendiez pas ce message, ignorez-le : votre mot de passe actuel reste valable.\n";
+    require_once __DIR__ . '/saas.php';
+    return saas_mail($email, "Réinitialiser votre mot de passe — $site", $body, 'compte')
+        ? null
+        : 'Le message n\'a pas pu être envoyé : vérifiez la messagerie du portail.';
+}
+
 /** Lien signé de réinitialisation d'un administrateur de galerie, ou null si l'adresse n'administre aucune galerie. */
 function ua_gallery_reset_link(string $email): ?string
 {

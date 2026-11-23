@@ -34,6 +34,7 @@ const SAAS_EVENT_TYPES = [
     'shop_deleted'          => ['Boutique supprimée', 'suppression', 'bad'],
     'shop_reset'            => ['Boutique remise à zéro', 'boutique', 'warn'],
     'access_changed'        => ['Accès administrateur changé', 'boutique', 'warn'],
+    'admin_reset_sent'      => ['Lien de mot de passe envoyé à l\'administrateur', 'boutique', 'warn'],
     'link_resent'           => ['Lien de création renvoyé', 'inscription', 'info'],
     'request_rejected'      => ['Demande refusée', 'suppression', 'warn'],
     'request_forgotten'     => ['Demande retirée de la liste', 'suppression', 'info'],
