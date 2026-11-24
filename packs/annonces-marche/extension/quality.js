@@ -5,7 +5,7 @@
 (function (global) {
   const squash = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-  const CLOTHES_OR_SHOES = /(vetement|robe|jupe|pantalon|jean|short|veste|manteau|blouson|pull|gilet|chemise|t-?shirt|chaussure|basket|botte|bottine|sandale|escarpin|derbie|mocassin|ballerine|costume|lingerie|maillot|combinaison|doudoune)/;
+  const CLOTHES_OR_SHOES = /(vetement|robe|jupe|pantalon|jean|short|veste|manteau|blouson|pull|gilet|chemise|t-?shirt|chaussure|basket|botte|bottine|sandale|escarpin|derbie|mocassin|ballerine|costume|lingerie|maillot|combinaison|doudoune|blouse|blazer|cardigan|perfecto|parka|trench|anorak|polo|sweat|legging|collant|bermuda|salopette|kimono|tunique|debardeur|chemisier|pyjama|peignoir|tailleur|kilt|poncho)/;
   const CONTACT = /(https?:\/\/|www\.|[\w.+-]+@[\w-]+\.[a-z]{2,}|(?:\+33|\b0)[1-9](?:[ .-]?\d{2}){4}\b)/i;
   const PROMO_WORDS = /\b(urgent|promo|pas cher|gratuit|soldes?|affaire|bonne affaire|top prix)\b/i;
   const ESTIMATED = /(probable|estim|environ|\?|~|approx)/i;
@@ -24,6 +24,18 @@
     if (specific) return CLOTHES_OR_SHOES.test(specific) ? 'yes' : 'no';
     if (CLOTHES_OR_SHOES.test(squash(p.title || p.name))) return 'yes';
     return CLOTHES_OR_SHOES.test(squash(p.category_label)) ? 'maybe' : 'no';
+  }
+
+  const TITLE_STOP = /^(de|du|des|la|le|les|en|et|au|aux|un|une|pour|avec|sur|sans|par|dans|ancien|ancienne|anciens|anciennes|vintage|beau|belle|joli|jolie|lot|set|paire|duo|trio|petit|petite|grand|grande)$/;
+
+  /** Mots du titre utiles pour chercher la catégorie du site (l'objet d'abord) : « Duo de salières en bois tourné » → salières, bois, tourné. */
+  function titleWords(p) {
+    const seen = new Set();
+    return String(p.title || p.name || '')
+      .split(/[^A-Za-zÀ-ÿ]+/)
+      .filter((w) => w.length >= 4 && !TITLE_STOP.test(squash(w)))
+      .filter((w) => { const k = squash(w); if (seen.has(k)) return false; seen.add(k); return true; })
+      .slice(0, 3);
   }
 
   function needsSize(p) {
@@ -231,6 +243,6 @@
     return m ? { min: Number(m[1]), max: Number(m[2]) } : null;
   }
 
-  global.AmQuality = { check, summary, lines, needsSize, hasSize, fingerprint, parseSuggestedPrice, priceGap, suggestionTag, suggestionFromNote };
+  global.AmQuality = { check, summary, lines, needsSize, sizeNeed, titleWords, hasSize, fingerprint, parseSuggestedPrice, priceGap, suggestionTag, suggestionFromNote };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.AmQuality;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

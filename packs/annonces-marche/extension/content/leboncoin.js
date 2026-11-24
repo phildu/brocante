@@ -205,7 +205,11 @@
       .flatMap((v) => (v ? String(v).split(/[,/]| et /) : []).concat(v ? [String(v)] : []))
       .map((v) => v.trim())
       .filter((v) => v.length > 3);
-    return unique(parts);
+    // Mots du titre : plus précis que la catégorie large de la boutique ; en premier pour une pièce qui n'est pas sûrement un vêtement.
+    const Q = globalThis.AmQuality;
+    const fromTitle = Q && Q.titleWords ? Q.titleWords(p) : [];
+    const clothing = Q && Q.sizeNeed ? Q.sizeNeed(p) === 'yes' : true;
+    return unique(clothing ? parts.concat(fromTitle) : fromTitle.concat(parts));
   }
 
   function priceText(p) {
