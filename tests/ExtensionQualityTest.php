@@ -33,6 +33,35 @@ final class ExtensionQualityTest extends TestCase
         self::assertStringContainsString('sync-test OK', implode("\n", $output));
     }
 
+    public function testUniversChoicePassesInNode(): void
+    {
+        $this->runNodeTest('univers.test.js', 'univers-test OK');
+    }
+
+    public function testSkippedItemKeepsQueueRunningInNode(): void
+    {
+        $this->runNodeTest('skip.test.js', 'skip-test OK');
+    }
+
+    public function testVintedConfirmationIsDetectedInNode(): void
+    {
+        $this->runNodeTest('published.test.js', 'published-test OK');
+    }
+
+    private function runNodeTest(string $file, string $expected): void
+    {
+        $node = trim((string) @shell_exec('command -v node 2>/dev/null'));
+        if ($node === '') {
+            self::markTestSkipped('Node n’est pas installé.');
+        }
+        $dir = dirname(__DIR__) . '/packs/annonces-marche/extension';
+        $output = [];
+        $code = 0;
+        exec(escapeshellarg($node) . ' ' . escapeshellarg($dir . '/tests/' . $file) . ' 2>&1', $output, $code);
+        self::assertSame(0, $code, implode("\n", $output));
+        self::assertStringContainsString($expected, implode("\n", $output));
+    }
+
     public function testExtensionScriptsAreSyntacticallyValid(): void
     {
         $node = trim((string) @shell_exec('command -v node 2>/dev/null'));

@@ -64,7 +64,7 @@
     }
     rows.forEach(function (m) {
       var tr = el('tr');
-      var label = m.field.indexOf('autre:') === 0 ? m.field.slice(6) : (field === 'etat' ? etatLabel(m.source_norm) : m.source_label);
+      var label = m.field.indexOf('autre:') === 0 ? m.field.slice(6) + (m.source_norm && m.source_norm !== '*' ? ' (catégorie : ' + m.source_label + ')' : '') : (field === 'etat' ? etatLabel(m.source_norm) : m.source_label);
       tr.appendChild(el('td', {}, label));
       tr.appendChild(el('td', {}, m.target));
       var td = el('td'); var b = el('button', { type: 'button', 'class': 'btn-small' }, 'Supprimer');

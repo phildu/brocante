@@ -675,6 +675,7 @@
       s.drafted ? s.drafted + ' en brouillon' : '',
       s.prepared ? s.prepared + ' simulée(s)' : '',
       s.rejected ? s.rejected + ' écartée(s)' : '',
+      s['no-match'] ? s['no-match'] + ' sans valeur' : '',
       s.blocked ? s.blocked + ' arrêt(s)' : '',
       s.error ? s.error + ' erreur(s)' : '',
     ].filter(Boolean).join(' · ') || 'aucune pièce traitée';
@@ -768,6 +769,7 @@
         drafted: 'brouillon',
         blocked: 'arrêt',
         skipped: 'passée',
+        'no-match': 'passée (menu)',
         'to-update': 'à mettre à jour',
         error: 'erreur',
       }[entry.action] || entry.action) + (entry.dryRun ? ' (sim.)' : '');

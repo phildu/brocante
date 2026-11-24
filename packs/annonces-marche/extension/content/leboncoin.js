@@ -116,6 +116,88 @@
     return 'Femme';
   }
 
+  // --- Univers : on lit la liste réelle du site et on prend l'entrée la plus proche de la pièce ---
+
+  // Mots de la pièce qui désignent un univers du site (clé = mot de l'univers, tel que normalisé et sans pluriel).
+  const UNIVERS_SYNONYMES = {
+    femme: ['dame', 'robe', 'jupe', 'escarpin', 'ballerine', 'lingerie'],
+    homme: ['monsieur', 'cravate', 'costume', 'derbie'],
+    enfant: ['garcon', 'fille', 'junior', 'ado'],
+    bebe: ['naissance', 'puericulture', 'layette'],
+    maison: ['deco', 'decoration', 'panier', 'rangement', 'cuisine', 'vaisselle', 'linge', 'meuble', 'luminaire', 'vase', 'coussin', 'bougie', 'cadre', 'miroir', 'tapis', 'plaid', 'rideau'],
+    jardin: ['plante', 'pot', 'jardiniere', 'outil', 'terrasse'],
+    deco: ['decoration', 'maison', 'cadre', 'vase', 'bougie', 'miroir'],
+    decoration: ['deco', 'maison', 'cadre', 'vase', 'bougie', 'miroir', 'panier'],
+    bricolage: ['outil', 'perceuse', 'visserie'],
+    livre: ['roman', 'bd', 'manga', 'album'],
+    jeu: ['jouet', 'puzzle', 'console', 'jeux'],
+    jouet: ['jeu', 'peluche', 'puzzle'],
+    sport: ['velo', 'raquette', 'ballon', 'randonnee'],
+    musique: ['vinyle', 'guitare', 'disque', 'cd'],
+    accessoire: ['sac', 'ceinture', 'echarpe', 'foulard', 'bijou', 'chapeau', 'lunette'],
+    bijou: ['collier', 'bracelet', 'bague'],
+    chaussure: ['basket', 'botte', 'bottine', 'sandale', 'mocassin'],
+  };
+  const MODE_WORDS = /\b(vetement|robe|jupe|pantalon|jean|short|veste|manteau|blouson|pull|gilet|chemise|t-?shirt|chaussure|basket|botte|bottine|sandale|escarpin|derbie|mocassin|ballerine|costume|lingerie|maillot|combinaison|doudoune|sac|ceinture|echarpe|foulard|chapeau)s?\b/;
+
+  function stem(word) {
+    return String(word || '').replace(/(s|x)$/, '');
+  }
+  function tokensOf(text) {
+    return squash(text).split(/[^a-z0-9]+/).map(stem).filter((w) => w.length >= 3);
+  }
+
+  /** Mots de la pièce avec leur poids : catégorie ×3, titre ×2, description ×1. */
+  function productTokens(p) {
+    const weights = new Map();
+    const add = (text, weight) => tokensOf(text).forEach((w) => weights.set(w, Math.max(weights.get(w) || 0, weight)));
+    add([p.nature_label, p.subcategory_label, p.category_label, p.nature, p.sous_categorie].join(' '), 3);
+    add(p.title || p.name, 2);
+    add(p.description, 1);
+    return weights;
+  }
+
+  function isFashion(p) {
+    const info = squash([p.nature_label, p.subcategory_label, p.category_label, p.nature, p.sous_categorie].join(' '));
+    // Aucune catégorie connue : comportement historique (univers « Femme / Homme »).
+    return !info.trim() || MODE_WORDS.test(info);
+  }
+
+  function scoreUnivers(optionText, weights) {
+    let score = 0;
+    for (const token of tokensOf(optionText)) {
+      if (weights.has(token)) score += weights.get(token);
+      for (const synonym of UNIVERS_SYNONYMES[token] || []) {
+        if (weights.has(stem(synonym))) { score += 2; break; }
+      }
+    }
+    return score;
+  }
+
+  /**
+   * Entrée de la liste « Univers » du site qui convient à la pièce, ou '' si aucune n'est assez sûre :
+   * 1) la valeur imposée par la table de correspondances ; 2) pour la mode, Femme / Homme ; 3) la plus proche par les mots de la pièce.
+   */
+  function universChoice(p, texts) {
+    const options = (texts || []).map((t) => ({ text: String(t || '').trim(), key: squash(t) })).filter((o) => o.key);
+    if (!options.length) return '';
+    const forced = squash(autre(p, 'univers'));
+    if (forced) {
+      const hit = options.find((o) => o.key === forced);
+      if (hit) return hit.text;
+    }
+    if (isFashion(p)) {
+      const gender = squash(universCandidate(p));
+      const hit = options.find((o) => o.key === gender);
+      if (hit) return hit.text;
+    }
+    const weights = productTokens(p);
+    const scored = options.map((o) => ({ text: o.text, score: scoreUnivers(o.text, weights) })).sort((a, b) => b.score - a.score);
+    // Seuil : un mot de catégorie, ou un mot du titre appuyé par un synonyme. Égalité : on ne devine pas.
+    if (scored[0].score >= 2 && (!scored[1] || scored[0].score > scored[1].score)) return scored[0].text;
+    return '';
+  }
+
   /** Mots à repérer dans les suggestions de catégorie proposées après le titre. */
   function categoryWords(p, withParent) {
     // La catégorie « parente » (Maison, Mode…) revient dans toutes les suggestions : elle ne sert que de dernier recours.
@@ -164,6 +246,21 @@
     if (trace.length > 14) trace.shift();
     try { sessionStorage.setItem('amLbcTrace', trace.join(' | ')); } catch (_) {}
     try { renderTrace(); } catch (_) {}
+  }
+
+  /** Signale au portail une valeur introuvable sur le site (liste « À renseigner » de la page Correspondances). Une seule fois par page. */
+  const reported = new Set();
+  function reportUnknown(p, fieldLabel, options) {
+    const source = String(p.subcategory_label || p.nature_label || p.category_label || '').trim();
+    const key = squash(fieldLabel) + '|' + squash(source);
+    if (reported.has(key)) return;
+    reported.add(key);
+    try {
+      chrome.runtime.sendMessage({
+        type: 'am-report-unknown', channel: 'leboncoin',
+        items: [{ field_label: fieldLabel, field_type: 'autre', source_value: source, product_ref: p.ref || '', options: (options || []).slice(0, 80) }],
+      }, () => { void chrome.runtime.lastError; });
+    } catch (_) {}
   }
 
   // --- Étapes de remplissage ---
@@ -268,7 +365,7 @@
     const nature = squash(p.nature_label);
     const brand = brandCandidate(p);
     const jobs = [
-      ['univers', () => F.chooseMenuOption(['Univers'], [universCandidate(p)])],
+      ['univers', () => F.chooseMenuOption(['Univers'], unique([autre(p, 'univers')]), { nearest: (texts) => universChoice(p, texts) })],
       ['marque', () => F.chooseMenuOption(['Marque', 'Brand'], brand ? [brand] : [], { search: !!brand, fallback: ['Sans marque', 'Autre'] })],
     ];
     if (nature.includes('chaussure')) {
@@ -297,6 +394,9 @@
       let res = null;
       try { res = await run(); } catch (e) { res = { ok: false, error: (e && e.message) || String(e) }; }
       results[name] = res;
+      // Menu présent, liste lue, mais aucune entrée ne convient : la pièce sera passée et le manque signalé au portail.
+      if (name === 'univers' && res && !res.ok && !res.absent && !res.skipped && res.options && res.options.length) res.unresolved = true;
+      if (res && res.nearest) note(name + ' : entrée la plus proche choisie (' + (res.value || '?') + ')');
       if (!(res && res.absent)) {
         note(name + ' : ' + (res && res.ok ? (res.already ? 'déjà ' : res.kept ? 'conservé ' : 'ok ') + (res.value || '') + (res.fallback ? ' (repli)' : '') : res && res.skipped ? 'pas de valeur' : 'échec' + (res && res.error ? ' (' + res.error + ')' : '')));
       }
@@ -357,7 +457,14 @@
     await pause();
 
     const menus = await stepMenus(product, F);
+    let skip = '';
     for (const [name, res] of Object.entries(menus)) {
+      if (res && res.unresolved) {
+        skip = 'menu « Univers » : aucune entrée ne correspond à la pièce (' + res.options.slice(0, 12).join(', ') + '). À renseigner dans Correspondances du portail.';
+        reportUnknown(product, 'Univers', res.options);
+        F.noteIssue('univers : aucune entrée proche parmi ' + res.options.slice(0, 12).join(', ') + ' — à choisir à la main, et à renseigner dans Correspondances.');
+        continue;
+      }
       const redo = async () => (await stepMenus(product, F))[name];
       record(name, res, redo);
     }
@@ -367,7 +474,7 @@
     record('prix', await stepPrice(product, F).catch(() => ({ ok: false })), () => stepPrice(product, F));
 
     if (!quiet) watchLater(retries.slice(), F);
-    return { done, pending: retries.map(([n]) => n) };
+    return { done, pending: retries.map(([n]) => n), skip };
   }
 
   // Retente les champs absents quand la page change (étape suivante du formulaire) ; s'arrête quand tout est rempli, ou après 15 minutes.
@@ -426,7 +533,7 @@
   }
 
   globalThis.AmLbc = {
-    etatCandidates, brandCandidate, sizeInfo, colorCandidates, universCandidate, categoryWords, priceText, fillFields,
+    etatCandidates, brandCandidate, sizeInfo, colorCandidates, universCandidate, universChoice, categoryWords, priceText, fillFields,
   };
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -444,7 +551,7 @@
           options: msg.options || {},
           fill: (p, quiet) => fillFields(p, F, quiet),
         });
-        const terminal = res && ['prepared', 'publish-clicked', 'blocked', 'published'].includes(res.action);
+        const terminal = res && ['prepared', 'publish-clicked', 'blocked', 'published', 'no-match'].includes(res.action);
         if (res && res.action === 'blocked') {
           let steps = '';
           try { steps = sessionStorage.getItem('amLbcTrace') || ''; } catch (_) {}

@@ -252,6 +252,8 @@ function actionLabel(action) {
     drafted: 'enregistrée en brouillon',
     rejected: 'écartée (contrôle de la fiche)',
     blocked: 'arrêtée',
+    skipped: 'passée',
+    'no-match': 'passée (menu sans valeur)',
     error: 'erreur',
   }[action] || action;
 }
@@ -608,7 +610,7 @@ async function runAutoInTab(tabId, channel, product, options) {
     if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
     await progress('Étape ' + (step + 1) + ' : ' + res.action + (res.reason ? ' — ' + res.reason : ''));
     if (res.suggested) suggested = res.suggested;
-    if (['blocked', 'prepared', 'published'].includes(res.action)) return withSuggestion(res);
+    if (['blocked', 'prepared', 'published', 'no-match'].includes(res.action)) return withSuggestion(res);
     if (res.action === 'draft-clicked') {
       const saved = await verifyDrafted(tabId, channel);
       return withSuggestion(saved || {
@@ -691,7 +693,7 @@ async function verifyPublished(tabId, channel) {
   }
   let tab = null;
   try { tab = await chrome.tabs.get(tabId); } catch (_) {}
-  if (tab && /(confirmation|success|merci|annonce-publiee|published)/i.test(tab.url || '')) {
+  if (tab && (/(confirmation|success|merci|annonce-publiee|published)/i.test(tab.url || '') || /vinted\.[a-z.]+\/member\/\d+.*promo_shown/i.test(tab.url || ''))) {
     return { ok: true, action: 'published', listing_url: tab.url };
   }
   return null;
@@ -739,7 +741,7 @@ async function finalizeItem(product, result, tabId, settings) {
     // L'historique local suffit pour éviter un doublon immédiat.
   }
 
-  const key = ['published', 'drafted', 'prepared', 'blocked', 'rejected'].includes(action) ? action : 'error';
+  const key = ['published', 'drafted', 'prepared', 'blocked', 'rejected', 'no-match'].includes(action) ? action : 'error';
   const stats = { ...(current.stats || {}) };
   stats[key] = (stats[key] || 0) + 1;
 
@@ -753,11 +755,11 @@ async function finalizeItem(product, result, tabId, settings) {
   });
   if (action === 'published' && isLive(settings)) { await bumpDayCount(); await pushStamp(); }
 
-  if (tabId && (action === 'published' || action === 'prepared' || action === 'drafted') && !settings.keepTabs) {
+  if (tabId && (action === 'published' || action === 'prepared' || action === 'drafted' || action === 'no-match') && !settings.keepTabs) {
     try { await chrome.tabs.remove(tabId); } catch (_) {}
   }
 
-  const advanced = action === 'published' || action === 'prepared' || action === 'drafted' || action === 'rejected';
+  const advanced = action === 'published' || action === 'prepared' || action === 'drafted' || action === 'rejected' || action === 'no-match';
   const updated = {
     ...current,
     // En cas d'arrêt ou d'erreur, la même pièce est retentée à la reprise (l'onglet reste ouvert).
@@ -809,11 +811,14 @@ async function finalizeItem(product, result, tabId, settings) {
   if (action === 'rejected') {
     await chrome.storage.local.set({ amAlert: { level: 'warn', message: 'Fiche ' + ref + ' écartée avant remplissage :\n' + (result.reason || '').replace(/ ; /g, '\n'), at: Date.now() } });
   }
+  if (action === 'no-match') {
+    await chrome.storage.local.set({ amAlert: { level: 'warn', message: 'Pièce ' + ref + ' passée, la file continue :\n' + (result.reason || ''), at: Date.now() } });
+  }
 
   await setQueue(updated);
   await ensureWatchdog();
   // Une fiche écartée n'a rien publié : on enchaîne vite, sans attendre l'intervalle entre publications.
-  await scheduleNext(settings, action === 'rejected' ? 8000 + Math.floor(Math.random() * 6000) : undefined);
+  await scheduleNext(settings, action === 'rejected' || action === 'no-match' ? 8000 + Math.floor(Math.random() * 6000) : undefined);
 }
 
 /* ---------- Messages ---------- */
@@ -869,6 +874,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const res = await sendToDeposit(tabId, channel, { type: 'am-selftest', channel });
       sendResponse(res && res.ok ? res : { ok: false, error: (res && res.error) || 'Le formulaire n’a pas répondu. Rechargez la page.' });
     })().catch((error) => sendResponse({ ok: false, error: error.message || 'Contrôle impossible.' }));
+    return true;
+  }
+
+  if (message.type === 'am-report-unknown') {
+    // Valeur du site introuvable (ex. Univers) : elle rejoint la liste « À renseigner » de la page Correspondances du portail.
+    (async () => {
+      const items = Array.isArray(message.items) ? message.items.slice(0, 20) : [];
+      if (!CHANNELS.includes(message.channel) || !items.length) { sendResponse({ ok: false }); return; }
+      await api('/champs-inconnus', { method: 'POST', json: { channel: message.channel, items } });
+      sendResponse({ ok: true });
+    })().catch(() => sendResponse({ ok: false }));
     return true;
   }
 

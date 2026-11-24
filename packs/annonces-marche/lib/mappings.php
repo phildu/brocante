@@ -103,7 +103,15 @@ function am_map_payload(array $p, ?array $all = null): array
             if ($found) $m[$f] = array_values(array_unique($found));
         }
         foreach ($rows as $field => $list) {
-            if (str_starts_with($field, 'autre:') && isset($list['*'])) $m['autre'][substr($field, 6)] = $list['*'];
+            if (!str_starts_with($field, 'autre:')) continue;
+            // Une valeur propre à la catégorie de la pièce l'emporte sur la valeur par défaut du champ.
+            $hit = null;
+            foreach (['subcategory_label', 'nature_label', 'category_label'] as $k) {
+                $n = am_map_norm((string) ($p[$k] ?? ''));
+                if ($n !== '' && isset($list[$n])) { $hit = $list[$n]; break; }
+            }
+            $hit ??= $list['*'] ?? null;
+            if ($hit !== null) $m['autre'][substr($field, 6)] = $hit;
         }
         if ($m) $out[$ch] = $m;
     }
@@ -154,8 +162,16 @@ function am_map_save(string $channel, string $field, string $source, string $tar
         $name = am_map_norm(substr($field, 6));
         if ($name === '') return 'Nom du champ manquant.';
         $field = 'autre:' . $name;
-        $sourceNorm = '*';
-        $label = '(valeur par défaut)';
+        $source = trim($source);
+        if ($source === '' || $source === '*') {
+            $sourceNorm = '*';
+            $label = '(valeur par défaut)';
+        } else {
+            // Valeur propre à une catégorie de la boutique (ex. Univers = « Maison » pour les paniers).
+            $sourceNorm = am_map_norm($source);
+            $label = $source;
+            if ($sourceNorm === '') return 'Catégorie de la boutique manquante.';
+        }
     } else {
         $field = $base;
         $sourceNorm = $base === 'etat' ? trim($source) : am_map_norm($source);
@@ -169,7 +185,7 @@ function am_map_save(string $channel, string $field, string $source, string $tar
     $del = db()->prepare('DELETE FROM am_unknown_fields WHERE id = ?');
     foreach (db()->query('SELECT id, field_label, field_type, source_value FROM am_unknown_fields WHERE channel = ' . db()->quote($channel))->fetchAll(PDO::FETCH_ASSOC) as $u) {
         $same = $base === 'autre'
-            ? am_map_norm($u['field_label']) === substr($field, 6)
+            ? am_map_norm($u['field_label']) === substr($field, 6) && ($sourceNorm === '*' || am_map_norm($u['source_value']) === $sourceNorm)
             : $u['field_type'] === $base && am_map_norm($u['source_value']) === am_map_norm($source);
         if ($same) $del->execute([$u['id']]);
     }
