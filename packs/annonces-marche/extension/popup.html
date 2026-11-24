@@ -80,7 +80,10 @@
           <span class="range"><input type="number" id="auto-from" min="0" max="23" step="1" inputmode="numeric" aria-label="Début de la plage"> à <input type="number" id="auto-to" min="1" max="24" step="1" inputmode="numeric" aria-label="Fin de la plage"></span>
         </label>
       </div>
-      <p class="hint">Quotas et plage horaire ne s’appliquent qu’à la publication réelle. Plus le rythme est élevé, plus la plateforme risque de demander une vérification.</p>
+      <label>Écart de prix signalé (%)
+        <input type="number" id="auto-gap" min="5" max="90" step="5" inputmode="numeric">
+      </label>
+      <p class="hint">Si votre prix s’écarte de la fourchette proposée par la plateforme d’au moins ce pourcentage, la pièce est marquée « ⚠ prix » dans l’historique. Quotas et plage horaire ne s’appliquent qu’à la publication réelle. Plus le rythme est élevé, plus la plateforme risque de demander une vérification.</p>
       <label class="check"><input type="checkbox" id="auto-keep-tabs"> <span>Garder les onglets ouverts après publication</span></label>
       <label>Page de dépôt Leboncoin
         <input type="url" id="auto-url-lbc" spellcheck="false" autocomplete="off">

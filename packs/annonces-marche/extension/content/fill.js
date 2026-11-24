@@ -375,7 +375,7 @@
     pressEl(found.el);
     await sleep(500);
     if (isOpen()) await close();
-    return { ok: !!squash(input.value), value: input.value, fallback: usedFallback, nearest: !!found.nearest };
+    return { ok: !!squash(input.value), value: input.value, fallback: usedFallback, nearest: !!found.nearest, options: seen };
   }
 
   async function chooseMenuOption(labels, wantedList, options) {
@@ -438,7 +438,7 @@
     }
     clickEl(found.el);
     await sleep(450);
-    return { ok: true, value: String(found.wanted), fallback: usedFallback, nearest: !!found.nearest };
+    return { ok: true, value: String(found.wanted), fallback: usedFallback, nearest: !!found.nearest, options: seen };
   }
 
   /** Élément cliquable dont le texte visible correspond à l'un des libellés (suggestions de catégorie…). */
@@ -811,6 +811,26 @@
     return /(brouillon (a ete |est )?(enregistre|sauvegarde|ajoute)|(enregistre|sauvegarde)e? (en|comme) brouillon|ton article a ete (enregistre|sauvegarde))/.test(text);
   }
 
+  const reportedUnknown = new Set();
+  /**
+   * Signale au portail une valeur de la fiche sans équivalent sur le site (liste « À renseigner » de la page Correspondances) :
+   * field = { label, type (etat, categorie, taille, couleur, marque, matiere, autre), source (valeur de la boutique), options (liste du site) }.
+   * Une seule fois par page et par valeur.
+   */
+  function reportUnknown(channel, p, field) {
+    const source = String(field.source || '').trim();
+    if (field.type !== 'autre' && !source) return;
+    const key = [channel, field.label, source].map(normalizeLabel).join('|');
+    if (reportedUnknown.has(key)) return;
+    reportedUnknown.add(key);
+    try {
+      chrome.runtime.sendMessage({
+        type: 'am-report-unknown', channel,
+        items: [{ field_label: field.label, field_type: field.type, source_value: source, product_ref: (p && p.ref) || '', options: (field.options || []).slice(0, 80) }],
+      }, () => { void chrome.runtime.lastError; });
+    } catch (_) {}
+  }
+
   /** Identifiant d'une annonce d'après son adresse (Vinted /items/123-…, Leboncoin /ad/<cat>/123 ou /annonce/123/…). */
   function idFromUrl(url) {
     const s = String(url || '');
@@ -943,6 +963,7 @@
     missingRequired,
     autoStep,
     verifyAuto,
+    reportUnknown,
     idFromUrl,
     titleMatches,
     publishedUrl,

@@ -16,6 +16,7 @@ const AUTO_DEFAULTS = {
   saveDraft: false,    // enregistre un brouillon sur la plateforme au lieu de publier (prioritaire sur la simulation)
   intervalMin: 5,
   dailyCap: 10,
+  priceGapPct: 30,     // écart de prix (en %) entre la boutique et la fourchette de la plateforme à partir duquel la pièce est signalée
   hourlyCap: 3,        // publications réelles par heure glissante au plus
   activeFrom: 8,       // plage horaire locale de travail (publication réelle uniquement)
   activeTo: 21,
@@ -737,6 +738,13 @@ async function finalizeItem(product, result, tabId, settings) {
       : 'prix proposé non lu (« ' + String(sg.text || '').slice(0, 60) + ' »)';
     result = { ...result, reason: (result.reason ? result.reason + ' · ' : '') + seen };
   }
+  // Prix de la boutique très éloigné de ce que propose la plateforme : signalé dans l'historique et dans la raison (repricer).
+  const gap = globalThis.AmQuality ? AmQuality.priceGap(product.price, result.suggested, settings.priceGapPct) : null;
+  if (gap && gap.big) {
+    const sg = result.suggested;
+    result = { ...result, reason: (result.reason ? result.reason + ' · ' : '') + '⚠ écart de prix : votre prix ' + product.price + ' € est ' + gap.pct + ' % ' +
+      (gap.state === 'high' ? 'au-dessus' : 'en dessous') + ' de la fourchette proposée (' + sg.min + (sg.max !== sg.min ? '–' + sg.max : '') + ' €)' };
+  }
   const hashMark = action === 'published' && isLive(settings) && globalThis.AmQuality && (product.title !== undefined || product.name !== undefined)
     ? '[h:' + AmQuality.fingerprint(product, current.channel) + '] ' : '';
   const suggestionMark = globalThis.AmQuality ? AmQuality.suggestionTag(result.suggested) : '';
@@ -769,8 +777,10 @@ async function finalizeItem(product, result, tabId, settings) {
     action,
     reason: result.reason || '',
     dryRun: isSimulation(settings),
+    priceGap: gap && gap.big ? gap.pct : 0,
     at: Date.now(),
   });
+  if (gap && gap.big) stats.priceGap = (stats.priceGap || 0) + 1;
   if (action === 'published' && isLive(settings)) { await bumpDayCount(); await pushStamp(); }
 
   if (tabId && (action === 'published' || action === 'prepared' || action === 'drafted' || action === 'no-match') && !settings.keepTabs) {

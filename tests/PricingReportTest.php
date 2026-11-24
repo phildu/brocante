@@ -17,6 +17,16 @@ final class PricingReportTest extends TestCase
         self::assertNull(am_suggestion_from_note('[s:15-8] published'), 'fourchette inversée ignorée');
     }
 
+    public function testBigGapIsFlagged(): void
+    {
+        $v = am_price_verdict(10.0, 2.0, 5.0);
+        self::assertSame(100, $v['gap']);
+        self::assertTrue($v['big']);
+        self::assertFalse(am_price_verdict(5.5, 2.0, 5.0)['big'], '10 % au-dessus de la fourchette : pas un gros écart');
+        self::assertTrue(am_price_verdict(1.0, 2.0, 5.0)['big'], 'trop bas : signalé aussi');
+        self::assertSame(0, am_price_verdict(3.0, 2.0, 5.0)['gap']);
+    }
+
     public function testVerdictUsesRangeAndTolerance(): void
     {
         self::assertSame('lower', am_price_verdict(30.0, 8.0, 15.0)['state']);
