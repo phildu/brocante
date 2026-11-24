@@ -103,4 +103,17 @@ const noColor = { title: 'Robe fleurie été', nature_label: 'Robes', descriptio
 assert.ok(Q.check(noColor, 'vinted').warn.some((w) => w.field === 'couleur' && /Multicolore/.test(w.message)));
 assert.ok(!Q.check(noColor, 'leboncoin').warn.some((w) => /Multicolore/.test(w.message)));
 
+// Un objet rangé dans l'univers « Vêtements » d'une friperie n'est pas écarté pour la taille.
+const saliere = { title: 'Duo de salières en bois tourné', category_label: 'Vêtements', description: 'x'.repeat(50), price: 8, photos: [{ url: 'u' }], size_text: '≈ 8 × 8 × 10 cm chacune (estimation)' };
+assert.ok(!Q.check(saliere, 'vinted').block.some((i) => i.field === 'taille'), 'pas de blocage taille pour une salière');
+assert.ok(!Q.check(saliere, 'vinted').warn.some((i) => i.field === 'taille' && /estim/i.test(i.message)), 'pas d’alerte « taille estimée » pour un objet');
+const sansTaille = { ...saliere, title: 'Objet ancien', size_text: '' };
+assert.ok(Q.check(sansTaille, 'vinted').warn.some((i) => i.field === 'taille'), 'catégorie large seule : simple avertissement');
+assert.ok(!Q.check(sansTaille, 'vinted').block.some((i) => i.field === 'taille'));
+// Nature précise « non vêtement » : aucun avertissement, même si la catégorie large dit « Vêtements ».
+assert.ok(!Q.check({ ...sansTaille, nature_label: 'Arts de la table et cuisine' }, 'vinted').warn.some((i) => i.field === 'taille'));
+// Vêtement reconnu par sa nature ou son titre : taille exigée comme avant.
+assert.ok(Q.check({ title: 'Robe fleurie été', nature_label: 'Vêtements', description: 'x'.repeat(50), price: 10, photos: [{ url: 'u' }] }, 'vinted').block.some((i) => i.field === 'taille'));
+assert.ok(Q.check({ title: 'Robe fleurie été', category_label: 'Vêtements', description: 'x'.repeat(50), price: 10, photos: [{ url: 'u' }] }, 'vinted').block.some((i) => i.field === 'taille'), 'mot du titre');
+
 console.log('quality.test.js : tous les tests passent');

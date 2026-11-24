@@ -14,8 +14,20 @@
     return squash([p.nature_label, p.subcategory_label, p.category_label, p.nature, p.sous_categorie].join(' '));
   }
 
+  /**
+   * La pièce est-elle un vêtement ou une chaussure ? 'yes' (nature ou sous-catégorie précise, ou mot du titre), 'maybe' (seule la
+   * catégorie large de la boutique, ex. « Vêtements » dans une friperie, le laisse penser), 'no'.
+   * La catégorie large ne suffit pas : une salière rangée dans l'univers « Vêtements » n'a pas de taille.
+   */
+  function sizeNeed(p) {
+    const specific = squash([p.nature_label, p.subcategory_label, p.nature, p.sous_categorie].join(' '));
+    if (specific) return CLOTHES_OR_SHOES.test(specific) ? 'yes' : 'no';
+    if (CLOTHES_OR_SHOES.test(squash(p.title || p.name))) return 'yes';
+    return CLOTHES_OR_SHOES.test(squash(p.category_label)) ? 'maybe' : 'no';
+  }
+
   function needsSize(p) {
-    return CLOTHES_OR_SHOES.test(nature(p));
+    return sizeNeed(p) === 'yes';
   }
 
   function hasSize(p) {
@@ -89,6 +101,9 @@
     }
 
     // --- Taille / pointure ---
+    if (sizeNeed(p) === 'maybe' && !hasSize(p)) {
+      add(warn, 'taille', 'Taille absente : à vérifier si la pièce est un vêtement ou une chaussure (la catégorie de la boutique le laisse penser, la nature n’est pas précisée).');
+    }
     if (needsSize(p)) {
       if (!hasSize(p)) add(block, 'taille', 'Taille ou pointure absente : ' + name + ' l’exige pour cette catégorie (vêtements, chaussures).');
       else if (ESTIMATED.test(String(p.size_text || ''))) add(warn, 'taille', 'Taille estimée (« ' + String(p.size_text).trim().slice(0, 30) + ' ») : vérifiez-la avant de publier, une erreur entraîne des retours.');
