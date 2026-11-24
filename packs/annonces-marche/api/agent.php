@@ -74,9 +74,12 @@ if ($path === '/annonces/publications' && $method === 'GET') {
     if (!in_array($channel, ['leboncoin', 'vinted'], true)) {
         plugin_json(['error' => 'Canal invalide (leboncoin|vinted).'], 422);
     }
+    // Une annonce supprimée de la plateforme (ligne « removed » plus récente que la publication) n'est plus en ligne.
+    $notRemoved = "AND id > COALESCE((SELECT MAX(r.id) FROM am_listings r WHERE r.product_ref = am_listings.product_ref
+          AND r.channel = am_listings.channel AND r.status = 'removed'), 0)";
     $stmt = db()->prepare("SELECT product_ref, MAX(id) AS last_id
         FROM am_listings
-        WHERE channel = ? AND status IN ('published', 'sold')
+        WHERE channel = ? AND status IN ('published', 'sold') $notRemoved
         GROUP BY product_ref
         ORDER BY last_id DESC
         LIMIT 2000");
@@ -86,7 +89,7 @@ if ($path === '/annonces/publications' && $method === 'GET') {
     }, $stmt->fetchAll(PDO::FETCH_ASSOC));
     // Dernière ligne publiée par pièce, avec l'adresse de l'annonce et la note (l'extension y range l'empreinte du contenu « [h:…] »).
     $last = db()->prepare("SELECT product_ref, listing_url, external_id, note, published_at FROM am_listings
-        WHERE id IN (SELECT MAX(id) FROM am_listings WHERE channel = ? AND status IN ('published', 'sold') GROUP BY product_ref)
+        WHERE id IN (SELECT MAX(id) FROM am_listings WHERE channel = ? AND status IN ('published', 'sold') $notRemoved GROUP BY product_ref)
         LIMIT 2000");
     $last->execute([$channel]);
     // Pièces dont la dernière trace sur ce canal est un brouillon enregistré sur la plateforme (pour ne pas en créer un doublon).

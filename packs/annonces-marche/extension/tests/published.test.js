@@ -12,4 +12,19 @@ assert.ok(detect('https://www.vinted.fr/member/251069429-phildu1', 'Article en v
 assert.ok(detect('https://www.vinted.fr/items/123-robe', ''), 'page article (déjà géré)');
 assert.ok(!detect('https://www.vinted.fr/member/251069429-phildu1', 'Vends tes articles Modifier mon profil'), 'simple visite du profil : pas une publication');
 assert.ok(!detect('https://www.vinted.fr/items/new', 'Ajouter un article'), 'formulaire de dépôt : pas une publication');
+
+// Aides communes : identifiant d'annonce et repérage par le titre.
+function helpers() {
+  const ctx = { console, location: { href: '', hostname: 'www.vinted.fr', pathname: '/', search: '' }, document: { body: { innerText: '' } }, chrome: {} };
+  ctx.globalThis = ctx; vm.createContext(ctx); vm.runInContext(src, ctx);
+  return ctx.AmFill;
+}
+const H = helpers();
+assert.strictEqual(H.idFromUrl('https://www.vinted.fr/items/10926219794-panier-decoratif'), '10926219794');
+assert.strictEqual(H.idFromUrl('/ad/chaussures/3292826227'), '3292826227');
+assert.strictEqual(H.idFromUrl('https://www.leboncoin.fr/annonce/3292826227/editer'), '3292826227');
+assert.strictEqual(H.idFromUrl('https://www.vinted.fr/member/251069429?promo_shown=true'), '');
+assert.ok(H.titleMatches('Panier décoratif métal doré feuilles, marque: Inconnu, état: Très bon', 'Panier décoratif métal doré feuilles'));
+assert.ok(!H.titleMatches('Robe asymétrique noire et rouge', 'Panier décoratif métal doré feuilles'));
+assert.ok(!H.titleMatches('n’importe quoi', 'Vase'), 'titre trop court : pas de correspondance hasardeuse');
 console.log('published-test OK');

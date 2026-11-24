@@ -152,6 +152,13 @@ label.check.risk {
 .list li .pick { display: flex; align-items: center; padding-right: 2px; }
 .list li .pick input { width: 16px; height: 16px; margin: 0; cursor: pointer; }
 
+.online-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.online-list li { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.online-list .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.online-list .st { font-size: 10px; padding: 2px 6px; border-radius: 8px; background: #eef0f2; color: #444; }
+.online-list .st.changed { background: #fff4de; color: #7a4b00; }
+.online-list .st.gone { background: #fdeceb; color: #8a1f17; }
+.range input { width: 52px; }
 .alert-bar[hidden] { display: none; }
 .alert-bar { display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: #fdeceb; color: #8a1f17; border-bottom: 1px solid #f3c1bd; font-size: 12px; }
 .alert-bar span { flex: 1; white-space: pre-line; }

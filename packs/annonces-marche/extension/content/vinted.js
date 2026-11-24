@@ -406,6 +406,78 @@
     return F.probeAnchors('formulaire « Vends ton article »', anchors);
   }
 
+  // --- Annonces en ligne : mise à jour et suppression (lancées depuis la popup) ---
+
+  const itemIdOfPath = () => (/^\/items\/(\d+)/.exec(location.pathname) || [])[1] || '';
+
+  function manageItemLink(F, target) {
+    return Array.from(document.querySelectorAll('a[href*="/items/"]')).find((a) => {
+      const href = a.getAttribute('href') || '';
+      const id = (/\/items\/(\d+)/.exec(href) || [])[1];
+      if (!id) return false;
+      return target.id ? id === target.id : F.titleMatches(a.innerText || a.getAttribute('title') || '', target.title);
+    });
+  }
+
+  async function manageStep(msg, F) {
+    const kind = msg.kind;
+    const p = msg.product || {};
+    const target = msg.target || {};
+    const path = location.pathname;
+    const id = itemIdOfPath();
+    const blocked = (reason) => ({ ok: true, action: 'blocked', reason });
+
+    if (/^\/items\/\d+\/edit/.test(path)) {
+      if (target.id && id !== target.id) return blocked('cette page n’est pas l’annonce attendue.');
+      if (kind === 'delete') { location.assign('/items/' + id); return { ok: true, action: 'next' }; }
+      await F.waitFor(() => { const t = document.getElementById('title'); return t && visible(t); }, 12000, 300);
+      await stepText(F, 'title', p.title || p.name);
+      await stepText(F, 'description', p.description);
+      await stepPrice(p, F);
+      if (msg.dryRun) return { ok: true, action: 'prepared', reason: 'mise à jour prête à valider (simulation)' };
+      const save = document.querySelector('[data-testid="upload-form-save-button"]');
+      if (!save) return blocked('bouton « Valider » introuvable.');
+      F.clickEl(save);
+      return { ok: true, action: 'submitted' };
+    }
+
+    if (id) {   // page de l'article
+      if (target.id && id !== target.id) return blocked('cette page n’est pas l’annonce attendue.');
+      if (kind === 'update') { location.assign('/items/' + id + '/edit'); return { ok: true, action: 'next' }; }
+      const del = await F.waitFor(() => document.querySelector('[data-testid="item-delete-button"]'), 10000, 300);
+      if (!del) return blocked('bouton « Supprimer » introuvable (annonce déjà supprimée, vendue ou compte différent).');
+      F.clickEl(del);
+      const confirm = await F.waitFor(() => document.querySelector('[data-testid="item-delete-confirmation-button"]'), 6000, 250);
+      if (!confirm) return blocked('confirmation de suppression introuvable.');
+      if (msg.dryRun) {
+        const cancel = document.querySelector('[data-testid="item-delete-cancelation-button"]');
+        if (cancel) F.clickEl(cancel);
+        return { ok: true, action: 'prepared', reason: 'suppression prête (simulation)' };
+      }
+      F.clickEl(confirm);
+      return { ok: true, action: 'submitted' };
+    }
+
+    if (/^\/member\/\d+/.test(path)) {   // profil du vendeur : on y retrouve l'annonce
+      const link = await F.waitFor(() => manageItemLink(F, target), 10000, 400);
+      if (!link) return { ok: true, action: 'not-found', reason: 'annonce introuvable sur votre profil (titre modifié ?).' };
+      location.assign(new URL(link.getAttribute('href'), location.origin).href);
+      return { ok: true, action: 'next' };
+    }
+
+    // Autre page (accueil) : on rejoint le profil par le lien de l'en-tête.
+    const me = Array.from(document.querySelectorAll('a[href^="/member/"]'))
+      .find((a) => /^\/member\/\d+/.test(a.getAttribute('href') || '') && visible(a) && a.getBoundingClientRect().top < 90);
+    if (!me) return blocked('profil introuvable : connectez-vous à Vinted, ou ouvrez votre profil puis réessayez.');
+    location.assign(new URL(me.getAttribute('href').split('?')[0], location.origin).href);
+    return { ok: true, action: 'next' };
+  }
+
+  function manageVerify(msg) {
+    if (msg.kind === 'update') return { ok: true, done: !/\/edit/.test(location.pathname) };
+    return { ok: true, done: !/^\/items\/\d+/.test(location.pathname) };
+  }
+
   globalThis.AmVinted = { etatCandidates, sizeTokens, colorNames, categoryWords, genderWord, fillFields };
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -442,6 +514,16 @@
     if (msg.type === 'am-selftest' && msg.channel === 'vinted') {
       const F = globalThis.AmFill;
       sendResponse(F ? { ok: true, ...selftest(F) } : { ok: false, error: 'Helpers absents : rechargez l’extension.' });
+      return;
+    }
+    if (msg.type === 'am-manage-step' && msg.channel === 'vinted') {
+      const F = globalThis.AmFill;
+      if (!F) { sendResponse({ ok: false, error: 'Helpers absents : rechargez l’extension.' }); return; }
+      manageStep(msg, F).then(sendResponse).catch((e) => sendResponse({ ok: false, error: String(e) }));
+      return true;
+    }
+    if (msg.type === 'am-manage-verify' && msg.channel === 'vinted') {
+      sendResponse(manageVerify(msg));
       return;
     }
     if (msg.type === 'am-auto-verify' && msg.channel === 'vinted') {

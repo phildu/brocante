@@ -724,7 +724,7 @@
 
       const challenge = detectChallenge();
       if (challenge) return { ok: true, action: 'blocked', reason: 'vérification demandée (' + challenge + ')', filled, photos };
-      if (detectPublished()) return { ok: true, action: 'published', listing_url: location.href, filled, photos };
+      if (detectPublished()) return { ok: true, action: 'published', listing_url: publishedUrl(p), filled, photos };
 
       try {
         const result = await fill(p, true);
@@ -811,11 +811,35 @@
     return /(brouillon (a ete |est )?(enregistre|sauvegarde|ajoute)|(enregistre|sauvegarde)e? (en|comme) brouillon|ton article a ete (enregistre|sauvegarde))/.test(text);
   }
 
+  /** Identifiant d'une annonce d'après son adresse (Vinted /items/123-…, Leboncoin /ad/<cat>/123 ou /annonce/123/…). */
+  function idFromUrl(url) {
+    const s = String(url || '');
+    const m = /\/items\/(\d{5,})/.exec(s) || /\/ad\/[^/]+\/(\d{5,})/.exec(s) || /\/annonce\/(\d{5,})/.exec(s) || /\/(\d{7,})\.htm/.exec(s);
+    return m ? m[1] : '';
+  }
+
+  /** Le texte (carte d'annonce, titre de page…) contient-il le début du titre de la pièce ? */
+  function titleMatches(text, title) {
+    const t = normalizeLabel(title).replace(/\s+/g, ' ').slice(0, 35).trim();
+    return t.length >= 6 && normalizeLabel(text).replace(/\s+/g, ' ').includes(t);
+  }
+
+  /** Adresse de l'annonce qui vient d'être publiée : sur Vinted, la page profil renvoyée après la mise en ligne liste l'article. */
+  function publishedUrl(p) {
+    if (/(^|\.)vinted\./i.test(location.hostname) && /^\/member\/\d+/.test(location.pathname)) {
+      const title = p && (p.title || p.name);
+      const link = Array.from(document.querySelectorAll('a[href*="/items/"]'))
+        .find((a) => /\/items\/\d+/.test(a.getAttribute('href') || '') && titleMatches(a.innerText || a.getAttribute('title') || '', title));
+      if (link) return new URL(link.getAttribute('href'), location.origin).href;
+    }
+    return location.href;
+  }
+
   function verifyAuto(opts) {
     if (opts && opts.draft) {
       return detectDrafted() ? { ok: true, action: 'drafted' } : { ok: true, action: 'still-open' };
     }
-    if (detectPublished()) return { ok: true, action: 'published', listing_url: location.href };
+    if (detectPublished()) return { ok: true, action: 'published', listing_url: publishedUrl(opts && opts.product) };
     const challenge = detectChallenge();
     if (challenge) return { ok: true, action: 'blocked', reason: 'vérification demandée (' + challenge + ')' };
     return { ok: true, action: 'still-open' };
@@ -919,5 +943,8 @@
     missingRequired,
     autoStep,
     verifyAuto,
+    idFromUrl,
+    titleMatches,
+    publishedUrl,
   };
 })(globalThis);
