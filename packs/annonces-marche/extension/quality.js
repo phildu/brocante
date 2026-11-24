@@ -96,7 +96,7 @@
 
     // --- Marque, couleur, catégorie ---
     if (!String(p.brand || '').trim() && platform === 'vinted') add(warn, 'marque', 'Marque absente : « Inconnu » sera choisi sur Vinted (marque obligatoire).');
-    if (!String(p.colors || '').trim() && needsSize(p)) add(warn, 'couleur', 'Couleur non renseignée : le menu « Couleur » sera laissé au choix du site.');
+    if (!String(p.colors || '').trim() && needsSize(p)) add(warn, 'couleur', platform === 'vinted' ? 'Couleur non renseignée : « Multicolore » sera choisi sur Vinted (couleur obligatoire), à corriger si besoin.' : 'Couleur non renseignée : le menu « Couleur » sera laissé au choix du site.');
     if (!String(p.nature_label || '').trim() && !String(p.subcategory_label || '').trim()) add(warn, 'catégorie', 'Catégorie non renseignée : l’extension prendra la première suggestion du site, à vérifier.');
     if (Number(p.lot_qty) > 1) add(warn, 'lot', 'Vendu en lot de ' + Number(p.lot_qty) + ' : vérifiez que le titre et le prix le disent.');
 

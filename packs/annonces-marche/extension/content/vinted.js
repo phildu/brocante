@@ -240,22 +240,30 @@
     const input = document.getElementById('color');
     if (!input || !visible(input)) return { ok: true, absent: true };
     if (String(input.value || '').trim()) return { ok: true, already: true };
-    const names = colorNames(p);
-    if (!names.length) return { ok: true, skipped: true };
     await openField(F, 'color');
     await F.waitFor(() => document.querySelector('[data-testid^="color-"]:not([data-testid^="color_code"]):not([data-testid*="dropdown"])'), 3000, 200);
-    let chosen = 0;
-    for (const name of names) {
-      const cell = Array.from(document.querySelectorAll('[data-testid^="color-"]'))
-        .filter((e) => visible(e) && !/color_code|dropdown/.test(e.getAttribute('data-testid') || ''))
-        .find((e) => squash(e.innerText) === squash(name));
-      if (!cell) continue;
-      F.pressEl(cell);
-      chosen++;
-      await F.sleep(500);
+    const pick = async (list) => {
+      let chosen = 0;
+      for (const name of list) {
+        const cell = Array.from(document.querySelectorAll('[data-testid^="color-"]'))
+          .filter((e) => visible(e) && !/color_code|dropdown/.test(e.getAttribute('data-testid') || ''))
+          .find((e) => squash(e.innerText) === squash(name));
+        if (!cell) continue;
+        F.pressEl(cell);
+        chosen++;
+        await F.sleep(500);
+      }
+      return chosen;
+    };
+    await pick(colorNames(p));
+    let fallback = '';
+    if (!String(input.value || '').trim()) {
+      // Vinted exige une couleur : sans couleur lisible dans la fiche (ou absente de sa liste), « Multicolore », signalé à corriger.
+      await pick(['Multicolore']);
+      if (String(input.value || '').trim()) fallback = 'Multicolore';
     }
     await closeDropdowns(F);
-    return { ok: chosen > 0 && !!String(input.value || '').trim(), value: input.value };
+    return { ok: !!String(input.value || '').trim(), value: input.value, fallback };
   }
 
   async function stepMaterial(p, F) {

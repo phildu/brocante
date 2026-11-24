@@ -98,4 +98,9 @@ assert.strictEqual(Q.suggestionTag(null), '');
 assert.deepStrictEqual(Q.suggestionFromNote('[h:0123456789abcdef] [s:8.5-15] published'), { min: 8.5, max: 15 });
 assert.strictEqual(Q.suggestionFromNote('[s:?] prepared'), null);
 
+// Couleur absente : Vinted l'exige, « Multicolore » est choisi par défaut et annoncé comme tel.
+const noColor = { title: 'Robe fleurie été', nature_label: 'Robes', description: 'x'.repeat(50), price: 10, photos: [{ url: 'u' }], size_text: 'M' };
+assert.ok(Q.check(noColor, 'vinted').warn.some((w) => w.field === 'couleur' && /Multicolore/.test(w.message)));
+assert.ok(!Q.check(noColor, 'leboncoin').warn.some((w) => /Multicolore/.test(w.message)));
+
 console.log('quality.test.js : tous les tests passent');

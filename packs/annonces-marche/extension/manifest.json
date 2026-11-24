@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Synchronisation multi-plateformes",
   "description": "Prépare et publie vos annonces sur les plateformes de seconde main depuis votre navigateur. Outil indépendant, sans affiliation ; publication automatique en opt-in.",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAntAt6r0tuS6Fb/g6aNYNPoBSbiI02hWttArMUVlGEtv/nWivUnzU9seHra29OVIdHwK9TRwpPgTgrJfEN+A8xi6fMjQLpM2PzBcien+umZcmHtTz+teP4YeN683CEWyX92Su5OU5bYFt++wZhIVo1pE+UyjjplQsd8j6WIlLwbi/yJpYbSVxk9l4U9byL0jH/rjNfvdH7qorWISw7X0k03hixXFAKKO28yi7Jo3tiENdRq1TF9YfZ4kfQi6jItdl+0yt1xF1S4TQYo9W9lNVfvusaRlkfxoEaqjY6cGcy+Wh2V5EEUX0XnBl8t8n8x67IFJVgbD2ZINFcFuTFUBFkwIDAQAB",
   "action": {
     "default_popup": "popup.html",
