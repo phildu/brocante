@@ -88,7 +88,12 @@
       first.push(part);
       first.push(...part.split(/\s+/).filter((w) => w.length > 4));
     }
-    return unique(first);
+    // Le titre est plus précis que la catégorie large de la boutique (une salière rangée dans l'univers « Robes » reste une salière) :
+    // pour une pièce qui n'est pas sûrement un vêtement, on cherche d'abord l'objet du titre ; pour un vêtement, la nature d'abord.
+    const Q = globalThis.AmQuality;
+    const fromTitle = Q && Q.titleWords ? Q.titleWords(p) : [];
+    const clothing = Q && Q.sizeNeed ? Q.sizeNeed(p) === 'yes' : true;
+    return unique(clothing ? first.concat(fromTitle) : fromTitle.concat(first));
   }
 
   function genderWord(p) {
@@ -151,12 +156,19 @@
       // Les boutons-radio des résultats sont masqués visuellement : on les prend sans test de visibilité, le texte est dans leur <li>.
       const rows = Array.from(document.querySelectorAll('input[type="radio"][id^="catalog-search-"]'));
       if (!rows.length) { await closeDropdowns(F); continue; }
-      const preferred = rows.find((r) => rowText(r.closest('li') || r).includes(squash(gender))) || null;
-      const pick = preferred || rows[0];
+      // Univers Femmes / Hommes / Enfants : uniquement pour un vêtement ; un objet prend le meilleur résultat de Vinted
+      // (et jamais une catégorie de mode quand la nature de la pièce est précisée et n'en est pas une).
+      const Q = globalThis.AmQuality;
+      const need = Q && Q.sizeNeed ? Q.sizeNeed(p) : 'yes';
+      const FASHION_ROOT = /\b(femmes|hommes|enfants) >/;
+      const usable = need === 'no' ? rows.filter((r) => !FASHION_ROOT.test(rowText(r.closest('li') || r))) : rows;
+      if (!usable.length) { await closeDropdowns(F); continue; }
+      const preferred = need === 'yes' ? usable.find((r) => rowText(r.closest('li') || r).includes(squash(gender))) || null : null;
+      const pick = preferred || usable[0];
       F.pressEl(pick.closest('label') || pick.closest('li') || pick);
       await F.sleep(1500);
       if (String(document.getElementById('category').value || '').trim()) {
-        return { ok: true, guessed: !preferred && rows.length > 1, text: rowText(pick.closest('li') || pick), word };
+        return { ok: true, guessed: !preferred && usable.length > 1, text: rowText(pick.closest('li') || pick), word };
       }
     }
     await closeDropdowns(F);
