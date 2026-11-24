@@ -7,7 +7,11 @@ require_once __DIR__ . '/../lib/pricing.php';
 $report = am_price_report();
 $rows = $report['rows'];
 $count = ['lower' => 0, 'raise' => 0, 'ok' => 0];
-foreach ($rows as $r) if (isset($count[$r['state']])) $count[$r['state']]++;
+$bigCount = 0;
+foreach ($rows as $r) {
+    if (isset($count[$r['state']])) $count[$r['state']]++;
+    if ($r['big']) $bigCount++;
+}
 $channelName = ['leboncoin' => 'Leboncoin', 'vinted' => 'Vinted'];
 $stateLabel = ['lower' => 'À baisser', 'raise' => 'À monter', 'ok' => 'Dans la fourchette', 'unknown' => 'Prix absent'];
 ?>
@@ -17,12 +21,13 @@ $stateLabel = ['lower' => 'À baisser', 'raise' => 'À monter', 'ok' => 'Dans la
   <h1 style="font-size:1.8rem;margin:12px 0 8px;">Prix suggérés par les plateformes</h1>
   <p class="hint" style="max-width:68ch;">
     À chaque remplissage d’annonce, l’extension relève le prix que la plateforme propose (fourchette ou valeur) et le compare au prix de la boutique.
-    Un prix à plus de <?= (int) round(AM_PRICE_TOLERANCE * 100) ?> % hors fourchette est signalé. Rien n’est modifié automatiquement : vous gardez la main sur vos prix.
+    Un prix à plus de <?= (int) round(AM_PRICE_TOLERANCE * 100) ?> % hors fourchette est signalé ; à partir de <?= (int) round(AM_PRICE_ALERT * 100) ?> %, l’écart est marqué « important ». Rien n’est modifié automatiquement : vous gardez la main sur vos prix.
   </p>
   <p><a href="<?= h(plugin_page_url('annonces-marche', 'index')) ?>">← Retour aux annonces</a></p>
 
   <section class="am-card">
     <h2>Rapport
+      <span class="am-pill"><?= (int) $bigCount ?> écart(s) important(s)</span>
       <span class="am-pill"><?= (int) $count['lower'] ?> à baisser</span>
       <span class="am-pill"><?= (int) $count['raise'] ?> à monter</span>
       <span class="am-pill"><?= (int) $count['ok'] ?> dans la fourchette</span>
@@ -32,7 +37,7 @@ $stateLabel = ['lower' => 'À baisser', 'raise' => 'À monter', 'ok' => 'Dans la
     <?php else: ?>
       <div class="am-actions"><button type="button" class="btn-small" id="am-price-csv">Exporter en CSV</button></div>
       <div class="am-table-scroll"><table class="am-table" id="am-price-table">
-        <thead><tr><th>Pièce</th><th>Plateforme</th><th>Mon prix</th><th>Prix proposé</th><th>Conseil</th></tr></thead>
+        <thead><tr><th>Pièce</th><th>Plateforme</th><th>Mon prix</th><th>Prix proposé</th><th>Conseil</th><th>Écart</th></tr></thead>
         <tbody>
         <?php foreach ($rows as $r): ?>
           <tr data-state="<?= h($r['state']) ?>">
@@ -41,6 +46,7 @@ $stateLabel = ['lower' => 'À baisser', 'raise' => 'À monter', 'ok' => 'Dans la
             <td><?= $r['price'] === null ? '—' : h(am_money((float) $r['price'])) ?></td>
             <td><?= $r['min'] === $r['max'] ? h(am_money($r['min'])) : h(am_money($r['min']) . ' – ' . am_money($r['max'])) ?></td>
             <td class="<?= $r['state'] === 'ok' ? 'muted' : '' ?>"><?= h($r['label']) ?></td>
+            <td class="<?= $r['big'] ? '' : 'muted' ?>"><?= $r['big'] ? '⚠ ' : '' ?><?= $r['gap'] > 0 ? (int) $r['gap'] . ' %' : '—' ?></td>
           </tr>
         <?php endforeach; ?>
         </tbody>

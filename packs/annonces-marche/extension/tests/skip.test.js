@@ -32,5 +32,16 @@ const T = ctx.__t;
   const mark = calls.find((c) => /marquer/.test(c.url));
   assert.ok(mark && mark.body.product_ref === '006' && mark.body.status === 'draft' && /^no-match — /.test(mark.body.note), 'inscrite au portail comme non publiée');
   assert.ok(store.amAlert && /006/.test(store.amAlert.message), 'alerte affichée dans la popup');
+  // Écart de prix : la fiche à 10 € face à une fourchette de 2–5 € est marquée dans l'historique et dans la raison.
+  store.amQueue = { status: 'running', channel: 'vinted', refs: ['013', '014'], index: 0, stats: {}, consecutiveErrors: 0, activeRef: '013' };
+  store.amAutoHistory = [];
+  await T.finalizeItem({ ref: '013', price: 10 }, { action: 'prepared', suggested: { min: 2, max: 5, text: 'x' } }, 42, { dryRun: true });
+  const entry = store.amAutoHistory[store.amAutoHistory.length - 1];
+  assert.strictEqual(entry.priceGap, 100);
+  assert.ok(/⚠ écart de prix/.test(entry.reason), entry.reason);
+  assert.strictEqual(store.amQueue.stats.priceGap, 1);
+  store.amQueue = { ...store.amQueue, status: 'running', index: 0, stats: {}, activeRef: '014' };
+  await T.finalizeItem({ ref: '014', price: 4 }, { action: 'prepared', suggested: { min: 2, max: 5, text: 'x' } }, 42, { dryRun: true });
+  assert.strictEqual(store.amAutoHistory[store.amAutoHistory.length - 1].priceGap, 0, 'prix dans la fourchette : rien à signaler');
   console.log('skip-test OK');
 })().catch((e) => { console.error(e); process.exit(1); });

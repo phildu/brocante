@@ -628,6 +628,7 @@
     interval: $('auto-interval'),
     cap: $('auto-cap'),
     hourly: $('auto-hourly'),
+    gap: $('auto-gap'),
     from: $('auto-from'),
     to: $('auto-to'),
     keepTabs: $('auto-keep-tabs'),
@@ -681,6 +682,7 @@
       s['no-match'] ? s['no-match'] + ' sans valeur' : '',
       s.blocked ? s.blocked + ' arrêt(s)' : '',
       s.error ? s.error + ' erreur(s)' : '',
+      s.priceGap ? s.priceGap + ' écart(s) de prix' : '',
     ].filter(Boolean).join(' · ') || 'aucune pièce traitée';
   }
 
@@ -703,6 +705,7 @@
     fillIfIdle(auto.interval, String(s.intervalMin || 5));
     fillIfIdle(auto.cap, String(s.dailyCap || 10));
     fillIfIdle(auto.hourly, String(s.hourlyCap || 3));
+    fillIfIdle(auto.gap, String(s.priceGapPct || 30));
     fillIfIdle(auto.from, String(s.activeFrom != null ? s.activeFrom : 8));
     fillIfIdle(auto.to, String(s.activeTo != null ? s.activeTo : 21));
     fillIfIdle(auto.urlLbc, (s.depositUrls && s.depositUrls.leboncoin) || '');
@@ -778,7 +781,7 @@
         'no-match': 'passée (menu)',
         'to-update': 'à mettre à jour',
         error: 'erreur',
-      }[entry.action] || entry.action) + (entry.dryRun ? ' (sim.)' : '');
+      }[entry.action] || entry.action) + (entry.dryRun ? ' (sim.)' : '') + (entry.priceGap ? ' · ⚠ prix ' + entry.priceGap + ' %' : '');
       li.append(left, right);
       auto.history.appendChild(li);
     });
@@ -849,6 +852,11 @@
     const value = intInRange(auto.hourly.value, 1, 20, 3);
     auto.hourly.value = String(value);
     patchAuto({ hourlyCap: value });
+  });
+  auto.gap.addEventListener('change', () => {
+    const value = intInRange(auto.gap.value, 5, 90, 30);
+    auto.gap.value = String(value);
+    patchAuto({ priceGapPct: value });
   });
   function saveRange() {
     const from = intInRange(auto.from.value, 0, 23, 8);

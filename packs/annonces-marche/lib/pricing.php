@@ -6,6 +6,9 @@ defined('PLUGIN_RUNTIME') || exit;
 /** Tolérance avant de recommander un changement : un prix à moins de 10 % de la fourchette reste « dans la fourchette ». */
 const AM_PRICE_TOLERANCE = 0.10;
 
+/** Écart (en part de la borne la plus proche) à partir duquel la différence de prix est signalée comme importante. */
+const AM_PRICE_ALERT = 0.30;
+
 /** @return array{min: float, max: float}|null */
 function am_suggestion_from_note(string $note): ?array
 {
@@ -21,13 +24,16 @@ function am_suggestion_from_note(string $note): ?array
  */
 function am_price_verdict(float $price, float $min, float $max): array
 {
+    // « gap » : écart en % de la borne la plus proche ; « big » : à partir de AM_PRICE_ALERT.
+    $gap = $price > $max ? ($price - $max) / $max : ($price < $min ? ($min - $price) / $min : 0.0);
+    $extra = ['gap' => (int) round($gap * 100), 'big' => $gap >= AM_PRICE_ALERT];
     if ($price > $max * (1 + AM_PRICE_TOLERANCE)) {
-        return ['state' => 'lower', 'target' => $max, 'label' => 'Baisser à ' . am_money($max)];
+        return ['state' => 'lower', 'target' => $max, 'label' => 'Baisser à ' . am_money($max)] + $extra;
     }
     if ($price < $min * (1 - AM_PRICE_TOLERANCE)) {
-        return ['state' => 'raise', 'target' => $min, 'label' => 'Monter à ' . am_money($min)];
+        return ['state' => 'raise', 'target' => $min, 'label' => 'Monter à ' . am_money($min)] + $extra;
     }
-    return ['state' => 'ok', 'target' => null, 'label' => 'Dans la fourchette'];
+    return ['state' => 'ok', 'target' => null, 'label' => 'Dans la fourchette'] + $extra;
 }
 
 function am_money(float $v): string
@@ -55,7 +61,7 @@ function am_price_report(): array
         $p = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$p) continue;
         $price = am_price_euros($p);
-        $verdict = $price === null ? ['state' => 'unknown', 'target' => null, 'label' => 'Prix boutique absent'] : am_price_verdict($price, $s['min'], $s['max']);
+        $verdict = $price === null ? ['state' => 'unknown', 'target' => null, 'label' => 'Prix boutique absent', 'gap' => 0, 'big' => false] : am_price_verdict($price, $s['min'], $s['max']);
         $rows[] = [
             'ref' => (string) $l['product_ref'],
             'name' => (string) $p['name'],
@@ -66,11 +72,13 @@ function am_price_report(): array
             'state' => $verdict['state'],
             'target' => $verdict['target'],
             'label' => $verdict['label'],
+            'gap' => $verdict['gap'],
+            'big' => $verdict['big'],
             'read_at' => (string) $l['created_at'],
         ];
     }
-    // À repricer d'abord (baisser, monter), puis le reste.
+    // Gros écarts d'abord, puis à repricer (baisser, monter), puis le reste.
     $order = ['lower' => 0, 'raise' => 1, 'unknown' => 2, 'ok' => 3];
-    usort($rows, static fn (array $a, array $b): int => ($order[$a['state']] ?? 9) <=> ($order[$b['state']] ?? 9) ?: strcmp($a['ref'], $b['ref']));
+    usort($rows, static fn (array $a, array $b): int => ((int) $b['big'] <=> (int) $a['big']) ?: (($order[$a['state']] ?? 9) <=> ($order[$b['state']] ?? 9)) ?: ($b['gap'] <=> $a['gap']) ?: strcmp($a['ref'], $b['ref']));
     return ['rows' => $rows, 'unreadable' => $unreadable];
 }

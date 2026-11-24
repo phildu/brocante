@@ -249,19 +249,22 @@
   }
 
   /** Signale au portail une valeur introuvable sur le site (liste « À renseigner » de la page Correspondances). Une seule fois par page. */
-  const reported = new Set();
   function reportUnknown(p, fieldLabel, options) {
     const source = String(p.subcategory_label || p.nature_label || p.category_label || '').trim();
-    const key = squash(fieldLabel) + '|' + squash(source);
-    if (reported.has(key)) return;
-    reported.add(key);
-    try {
-      chrome.runtime.sendMessage({
-        type: 'am-report-unknown', channel: 'leboncoin',
-        items: [{ field_label: fieldLabel, field_type: 'autre', source_value: source, product_ref: p.ref || '', options: (options || []).slice(0, 80) }],
-      }, () => { void chrome.runtime.lastError; });
-    } catch (_) {}
+    const F = F0();
+    if (F && F.reportUnknown) F.reportUnknown('leboncoin', p, { label: fieldLabel, type: 'autre', source, options });
   }
+
+  // Menus dont une valeur de la fiche peut manquer sur le site : intitulé, type de correspondance, valeur de la boutique.
+  const UNKNOWN_MENU = {
+    marque: ['Marque', 'marque', (p) => p.brand],
+    taille: ['Taille', 'taille', (p) => p.size_text],
+    pointure: ['Pointure', 'taille', (p) => p.size_text],
+    couleur: ['Couleur', 'couleur', (p) => p.colors],
+    'état': ['État', 'etat', (p) => (p.condition && p.condition.leboncoin && p.condition.leboncoin.key) || ''],
+    'type de chaussures': ['Type de chaussures', 'autre', (p) => p.subcategory_label || p.nature_label],
+    genre: ['Genre', 'autre', (p) => p.genre || p.subcategory_label],
+  };
 
   // --- Étapes de remplissage ---
 
@@ -396,6 +399,12 @@
       results[name] = res;
       // Menu présent, liste lue, mais aucune entrée ne convient : la pièce sera passée et le manque signalé au portail.
       if (name === 'univers' && res && !res.ok && !res.absent && !res.skipped && res.options && res.options.length) res.unresolved = true;
+      // Valeur de la fiche absente de la liste du site (menu non rempli, ou repli « Sans marque » / « Autre » / « Bon état ») : signalée au portail.
+      const meta = UNKNOWN_MENU[name];
+      if (meta && res && res.options && res.options.length && (res.fallback || (!res.ok && !res.absent && !res.skipped))) {
+        const F0r = F0();
+        if (F0r && F0r.reportUnknown) F0r.reportUnknown('leboncoin', p, { label: meta[0], type: meta[1], source: meta[2](p), options: res.options });
+      }
       if (res && res.nearest) note(name + ' : entrée la plus proche choisie (' + (res.value || '?') + ')');
       if (!(res && res.absent)) {
         note(name + ' : ' + (res && res.ok ? (res.already ? 'déjà ' : res.kept ? 'conservé ' : 'ok ') + (res.value || '') + (res.fallback ? ' (repli)' : '') : res && res.skipped ? 'pas de valeur' : 'échec' + (res && res.error ? ' (' + res.error + ')' : '')));

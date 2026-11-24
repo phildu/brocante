@@ -205,7 +205,7 @@
     if (!options) { await closeDropdowns(F); return { ok: false }; }
     const wanted = tokens.map(squash);
     const hit = options.find((o) => squash(o.innerText).split(/[\/\s]+/).some((t) => wanted.includes(t)));
-    if (!hit) { await closeDropdowns(F); return { ok: false }; }
+    if (!hit) { const listed = options.map((o) => String(o.innerText || '').trim()).filter(Boolean); await closeDropdowns(F); return { ok: false, options: listed }; }
     F.pressEl(hit);
     await F.sleep(700);
     await closeDropdowns(F);
@@ -228,8 +228,9 @@
       return list.length ? list : null;
     }, 3000, 200);
     if (!radios) { await closeDropdowns(F); return { ok: false }; }
-    const hit = radios.map((r) => ({ r, text: rowText(r) })).find((o) => wanted.some((w) => o.text === w || o.text.startsWith(w + ' ')));
-    if (!hit) { await closeDropdowns(F); return { ok: false }; }
+    const rows = radios.map((r) => ({ r, text: rowText(r) }));
+    const hit = rows.find((o) => wanted.some((w) => o.text === w || o.text.startsWith(w + ' ')));
+    if (!hit) { await closeDropdowns(F); return { ok: false, options: rows.map((o) => o.text).filter(Boolean) }; }
     F.pressEl(hit.r.closest('label') || hit.r.parentElement.parentElement || hit.r);
     await F.sleep(900);
     await closeDropdowns(F);
@@ -255,7 +256,11 @@
       }
       return chosen;
     };
-    await pick(colorNames(p));
+    const names = colorNames(p);
+    await pick(names);
+    const listed = Array.from(document.querySelectorAll('[data-testid^="color-"]'))
+      .filter((e) => visible(e) && !/color_code|dropdown/.test(e.getAttribute('data-testid') || ''))
+      .map((e) => String(e.innerText || '').trim()).filter(Boolean);
     let fallback = '';
     if (!String(input.value || '').trim()) {
       // Vinted exige une couleur : sans couleur lisible dans la fiche (ou absente de sa liste), « Multicolore », signalé à corriger.
@@ -263,7 +268,7 @@
       if (String(input.value || '').trim()) fallback = 'Multicolore';
     }
     await closeDropdowns(F);
-    return { ok: !!String(input.value || '').trim(), value: input.value, fallback };
+    return { ok: !!String(input.value || '').trim(), value: input.value, fallback, options: listed, wanted: names };
   }
 
   async function stepMaterial(p, F) {
@@ -277,8 +282,9 @@
     const words = wanted.split(/\s+/);
     const cell = cells.find((e) => squash(e.innerText) === wanted) || cells.find((e) => words.includes(squash(e.innerText)));
     if (cell) { F.pressEl(cell); await F.sleep(500); }
+    const listed = cells.map((e) => String(e.innerText || '').trim()).filter(Boolean);
     await closeDropdowns(F);
-    return { ok: true, skipped: !cell };   // matériau recommandé mais facultatif
+    return { ok: true, skipped: !cell, options: listed, missing: cell ? '' : wanted };   // matériau recommandé mais facultatif
   }
 
   /** Montant lu dans le champ prix de Vinted (« 10,00 € ») ; NaN si le champ est vide ou cassé (« NaN € »). */
@@ -319,7 +325,22 @@
     const product = p || {};
     const done = [];
     const retries = [];
+    // Valeur de la fiche sans équivalent chez Vinted (menu non rempli, repli, matériau absent) : signalée au portail (« À renseigner »).
+    const UNKNOWN = {
+      marque: ['Marque', 'marque', (p) => p.brand],
+      taille: ['Taille', 'taille', (p) => p.size_text],
+      'état': ['État', 'etat', (p) => (p.condition && p.condition.vinted && p.condition.vinted.key) || ''],
+      couleur: ['Couleur', 'couleur', (p) => p.colors],
+      'matériau': ['Matériau', 'matiere', (p) => p.materials],
+    };
+    const reportMissing = (name, res) => {
+      const meta = UNKNOWN[name];
+      if (!meta || !res) return;
+      const missed = res.fallback || res.missing || (!res.ok && res.options);
+      if (missed) F.reportUnknown('vinted', product, { label: meta[0], type: meta[1], source: meta[2](product), options: res.options || [] });
+    };
     const record = (name, res, run) => {
+      reportMissing(name, res);
       if (res && res.ok) {
         if (!res.skipped && !res.absent) done.push(name + (res.guessed ? ' (1er choix du site : ' + (res.text || '?') + ')' : '') + (res.fallback ? ' (repli « ' + res.fallback + ' »)' : ''));
         if (res.guessed) F.noteIssue('catégorie prise par défaut (1re suggestion du site) : ' + (res.text || '?') + '.');

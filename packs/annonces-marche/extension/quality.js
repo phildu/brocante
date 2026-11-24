@@ -160,6 +160,41 @@
   const RANGE = new RegExp(KEY + '[^0-9]{0,60}' + AMOUNT + '\\s*(?:€|eur)?\\s*(?:-|–|—|a|et|jusqu\'a)\\s*' + AMOUNT + '\\s*(?:€|eur)');
   const SINGLE = new RegExp(KEY + '[^0-9]{0,60}' + AMOUNT + '\\s*(?:€|eur)');
 
+  // Vinted : « Recommandation de prix » avec trois paliers (2,00 € Bonne affaire · 4,00 € Prix idéal · 5,00 € Premium).
+  const TIER = /(\d[\d ]*(?:[.,]\d{1,2})?)\s*(?:€|eur)\s*(bonne affaire|prix ideal|premium)/g;
+  function parseTiers(flat) {
+    const found = {};
+    let m;
+    TIER.lastIndex = 0;
+    while ((m = TIER.exec(flat))) {
+      const v = toEuros(m[1]);
+      if (v > 0 && v < 100000) found[m[2]] = v;
+    }
+    const names = Object.keys(found);
+    if (names.length < 2) return null;
+    const values = names.map((k) => found[k]);
+    return {
+      min: Math.min(...values), max: Math.max(...values), ideal: found['prix ideal'] != null ? found['prix ideal'] : null,
+      text: 'recommandation de prix : ' + names.map((k) => k + ' ' + found[k]).join(', '),
+    };
+  }
+
+  /**
+   * Écart entre le prix de la boutique et la fourchette proposée par la plateforme.
+   * { state: 'ok'|'high'|'low', pct (écart en % de la borne la plus proche), target, big (écart ≥ seuil) } ; null si pas de relevé lisible.
+   */
+  function priceGap(price, suggestion, thresholdPct) {
+    const p = Number(price);
+    if (!suggestion || suggestion.min == null || suggestion.max == null || !(p > 0)) return null;
+    const threshold = Math.max(1, Number(thresholdPct) || 30) / 100;
+    let state = 'ok';
+    let pct = 0;
+    let target = null;
+    if (p > suggestion.max) { state = 'high'; pct = (p - suggestion.max) / suggestion.max; target = suggestion.max; }
+    else if (p < suggestion.min) { state = 'low'; pct = (suggestion.min - p) / suggestion.min; target = suggestion.min; }
+    return { state, pct: Math.round(pct * 100), target, big: state !== 'ok' && pct >= threshold };
+  }
+
   /**
    * Prix proposé par la plateforme, lu dans le texte de la page : { min, max, text } ; { min: null, max: null, text } quand
    * la plateforme parle d'un prix suggéré sans qu'on sache en lire le montant (le texte sert alors à ajuster la lecture) ;
@@ -167,6 +202,8 @@
    */
   function parseSuggestedPrice(pageText) {
     const flat = squash(String(pageText || '').replace(/[  ]/g, ' '));
+    const tiers = parseTiers(flat);
+    if (tiers) return tiers;
     let m = RANGE.exec(flat);
     if (m) {
       const a = toEuros(m[2]);
@@ -194,6 +231,6 @@
     return m ? { min: Number(m[1]), max: Number(m[2]) } : null;
   }
 
-  global.AmQuality = { check, summary, lines, needsSize, hasSize, fingerprint, parseSuggestedPrice, suggestionTag, suggestionFromNote };
+  global.AmQuality = { check, summary, lines, needsSize, hasSize, fingerprint, parseSuggestedPrice, priceGap, suggestionTag, suggestionFromNote };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.AmQuality;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

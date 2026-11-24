@@ -116,4 +116,16 @@ assert.ok(!Q.check({ ...sansTaille, nature_label: 'Arts de la table et cuisine' 
 assert.ok(Q.check({ title: 'Robe fleurie été', nature_label: 'Vêtements', description: 'x'.repeat(50), price: 10, photos: [{ url: 'u' }] }, 'vinted').block.some((i) => i.field === 'taille'));
 assert.ok(Q.check({ title: 'Robe fleurie été', category_label: 'Vêtements', description: 'x'.repeat(50), price: 10, photos: [{ url: 'u' }] }, 'vinted').block.some((i) => i.field === 'taille'), 'mot du titre');
 
+// Vinted : « Recommandation de prix » avec trois paliers.
+const vintedText = 'Prix\n\nRecommandation de prix\nEn savoir plus\n\n2,00 €\n\nBonne affaire\n\n4,00 €\n\nPrix idéal\n\n5,00 €\n\nPremium\n\nVoir le prix de vente d’articles similaires';
+const tiers = Q.parseSuggestedPrice(vintedText);
+assert.strictEqual(tiers.min, 2); assert.strictEqual(tiers.max, 5); assert.strictEqual(tiers.ideal, 4);
+// Écart entre le prix de la boutique et la fourchette proposée.
+const gapHigh = Q.priceGap(10, tiers, 30);
+assert.strictEqual(gapHigh.state, 'high'); assert.strictEqual(gapHigh.pct, 100); assert.ok(gapHigh.big);
+assert.ok(!Q.priceGap(5.5, tiers, 30).big, '10 % au-dessus : pas un gros écart');
+assert.strictEqual(Q.priceGap(3, tiers, 30).state, 'ok');
+assert.ok(Q.priceGap(1, tiers, 30).big && Q.priceGap(1, tiers, 30).state === 'low', 'trop bas : signalé aussi');
+assert.ok(Q.priceGap(5.5, tiers, 5).big, 'seuil réglable');
+assert.strictEqual(Q.priceGap(10, null, 30), null); assert.strictEqual(Q.priceGap(10, { min: null, max: null }, 30), null);
 console.log('quality.test.js : tous les tests passent');
