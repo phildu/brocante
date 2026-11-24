@@ -128,6 +128,8 @@ couleur, catégorie, photos) dans la note de la ligne d'historique (`[h:…]`). 
 - **Prix suggérés** : à chaque remplissage (simulation, brouillon ou publication), l'extension lit le prix proposé par la plateforme (`AmQuality.parseSuggestedPrice`) et le range dans la note de la ligne `am_listings` sous la forme `[s:min-max]` (`[s:?]` quand la plateforme en parle sans montant lisible). Aucune migration SQL. La page « Prix suggérés » (`pages/prix.php`, `lib/pricing.php`) compare ces fourchettes au prix de la boutique (tolérance 10 %) et exporte un CSV. Rien n'est modifié automatiquement.
 - La lecture s'appuie sur des libellés (« prix suggéré », « recommandé », « estimation »…) : elle n'a pas pu être essayée sur un formulaire réel avec suggestion. Un montant illisible laisse le texte relevé dans l'historique de l'extension pour ajuster la lecture.
 
-## Menu « Univers » de Leboncoin (extension 1.9.1)
+## Menu « Univers » de Leboncoin (extension 1.9.2)
 
 L'extension lit la liste réelle des univers proposés par le site et choisit l'entrée la plus proche de la pièce (valeur imposée par la table de correspondances, puis Femme / Homme pour la mode, puis comparaison des mots de la catégorie, du titre et de la description). Sans choix assez sûr, la pièce est **passée** (la file continue, ce n'est plus un arrêt) et le manque est inscrit dans « À renseigner » de la page Correspondances, avec la liste des univers du site. Une correspondance « Autre champ » peut maintenant porter une catégorie de la boutique (ex. Univers = « Maison » pour les paniers) sans toucher aux autres pièces.
+
+Vinted : après la mise en ligne, le site renvoie sur le profil du vendeur (`/member/<n>?promo_shown=…`) avec la fenêtre « Article en vente » ; cette page est maintenant reconnue comme une publication réussie (1.9.2).

@@ -43,6 +43,11 @@ final class ExtensionQualityTest extends TestCase
         $this->runNodeTest('skip.test.js', 'skip-test OK');
     }
 
+    public function testVintedConfirmationIsDetectedInNode(): void
+    {
+        $this->runNodeTest('published.test.js', 'published-test OK');
+    }
+
     private function runNodeTest(string $file, string $expected): void
     {
         $node = trim((string) @shell_exec('command -v node 2>/dev/null'));

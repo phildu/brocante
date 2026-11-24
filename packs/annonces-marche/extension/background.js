@@ -693,7 +693,7 @@ async function verifyPublished(tabId, channel) {
   }
   let tab = null;
   try { tab = await chrome.tabs.get(tabId); } catch (_) {}
-  if (tab && /(confirmation|success|merci|annonce-publiee|published)/i.test(tab.url || '')) {
+  if (tab && (/(confirmation|success|merci|annonce-publiee|published)/i.test(tab.url || '') || /vinted\.[a-z.]+\/member\/\d+.*promo_shown/i.test(tab.url || ''))) {
     return { ok: true, action: 'published', listing_url: tab.url };
   }
   return null;

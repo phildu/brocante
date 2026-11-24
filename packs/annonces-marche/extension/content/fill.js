@@ -597,6 +597,9 @@
     // Vinted : après la mise en ligne, on arrive sur la page de l'article (/items/<numéro>-<titre>), plus sur /items/new.
     if (/(^|\.)vinted\./i.test(location.hostname) && /^\/items\/\d+/.test(location.pathname)) return true;
     const text = normalizeLabel(document.body ? document.body.innerText.slice(0, 20000) : '');
+    // Vinted renvoie maintenant sur le profil du vendeur (/member/<n>?promo_shown=…) avec la fenêtre « Article en vente ».
+    if (/(^|\.)vinted\./i.test(location.hostname) && /^\/member\/\d+/.test(location.pathname) &&
+        (/promo_shown/i.test(location.search) || /article en vente[\s\S]{0,400}ajouter un autre article/.test(text))) return true;
     return /(annonce (est )?(en ligne|publiee|visible)|votre annonce a bien ete publiee|felicitations[^.]{0,40}annonce|article (est )?(en ligne|publie))/.test(text);
   }
 
