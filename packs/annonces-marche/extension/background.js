@@ -521,7 +521,15 @@ async function processNext() {
     if (quality.warn.length) await progress('Fiche ' + ref + ' : ' + AmQuality.summary(quality) + '…');
 
     let openDeposit = false;
-    if (!tabId) {
+    if (tabId) {
+      // Onglet repris (« Reprendre » après un arrêt) : s'il n'est plus sur le formulaire (profil Vinted après une publication…),
+      // on repart du bouton « Déposer une annonce » / « Vends ton article » comme le vendeur.
+      let url = '';
+      try { url = (await chrome.tabs.get(tabId)).url || ''; } catch (_) {}
+      const custom = (settings.depositUrls[queue.channel] || '').trim();
+      const isDefault = !custom || custom === AUTO_DEFAULTS.depositUrls[queue.channel];
+      if (isDefault && url && !onDepositForm(url, queue.channel)) openDeposit = true;
+    } else {
       const depositUrl = (settings.depositUrls[queue.channel] || '').trim() ||
         AUTO_DEFAULTS.depositUrls[queue.channel];
       // Départ de session comme le vendeur : accueil du site, puis clic sur « Déposer une annonce » / « Vends ton article ».
@@ -598,6 +606,13 @@ async function waitForContent(tabId, channel, timeoutMs) {
   throw new Error(
     'La page de dépôt n’a pas répondu. Vérifiez que l’onglet est connecté au bon site, puis relancez.'
   );
+}
+
+/** L'onglet est-il déjà sur le formulaire de dépôt de la plateforme ? */
+function onDepositForm(url, channel) {
+  return channel === 'vinted'
+    ? /^https?:\/\/[^/]*vinted\.[a-z.]+\/items\/new/i.test(url)
+    : /^https?:\/\/[^/]*leboncoin\.fr\/deposer-une-annonce/i.test(url);
 }
 
 async function runAutoInTab(tabId, channel, product, options) {
