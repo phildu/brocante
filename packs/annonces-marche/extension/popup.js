@@ -627,6 +627,9 @@
     draft: $('auto-draft'),
     interval: $('auto-interval'),
     cap: $('auto-cap'),
+    hourly: $('auto-hourly'),
+    from: $('auto-from'),
+    to: $('auto-to'),
     keepTabs: $('auto-keep-tabs'),
     urlLbc: $('auto-url-lbc'),
     urlVinted: $('auto-url-vinted'),
@@ -699,6 +702,9 @@
     fillIfIdle(auto.keepTabs, !!s.keepTabs, 'checked');
     fillIfIdle(auto.interval, String(s.intervalMin || 5));
     fillIfIdle(auto.cap, String(s.dailyCap || 10));
+    fillIfIdle(auto.hourly, String(s.hourlyCap || 3));
+    fillIfIdle(auto.from, String(s.activeFrom != null ? s.activeFrom : 8));
+    fillIfIdle(auto.to, String(s.activeTo != null ? s.activeTo : 21));
     fillIfIdle(auto.urlLbc, (s.depositUrls && s.depositUrls.leboncoin) || '');
     fillIfIdle(auto.urlVinted, (s.depositUrls && s.depositUrls.vinted) || '');
 
@@ -835,10 +841,24 @@
     patchAuto({ intervalMin: value });
   });
   auto.cap.addEventListener('change', () => {
-    const value = intInRange(auto.cap.value, 1, 30, 10);
+    const value = intInRange(auto.cap.value, 1, 50, 10);
     auto.cap.value = String(value);
     patchAuto({ dailyCap: value });
   });
+  auto.hourly.addEventListener('change', () => {
+    const value = intInRange(auto.hourly.value, 1, 20, 3);
+    auto.hourly.value = String(value);
+    patchAuto({ hourlyCap: value });
+  });
+  function saveRange() {
+    const from = intInRange(auto.from.value, 0, 23, 8);
+    const to = Math.max(from + 1, intInRange(auto.to.value, 1, 24, 21));
+    auto.from.value = String(from);
+    auto.to.value = String(to);
+    patchAuto({ activeFrom: from, activeTo: to });
+  }
+  auto.from.addEventListener('change', saveRange);
+  auto.to.addEventListener('change', saveRange);
   auto.urlLbc.addEventListener('change', () => patchAuto({ depositUrls: { leboncoin: auto.urlLbc.value.trim() } }));
   auto.urlVinted.addEventListener('change', () => patchAuto({ depositUrls: { vinted: auto.urlVinted.value.trim() } }));
   auto.lbc.addEventListener('click', () => startAutoRun('leboncoin'));
@@ -875,6 +895,110 @@
     await refreshAuto();
   });
 
+  /* ---------- Annonces en ligne : mise à jour et suppression ---------- */
+  const online = {
+    channel: $('online-channel'), refresh: $('online-refresh'), list: $('online-list'), status: $('online-status'),
+    updateAll: $('online-update-all'), deleteGone: $('online-delete-gone'), cancel: $('online-cancel'),
+  };
+  let onlineItems = [];
+  let onlineBusy = false;
+  let wasBusy = false;
+  const STATE_LABEL = { same: 'à jour', changed: 'modifiée', gone: 'retirée de la boutique', unknown: 'état inconnu' };
+  const channelName = () => (online.channel.value === 'vinted' ? 'Vinted' : 'Leboncoin');
+
+  function onlineSay(text, kind) { online.status.textContent = text; online.status.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+  function renderOnline() {
+    online.list.replaceChildren();
+    for (const item of onlineItems) {
+      const li = document.createElement('li');
+      const title = document.createElement('span');
+      title.className = 't';
+      title.textContent = item.ref + ' · ' + (item.title || '(fiche indisponible)');
+      title.title = title.textContent;
+      const st = document.createElement('span');
+      st.className = 'st ' + item.state;
+      st.textContent = STATE_LABEL[item.state] || item.state;
+      li.append(title, st);
+      if (item.state !== 'gone') li.append(manageButton('Mettre à jour', 'update', item));
+      li.append(manageButton('Supprimer', 'delete', item));
+      online.list.append(li);
+    }
+    const changed = onlineItems.filter((i) => i.state === 'changed');
+    const gone = onlineItems.filter((i) => i.state === 'gone');
+    online.updateAll.textContent = 'Tout mettre à jour (' + changed.length + ')';
+    online.deleteGone.textContent = 'Supprimer les retirées (' + gone.length + ')';
+    online.updateAll.disabled = onlineBusy || !changed.length;
+    online.deleteGone.disabled = onlineBusy || !gone.length;
+    for (const b of online.list.querySelectorAll('button')) b.disabled = onlineBusy;
+  }
+
+  function manageButton(label, kind, item) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ghost small';
+    b.textContent = label;
+    b.addEventListener('click', () => runManage(kind, [item.ref]));
+    return b;
+  }
+
+  async function loadOnline() {
+    onlineSay('Lecture des annonces…');
+    const res = await autoSend({ type: 'am-online-list', channel: online.channel.value });
+    if (!res || !res.ok) { onlineSay((res && res.error) || 'Liste impossible.', 'err'); return; }
+    onlineItems = res.items || [];
+    onlineSay(onlineItems.length
+      ? onlineItems.length + ' annonce(s) sur ' + channelName() + '.'
+      : 'Aucune annonce enregistrée sur ' + channelName() + ' (seules les publications faites par l’extension apparaissent).');
+    renderOnline();
+  }
+
+  async function runManage(kind, refs) {
+    if (!refs.length) return;
+    const verb = kind === 'delete' ? 'supprimer' : 'mettre à jour';
+    const warn = kind === 'delete' ? ' Cette suppression est définitive sur la plateforme.' : '';
+    if (!window.confirm('Vraiment ' + verb + ' ' + refs.length + ' annonce(s) sur ' + channelName() + ' ?' + warn)) return;
+    onlineSay('Démarrage…');
+    const res = await autoSend({ type: 'am-manage', channel: online.channel.value, kind, refs });
+    if (!res || !res.ok) onlineSay((res && res.error) || 'Action impossible.', 'err');
+    else refreshManage();
+  }
+
+  const MANAGE_VERB = { done: 'faite', prepared: 'prête (simulation)', 'not-found': 'introuvable', blocked: 'arrêtée', error: 'erreur' };
+
+  async function refreshManage() {
+    const { amManage } = await chrome.storage.local.get('amManage');
+    const m = amManage;
+    const running = !!m && m.status === 'running';
+    onlineBusy = running;
+    online.cancel.hidden = !running;
+    if (m && m.status) {
+      const verb = m.kind === 'delete' ? 'Suppression' : 'Mise à jour';
+      const results = (m.results || []).map((r) => r.ref + ' : ' + (MANAGE_VERB[r.action] || r.action) + (r.reason ? ' (' + r.reason + ')' : ''));
+      onlineSay((running ? verb + ' en cours · ' + Math.min((m.index || 0) + 1, m.total) + '/' + m.total + (m.current ? ' (' + m.current + ')' : '') : verb + ' terminée') +
+        (results.length ? ' — ' + results.join(' ; ') : '') + (m.error ? ' — ' + m.error : ''),
+        !running && (m.results || []).some((r) => ['blocked', 'error', 'not-found'].includes(r.action)) ? 'err' : '');
+    }
+    renderOnline();
+    // Une action vient de se terminer : la liste est relue pour refléter les annonces mises à jour ou supprimées.
+    if (wasBusy && !running && onlineItems.length) {
+      wasBusy = false;
+      const keep = online.status.textContent;
+      await loadOnline();
+      onlineSay(keep, online.status.className.replace('msg', '').trim());
+    }
+    if (running) wasBusy = true;
+  }
+
+  online.refresh.addEventListener('click', loadOnline);
+  online.channel.addEventListener('change', () => { onlineItems = []; renderOnline(); loadOnline(); });
+  online.updateAll.addEventListener('click', () => runManage('update', onlineItems.filter((i) => i.state === 'changed').map((i) => i.ref)));
+  online.deleteGone.addEventListener('click', () => runManage('delete', onlineItems.filter((i) => i.state === 'gone').map((i) => i.ref)));
+  online.cancel.addEventListener('click', async () => { await autoSend({ type: 'am-manage-cancel' }); refreshManage(); });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.amManage) refreshManage();
+  });
+
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.amQueue || changes.amAutoSettings || changes.amAutoHistory || changes.amAutoDay) {
@@ -885,4 +1009,5 @@
 
   refreshConn();
   refreshAuto();
+  refreshManage();
 })();

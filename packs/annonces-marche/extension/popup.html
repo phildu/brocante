@@ -69,9 +69,18 @@
           <input type="number" id="auto-interval" min="2" max="30" step="1" inputmode="numeric">
         </label>
         <label>Quota / jour
-          <input type="number" id="auto-cap" min="1" max="30" step="1" inputmode="numeric">
+          <input type="number" id="auto-cap" min="1" max="50" step="1" inputmode="numeric">
         </label>
       </div>
+      <div class="two">
+        <label>Quota / heure
+          <input type="number" id="auto-hourly" min="1" max="20" step="1" inputmode="numeric">
+        </label>
+        <label>Plage horaire (h)
+          <span class="range"><input type="number" id="auto-from" min="0" max="23" step="1" inputmode="numeric" aria-label="Début de la plage"> à <input type="number" id="auto-to" min="1" max="24" step="1" inputmode="numeric" aria-label="Fin de la plage"></span>
+        </label>
+      </div>
+      <p class="hint">Quotas et plage horaire ne s’appliquent qu’à la publication réelle. Plus le rythme est élevé, plus la plateforme risque de demander une vérification.</p>
       <label class="check"><input type="checkbox" id="auto-keep-tabs"> <span>Garder les onglets ouverts après publication</span></label>
       <label>Page de dépôt Leboncoin
         <input type="url" id="auto-url-lbc" spellcheck="false" autocomplete="off">
@@ -99,6 +108,25 @@
     <div id="auto-queue" class="auto-queue" hidden></div>
     <ul id="auto-history" class="auto-history" aria-label="Derniers traitements"></ul>
     <button type="button" id="auto-clear-history" class="link small" hidden>Effacer l’historique local</button>
+  </section>
+
+  <section id="online" class="panel">
+    <h2>Annonces en ligne</h2>
+    <p class="hint">Mettez à jour une annonce quand la fiche a changé dans la boutique, ou supprimez-la de la plateforme (pièce vendue ou retirée). En mode « Simulation », l’extension s’arrête juste avant le clic final.</p>
+    <div class="row">
+      <select id="online-channel" aria-label="Plateforme">
+        <option value="vinted">Vinted</option>
+        <option value="leboncoin">Leboncoin</option>
+      </select>
+      <button type="button" id="online-refresh" class="ghost">Actualiser la liste</button>
+    </div>
+    <div class="row">
+      <button type="button" id="online-update-all" class="ghost" disabled>Tout mettre à jour</button>
+      <button type="button" id="online-delete-gone" class="ghost" disabled>Supprimer les retirées</button>
+      <button type="button" id="online-cancel" class="ghost" hidden>Arrêter</button>
+    </div>
+    <p id="online-status" class="msg" role="status"></p>
+    <ul id="online-list" class="online-list"></ul>
   </section>
 
   <script src="quality.js"></script>

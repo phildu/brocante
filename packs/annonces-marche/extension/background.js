@@ -253,6 +253,8 @@ function actionLabel(action) {
     rejected: 'écartée (contrôle de la fiche)',
     blocked: 'arrêtée',
     skipped: 'passée',
+    updated: 'mise à jour',
+    removed: 'supprimée',
     'no-match': 'passée (menu sans valeur)',
     error: 'erreur',
   }[action] || action;
@@ -636,7 +638,7 @@ async function runAutoInTab(tabId, channel, product, options) {
     }
     if (res.action === 'publish-clicked') {
       publishClicks++;
-      const verified = await verifyPublished(tabId, channel);
+      const verified = await verifyPublished(tabId, channel, product);
       if (verified) return withSuggestion(verified);
       if (publishClicks >= 2) {
         return {
@@ -693,11 +695,11 @@ async function verifyDrafted(tabId, channel) {
   return null;
 }
 
-async function verifyPublished(tabId, channel) {
+async function verifyPublished(tabId, channel, product) {
   for (let i = 0; i < 6; i++) {
     await sleep(i === 0 ? 1500 : 2500);
     try {
-      const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-verify', channel });
+      const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-verify', channel, product });
       if (res && res.action === 'published') {
         return { ok: true, action: 'published', listing_url: res.listing_url };
       }
@@ -749,6 +751,7 @@ async function finalizeItem(product, result, tabId, settings) {
         channel: current.channel,
         status,
         listing_url: result.listing_url || '',
+        external_id: listingIdFromUrl(result.listing_url),
         note,
       },
     });
@@ -834,6 +837,183 @@ async function finalizeItem(product, result, tabId, settings) {
   await ensureWatchdog();
   // Une fiche écartée n'a rien publié : on enchaîne vite, sans attendre l'intervalle entre publications.
   await scheduleNext(settings, action === 'rejected' || action === 'no-match' ? 8000 + Math.floor(Math.random() * 6000) : undefined);
+}
+
+/* ---------- Annonces en ligne : mise à jour et suppression ---------- */
+
+const MANAGE_KEY = 'amManage';
+
+/** Identifiant d'annonce d'après son adresse (Vinted /items/123-…, Leboncoin /ad/<cat>/123 ou /annonce/123/…). */
+function listingIdFromUrl(url) {
+  const s = String(url || '');
+  const m = /\/items\/(\d{5,})/.exec(s) || /\/ad\/[^/]+\/(\d{5,})/.exec(s) || /\/annonce\/(\d{5,})/.exec(s) || /\/(\d{7,})\.htm/.exec(s);
+  return m ? m[1] : '';
+}
+
+/**
+ * Annonces en ligne d'un canal, avec leur état face à la boutique :
+ * 'changed' (fiche modifiée depuis la publication), 'gone' (pièce vendue, masquée ou supprimée de la boutique), 'same', 'unknown'.
+ */
+async function listOnline(channel) {
+  if (!CHANNELS.includes(channel)) throw new Error('Canal inconnu.');
+  const res = await api('/publications?channel=' + encodeURIComponent(channel));
+  const listings = Array.isArray(res.listings) ? res.listings : [];
+  const items = [];
+  for (const listing of listings.slice(0, 100)) {
+    const ref = String(listing.ref);
+    let product = null;
+    let state = 'same';
+    try {
+      product = (await api('/produit/' + encodeURIComponent(ref))).product;
+    } catch (error) {
+      state = /introuvable|indisponible/i.test((error && error.message) || '') ? 'gone' : 'unknown';
+    }
+    if (product && globalThis.AmQuality) {
+      const before = hashFromNote(listing.note);
+      if (before && before !== AmQuality.fingerprint(product, channel)) state = 'changed';
+    }
+    items.push({
+      ref,
+      title: product ? String(product.title || product.name || '') : '',
+      state,
+      listing_url: listing.listing_url || '',
+      external_id: listing.external_id || listingIdFromUrl(listing.listing_url),
+    });
+  }
+  const rank = { changed: 0, gone: 1, unknown: 2, same: 3 };
+  return items.sort((a, b) => rank[a.state] - rank[b.state]);
+}
+
+async function getManage() {
+  const data = await chrome.storage.local.get(MANAGE_KEY);
+  return data[MANAGE_KEY] || null;
+}
+async function setManage(patch) {
+  const next = { ...((await getManage()) || {}), ...patch };
+  await chrome.storage.local.set({ [MANAGE_KEY]: next });
+  return next;
+}
+
+/** Vérifie que l'action finale (Valider / Supprimer) a bien abouti : la page change, ou la carte de l'annonce disparaît. */
+async function verifyManaged(tabId, channel, kind, product, target) {
+  for (let i = 0; i < 8; i++) {
+    await sleep(i === 0 ? 1500 : 2500);
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, { type: 'am-manage-verify', channel, kind, product, target });
+      if (res && res.done) return { ok: true, action: 'done' };
+      if (res && res.action === 'blocked') return res;
+    } catch (_) {
+      // Navigation en cours : on retente.
+    }
+  }
+  return { ok: true, action: 'blocked', reason: 'l’action a été envoyée, mais l’effet n’est pas confirmé. Vérifiez l’onglet.' };
+}
+
+async function runManageInTab(tabId, channel, kind, product, target, dryRun) {
+  for (let step = 0; step < 8; step++) {
+    const res = await sendWithRetry(tabId, { type: 'am-manage-step', channel, kind, product, target, dryRun });
+    if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
+    if (res.action === 'next') {
+      await sleep(2000);
+      await waitForContent(tabId, channel, 45000);
+      continue;
+    }
+    if (res.action === 'submitted') return verifyManaged(tabId, channel, kind, product, target);
+    return res;   // prepared (simulation) | not-found | blocked
+  }
+  return { ok: true, action: 'blocked', reason: 'trop d’étapes sans aboutir.' };
+}
+
+/** Met à jour (kind = 'update') ou supprime (kind = 'delete') l'annonce d'une pièce sur la plateforme. */
+async function manageListing(channel, ref, kind) {
+  const settings = await getSettings();
+  let listing = null;
+  try {
+    const res = await api('/publications?channel=' + encodeURIComponent(channel));
+    listing = (res.listings || []).find((l) => String(l.ref) === String(ref)) || null;
+  } catch (_) {}
+  if (!listing) return { ref, action: 'not-found', reason: 'aucune annonce enregistrée pour cette pièce sur ce canal.' };
+
+  let product = null;
+  try { product = (await api('/produit/' + encodeURIComponent(ref))).product; } catch (_) {}
+  if (kind === 'update' && !product) return { ref, action: 'not-found', reason: 'la pièce n’est plus disponible dans la boutique : supprimez l’annonce plutôt.' };
+
+  const id = listing.external_id || listingIdFromUrl(listing.listing_url);
+  const title = product ? String(product.title || product.name || '') : '';
+  if (!id && !title) return { ref, action: 'not-found', reason: 'adresse de l’annonce inconnue : supprimez-la à la main sur le site.' };
+
+  let url;
+  if (channel === 'vinted') {
+    url = id ? 'https://www.vinted.fr/items/' + id + (kind === 'update' ? '/edit' : '') : 'https://www.vinted.fr/';
+  } else {
+    url = id && kind === 'update' ? 'https://www.leboncoin.fr/annonce/' + id + '/editer' : 'https://www.leboncoin.fr/compte/part/mes-annonces';
+  }
+  const target = { id, title };
+  const dryRun = !!settings.dryRun;
+  let tabId = null;
+  let result;
+  try {
+    const tab = await chrome.tabs.create({ url, active: true });
+    tabId = tab.id;
+    await waitForContent(tabId, channel, 60000);
+    result = await runManageInTab(tabId, channel, kind, product, target, dryRun);
+  } catch (error) {
+    result = { ok: true, action: 'error', reason: (error && error.message) || 'erreur inconnue' };
+  }
+
+  const done = result.action === 'done';
+  if (done) {
+    try {
+      if (kind === 'update') {
+        const hash = product && globalThis.AmQuality ? '[h:' + AmQuality.fingerprint(product, channel) + '] ' : '';
+        await api('/marquer', { method: 'POST', json: { product_ref: ref, channel, status: 'published', listing_url: listing.listing_url || '', external_id: id, note: hash + 'updated — annonce mise à jour' } });
+      } else {
+        await api('/marquer', { method: 'POST', json: { product_ref: ref, channel, status: 'removed', listing_url: listing.listing_url || '', external_id: id, note: 'removed — annonce supprimée de la plateforme' } });
+      }
+    } catch (_) {}
+  }
+  await pushHistory({
+    ref, channel,
+    action: done ? (kind === 'update' ? 'updated' : 'removed') : result.action === 'prepared' ? 'prepared' : result.action === 'not-found' ? 'skipped' : result.action,
+    reason: result.reason || '', dryRun, at: Date.now(),
+  });
+  if (tabId && (done || result.action === 'prepared') && !settings.keepTabs) {
+    try { await chrome.tabs.remove(tabId); } catch (_) {}
+  } else if (tabId && result.action !== 'done') {
+    try { await chrome.tabs.update(tabId, { active: true }); } catch (_) {}
+  }
+  return { ref, action: result.action, reason: result.reason || '' };
+}
+
+/** Enchaîne les actions sur plusieurs pièces, une à la fois ; s'arrête sur un blocage. */
+async function manageBatch(channel, kind, refs) {
+  const settings = await getSettings();
+  if (!settings.armed) throw new Error('Cochez « J’assume le risque » avant de modifier ou supprimer des annonces.');
+  const queue = await getQueue();
+  if (queue && (queue.status === 'running' || queue.status === 'paused')) {
+    throw new Error('Une file de publication est en cours : reprenez-la ou arrêtez-la avant.');
+  }
+  const current = await getManage();
+  if (current && current.status === 'running' && Date.now() - (current.updatedAt || 0) < 10 * 60 * 1000) {
+    throw new Error('Une action est déjà en cours sur les annonces.');
+  }
+  if (!CHANNELS.includes(channel) || !['update', 'delete'].includes(kind) || !refs.length) throw new Error('Demande invalide.');
+  await chrome.storage.local.set({ [MANAGE_KEY]: { status: 'running', channel, kind, total: refs.length, index: 0, results: [], cancel: false, updatedAt: Date.now() } });
+  (async () => {
+    const results = [];
+    for (let i = 0; i < refs.length; i++) {
+      const state = await getManage();
+      if (state && state.cancel) break;
+      await setManage({ index: i, current: refs[i], updatedAt: Date.now() });
+      let res;
+      try { res = await manageListing(channel, refs[i], kind); } catch (error) { res = { ref: refs[i], action: 'error', reason: (error && error.message) || 'erreur' }; }
+      results.push(res);
+      await setManage({ results, updatedAt: Date.now() });
+      if (res.action === 'blocked' || res.action === 'error') break;
+      if (i < refs.length - 1) await sleep(8000 + Math.floor(Math.random() * 6000));
+    }
+    await setManage({ status: 'done', current: '', results, updatedAt: Date.now() });
+  })().catch(async (error) => { await setManage({ status: 'done', error: (error && error.message) || 'erreur', updatedAt: Date.now() }); });
 }
 
 /* ---------- Messages ---------- */
@@ -964,6 +1144,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       sendResponse({ ok: true, settings });
     })().catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === 'am-online-list') {
+    listOnline(message.channel)
+      .then((items) => sendResponse({ ok: true, items }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || 'Liste impossible.' }));
+    return true;
+  }
+
+  if (message.type === 'am-manage') {
+    const refs = Array.isArray(message.refs) ? message.refs.map(String).slice(0, 50) : [];
+    manageBatch(message.channel, message.kind, refs)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || 'Action impossible.' }));
+    return true;
+  }
+
+  if (message.type === 'am-manage-cancel') {
+    setManage({ cancel: true }).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
     return true;
   }
 

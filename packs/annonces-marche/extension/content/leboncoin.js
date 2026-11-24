@@ -532,6 +532,85 @@
     return { page: 'page non reconnue', found: [], missing: ['page de dépôt reconnue'] };
   }
 
+  // --- Annonces en ligne : mise à jour et suppression (lancées depuis la popup) ---
+
+  const MINE = '/compte/part/mes-annonces';
+
+  /** Cartes d'« Mes annonces » : { card, id, text }. Chaque carte contient ses boutons « Supprimer » et « Modifier ». */
+  function adCards(F) {
+    const cards = [];
+    for (const a of document.querySelectorAll('a[href^="/ad/"]')) {
+      let card = a;
+      for (let i = 0; i < 8 && card; i++) {
+        if (Array.from(card.querySelectorAll('button')).some((b) => /^supprimer$/i.test((b.innerText || '').trim()))) break;
+        card = card.parentElement;
+      }
+      if (!card || cards.some((c) => c.card === card)) continue;
+      cards.push({ card, id: F.idFromUrl(a.getAttribute('href')), text: card.innerText || '' });
+    }
+    return cards;
+  }
+
+  function findAdCard(F, target) {
+    return adCards(F).find((c) => (target.id ? c.id === target.id : F.titleMatches(c.text, target.title)));
+  }
+
+  async function manageStep(msg, F) {
+    const kind = msg.kind;
+    const p = msg.product || {};
+    const target = msg.target || {};
+    const path = location.pathname;
+    const blocked = (reason) => ({ ok: true, action: 'blocked', reason });
+
+    if (/^\/annonce\/\d+\/editer/.test(path)) {
+      if (kind === 'delete') { location.assign(MINE); return { ok: true, action: 'next' }; }
+      const subject = await F.waitFor(() => document.querySelector('input[name="subject"]'), 15000, 400);
+      if (!subject) return blocked('formulaire de modification introuvable.');
+      const body = document.querySelector('textarea[name="body"]');
+      const price = document.querySelector('input[name="price_cents"]');
+      await F.typeInto(subject, String(p.title || p.name || ''));
+      if (body && String(p.description || '').trim()) await F.typeInto(body, String(p.description));
+      if (price && priceText(p)) await F.typeInto(price, priceText(p));
+      if (msg.dryRun) return { ok: true, action: 'prepared', reason: 'mise à jour prête à valider (simulation)' };
+      const save = Array.from(document.querySelectorAll('button[type="submit"]')).find((b) => /valider les modifications/i.test(b.innerText || ''));
+      if (!save) return blocked('bouton « Valider les modifications » introuvable.');
+      F.clickEl(save);
+      return { ok: true, action: 'submitted' };
+    }
+
+    if (path !== MINE) { location.assign(MINE); return { ok: true, action: 'next' }; }
+
+    const found = await F.waitFor(() => findAdCard(F, target), 12000, 500);
+    if (!found) return { ok: true, action: 'not-found', reason: 'annonce introuvable dans « Mes annonces » (déjà supprimée, expirée ou titre modifié ?).' };
+    if (kind === 'update') {
+      const edit = found.card.querySelector('a[href*="/editer"]');
+      if (!edit) return blocked('lien « Modifier » introuvable.');
+      location.assign(new URL(edit.getAttribute('href'), location.origin).href);
+      return { ok: true, action: 'next' };
+    }
+    const del = Array.from(found.card.querySelectorAll('button')).find((b) => /^supprimer$/i.test((b.innerText || '').trim()));
+    if (!del) return blocked('bouton « Supprimer » introuvable.');
+    F.clickEl(del);
+    const confirm = await F.waitFor(() => document.querySelector('[data-qa-id="delete-ad-modal-confirm"]'), 6000, 250);
+    if (!confirm) return blocked('confirmation de suppression introuvable.');
+    if (msg.dryRun) {
+      const close = Array.from(document.querySelectorAll('[role="dialog"] button, [aria-modal="true"] button')).find((b) => /fermer/i.test(b.innerText || b.getAttribute('aria-label') || ''));
+      if (close) F.clickEl(close);
+      return { ok: true, action: 'prepared', reason: 'suppression prête (simulation)' };
+    }
+    F.clickEl(confirm);
+    return { ok: true, action: 'submitted' };
+  }
+
+  function manageVerify(msg, F) {
+    const target = msg.target || {};
+    if (msg.kind === 'update') return { ok: true, done: !/\/editer/.test(location.pathname) };
+    // Suppression : la liste est affichée, la fenêtre de confirmation est fermée et la carte a disparu.
+    const listShown = location.pathname === MINE && /En ligne \(\d+\)/.test(document.body ? document.body.innerText : '');
+    const modalOpen = !!document.querySelector('[data-qa-id="delete-ad-modal-confirm"]');
+    return { ok: true, done: listShown && !modalOpen && !findAdCard(F, target) };
+  }
+
   globalThis.AmLbc = {
     etatCandidates, brandCandidate, sizeInfo, colorCandidates, universCandidate, universChoice, categoryWords, priceText, fillFields,
   };
@@ -574,6 +653,17 @@
     if (msg.type === 'am-selftest' && msg.channel === 'leboncoin') {
       const F = globalThis.AmFill;
       sendResponse(F ? { ok: true, ...selftest(F) } : { ok: false, error: 'Helpers absents : rechargez l’extension.' });
+      return;
+    }
+    if (msg.type === 'am-manage-step' && msg.channel === 'leboncoin') {
+      const F = globalThis.AmFill;
+      if (!F) { sendResponse({ ok: false, error: 'Helpers absents : rechargez l’extension.' }); return; }
+      manageStep(msg, F).then(sendResponse).catch((e) => sendResponse({ ok: false, error: String(e) }));
+      return true;
+    }
+    if (msg.type === 'am-manage-verify' && msg.channel === 'leboncoin') {
+      const F = globalThis.AmFill;
+      sendResponse(F ? manageVerify(msg, F) : { ok: false, error: 'Helpers absents : rechargez l’extension.' });
       return;
     }
     if (msg.type === 'am-auto-verify' && msg.channel === 'leboncoin') {

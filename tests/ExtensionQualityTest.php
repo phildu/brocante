@@ -48,6 +48,11 @@ final class ExtensionQualityTest extends TestCase
         $this->runNodeTest('published.test.js', 'published-test OK');
     }
 
+    public function testManageListingsPassesInNode(): void
+    {
+        $this->runNodeTest('manage.test.js', 'manage-test OK');
+    }
+
     private function runNodeTest(string $file, string $expected): void
     {
         $node = trim((string) @shell_exec('command -v node 2>/dev/null'));
