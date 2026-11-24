@@ -16,7 +16,7 @@ const fetch = async (url, o = {}) => { calls.push({ url, method: o.method || 'GE
 const ctx = { chrome, fetch, console, setTimeout, clearTimeout, Date, Math, JSON, URL, Promise, importScripts: (f) => vm.runInContext(fs.readFileSync(dir + '/' + f, 'utf8'), ctx) };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(dir + '/background.js', 'utf8') + ';this.__t={finalizeItem,actionLabel}', ctx);
+vm.runInContext(fs.readFileSync(dir + '/background.js', 'utf8') + ';this.__t={finalizeItem,actionLabel,onDepositForm}', ctx);
 const T = ctx.__t;
 
 (async () => {

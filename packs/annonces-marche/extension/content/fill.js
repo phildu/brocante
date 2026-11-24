@@ -673,11 +673,15 @@
     const vinted = /(^|\.)vinted\./i.test(location.hostname);
     const onForm = vinted ? /^\/items\/new/.test(location.pathname) : /\/deposer-une-annonce/.test(location.pathname);
     if (onForm) return null;
-    // Pages qui ne sont pas l'accueil (annonce publiée, compte…) : on ne touche à rien, le service worker gère.
-    if (vinted ? /^\/items\/\d+/.test(location.pathname) : false) return null;
     const label = vinted ? /^(vends (ton article|tes articles)|vendre maintenant)$/ : /^deposer une annonce$/;
-    const find = () => Array.from(document.querySelectorAll('a, button, [role="button"]'))
-      .find((el) => isVisible(el) && !el.disabled && !/\/help\//.test(el.getAttribute('href') || '') && label.test(squash(el.innerText || el.textContent || '')));
+    const candidates = () => Array.from(document.querySelectorAll('a, button, [role="button"]'))
+      .filter((el) => isVisible(el) && !el.disabled && !/\/help\//.test(el.getAttribute('href') || ''));
+    const find = () => {
+      const all = candidates();
+      // Fenêtre « Article en vente » (Vinted, après une publication) : son bouton mène directement au formulaire.
+      const again = vinted ? all.find((el) => /^ajouter un autre article$/.test(squash(el.innerText || el.textContent || ''))) : null;
+      return again || all.find((el) => label.test(squash(el.innerText || el.textContent || '')));
+    };
     let el = null;
     for (let i = 0; i < 12 && !el; i++) {
       el = find();
