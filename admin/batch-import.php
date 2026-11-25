@@ -29,6 +29,8 @@ $uploadLimits = [
 <link rel="stylesheet" href="/assets/style.css">
 <script src="/assets/heic-convert.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/heic-convert.js') ?>"></script>
 <style>
+  /* .btn / .bi-thumbs fixent leur propre display : sans ceci, « hidden » est ignoré et les boutons d'envoi s'affichent sans photo. */
+  .bi-drop [hidden] { display: none !important; }
   .bi-group-card { background: var(--surface); border: 1px solid var(--line); padding: 18px 20px; margin-top: 20px; }
   .bi-group-card.is-done { opacity: 0.7; }
   .bi-group-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -233,15 +235,41 @@ $uploadLimits = [
     });
   }
 
+  // Une photo de téléphone pèse 3 à 8 Mo : sur une ligne à faible débit montant, l'envoi des originaux prend
+  // un quart d'heure. Chaque photo est donc réduite ici (grand côté ≤ 2400 px, JPEG) avant l'envoi.
+  var MAXSIDE = 2400;
+  function shrink(f) {
+    if (f.size < 1.2 * 1048576 || !window.createImageBitmap) return Promise.resolve(f);
+    return createImageBitmap(f, { imageOrientation: 'from-image' }).then(function (bmp) {
+      var s = Math.min(1, MAXSIDE / Math.max(bmp.width, bmp.height));
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s));
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      if (bmp.close) bmp.close();
+      return new Promise(function (res) { c.toBlob(res, 'image/jpeg', 0.85); });
+    }).then(function (blob) {
+      if (!blob || blob.size >= f.size) return f;
+      return new File([blob], f.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: f.lastModified });
+    }).catch(function () { return f; });
+  }
+
   function addNow(files) {
+    var todo = [];
     Array.prototype.forEach.call(files, function (f) {
       if (f.name.charAt(0) === '.') return;                       // fichiers cachés (.DS_Store…)
       if (!OK.test(f.name)) { if (/\.(heic|heif)$/i.test(f.name) || /^image\//.test(f.type)) ignored.push(f.name); return; }
       if (f.size > limits.maxFile || f.size > limits.maxPost * 0.9) { ignored.push(f.name + ' (trop lourde)'); return; }
-      if (picked.some(function (p) { return p.name === f.name && p.size === f.size && p.lastModified === f.lastModified; })) return;
-      picked.push(f);
+      var key = f.name + '|' + f.size + '|' + f.lastModified;
+      if (picked.some(function (p) { return p.__key === key; }) || todo.some(function (t) { return t.key === key; })) return;
+      todo.push({ file: f, key: key });
     });
-    render();
+    var info = $('bi-picked');
+    if (todo.length) { info.hidden = false; info.textContent = 'Préparation des photos (réduction avant envoi)…'; }
+    todo.reduce(function (p, t) {
+      return p.then(function () {
+        return shrink(t.file).then(function (s) { s.__key = t.key; picked.push(s); info.textContent = 'Préparation des photos… ' + picked.length; });
+      });
+    }, Promise.resolve()).then(render);
   }
 
   function render() {
@@ -274,18 +302,28 @@ $uploadLimits = [
   });
   drop.addEventListener('drop', function (e) { add(e.dataTransfer.files); });
 
-  function post(fd) {
-    return fetch('/admin/batch-import-action.php', { method: 'POST', body: fd, credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .catch(function () { return { ok: false, error: 'Envoi interrompu : vérifiez la connexion, puis recommencez.' }; });
+  // XHR plutôt que fetch : seul lui donne la progression de l'envoi (sinon la page semble figée sur une ligne lente).
+  function post(fd, onProgress) {
+    return new Promise(function (resolve) {
+      var x = new XMLHttpRequest();
+      var fail = function (m) { resolve({ ok: false, error: m }); };
+      x.open('POST', '/admin/batch-import-action.php');
+      if (onProgress && x.upload) x.upload.onprogress = function (e) { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+      x.onload = function () {
+        try { resolve(JSON.parse(x.responseText)); }
+        catch (e) { fail('Réponse inattendue du serveur (code ' + x.status + ') : réessayez.'); }
+      };
+      x.onerror = function () { fail('Envoi interrompu : vérifiez la connexion, puis recommencez.'); };
+      x.send(fd);
+    });
   }
   function field(action) { var fd = new FormData(); fd.append('action', action); return fd; }
 
-  // Paquets : au plus maxFiles fichiers et ~80 % de post_max_size par envoi.
+  // Petits paquets (≤ 6 photos, ≤ 3 Mo) : la progression avance régulièrement et un paquet perdu se refait vite.
   function chunks() {
-    var out = [], cur = [], size = 0, budget = limits.maxPost * 0.8;
+    var out = [], cur = [], size = 0, budget = Math.min(limits.maxPost * 0.8, 3 * 1048576), maxN = Math.min(limits.maxFiles, 6);
     picked.forEach(function (f) {
-      if (cur.length && (cur.length >= limits.maxFiles || size + f.size > budget)) { out.push(cur); cur = []; size = 0; }
+      if (cur.length && (cur.length >= maxN || size + f.size > budget)) { out.push(cur); cur = []; size = 0; }
       cur.push(f); size += f.size;
     });
     if (cur.length) out.push(cur);
@@ -297,17 +335,23 @@ $uploadLimits = [
     btn.disabled = true; $('bi-clear').hidden = true;
     bar.hidden = false;
     var total = picked.length;
+    var totalBytes = picked.reduce(function (n, f) { return n + f.size; }, 0), doneBytes = 0;
+    var show = function (extra) {
+      var pct = Math.min(100, Math.round((doneBytes + extra) / totalBytes * 100));
+      bar.firstElementChild.style.width = pct + '%';
+      btn.textContent = 'Envoi… ' + done + ' / ' + total + ' (' + pct + ' %)';
+    };
+    show(0);
     post(field('files_begin')).then(function (r) {
       if (!r.ok) throw r;
       return list.reduce(function (p, chunk) {
         return p.then(function () {
-          var fd = field('files_chunk');
-          chunk.forEach(function (f) { fd.append('photos[]', f, f.name); fd.append('mtimes[]', String(f.lastModified || 0)); });
-          btn.textContent = 'Envoi… ' + done + ' / ' + total;
-          return post(fd).then(function (res) {
+          var fd = field('files_chunk'), bytes = 0;
+          chunk.forEach(function (f) { fd.append('photos[]', f, f.name); fd.append('mtimes[]', String(f.lastModified || 0)); bytes += f.size; });
+          return post(fd, function (ratio) { show(ratio * bytes); }).then(function (res) {
             if (!res.ok) throw res;
-            done += chunk.length;
-            bar.firstElementChild.style.width = Math.round(done / total * 100) + '%';
+            done += chunk.length; doneBytes += bytes;
+            show(0);
           });
         });
       }, Promise.resolve());
