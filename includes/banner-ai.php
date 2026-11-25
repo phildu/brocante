@@ -8,17 +8,19 @@ require_once __DIR__ . '/autofeed.php';
 require_once __DIR__ . '/ai-providers.php';
 require_once __DIR__ . '/banner-ai-usage.php';
 
-/** Fournisseur d'images utilisable ici : Gemini (le seul générateur texte → image branché sur cette clé). */
+/** Fournisseur d'images utilisable ici : Gemini, ou un connecteur gratuit texte → image (Cloudflare, Hugging Face). */
 function banner_ai_provider(): ?array
 {
     $provider = ai_provider_active('image');
-    return $provider && $provider['driver'] === 'gemini' ? $provider : null;
+    return $provider && in_array($provider['driver'], ['gemini', 'cloudflare', 'huggingface'], true) ? $provider : null;
 }
 
-/** Génération possible ? (fournisseur image Gemini actif, IA de la plateforme ouverte, clé présente) */
+/** Génération possible ? (fournisseur image actif, IA de la plateforme ouverte, clé présente) */
 function banner_ai_available(): bool
 {
-    if (!banner_ai_provider() || autofeed_api_key() === '') return false;
+    $provider = banner_ai_provider();
+    if (!$provider) return false;
+    if ($provider['driver'] === 'gemini' ? autofeed_api_key() === '' : !ai_provider_has_key($provider)) return false;
     $settings = ai_provider_read();
     return !array_key_exists('enabled', $settings) || (bool) $settings['enabled'];
 }
@@ -68,7 +70,18 @@ function banner_ai_generate_many(array $prompts, string $ratio = '16:9'): array
     $prompts = array_slice(array_values(array_filter(array_map('strval', $prompts))), 0, 3);
     if (!$prompts) throw new InvalidArgumentException('Aucune description à illustrer.');
     if (!banner_ai_available()) {
-        throw new RuntimeException("La génération d'images par l'IA n'est pas disponible : fournisseur image Gemini désactivé ou clé absente (voir Fournisseurs IA).");
+        throw new RuntimeException("La génération d'images par l'IA n'est pas disponible : fournisseur image désactivé ou clé absente (voir Fournisseurs IA).");
+    }
+    $provider = banner_ai_provider();
+    if ($provider && $provider['driver'] !== 'gemini') {
+        // Offres gratuites : débit limité, un appel après l'autre.
+        $images = [];
+        foreach ($prompts as $i => $prompt) {
+            $bytes = ai_provider_text_image($provider, $prompt, $ratio);
+            if ($bytes !== null) $images[$i] = $bytes;
+        }
+        if (!$images) throw new RuntimeException("Le service « " . $provider['label'] . " » n'a pas renvoyé d'image : quota du jour atteint ou jeton refusé. Testez la connexion dans Fournisseurs IA.");
+        return array_values($images);
     }
     $multi = curl_multi_init();
     $handles = [];

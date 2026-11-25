@@ -143,6 +143,8 @@ $driverDefaults = [
     'text|anthropic' => ['https://api.anthropic.com/v1', 'claude-sonnet-4-5'],
     'image|gemini' => ['https://generativelanguage.googleapis.com/v1beta', 'gemini-2.5-flash-image'],
     'image|openai' => ['https://api.openai.com/v1', 'gpt-image-1'],
+    'image|cloudflare' => ['https://api.cloudflare.com/client/v4/accounts/IDENTIFIANT_DE_COMPTE/ai/run', ''],
+    'image|huggingface' => ['https://router.huggingface.co/hf-inference/models', 'black-forest-labs/FLUX.1-schnell'],
     'video|veo' => ['https://generativelanguage.googleapis.com/v1beta', ''],
     'video|siliconflow' => ['https://api.siliconflow.com/v1', 'Wan-AI/Wan2.2-I2V-A14B'],
     'video|modal' => ['', ''],
@@ -284,7 +286,7 @@ $driverDefaults = [
           <div class="actions" style="margin-top:10px">
             <label class="check"><input type="checkbox" name="enabled" value="1" checked> Proposé</label>
             <button class="btn small btn-primary" type="submit">Ajouter</button>
-            <span class="hint"><?= $category === 'video' ? 'La vidéo accepte les services compatibles SiliconFlow (/video/submit et /video/status).' : 'Texte et image acceptent les services compatibles OpenAI (/chat/completions, /images/edits).' ?></span>
+            <span class="hint"><?= $category === 'video' ? 'La vidéo accepte les services compatibles SiliconFlow (/video/submit et /video/status).' : 'Texte et image acceptent les services compatibles OpenAI (/chat/completions, /images/edits). Image gratuite : Cloudflare Workers AI (retouche de photo et bandeaux ; clé = jeton API, identifiant de compte dans l\'adresse) et Hugging Face (bandeaux seulement).' ?></span>
           </div>
         </form>
       </section>
