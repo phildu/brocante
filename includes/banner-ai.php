@@ -8,19 +8,22 @@ require_once __DIR__ . '/autofeed.php';
 require_once __DIR__ . '/ai-providers.php';
 require_once __DIR__ . '/banner-ai-usage.php';
 
-/** Fournisseur d'images utilisable ici : Gemini, ou un connecteur gratuit texte → image (Cloudflare, Hugging Face). */
-function banner_ai_provider(): ?array
+/** Un fournisseur de la chaîne peut-il générer ici ? (Gemini : clé du portail ; les autres : leur propre clé) */
+function banner_ai_usable(array $provider): bool
 {
-    $provider = ai_provider_active('image');
-    return $provider && in_array($provider['driver'], ['gemini', 'cloudflare', 'huggingface'], true) ? $provider : null;
+    return $provider['driver'] === 'gemini' ? autofeed_api_key() !== '' : ai_provider_has_key($provider);
 }
 
-/** Génération possible ? (fournisseur image actif, IA de la plateforme ouverte, clé présente) */
+/** Fournisseurs d'images à essayer dans l'ordre : l'actif, puis les secours cochés (Gemini, Cloudflare, Hugging Face). */
+function banner_ai_chain(): array
+{
+    return array_values(array_filter(ai_provider_chain('image', 'text_image'), 'banner_ai_usable'));
+}
+
+/** Génération possible ? (au moins un fournisseur image utilisable, IA de la plateforme ouverte) */
 function banner_ai_available(): bool
 {
-    $provider = banner_ai_provider();
-    if (!$provider) return false;
-    if ($provider['driver'] === 'gemini' ? autofeed_api_key() === '' : !ai_provider_has_key($provider)) return false;
+    if (!banner_ai_chain()) return false;
     $settings = ai_provider_read();
     return !array_key_exists('enabled', $settings) || (bool) $settings['enabled'];
 }
@@ -69,20 +72,30 @@ function banner_ai_generate_many(array $prompts, string $ratio = '16:9'): array
 {
     $prompts = array_slice(array_values(array_filter(array_map('strval', $prompts))), 0, 3);
     if (!$prompts) throw new InvalidArgumentException('Aucune description à illustrer.');
-    if (!banner_ai_available()) {
+    $chain = banner_ai_available() ? banner_ai_chain() : [];
+    if (!$chain) {
         throw new RuntimeException("La génération d'images par l'IA n'est pas disponible : fournisseur image désactivé ou clé absente (voir Fournisseurs IA).");
     }
-    $provider = banner_ai_provider();
-    if ($provider && $provider['driver'] !== 'gemini') {
-        // Offres gratuites : débit limité, un appel après l'autre.
-        $images = [];
-        foreach ($prompts as $i => $prompt) {
-            $bytes = ai_provider_text_image($provider, $prompt, $ratio);
-            if ($bytes !== null) $images[$i] = $bytes;
-        }
-        if (!$images) throw new RuntimeException("Le service « " . $provider['label'] . " » n'a pas renvoyé d'image : quota du jour atteint ou jeton refusé. Testez la connexion dans Fournisseurs IA.");
-        return array_values($images);
+    // Chaque fournisseur reprend les descriptions que le précédent n'a pas pu illustrer (quota, crédits, clé refusée…).
+    $images = [];
+    $error = null;
+    foreach ($chain as $n => $provider) {
+        $missing = array_diff_key($prompts, $images);
+        if (!$missing) break;
+        $got = $provider['driver'] === 'gemini'
+            ? banner_ai_gemini_many($missing, $ratio, $error)
+            : banner_ai_free_many($provider, $missing, $ratio, $error);
+        if ($got && $n > 0) error_log('banner_ai: secours « ' . $provider['label'] . ' » utilisé après l\'échec de « ' . $chain[0]['label'] . ' ».');
+        $images += $got;
     }
+    if (!$images) throw new RuntimeException($error ?? "L'IA n'a pas renvoyé d'image : rien n'a été débité, réessayez.");
+    ksort($images);
+    return array_values($images);
+}
+
+/** Gemini : toutes les descriptions en parallèle. Rend index => octets ; $error reçoit le message du premier échec. */
+function banner_ai_gemini_many(array $prompts, string $ratio, ?string &$error): array
+{
     $multi = curl_multi_init();
     $handles = [];
     foreach ($prompts as $i => $prompt) {
@@ -95,7 +108,6 @@ function banner_ai_generate_many(array $prompts, string $ratio = '16:9'): array
     } while ($running && $status === CURLM_OK);
 
     $images = [];
-    $error = null;
     foreach ($handles as $i => $ch) {
         $body = (string) curl_multi_getcontent($ch);
         $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -108,9 +120,21 @@ function banner_ai_generate_many(array $prompts, string $ratio = '16:9'): array
         curl_close($ch);
     }
     curl_multi_close($multi);
-    if (!$images) throw new RuntimeException($error ?? "L'IA n'a pas renvoyé d'image : rien n'a été débité, réessayez.");
-    ksort($images);
-    return array_values($images);
+    return $images;
+}
+
+/** Cloudflare / Hugging Face : un appel après l'autre (débit limité des offres gratuites). Rend index => octets. */
+function banner_ai_free_many(array $provider, array $prompts, string $ratio, ?string &$error): array
+{
+    $images = [];
+    foreach ($prompts as $i => $prompt) {
+        $bytes = ai_provider_text_image($provider, $prompt, $ratio);
+        if ($bytes !== null) $images[$i] = $bytes;
+    }
+    if (!$images && $error === null) {
+        $error = "Le service « " . $provider['label'] . " » n'a pas renvoyé d'image : quota du jour atteint ou jeton refusé. Testez la connexion dans Fournisseurs IA.";
+    }
+    return $images;
 }
 
 /** Enregistre des octets générés en JPEG dans uploads/saas ou uploads/galeries ; rend le chemin relatif. */

@@ -117,8 +117,9 @@ function ai_provider_row(array $row, string $category, ?array $base = null): ?ar
     $builtin = $base !== null;
     $secret = $builtin ? (string) $base['secret'] : ai_provider_custom_secret($category, $id);
     $enabled = array_key_exists('enabled', $row) ? (bool) $row['enabled'] : true;
+    $fallback = array_key_exists('fallback', $row) ? (bool) $row['fallback'] : (bool) ($base['fallback'] ?? false);
     return ['id' => $id, 'label' => $label, 'driver' => $driver, 'base_url' => $baseUrl, 'model' => $model,
-        'secret' => $secret, 'builtin' => $builtin, 'enabled' => $enabled];
+        'secret' => $secret, 'builtin' => $builtin, 'enabled' => $enabled, 'fallback' => $fallback];
 }
 
 /** Fournisseurs d'une catégorie, dans l'ordre enregistré (à défaut, ceux fournis au départ). */
@@ -156,6 +157,25 @@ function ai_provider_active(string $category): ?array
     foreach ($rows as $row) if ($row['id'] === $active && $row['enabled']) return $row;
     foreach ($rows as $row) if ($row['enabled']) return $row;
     return null;
+}
+
+/**
+ * Fournisseurs à essayer dans l'ordre pour une catégorie : l'actif d'abord, puis ceux cochés « secours » (activés, avec une clé),
+ * dans l'ordre de la liste du portail. $mode : « retouch » (photo + consigne : Gemini, compatible OpenAI, Cloudflare) ou
+ * « text_image » (texte seul : Gemini, Cloudflare, Hugging Face). Un connecteur qui ne sait pas faire le travail est écarté.
+ */
+function ai_provider_chain(string $category, string $mode = 'retouch'): array
+{
+    $can = $mode === 'text_image' ? ['gemini', 'cloudflare', 'huggingface'] : ['gemini', 'openai', 'cloudflare'];
+    $active = ai_provider_active($category);
+    $chain = [];
+    if ($active && in_array($active['driver'], $can, true)) $chain[] = $active;
+    foreach (ai_provider_rows($category) as $row) {
+        if (!$row['enabled'] || empty($row['fallback']) || ($active && $row['id'] === $active['id']) || !in_array($row['driver'], $can, true)) continue;
+        $ready = $row['driver'] === 'gemini' ? (defined('GEMINI_API_KEY') ? GEMINI_API_KEY !== '' : ai_provider_has_key($row)) : ai_provider_has_key($row);
+        if ($ready) $chain[] = $row;
+    }
+    return $chain;
 }
 
 /** Fournisseur choisi par défaut dans le portail (même s'il est désactivé), pour l'affichage. */

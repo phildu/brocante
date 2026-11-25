@@ -64,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'base_url' => rtrim(trim((string) ($_POST['base_url'] ?? '')), '/'),
                 'model' => trim((string) ($_POST['model'] ?? '')),
                 'enabled' => !empty($_POST['enabled']),
+                'fallback' => !empty($_POST['fallback']),
             ];
             if ($builtin) $row['builtin'] = true;
             $key = trim((string) ($_POST['key'] ?? ''));
@@ -245,6 +246,7 @@ $driverDefaults = [
               </div>
               <div class="actions" style="margin-top:10px">
                 <label class="check"><input type="checkbox" name="enabled" value="1"<?= $row['enabled'] ? ' checked' : '' ?>> Proposé</label>
+                <?php if ($category === 'image'): ?><label class="check" title="Essayé automatiquement, dans l'ordre de cette liste, quand le fournisseur actif échoue (quota ou crédits épuisés, clé refusée)."><input type="checkbox" name="fallback" value="1"<?= !empty($row['fallback']) ? ' checked' : '' ?>> Secours</label><?php endif; ?>
                 <button class="btn btn-primary small" type="submit">Enregistrer</button>
                 <?php if ($row['builtin']): ?><span class="key-state">Clé : <?= $hasKey ? 'présente' : 'à renseigner' ?> — <a href="/portail/api.php?s=cles">gérer les clés partagées</a></span><?php endif; ?>
               </div>
@@ -285,6 +287,7 @@ $driverDefaults = [
           </div>
           <div class="actions" style="margin-top:10px">
             <label class="check"><input type="checkbox" name="enabled" value="1" checked> Proposé</label>
+            <?php if ($category === 'image'): ?><label class="check"><input type="checkbox" name="fallback" value="1"> Secours</label><?php endif; ?>
             <button class="btn small btn-primary" type="submit">Ajouter</button>
             <span class="hint"><?= $category === 'video' ? 'La vidéo accepte les services compatibles SiliconFlow (/video/submit et /video/status).' : 'Texte et image acceptent les services compatibles OpenAI (/chat/completions, /images/edits). Image gratuite : Cloudflare Workers AI (retouche de photo et bandeaux ; clé = jeton API, identifiant de compte dans l\'adresse) et Hugging Face (bandeaux seulement).' ?></span>
           </div>

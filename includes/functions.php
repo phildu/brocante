@@ -1061,8 +1061,27 @@ function generate_media_export_variants(string $srcAbsPath, string $baseLabel, ?
 function gemini_generate_image(string $srcAbsPath, string $prompt, int $retries = 3, ?string $aspectRatio = null, array $extraAbsPaths = []): ?string
 {
     if (ai_gate() !== null) return null;   // IA désactivée pour la boutique, ou quota épuisé : voir ai_gate()
-    // Fournisseur d'image choisi dans le portail : un service compatible OpenAI prend le relais du modèle Gemini.
-    $provider = ai_provider_active('image');
+    // Fournisseur d'image choisi dans le portail, puis ses secours (cochés « secours ») : on passe au suivant quand un service échoue
+    // (quota ou crédits épuisés, clé refusée, saturation). Avec des secours, les reprises longues sont évitées pour rester sous 60 s.
+    $chain = ai_provider_chain('image', 'retouch');
+    if (!$chain) return gemini_generate_image_direct(null, $srcAbsPath, $prompt, $retries, $aspectRatio, $extraAbsPaths);
+    foreach ($chain as $i => $provider) {
+        $last = $i === count($chain) - 1;
+        $bytes = ($provider['driver'] ?? 'gemini') === 'gemini'
+            ? gemini_generate_image_direct($provider, $srcAbsPath, $prompt, $last ? $retries : min(1, $retries), $aspectRatio, $extraAbsPaths)
+            : ai_provider_image($provider, $srcAbsPath, $prompt, $aspectRatio, $extraAbsPaths);
+        if ($bytes !== null) {
+            if ($i > 0) error_log('gemini_generate_image: secours « ' . ($provider['label'] ?? $provider['id']) . ' » utilisé après l\'échec de « ' . ($chain[0]['label'] ?? $chain[0]['id']) . ' ».');
+            return $bytes;
+        }
+    }
+    return null;
+}
+
+/** Retouche par Gemini avec le fournisseur donné (null : le fournisseur actif). Voir gemini_generate_image(). */
+function gemini_generate_image_direct(?array $provider, string $srcAbsPath, string $prompt, int $retries = 3, ?string $aspectRatio = null, array $extraAbsPaths = []): ?string
+{
+    $provider ??= ai_provider_active('image');
     if ($provider && ($provider['driver'] ?? 'gemini') !== 'gemini') {
         return ai_provider_image($provider, $srcAbsPath, $prompt, $aspectRatio, $extraAbsPaths);
     }

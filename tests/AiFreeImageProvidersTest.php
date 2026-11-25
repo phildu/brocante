@@ -55,4 +55,21 @@ final class AiFreeImageProvidersTest extends TestCase
     {
         $this->assertNull(ai_provider_image(['driver' => 'huggingface', 'label' => 'HF'], __FILE__, 'test'));
     }
+
+    public function testFallbackFlagIsKept(): void
+    {
+        $row = ai_provider_row(['id' => 'cf-secours', 'label' => 'Cloudflare', 'driver' => 'cloudflare', 'fallback' => true], 'image');
+        $this->assertTrue($row['fallback']);
+        $this->assertFalse(ai_provider_row(['id' => 'cf-autre', 'label' => 'Autre', 'driver' => 'cloudflare'], 'image')['fallback']);
+    }
+
+    public function testChainStartsWithActiveProviderOnly(): void
+    {
+        $chain = ai_provider_chain('image', 'retouch');
+        foreach ($chain as $i => $p) {
+            $this->assertContains($p['driver'], ['gemini', 'openai', 'cloudflare']);
+            if ($i > 0) $this->assertNotEmpty($p['fallback']);
+        }
+        foreach (ai_provider_chain('image', 'text_image') as $p) $this->assertNotSame('openai', $p['driver']);
+    }
 }
