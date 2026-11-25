@@ -260,6 +260,14 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
         // Photos de départ : on les choisit en cliquant (la première choisie est la principale, marquée ★).
         var srcBox = document.getElementById('gen-sources'), srcNote = document.getElementById('gen-sources-note');
         var order = srcBox.firstElementChild ? [srcBox.firstElementChild.dataset.id] : [];
+        // Le choix est mémorisé (navigateur, par fiche) : il survit au rechargement de la page.
+        var srcKey = 'gallery-sources:' + location.pathname + ':' + (genForm.elements.ref ? genForm.elements.ref.value : '');
+        try {
+          var saved = JSON.parse(localStorage.getItem(srcKey) || '[]');
+          var present = Array.prototype.map.call(srcBox.children, function (b) { return b.dataset.id; });
+          saved = Array.isArray(saved) ? saved.map(String).filter(function (id) { return present.indexOf(id) >= 0; }) : [];
+          if (saved.length) order = saved;
+        } catch (e) {}
         window.genSelectedIds = function () { return order.slice(); };
         function renderSources() {
           Array.prototype.forEach.call(srcBox.children, function (b) {
@@ -277,6 +285,7 @@ $pendingVideos = array_map(static fn (array $j): array => ['id' => (int) $j['id'
           if (!b) return;
           var i = order.indexOf(b.dataset.id);
           if (i >= 0) { if (order.length > 1) order.splice(i, 1); } else order.push(b.dataset.id);
+          try { localStorage.setItem(srcKey, JSON.stringify(order)); } catch (e) {}
           renderSources();
         });
 
