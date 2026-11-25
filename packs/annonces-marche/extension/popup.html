@@ -12,11 +12,16 @@
     <button type="button" id="btn-settings" class="link" aria-expanded="false">Réglages</button>
   </header>
 
+  <div id="alert-bar" class="alert-bar" role="alert" hidden>
+    <span id="alert-text"></span>
+    <button type="button" id="alert-close" class="link small" aria-label="Fermer l’alerte">OK</button>
+  </div>
+
   <section id="settings" class="panel">
     <label>Adresse de la boutique
       <input type="url" id="shop-url" placeholder="https://exemple.com/ma-boutique" autocomplete="off" spellcheck="false">
     </label>
-    <p class="hint">Collez l’adresse de la boutique (sans /api), même si elle finit par /boutique.php. L’extension ajoute /api/annonces toute seule.</p>
+    <p class="hint"><b>Le plus simple :</b> collez ici le « code de connexion » copié depuis l’admin de la boutique. Adresse et jeton se remplissent, s’enregistrent et se testent tout seuls. Sinon, collez l’adresse de la boutique (sans /api) ; l’extension ajoute /api/annonces.</p>
     <label>Jeton
       <input type="text" id="token" class="token" placeholder="Collez ici le jeton am_…" autocomplete="off" spellcheck="false" autocapitalize="off">
     </label>
@@ -34,6 +39,16 @@
       <input type="search" id="q" placeholder="Chercher un article…" disabled>
       <button type="button" id="btn-search" disabled>OK</button>
     </div>
+    <div class="row selftest">
+      <button type="button" id="btn-selftest" class="ghost small">Contrôler le formulaire ouvert</button>
+    </div>
+    <p id="selftest-msg" class="msg" role="status"></p>
+    <div id="pick-bar" class="pick-bar" hidden>
+      <span><strong id="pick-count">0</strong> coché(s) pour la file automatique</span>
+      <button type="button" id="pick-all" class="link small">Tout cocher</button>
+      <button type="button" id="pick-none" class="link small">Tout décocher</button>
+    </div>
+    <p id="pick-hint" class="hint" hidden>Cochez les articles à publier en série. Si rien n’est coché, la sélection de l’administration de la boutique est utilisée.</p>
     <ul id="list" class="list"></ul>
     <div id="detail" class="detail" hidden></div>
   </section>
@@ -48,14 +63,27 @@
     <details id="auto-setup" class="auto-setup">
       <summary>Réglages du mode automatique</summary>
       <label class="check"><input type="checkbox" id="auto-dry"> <span>Simulation seule (ne clique jamais sur « Publier »)</span></label>
+      <label class="check"><input type="checkbox" id="auto-draft"> <span>Enregistrer en brouillon au lieu de publier (Vinted) : vous vérifiez sur le site avant de publier. Prioritaire sur la simulation.</span></label>
       <div class="two">
         <label>Intervalle (min)
           <input type="number" id="auto-interval" min="2" max="30" step="1" inputmode="numeric">
         </label>
         <label>Quota / jour
-          <input type="number" id="auto-cap" min="1" max="30" step="1" inputmode="numeric">
+          <input type="number" id="auto-cap" min="1" max="50" step="1" inputmode="numeric">
         </label>
       </div>
+      <div class="two">
+        <label>Quota / heure
+          <input type="number" id="auto-hourly" min="1" max="20" step="1" inputmode="numeric">
+        </label>
+        <label>Plage horaire (h)
+          <span class="range"><input type="number" id="auto-from" min="0" max="23" step="1" inputmode="numeric" aria-label="Début de la plage"> à <input type="number" id="auto-to" min="1" max="24" step="1" inputmode="numeric" aria-label="Fin de la plage"></span>
+        </label>
+      </div>
+      <label>Écart de prix signalé (%)
+        <input type="number" id="auto-gap" min="5" max="90" step="5" inputmode="numeric">
+      </label>
+      <p class="hint">Si votre prix s’écarte de la fourchette proposée par la plateforme d’au moins ce pourcentage, la pièce est marquée « ⚠ prix » dans l’historique. Quotas et plage horaire ne s’appliquent qu’à la publication réelle. Plus le rythme est élevé, plus la plateforme risque de demander une vérification.</p>
       <label class="check"><input type="checkbox" id="auto-keep-tabs"> <span>Garder les onglets ouverts après publication</span></label>
       <label>Page de dépôt Leboncoin
         <input type="url" id="auto-url-lbc" spellcheck="false" autocomplete="off">
@@ -85,6 +113,26 @@
     <button type="button" id="auto-clear-history" class="link small" hidden>Effacer l’historique local</button>
   </section>
 
+  <section id="online" class="panel">
+    <h2>Annonces en ligne</h2>
+    <p class="hint">Mettez à jour une annonce quand la fiche a changé dans la boutique, ou supprimez-la de la plateforme (pièce vendue ou retirée). En mode « Simulation », l’extension s’arrête juste avant le clic final.</p>
+    <div class="row">
+      <select id="online-channel" aria-label="Plateforme">
+        <option value="vinted">Vinted</option>
+        <option value="leboncoin">Leboncoin</option>
+      </select>
+      <button type="button" id="online-refresh" class="ghost">Actualiser la liste</button>
+    </div>
+    <div class="row">
+      <button type="button" id="online-update-all" class="ghost" disabled>Tout mettre à jour</button>
+      <button type="button" id="online-delete-gone" class="ghost" disabled>Supprimer les retirées</button>
+      <button type="button" id="online-cancel" class="ghost" hidden>Arrêter</button>
+    </div>
+    <p id="online-status" class="msg" role="status"></p>
+    <ul id="online-list" class="online-list"></ul>
+  </section>
+
+  <script src="quality.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

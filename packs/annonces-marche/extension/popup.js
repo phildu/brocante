@@ -9,6 +9,28 @@
   const btnSearch = $('btn-search');
   const store = chrome.storage.local;
 
+  /* ---------- Cases à cocher : articles de la file automatique ---------- */
+  const picked = new Set();
+  let shownRefs = [];
+
+  function updatePickBar() {
+    const bar = $('pick-bar');
+    if (!bar) return;
+    bar.hidden = !shownRefs.length && !picked.size;
+    $('pick-hint').hidden = bar.hidden;
+    $('pick-count').textContent = String(picked.size);
+  }
+
+  async function savePicked() {
+    await store.set({ amPicked: Array.from(picked) });
+    updatePickBar();
+  }
+
+  store.get('amPicked').then((data) => {
+    (Array.isArray(data.amPicked) ? data.amPicked : []).forEach((ref) => picked.add(String(ref)));
+    updatePickBar();
+  });
+
   /**
    * Accepte l’URL boutique, …/api ou …/api/annonces et renvoie toujours …/api/annonces.
    * Ex. https://host/slug/api → https://host/slug/api/annonces
@@ -149,20 +171,90 @@
     }
   }
 
+  /* ---------- Contrôle des fiches ---------- */
+  const CHANNEL_NAMES = { leboncoin: 'Leboncoin', vinted: 'Vinted' };
+
+  function qualityChip(item) {
+    if (!globalThis.AmQuality) return null;
+    const results = ['leboncoin', 'vinted'].map((ch) => ({ ch, r: AmQuality.check(item, ch) }));
+    const blocks = results.filter((x) => x.r.block.length);
+    const warns = results.filter((x) => x.r.warn.length);
+    if (!blocks.length && !warns.length) return null;
+    const chip = document.createElement('span');
+    chip.className = 'chip ' + (blocks.length ? 'block' : 'warn');
+    chip.textContent = blocks.length ? '⛔' : '⚠';
+    chip.title = results.map((x) => CHANNEL_NAMES[x.ch] + ' : ' + (AmQuality.lines(x.r).join(' | ') || 'rien à signaler')).join('\n');
+    return chip;
+  }
+
+  function qualityBox(product) {
+    const box = document.createElement('div');
+    box.className = 'check';
+    const title = document.createElement('h3');
+    title.textContent = 'Contrôle avant remplissage';
+    box.appendChild(title);
+    if (!globalThis.AmQuality) return box;
+    for (const ch of ['leboncoin', 'vinted']) {
+      const r = AmQuality.check(product, ch);
+      const head = document.createElement('div');
+      head.innerHTML = '<strong></strong>';
+      head.querySelector('strong').textContent = CHANNEL_NAMES[ch] + ' ';
+      if (!r.block.length && !r.warn.length) {
+        const ok = document.createElement('span');
+        ok.className = 'ok';
+        ok.textContent = '✓ fiche complète';
+        head.appendChild(ok);
+        box.appendChild(head);
+        continue;
+      }
+      box.appendChild(head);
+      const ul = document.createElement('ul');
+      for (const item of r.block.concat(r.warn)) {
+        const li = document.createElement('li');
+        li.className = r.block.includes(item) ? 'block' : 'warn';
+        li.textContent = (r.block.includes(item) ? '⛔ ' : '⚠ ') + item.field + ' : ' + item.message;
+        ul.appendChild(li);
+      }
+      box.appendChild(ul);
+    }
+    return box;
+  }
+
+  /** Avant un remplissage : si la fiche a des points bloquants, on demande confirmation (l'utilisateur peut corriger la fiche d'abord). */
+  function confirmQuality(product, channel) {
+    if (!globalThis.AmQuality) return true;
+    const r = AmQuality.check(product, channel);
+    if (!r.block.length) return true;
+    return confirm('Cette fiche a des points bloquants pour ' + CHANNEL_NAMES[channel] + ' :\n\n' + AmQuality.lines({ block: r.block, warn: [] }).join('\n') + '\n\nRemplir quand même ?');
+  }
+
   function renderList(items) {
-    list.innerHTML = '';
+    list.replaceChildren();
     detail.hidden = true;
     if (!items.length) {
       list.innerHTML = '<li class="empty">Aucun article.</li>';
       return;
     }
+    shownRefs = items.map((item) => String(item.ref));
+    updatePickBar();
     items.forEach((item) => {
       const li = document.createElement('li');
       const thumb = item.photos && item.photos[0] ? item.photos[0].url : '';
       li.innerHTML =
+        '<label class="pick"><input type="checkbox" aria-label="Cocher pour la file automatique"></label>' +
         (thumb ? '<img src="' + thumb + '" alt="">' : '<span class="ph"></span>') +
         '<span class="meta"><strong></strong><small></small></span>';
+      const box = li.querySelector('.pick input');
+      box.checked = picked.has(String(item.ref));
+      box.addEventListener('click', (event) => event.stopPropagation());
+      li.querySelector('.pick').addEventListener('click', (event) => event.stopPropagation());
+      box.addEventListener('change', () => {
+        if (box.checked) picked.add(String(item.ref)); else picked.delete(String(item.ref));
+        savePicked();
+      });
       li.querySelector('strong').textContent = item.title || item.name;
+      const chip = qualityChip(item);
+      if (chip) li.querySelector('strong').appendChild(chip);
       li.querySelector('small').textContent =
         (item.price != null ? item.price.toFixed(2).replace('.', ',') + ' €' : item.price_text || '') +
         ' · réf. ' +
@@ -180,7 +272,7 @@
       renderList(data.items || []);
     } catch (e) {
       lockSearch(e.message);
-      list.innerHTML = '';
+      list.replaceChildren();
     }
   }
 
@@ -190,7 +282,7 @@
     try {
       const data = await api('/produit/' + encodeURIComponent(ref));
       const p = data.product;
-      detail.innerHTML = '';
+      detail.replaceChildren();
       const title = document.createElement('h2');
       title.textContent = p.title;
       const desc = document.createElement('p');
@@ -226,7 +318,7 @@
         download.addEventListener('click', () => downloadPhotos(p, download, note));
         actions.appendChild(download);
       }
-      detail.append(title, desc, actions, note);
+      detail.append(title, qualityBox(p), desc, actions, note);
     } catch (e) {
       detail.innerHTML = '<p class="msg">' + (e.message || 'Erreur') + '</p>';
     }
@@ -352,6 +444,7 @@
   }
 
   async function fillTab(channel, product) {
+    if (!confirmQuality(product, channel)) return;
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.id) {
       alert('Aucun onglet actif.');
@@ -405,21 +498,63 @@
     return 'Adresse et jeton requis.';
   }
 
+  /**
+   * Un « code de connexion » = adresse de la boutique + jeton am_… collés ensemble (dans l'un ou l'autre champ).
+   * Renvoie { url, token } ou null si le texte ne contient pas les deux.
+   */
+  function parseConnectionCode(text) {
+    const raw = String(text || '');
+    const token = (raw.match(/\bam_[A-Za-z0-9_-]{8,}/) || [])[0];
+    const url = (raw.match(/https?:\/\/[^\s"'<>]+/i) || [])[0];
+    return token && url ? { url, token } : null;
+  }
+
+  async function applyConnectionCode(field) {
+    const code = parseConnectionCode(field.value);
+    if (!code) return;
+    $('shop-url').value = code.url;
+    $('token').value = code.token;
+    $('btn-save').click();
+  }
+  ['shop-url', 'token'].forEach((id) => {
+    $(id).addEventListener('paste', () => setTimeout(() => applyConnectionCode($(id)), 0));
+  });
+
+  /**
+   * Garde chaque champ dès qu'il est rempli : la fenêtre de l'extension se ferme quand on va copier la clé dans l'admin,
+   * et ce qui était collé ne doit pas être perdu. Renvoie la configuration complète après fusion avec l'existante.
+   */
+  async function saveDraft() {
+    const form = readFormConfig();
+    const prev = await loadConfig();
+    const next = { apiBase: form.apiBase || prev.apiBase, token: form.token || prev.token };
+    if (next.apiBase !== prev.apiBase || next.token !== prev.token) await saveConfig(next.apiBase, next.token);
+    return next;
+  }
+  ['shop-url', 'token'].forEach((id) => {
+    $(id).addEventListener('change', () => { saveDraft().catch(() => {}); });
+    $(id).addEventListener('paste', () => setTimeout(() => { saveDraft().catch(() => {}); }, 50));
+  });
+
   $('btn-save').addEventListener('click', async () => {
-    const cfg = readFormConfig();
+    const cfg = await saveDraft();
     if (!cfg.apiBase || !cfg.token) {
-      $('settings-msg').textContent = missingConfigMessage(cfg);
+      $('settings-msg').textContent = cfg.apiBase
+        ? 'Adresse enregistrée. Collez maintenant le jeton (ou le code de connexion).'
+        : cfg.token
+          ? 'Jeton enregistré. Collez maintenant l’adresse de la boutique.'
+          : missingConfigMessage(cfg);
       return;
     }
     $('shop-url').value = cfg.apiBase;
-    await saveConfig(cfg.apiBase, cfg.token);
+    $('token').value = cfg.token;
     $('settings-msg').textContent = 'Enregistrement…';
     const result = await refreshConn(cfg);
     $('settings-msg').textContent = result.ok ? 'Enregistré — ' + result.message : result.message;
   });
 
   $('btn-ping').addEventListener('click', async () => {
-    const cfg = readFormConfig();
+    const cfg = await saveDraft();
     if (!cfg.apiBase || !cfg.token) {
       $('settings-msg').textContent = missingConfigMessage(cfg);
       lockSearch('Configurez la boutique dans Réglages.');
@@ -432,9 +567,55 @@
     $('settings-msg').textContent = result.ok ? 'OK — ' + result.message : 'Échec : ' + result.message;
   });
 
+  $('pick-all').addEventListener('click', () => {
+    shownRefs.forEach((ref) => picked.add(ref));
+    list.querySelectorAll('.pick input').forEach((box) => { box.checked = true; });
+    savePicked();
+  });
+  $('pick-none').addEventListener('click', () => {
+    picked.clear();
+    list.querySelectorAll('.pick input').forEach((box) => { box.checked = false; });
+    savePicked();
+  });
+
+  /* ---------- Alerte persistante (formulaire modifié, fiche écartée…) ---------- */
+  const alertBar = $('alert-bar');
+  function showAlert(a) {
+    if (!a || !a.message) { alertBar.hidden = true; return; }
+    $('alert-text').textContent = a.message;
+    alertBar.className = 'alert-bar' + (a.level === 'warn' ? ' warn' : '');
+    alertBar.hidden = false;
+  }
+  store.get('amAlert').then((data) => showAlert(data.amAlert));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.amAlert) showAlert(changes.amAlert.newValue);
+  });
+  $('alert-close').addEventListener('click', () => { store.remove('amAlert'); alertBar.hidden = true; });
+
+  /* ---------- Contrôle du formulaire ouvert (détecte un changement de la plateforme) ---------- */
+  $('btn-selftest').addEventListener('click', async () => {
+    const msg = $('selftest-msg');
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    let host = '';
+    try { host = new URL((tab && tab.url) || '').hostname; } catch (_) {}
+    const channel = /leboncoin\.fr$/i.test(host) ? 'leboncoin' : /vinted\.fr$/i.test(host) ? 'vinted' : '';
+    if (!tab || !channel) {
+      msg.textContent = 'Ouvrez d’abord la page de dépôt Leboncoin ou Vinted, puis recliquez.';
+      return;
+    }
+    msg.textContent = 'Contrôle…';
+    const res = await new Promise((resolve) => chrome.runtime.sendMessage({ type: 'am-selftest', tabId: tab.id, channel }, (r) => resolve(chrome.runtime.lastError ? { ok: false, error: chrome.runtime.lastError.message } : r)));
+    if (!res || !res.ok) { msg.textContent = res && res.error || 'Contrôle impossible.'; return; }
+    const name = CHANNEL_NAMES[channel];
+    msg.textContent = res.missing.length
+      ? '⚠ ' + name + ' (' + res.page + ') : repères absents : ' + res.missing.join(', ') + '. La plateforme a peut-être changé son formulaire : remplissez à la main et signalez-le.'
+      : '✓ ' + name + ' (' + res.page + ') : ' + res.found.length + ' repère(s) reconnus, le remplissage peut fonctionner.';
+  });
+
   btnSearch.addEventListener('click', () => search(q.value));
   q.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') search(q.value);
+    // Entrée qui valide une composition (méthode de saisie) : ne pas lancer la recherche.
+    if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) search(q.value);
   });
 
   /* ---------- Publication automatique locale ---------- */
@@ -444,8 +625,13 @@
     armed: $('auto-armed'),
     armedAt: $('auto-armed-at'),
     dry: $('auto-dry'),
+    draft: $('auto-draft'),
     interval: $('auto-interval'),
     cap: $('auto-cap'),
+    hourly: $('auto-hourly'),
+    gap: $('auto-gap'),
+    from: $('auto-from'),
+    to: $('auto-to'),
     keepTabs: $('auto-keep-tabs'),
     urlLbc: $('auto-url-lbc'),
     urlVinted: $('auto-url-vinted'),
@@ -491,9 +677,13 @@
     const s = (queue && queue.stats) || {};
     return [
       s.published ? s.published + ' publiée(s)' : '',
+      s.drafted ? s.drafted + ' en brouillon' : '',
       s.prepared ? s.prepared + ' simulée(s)' : '',
+      s.rejected ? s.rejected + ' écartée(s)' : '',
+      s['no-match'] ? s['no-match'] + ' sans valeur' : '',
       s.blocked ? s.blocked + ' arrêt(s)' : '',
       s.error ? s.error + ' erreur(s)' : '',
+      s.priceGap ? s.priceGap + ' écart(s) de prix' : '',
     ].filter(Boolean).join(' · ') || 'aucune pièce traitée';
   }
 
@@ -511,9 +701,14 @@
       ? 'Risque accepté le ' + new Date(s.armedAt).toLocaleString('fr-FR') + '.'
       : 'Sans cette case, aucune publication automatique n’est possible.';
     fillIfIdle(auto.dry, s.dryRun !== false, 'checked');
+    fillIfIdle(auto.draft, !!s.saveDraft, 'checked');
     fillIfIdle(auto.keepTabs, !!s.keepTabs, 'checked');
     fillIfIdle(auto.interval, String(s.intervalMin || 5));
     fillIfIdle(auto.cap, String(s.dailyCap || 10));
+    fillIfIdle(auto.hourly, String(s.hourlyCap || 3));
+    fillIfIdle(auto.gap, String(s.priceGapPct || 30));
+    fillIfIdle(auto.from, String(s.activeFrom != null ? s.activeFrom : 8));
+    fillIfIdle(auto.to, String(s.activeTo != null ? s.activeTo : 21));
     fillIfIdle(auto.urlLbc, (s.depositUrls && s.depositUrls.leboncoin) || '');
     fillIfIdle(auto.urlVinted, (s.depositUrls && s.depositUrls.vinted) || '');
 
@@ -532,7 +727,9 @@
       auto.status.className = 'msg err';
     } else if (!queue || status === 'idle') {
       auto.status.textContent = s.armed
-        ? (s.dryRun !== false
+        ? (s.saveDraft
+          ? 'Prêt (brouillon) : les fiches seront enregistrées en brouillon, sans être publiées.'
+          : s.dryRun !== false
           ? 'Prêt (simulation) : choisissez une plateforme.'
           : 'Prêt : choisissez une plateforme. La publication réelle cliquera « Publier ».')
         : 'Publication automatique désactivée : cochez « J’assume le risque » pour l’autoriser.';
@@ -576,12 +773,16 @@
       const right = document.createElement('span');
       right.className = 'act ' + entry.action;
       right.textContent = ({
+        rejected: 'écartée (fiche)',
         published: 'publiée',
         prepared: 'simulée',
+        drafted: 'brouillon',
         blocked: 'arrêt',
         skipped: 'passée',
+        'no-match': 'passée (menu)',
+        'to-update': 'à mettre à jour',
         error: 'erreur',
-      }[entry.action] || entry.action) + (entry.dryRun ? ' (sim.)' : '');
+      }[entry.action] || entry.action) + (entry.dryRun ? ' (sim.)' : '') + (entry.priceGap ? ' · ⚠ prix ' + entry.priceGap + ' %' : '');
       li.append(left, right);
       auto.history.appendChild(li);
     });
@@ -617,7 +818,7 @@
       auto.status.className = 'msg err';
       return;
     }
-    if (autoState.settings.dryRun === false) {
+    if (autoState.settings.dryRun === false && !autoState.settings.saveDraft) {
       const label = channel === 'leboncoin' ? 'Leboncoin' : 'Vinted';
       if (!confirm('Publier automatiquement sur ' + label + ' ?\n\nLe navigateur remplira puis cliquera « Publier » à votre place. Vous restez responsable du respect des CGU de la plateforme.')) {
         return;
@@ -636,6 +837,7 @@
 
   auto.armed.addEventListener('change', () => patchAuto({ armed: auto.armed.checked }));
   auto.dry.addEventListener('change', () => patchAuto({ dryRun: auto.dry.checked }));
+  auto.draft.addEventListener('change', () => patchAuto({ saveDraft: auto.draft.checked }));
   auto.keepTabs.addEventListener('change', () => patchAuto({ keepTabs: auto.keepTabs.checked }));
   auto.interval.addEventListener('change', () => {
     const value = intInRange(auto.interval.value, 2, 30, 5);
@@ -643,10 +845,29 @@
     patchAuto({ intervalMin: value });
   });
   auto.cap.addEventListener('change', () => {
-    const value = intInRange(auto.cap.value, 1, 30, 10);
+    const value = intInRange(auto.cap.value, 1, 50, 10);
     auto.cap.value = String(value);
     patchAuto({ dailyCap: value });
   });
+  auto.hourly.addEventListener('change', () => {
+    const value = intInRange(auto.hourly.value, 1, 20, 3);
+    auto.hourly.value = String(value);
+    patchAuto({ hourlyCap: value });
+  });
+  auto.gap.addEventListener('change', () => {
+    const value = intInRange(auto.gap.value, 5, 90, 30);
+    auto.gap.value = String(value);
+    patchAuto({ priceGapPct: value });
+  });
+  function saveRange() {
+    const from = intInRange(auto.from.value, 0, 23, 8);
+    const to = Math.max(from + 1, intInRange(auto.to.value, 1, 24, 21));
+    auto.from.value = String(from);
+    auto.to.value = String(to);
+    patchAuto({ activeFrom: from, activeTo: to });
+  }
+  auto.from.addEventListener('change', saveRange);
+  auto.to.addEventListener('change', saveRange);
   auto.urlLbc.addEventListener('change', () => patchAuto({ depositUrls: { leboncoin: auto.urlLbc.value.trim() } }));
   auto.urlVinted.addEventListener('change', () => patchAuto({ depositUrls: { vinted: auto.urlVinted.value.trim() } }));
   auto.lbc.addEventListener('click', () => startAutoRun('leboncoin'));
@@ -683,6 +904,110 @@
     await refreshAuto();
   });
 
+  /* ---------- Annonces en ligne : mise à jour et suppression ---------- */
+  const online = {
+    channel: $('online-channel'), refresh: $('online-refresh'), list: $('online-list'), status: $('online-status'),
+    updateAll: $('online-update-all'), deleteGone: $('online-delete-gone'), cancel: $('online-cancel'),
+  };
+  let onlineItems = [];
+  let onlineBusy = false;
+  let wasBusy = false;
+  const STATE_LABEL = { same: 'à jour', changed: 'modifiée', gone: 'retirée de la boutique', unknown: 'état inconnu' };
+  const channelName = () => (online.channel.value === 'vinted' ? 'Vinted' : 'Leboncoin');
+
+  function onlineSay(text, kind) { online.status.textContent = text; online.status.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+  function renderOnline() {
+    online.list.replaceChildren();
+    for (const item of onlineItems) {
+      const li = document.createElement('li');
+      const title = document.createElement('span');
+      title.className = 't';
+      title.textContent = item.ref + ' · ' + (item.title || '(fiche indisponible)');
+      title.title = title.textContent;
+      const st = document.createElement('span');
+      st.className = 'st ' + item.state;
+      st.textContent = STATE_LABEL[item.state] || item.state;
+      li.append(title, st);
+      if (item.state !== 'gone') li.append(manageButton('Mettre à jour', 'update', item));
+      li.append(manageButton('Supprimer', 'delete', item));
+      online.list.append(li);
+    }
+    const changed = onlineItems.filter((i) => i.state === 'changed');
+    const gone = onlineItems.filter((i) => i.state === 'gone');
+    online.updateAll.textContent = 'Tout mettre à jour (' + changed.length + ')';
+    online.deleteGone.textContent = 'Supprimer les retirées (' + gone.length + ')';
+    online.updateAll.disabled = onlineBusy || !changed.length;
+    online.deleteGone.disabled = onlineBusy || !gone.length;
+    for (const b of online.list.querySelectorAll('button')) b.disabled = onlineBusy;
+  }
+
+  function manageButton(label, kind, item) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ghost small';
+    b.textContent = label;
+    b.addEventListener('click', () => runManage(kind, [item.ref]));
+    return b;
+  }
+
+  async function loadOnline() {
+    onlineSay('Lecture des annonces…');
+    const res = await autoSend({ type: 'am-online-list', channel: online.channel.value });
+    if (!res || !res.ok) { onlineSay((res && res.error) || 'Liste impossible.', 'err'); return; }
+    onlineItems = res.items || [];
+    onlineSay(onlineItems.length
+      ? onlineItems.length + ' annonce(s) sur ' + channelName() + '.'
+      : 'Aucune annonce enregistrée sur ' + channelName() + ' (seules les publications faites par l’extension apparaissent).');
+    renderOnline();
+  }
+
+  async function runManage(kind, refs) {
+    if (!refs.length) return;
+    const verb = kind === 'delete' ? 'supprimer' : 'mettre à jour';
+    const warn = kind === 'delete' ? ' Cette suppression est définitive sur la plateforme.' : '';
+    if (!window.confirm('Vraiment ' + verb + ' ' + refs.length + ' annonce(s) sur ' + channelName() + ' ?' + warn)) return;
+    onlineSay('Démarrage…');
+    const res = await autoSend({ type: 'am-manage', channel: online.channel.value, kind, refs });
+    if (!res || !res.ok) onlineSay((res && res.error) || 'Action impossible.', 'err');
+    else refreshManage();
+  }
+
+  const MANAGE_VERB = { done: 'faite', prepared: 'prête (simulation)', 'not-found': 'introuvable', blocked: 'arrêtée', error: 'erreur' };
+
+  async function refreshManage() {
+    const { amManage } = await chrome.storage.local.get('amManage');
+    const m = amManage;
+    const running = !!m && m.status === 'running';
+    onlineBusy = running;
+    online.cancel.hidden = !running;
+    if (m && m.status) {
+      const verb = m.kind === 'delete' ? 'Suppression' : 'Mise à jour';
+      const results = (m.results || []).map((r) => r.ref + ' : ' + (MANAGE_VERB[r.action] || r.action) + (r.reason ? ' (' + r.reason + ')' : ''));
+      onlineSay((running ? verb + ' en cours · ' + Math.min((m.index || 0) + 1, m.total) + '/' + m.total + (m.current ? ' (' + m.current + ')' : '') : verb + ' terminée') +
+        (results.length ? ' — ' + results.join(' ; ') : '') + (m.error ? ' — ' + m.error : ''),
+        !running && (m.results || []).some((r) => ['blocked', 'error', 'not-found'].includes(r.action)) ? 'err' : '');
+    }
+    renderOnline();
+    // Une action vient de se terminer : la liste est relue pour refléter les annonces mises à jour ou supprimées.
+    if (wasBusy && !running && onlineItems.length) {
+      wasBusy = false;
+      const keep = online.status.textContent;
+      await loadOnline();
+      onlineSay(keep, online.status.className.replace('msg', '').trim());
+    }
+    if (running) wasBusy = true;
+  }
+
+  online.refresh.addEventListener('click', loadOnline);
+  online.channel.addEventListener('change', () => { onlineItems = []; renderOnline(); loadOnline(); });
+  online.updateAll.addEventListener('click', () => runManage('update', onlineItems.filter((i) => i.state === 'changed').map((i) => i.ref)));
+  online.deleteGone.addEventListener('click', () => runManage('delete', onlineItems.filter((i) => i.state === 'gone').map((i) => i.ref)));
+  online.cancel.addEventListener('click', async () => { await autoSend({ type: 'am-manage-cancel' }); refreshManage(); });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.amManage) refreshManage();
+  });
+
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.amQueue || changes.amAutoSettings || changes.amAutoHistory || changes.amAutoDay) {
@@ -693,4 +1018,5 @@
 
   refreshConn();
   refreshAuto();
+  refreshManage();
 })();

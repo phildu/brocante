@@ -1,5 +1,7 @@
 /* Service worker : préremplissage manuel + file de publication locale (opt-in, locale uniquement). */
 
+try { importScripts('quality.js'); } catch (_) { /* contrôle des fiches indisponible : la file reste utilisable */ }
+
 const CHANNELS = ['leboncoin', 'vinted'];
 const ALARM_NEXT = 'am-auto-next';
 const ALARM_WATCHDOG = 'am-auto-watchdog';
@@ -11,14 +13,25 @@ const AUTO_DEFAULTS = {
   armed: false,
   armedAt: 0,
   dryRun: true,
+  saveDraft: false,    // enregistre un brouillon sur la plateforme au lieu de publier (prioritaire sur la simulation)
   intervalMin: 5,
   dailyCap: 10,
+  priceGapPct: 30,     // écart de prix (en %) entre la boutique et la fourchette de la plateforme à partir duquel la pièce est signalée
+  hourlyCap: 3,        // publications réelles par heure glissante au plus
+  activeFrom: 8,       // plage horaire locale de travail (publication réelle uniquement)
+  activeTo: 21,
+  cooldownHours: 6,    // pause obligatoire après une vérification demandée par la plateforme
   keepTabs: false,
   depositUrls: {
     leboncoin: 'https://www.leboncoin.fr/deposer-une-annonce',
     vinted: 'https://www.vinted.fr/items/new',
   },
 };
+
+/** Publication réelle : ni simulation, ni brouillon. Seule elle est soumise aux plafonds, à la plage horaire et au délai de repos. */
+const isLive = (settings) => !settings.dryRun && !settings.saveDraft;
+/** Simulation pure (rien n'est cliqué sur la plateforme). */
+const isSimulation = (settings) => !!settings.dryRun && !settings.saveDraft;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -85,6 +98,61 @@ async function bumpDayCount() {
   return count;
 }
 
+/* ---------- Rythme (publication réelle uniquement) ---------- */
+
+async function getStamps() {
+  const { amAutoStamps } = await chrome.storage.local.get('amAutoStamps');
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  return (Array.isArray(amAutoStamps) ? amAutoStamps : []).filter((t) => t > hourAgo);
+}
+
+async function pushStamp() {
+  const stamps = await getStamps();
+  stamps.push(Date.now());
+  await chrome.storage.local.set({ amAutoStamps: stamps });
+}
+
+/** Un délai aléatoire (minutes → ms) : jamais deux écarts identiques, et de temps en temps une vraie pause. */
+function humanDelay(minutes) {
+  let factor = 0.8 + Math.random() * 0.6;
+  if (Math.random() < 0.15) factor += 0.5 + Math.random();   // « pause café » occasionnelle
+  return Math.round(minutes * 60000 * factor);
+}
+
+function hhmm(ts) {
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
+}
+
+/**
+ * Garde de rythme avant chaque pièce en publication réelle : plage horaire, plafond par heure.
+ * Retourne null (on peut y aller) ou { until, message } : la file attend, sans se mettre en pause.
+ */
+async function pacingHold(settings) {
+  if (!isLive(settings)) return null;
+  const now = new Date();
+  const from = Math.max(0, Math.min(23, Number(settings.activeFrom)));
+  const to = Math.max(from + 1, Math.min(24, Number(settings.activeTo)));
+  const hour = now.getHours();
+  if (hour < from || hour >= to) {
+    const start = new Date(now);
+    if (hour >= to) start.setDate(start.getDate() + 1);
+    start.setHours(from, Math.floor(Math.random() * 40), 0, 0);
+    return { until: start.getTime(), message: 'Hors de la plage horaire (' + from + 'h–' + to + 'h) : reprise à ' + hhmm(start.getTime()) + '.' };
+  }
+  const stamps = await getStamps();
+  if (stamps.length >= Math.max(1, Number(settings.hourlyCap) || 3)) {
+    const until = Math.min(...stamps) + 60 * 60 * 1000 + Math.floor(Math.random() * 6 * 60000);
+    return { until, message: 'Plafond horaire atteint (' + stamps.length + ') : reprise à ' + hhmm(until) + '.' };
+  }
+  return null;
+}
+
+async function getCooldown() {
+  const { amAutoCooldown } = await chrome.storage.local.get('amAutoCooldown');
+  return Number(amAutoCooldown) > Date.now() ? Number(amAutoCooldown) : 0;
+}
+
 async function getHistory() {
   const { amAutoHistory } = await chrome.storage.local.get('amAutoHistory');
   return Array.isArray(amAutoHistory) ? amAutoHistory : [];
@@ -132,10 +200,10 @@ async function clearAlarms() {
   await chrome.alarms.clear(ALARM_WATCHDOG);
 }
 
-async function scheduleNext(settings) {
+async function scheduleNext(settings, fixedDelay) {
   // En simulation, on enchaîne plus vite (mais jamais en rafale) ; en réel, respect du réglage.
-  const minutes = settings.dryRun ? 0.6 : Math.max(2, Math.min(30, Number(settings.intervalMin) || 5));
-  const delay = Math.round(minutes * 60000 * (0.85 + Math.random() * 0.3));
+  const minutes = !isLive(settings) ? 0.6 : Math.max(2, Math.min(30, Number(settings.intervalMin) || 5));
+  const delay = fixedDelay != null ? fixedDelay : !isLive(settings) ? Math.round(minutes * 60000 * (0.85 + Math.random() * 0.3)) : humanDelay(minutes);
   await chrome.alarms.clear(ALARM_NEXT);
   await chrome.alarms.create(ALARM_NEXT, { when: Date.now() + delay });
 }
@@ -145,11 +213,50 @@ async function ensureWatchdog() {
   if (!existing) await chrome.alarms.create(ALARM_WATCHDOG, { periodInMinutes: 1 });
 }
 
+/** Texte d'une note de publication → empreinte du contenu publié ('' si absente). Format : « [h:0123abcd…] … ». */
+function hashFromNote(note) {
+  const m = /\[h:([0-9a-f]{8,32})\]/.exec(String(note || ''));
+  return m ? m[1] : '';
+}
+
+/**
+ * Compare la fiche actuelle à ce qui a été publié. Renvoie 'same' (inchangée), 'changed' (modifiée) ;
+ * une publication sans empreinte (faite avant cette fonction) est adoptée telle quelle : on enregistre l'empreinte actuelle.
+ */
+async function compareWithPublished(ref, channel, listing) {
+  let product = null;
+  try {
+    product = (await api('/produit/' + encodeURIComponent(ref))).product;
+  } catch (_) {
+    return 'same'; // fiche illisible : on ne touche à rien
+  }
+  if (!product || !globalThis.AmQuality) return 'same';
+  const current = AmQuality.fingerprint(product, channel);
+  const before = hashFromNote(listing.note);
+  if (!before) {
+    try {
+      await api('/marquer', {
+        method: 'POST',
+        json: { product_ref: ref, channel, status: 'published', listing_url: listing.listing_url || '', external_id: listing.external_id || '', note: '[h:' + current + '] empreinte enregistrée' },
+      });
+    } catch (_) {}
+    return 'same';
+  }
+  return before === current ? 'same' : 'changed';
+}
+
 function actionLabel(action) {
   return {
+    'to-update': 'à mettre à jour',
     published: 'publiée',
     prepared: 'prête (simulation)',
+    drafted: 'enregistrée en brouillon',
+    rejected: 'écartée (contrôle de la fiche)',
     blocked: 'arrêtée',
+    skipped: 'passée',
+    updated: 'mise à jour',
+    removed: 'supprimée',
+    'no-match': 'passée (menu sans valeur)',
     error: 'erreur',
   }[action] || action;
 }
@@ -161,6 +268,12 @@ async function startAuto(channel) {
   const settings = await getSettings();
   if (!settings.armed) {
     throw new Error('Cochez « J’assume le risque » avant de lancer la publication automatique.');
+  }
+  if (isLive(settings)) {
+    const cooldown = await getCooldown();
+    if (cooldown) {
+      throw new Error('Une vérification a été demandée par la plateforme : pas de publication automatique avant ' + hhmm(cooldown) + '. Vérifiez votre compte à la main (la simulation reste possible).');
+    }
   }
   const existing = await getQueue();
   if (existing && (existing.status === 'running' || existing.status === 'paused')) {
@@ -175,13 +288,18 @@ async function startAuto(channel) {
   const items = Array.isArray(selection.items) ? selection.items : [];
 
   let published = [];
+  let listings = [];
+  let drafted = [];
   try {
     const res = await api('/publications?channel=' + encodeURIComponent(channel));
     published = Array.isArray(res.refs) ? res.refs : [];
+    listings = Array.isArray(res.listings) ? res.listings : [];
+    drafted = Array.isArray(res.drafts) ? res.drafts.map(String) : [];
   } catch (_) {
     // Ancienne version du serveur : l'historique local reste la seule protection anti-doublon.
   }
   const history = await getHistory();
+  const known = new Map(listings.map((l) => [String(l.ref), l]));
   const seen = new Set([
     ...published,
     ...history
@@ -189,13 +307,39 @@ async function startAuto(channel) {
       .map((h) => h.ref),
   ]);
 
-  const refs = items
-    .map((item) => item && item.product && item.product.ref)
-    .filter((ref) => ref && !seen.has(ref))
+  // Articles cochés dans la popup de l'extension ; à défaut, sélection faite dans l'administration de la boutique.
+  const { amPicked } = await chrome.storage.local.get('amPicked');
+  const picked = (Array.isArray(amPicked) ? amPicked : []).map(String).filter(Boolean);
+  const candidates = picked.length
+    ? picked
+    : items.map((item) => item && item.product && item.product.ref);
+  // Pièces déjà en ligne : inchangées → on passe à la suivante ; modifiées depuis la publication → à mettre à jour.
+  const unchanged = [];
+  const toUpdate = [];
+  for (const ref of candidates) {
+    const listing = ref && known.get(String(ref));
+    if (!listing) continue;
+    const state = await compareWithPublished(ref, channel, listing);
+    if (state === 'changed') toUpdate.push(ref);
+    else unchanged.push(ref);
+  }
+  const alreadyOnline = new Set([...unchanged, ...toUpdate]);
+  // En mode brouillon, une pièce déjà enregistrée en brouillon sur ce canal n'est pas redéposée (sinon doublon de brouillons).
+  const alreadyDrafted = settings.saveDraft ? new Set(drafted) : new Set();
+  const draftSkipped = candidates.filter((ref) => ref && alreadyDrafted.has(String(ref)) && !seen.has(ref) && !alreadyOnline.has(ref));
+  const refs = candidates
+    .filter((ref) => ref && !seen.has(ref) && !alreadyOnline.has(ref) && !alreadyDrafted.has(String(ref)))
     .slice(0, Math.max(0, settings.dailyCap - dayCount));
+  const source = picked.length ? ' (cochées dans l’extension)' : ' (sélection de la boutique)';
+  const skipNote = (unchanged.length ? ' ' + unchanged.length + ' inchangée(s) passée(s).' : '') +
+    (toUpdate.length ? ' ' + toUpdate.length + ' à mettre à jour (' + toUpdate.join(', ') + ').' : '') +
+    (draftSkipped.length ? ' ' + draftSkipped.length + ' déjà en brouillon sur la plateforme (' + draftSkipped.join(', ') + ').' : '');
+  for (const ref of toUpdate) {
+    await pushHistory({ ref, channel, action: 'to-update', reason: 'contenu modifié depuis la publication', dryRun: isSimulation(settings), at: Date.now() });
+  }
 
   if (!refs.length) {
-    throw new Error('Aucune pièce à traiter : la sélection est vide ou déjà publiée sur ce canal.');
+    throw new Error('Aucune pièce à publier : sélection vide ou déjà en ligne sur ce canal.' + skipNote);
   }
 
   const queue = {
@@ -205,12 +349,12 @@ async function startAuto(channel) {
     index: 0,
     status: 'running',
     startedAt: Date.now(),
-    stats: { published: 0, prepared: 0, blocked: 0, error: 0 },
+    stats: { published: 0, drafted: 0, prepared: 0, blocked: 0, error: 0 },
     consecutiveErrors: 0,
     lockAt: 0,
     activeTabId: null,
     activeRef: '',
-    lastMessage: 'File démarrée : ' + refs.length + ' pièce(s).',
+    lastMessage: 'File démarrée : ' + refs.length + ' pièce(s)' + source + '.' + skipNote,
   };
   await setQueue(queue);
   await ensureWatchdog();
@@ -239,6 +383,12 @@ async function resumeAuto() {
   const settings = await getSettings();
   if (!settings.armed) throw new Error('Cochez « J’assume le risque » pour reprendre.');
   if (queue.index >= queue.refs.length) throw new Error('Cette file est terminée : relancez un nouveau passage.');
+  if (isLive(settings)) {
+    const cooldown = await getCooldown();
+    if (cooldown) {
+      throw new Error('Une vérification a été demandée par la plateforme : pas de publication automatique avant ' + hhmm(cooldown) + '. Vérifiez votre compte à la main (la simulation reste possible).');
+    }
+  }
   const resumed = {
     ...queue,
     status: 'running',
@@ -288,7 +438,7 @@ async function skipAuto() {
     channel: queue.channel,
     action: 'skipped',
     reason: 'ignorée manuellement',
-    dryRun: !!settings.dryRun,
+    dryRun: isSimulation(settings),
     at: Date.now(),
   });
 
@@ -313,6 +463,14 @@ async function skipAuto() {
   return updated;
 }
 
+/** Met à jour le message de la file (affiché dans la popup) : sans cela, la popup reste figée sur « File démarrée » pendant tout le traitement. */
+async function progress(message) {
+  try {
+    const q = await getQueue();
+    if (q && q.status === 'running') await setQueue({ ...q, lastMessage: message });
+  } catch (_) {}
+}
+
 async function processNext() {
   const queue = await getQueue();
   if (!queue || queue.status !== 'running') return;
@@ -326,6 +484,14 @@ async function processNext() {
   const settings = await getSettings();
   if ((await getDayCount()) >= settings.dailyCap) {
     await pauseAuto('Quota quotidien atteint (' + settings.dailyCap + ').');
+    return;
+  }
+
+  const hold = await pacingHold(settings);
+  if (hold) {
+    if (queue.lastMessage !== hold.message) await setQueue({ ...queue, lastMessage: hold.message });
+    await chrome.alarms.clear(ALARM_NEXT);
+    await chrome.alarms.create(ALARM_NEXT, { when: hold.until });
     return;
   }
 
@@ -344,37 +510,99 @@ async function processNext() {
   }
 
   try {
+    await progress('Lecture de la fiche ' + ref + '…');
     const data = await api('/produit/' + encodeURIComponent(ref));
     const product = data.product;
     if (!product) throw new Error('Produit introuvable.');
 
-    if (!tabId) {
+    // Contrôle de la fiche avant d'ouvrir quoi que ce soit : une fiche qui bloquera la plateforme est écartée, la file continue.
+    const quality = globalThis.AmQuality ? AmQuality.check(product, queue.channel) : { block: [], warn: [] };
+    if (quality.block.length) {
+      await finalizeItem(product, { action: 'rejected', reason: AmQuality.lines({ block: quality.block, warn: [] }).join(' ; ') }, tabId, settings);
+      return;
+    }
+    if (quality.warn.length) await progress('Fiche ' + ref + ' : ' + AmQuality.summary(quality) + '…');
+
+    let openDeposit = false;
+    if (tabId) {
+      // Onglet repris (« Reprendre » après un arrêt) : s'il n'est plus sur le formulaire (profil Vinted après une publication…),
+      // on repart du bouton « Déposer une annonce » / « Vends ton article » comme le vendeur.
+      let url = '';
+      try { url = (await chrome.tabs.get(tabId)).url || ''; } catch (_) {}
+      const custom = (settings.depositUrls[queue.channel] || '').trim();
+      const isDefault = !custom || custom === AUTO_DEFAULTS.depositUrls[queue.channel];
+      if (isDefault && url && !onDepositForm(url, queue.channel)) openDeposit = true;
+    } else {
       const depositUrl = (settings.depositUrls[queue.channel] || '').trim() ||
         AUTO_DEFAULTS.depositUrls[queue.channel];
-      const tab = await chrome.tabs.create({ url: depositUrl, active: false });
+      // Départ de session comme le vendeur : accueil du site, puis clic sur « Déposer une annonce » / « Vends ton article ».
+      // Une adresse de dépôt personnalisée (réglages) est respectée telle quelle.
+      let startUrl = depositUrl;
+      if (depositUrl === AUTO_DEFAULTS.depositUrls[queue.channel]) {
+        startUrl = new URL(depositUrl).origin + '/';
+        openDeposit = true;
+      }
+      // Onglet au premier plan : une page ouverte en arrière-plan est ralentie par Chrome et Leboncoin y affiche un écran de chargement interminable.
+      await progress(openDeposit ? 'Ouverture du site, puis clic sur « Déposer une annonce »…' : 'Ouverture de la page de dépôt…');
+      const tab = await chrome.tabs.create({ url: startUrl, active: true });
       tabId = tab.id;
     }
     await setQueue({ ...(await getQueue()), activeTabId: tabId });
 
-    await waitForContent(tabId, queue.channel, 45000);
+    await progress('Attente de la page de dépôt (jusqu’à 90 s)…');
+    await waitForContent(tabId, queue.channel, 90000);
+    await progress('Remplissage de ' + ref + '…');
     const result = await runAutoInTab(tabId, queue.channel, product, {
-      dryRun: !!settings.dryRun,
+      dryRun: isSimulation(settings),
+      draft: !!settings.saveDraft,
       runId: queue.runId,
+      openDeposit,
     });
+    if (quality.warn.length) result.reason = (result.reason ? result.reason + ' · ' : '') + 'fiche : ' + quality.warn.map((i) => i.field + ' (' + i.message.split(/[:.(]/)[0].trim() + ')').join(', ');
     await finalizeItem(product, result, tabId, settings);
   } catch (error) {
     await finalizeItem({ ref }, { action: 'error', reason: error.message || 'erreur inconnue' }, tabId, settings);
   }
 }
 
+/**
+ * Injecte les scripts de la page de dépôt dans l'onglet. Nécessaire quand l'onglet était déjà ouvert à l'installation ou au
+ * rechargement de l'extension : Chrome n'y injecte pas les scripts tout seul (« Receiving end does not exist »).
+ */
+async function injectContent(tabId, channel) {
+  const files = ['quality.js', 'content/fill.js', channel === 'vinted' ? 'content/vinted.js' : 'content/leboncoin.js'];
+  await chrome.scripting.executeScript({ target: { tabId }, files });
+}
+
+function isNoReceiver(error) {
+  return /Receiving end does not exist|Could not establish connection/i.test((error && error.message) || '');
+}
+
+/** Envoie un message à la page de dépôt ; si aucun script n'y écoute, l'injecte puis réessaie une fois. */
+async function sendToDeposit(tabId, channel, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (error) {
+    if (!isNoReceiver(error)) throw error;
+    await injectContent(tabId, channel);
+    await sleep(400);
+    return await chrome.tabs.sendMessage(tabId, message);
+  }
+}
+
 async function waitForContent(tabId, channel, timeoutMs) {
   const started = Date.now();
+  let injected = false;
   while (Date.now() - started < timeoutMs) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-ping' });
       if (res && res.ready && res.channel === channel) return true;
-    } catch (_) {
-      // Le content script n'est pas encore injecté (navigation en cours).
+    } catch (error) {
+      // Pas de script dans l'onglet : navigation en cours, ou onglet ouvert avant le rechargement de l'extension.
+      if (!injected && isNoReceiver(error) && Date.now() - started > 4000) {
+        injected = true;
+        try { await injectContent(tabId, channel); } catch (_) {}
+      }
     }
     await sleep(600);
   }
@@ -383,16 +611,36 @@ async function waitForContent(tabId, channel, timeoutMs) {
   );
 }
 
+/** L'onglet est-il déjà sur le formulaire de dépôt de la plateforme ? */
+function onDepositForm(url, channel) {
+  return channel === 'vinted'
+    ? /^https?:\/\/[^/]*vinted\.[a-z.]+\/items\/new/i.test(url)
+    : /^https?:\/\/[^/]*leboncoin\.fr\/deposer-une-annonce/i.test(url);
+}
+
 async function runAutoInTab(tabId, channel, product, options) {
   let publishClicks = 0;
+  let suggested = null; // prix proposé par la plateforme, relevé à l'étape du formulaire
+  const withSuggestion = (res) => (suggested && res && !res.suggested ? { ...res, suggested } : res);
   for (let step = 0; step < MAX_STEPS; step++) {
-    const res = await sendWithRetry(tabId, { type: 'am-auto-step', channel, product, options });
+    // Le clic de départ n'a lieu qu'à la première étape d'un onglet neuf.
+    const res = await sendWithRetry(tabId, { type: 'am-auto-step', channel, product, options: { ...options, openDeposit: !!options.openDeposit && step === 0 } });
     if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
-    if (['blocked', 'prepared', 'published'].includes(res.action)) return res;
+    await progress('Étape ' + (step + 1) + ' : ' + res.action + (res.reason ? ' — ' + res.reason : ''));
+    if (res.suggested) suggested = res.suggested;
+    if (['blocked', 'prepared', 'published', 'no-match'].includes(res.action)) return withSuggestion(res);
+    if (res.action === 'draft-clicked') {
+      const saved = await verifyDrafted(tabId, channel);
+      return withSuggestion(saved || {
+        ok: true,
+        action: 'blocked',
+        reason: 'clic sur « Sauvegarder le brouillon » envoyé, mais l’enregistrement n’est pas confirmé. Vérifiez l’onglet.',
+      });
+    }
     if (res.action === 'publish-clicked') {
       publishClicks++;
-      const verified = await verifyPublished(tabId, channel);
-      if (verified) return verified;
+      const verified = await verifyPublished(tabId, channel, product);
+      if (verified) return withSuggestion(verified);
       if (publishClicks >= 2) {
         return {
           ok: true,
@@ -429,11 +677,30 @@ async function sendWithRetry(tabId, message, attempts = 6) {
   throw new Error((lastError && lastError.message) || 'La page ne répond pas.');
 }
 
-async function verifyPublished(tabId, channel) {
+/** Brouillon enregistré : message de confirmation du site, ou formulaire quitté (le site renvoie vers ses brouillons). */
+async function verifyDrafted(tabId, channel) {
+  for (let i = 0; i < 6; i++) {
+    await sleep(i === 0 ? 1500 : 2000);
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-verify', channel, draft: true });
+      if (res && res.action === 'drafted') return { ok: true, action: 'drafted' };
+    } catch (_) {
+      // Navigation en cours : on contrôle l'adresse ci-dessous.
+    }
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      const path = new URL(tab.url || 'about:blank').pathname;
+      if (channel === 'vinted' && tab.url && !/^\/items\/new/.test(path)) return { ok: true, action: 'drafted' };
+    } catch (_) {}
+  }
+  return null;
+}
+
+async function verifyPublished(tabId, channel, product) {
   for (let i = 0; i < 6; i++) {
     await sleep(i === 0 ? 1500 : 2500);
     try {
-      const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-verify', channel });
+      const res = await chrome.tabs.sendMessage(tabId, { type: 'am-auto-verify', channel, product });
       if (res && res.action === 'published') {
         return { ok: true, action: 'published', listing_url: res.listing_url };
       }
@@ -444,7 +711,7 @@ async function verifyPublished(tabId, channel) {
   }
   let tab = null;
   try { tab = await chrome.tabs.get(tabId); } catch (_) {}
-  if (tab && /(confirmation|success|merci|annonce-publiee|published)/i.test(tab.url || '')) {
+  if (tab && (/(confirmation|success|merci|annonce-publiee|published)/i.test(tab.url || '') || /vinted\.[a-z.]+\/member\/\d+.*promo_shown/i.test(tab.url || ''))) {
     return { ok: true, action: 'published', listing_url: tab.url };
   }
   return null;
@@ -464,7 +731,24 @@ async function finalizeItem(product, result, tabId, settings) {
 
   const action = result.action;
   const ref = product.ref || current.activeRef || '';
-  const note = action + (result.reason ? ' — ' + result.reason : '') + (settings.dryRun ? ' [simulation]' : '');
+  if (result.suggested) {
+    const sg = result.suggested;
+    const seen = sg.min != null
+      ? 'prix proposé ' + sg.min + (sg.max !== sg.min ? '–' + sg.max : '') + ' €'
+      : 'prix proposé non lu (« ' + String(sg.text || '').slice(0, 60) + ' »)';
+    result = { ...result, reason: (result.reason ? result.reason + ' · ' : '') + seen };
+  }
+  // Prix de la boutique très éloigné de ce que propose la plateforme : signalé dans l'historique et dans la raison (repricer).
+  const gap = globalThis.AmQuality ? AmQuality.priceGap(product.price, result.suggested, settings.priceGapPct) : null;
+  if (gap && gap.big) {
+    const sg = result.suggested;
+    result = { ...result, reason: (result.reason ? result.reason + ' · ' : '') + '⚠ écart de prix : votre prix ' + product.price + ' € est ' + gap.pct + ' % ' +
+      (gap.state === 'high' ? 'au-dessus' : 'en dessous') + ' de la fourchette proposée (' + sg.min + (sg.max !== sg.min ? '–' + sg.max : '') + ' €)' };
+  }
+  const hashMark = action === 'published' && isLive(settings) && globalThis.AmQuality && (product.title !== undefined || product.name !== undefined)
+    ? '[h:' + AmQuality.fingerprint(product, current.channel) + '] ' : '';
+  const suggestionMark = globalThis.AmQuality ? AmQuality.suggestionTag(result.suggested) : '';
+  const note = hashMark + suggestionMark + action + (result.reason ? ' — ' + result.reason : '') + (isSimulation(settings) ? ' [simulation]' : '');
   const status = action === 'published' ? 'published' : action === 'error' ? 'error' : 'draft';
 
   try {
@@ -475,6 +759,7 @@ async function finalizeItem(product, result, tabId, settings) {
         channel: current.channel,
         status,
         listing_url: result.listing_url || '',
+        external_id: listingIdFromUrl(result.listing_url),
         note,
       },
     });
@@ -482,7 +767,7 @@ async function finalizeItem(product, result, tabId, settings) {
     // L'historique local suffit pour éviter un doublon immédiat.
   }
 
-  const key = ['published', 'prepared', 'blocked'].includes(action) ? action : 'error';
+  const key = ['published', 'drafted', 'prepared', 'blocked', 'rejected', 'no-match'].includes(action) ? action : 'error';
   const stats = { ...(current.stats || {}) };
   stats[key] = (stats[key] || 0) + 1;
 
@@ -491,16 +776,18 @@ async function finalizeItem(product, result, tabId, settings) {
     channel: current.channel,
     action,
     reason: result.reason || '',
-    dryRun: !!settings.dryRun,
+    dryRun: isSimulation(settings),
+    priceGap: gap && gap.big ? gap.pct : 0,
     at: Date.now(),
   });
-  if (action === 'published' && !settings.dryRun) await bumpDayCount();
+  if (gap && gap.big) stats.priceGap = (stats.priceGap || 0) + 1;
+  if (action === 'published' && isLive(settings)) { await bumpDayCount(); await pushStamp(); }
 
-  if (tabId && (action === 'published' || action === 'prepared') && !settings.keepTabs) {
+  if (tabId && (action === 'published' || action === 'prepared' || action === 'drafted' || action === 'no-match') && !settings.keepTabs) {
     try { await chrome.tabs.remove(tabId); } catch (_) {}
   }
 
-  const advanced = action === 'published' || action === 'prepared';
+  const advanced = action === 'published' || action === 'prepared' || action === 'drafted' || action === 'rejected' || action === 'no-match';
   const updated = {
     ...current,
     // En cas d'arrêt ou d'erreur, la même pièce est retentée à la reprise (l'onglet reste ouvert).
@@ -512,6 +799,12 @@ async function finalizeItem(product, result, tabId, settings) {
     activeRef: advanced ? '' : ref,
     lastMessage: ref + ' : ' + actionLabel(action) + (result.reason ? ' — ' + result.reason : ''),
   };
+
+  if (action === 'blocked' && isLive(settings) && /v[ée]rification|captcha/i.test(result.reason || '')) {
+    // La plateforme demande une vérification : on arrête tout et on ne relance pas en automatique avant plusieurs heures.
+    const hours = Math.max(1, Number(settings.cooldownHours) || 6);
+    await chrome.storage.local.set({ amAutoCooldown: Date.now() + hours * 3600 * 1000 });
+  }
 
   if (action === 'blocked') {
     // L'onglet passe au premier plan : le commerçant voit l'étape à compléter avant de reprendre.
@@ -543,9 +836,194 @@ async function finalizeItem(product, result, tabId, settings) {
     return;
   }
 
+  if (action === 'rejected') {
+    await chrome.storage.local.set({ amAlert: { level: 'warn', message: 'Fiche ' + ref + ' écartée avant remplissage :\n' + (result.reason || '').replace(/ ; /g, '\n'), at: Date.now() } });
+  }
+  if (action === 'no-match') {
+    await chrome.storage.local.set({ amAlert: { level: 'warn', message: 'Pièce ' + ref + ' passée, la file continue :\n' + (result.reason || ''), at: Date.now() } });
+  }
+
   await setQueue(updated);
   await ensureWatchdog();
-  await scheduleNext(settings);
+  // Une fiche écartée n'a rien publié : on enchaîne vite, sans attendre l'intervalle entre publications.
+  await scheduleNext(settings, action === 'rejected' || action === 'no-match' ? 8000 + Math.floor(Math.random() * 6000) : undefined);
+}
+
+/* ---------- Annonces en ligne : mise à jour et suppression ---------- */
+
+const MANAGE_KEY = 'amManage';
+
+/** Identifiant d'annonce d'après son adresse (Vinted /items/123-…, Leboncoin /ad/<cat>/123 ou /annonce/123/…). */
+function listingIdFromUrl(url) {
+  const s = String(url || '');
+  const m = /\/items\/(\d{5,})/.exec(s) || /\/ad\/[^/]+\/(\d{5,})/.exec(s) || /\/annonce\/(\d{5,})/.exec(s) || /\/(\d{7,})\.htm/.exec(s);
+  return m ? m[1] : '';
+}
+
+/**
+ * Annonces en ligne d'un canal, avec leur état face à la boutique :
+ * 'changed' (fiche modifiée depuis la publication), 'gone' (pièce vendue, masquée ou supprimée de la boutique), 'same', 'unknown'.
+ */
+async function listOnline(channel) {
+  if (!CHANNELS.includes(channel)) throw new Error('Canal inconnu.');
+  const res = await api('/publications?channel=' + encodeURIComponent(channel));
+  const listings = Array.isArray(res.listings) ? res.listings : [];
+  const items = [];
+  for (const listing of listings.slice(0, 100)) {
+    const ref = String(listing.ref);
+    let product = null;
+    let state = 'same';
+    try {
+      product = (await api('/produit/' + encodeURIComponent(ref))).product;
+    } catch (error) {
+      state = /introuvable|indisponible/i.test((error && error.message) || '') ? 'gone' : 'unknown';
+    }
+    if (product && globalThis.AmQuality) {
+      const before = hashFromNote(listing.note);
+      if (before && before !== AmQuality.fingerprint(product, channel)) state = 'changed';
+    }
+    items.push({
+      ref,
+      title: product ? String(product.title || product.name || '') : '',
+      state,
+      listing_url: listing.listing_url || '',
+      external_id: listing.external_id || listingIdFromUrl(listing.listing_url),
+    });
+  }
+  const rank = { changed: 0, gone: 1, unknown: 2, same: 3 };
+  return items.sort((a, b) => rank[a.state] - rank[b.state]);
+}
+
+async function getManage() {
+  const data = await chrome.storage.local.get(MANAGE_KEY);
+  return data[MANAGE_KEY] || null;
+}
+async function setManage(patch) {
+  const next = { ...((await getManage()) || {}), ...patch };
+  await chrome.storage.local.set({ [MANAGE_KEY]: next });
+  return next;
+}
+
+/** Vérifie que l'action finale (Valider / Supprimer) a bien abouti : la page change, ou la carte de l'annonce disparaît. */
+async function verifyManaged(tabId, channel, kind, product, target) {
+  for (let i = 0; i < 8; i++) {
+    await sleep(i === 0 ? 1500 : 2500);
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, { type: 'am-manage-verify', channel, kind, product, target });
+      if (res && res.done) return { ok: true, action: 'done' };
+      if (res && res.action === 'blocked') return res;
+    } catch (_) {
+      // Navigation en cours : on retente.
+    }
+  }
+  return { ok: true, action: 'blocked', reason: 'l’action a été envoyée, mais l’effet n’est pas confirmé. Vérifiez l’onglet.' };
+}
+
+async function runManageInTab(tabId, channel, kind, product, target, dryRun) {
+  for (let step = 0; step < 8; step++) {
+    const res = await sendWithRetry(tabId, { type: 'am-manage-step', channel, kind, product, target, dryRun });
+    if (!res || res.ok === false) throw new Error((res && res.error) || 'Étape impossible.');
+    if (res.action === 'next') {
+      await sleep(2000);
+      await waitForContent(tabId, channel, 45000);
+      continue;
+    }
+    if (res.action === 'submitted') return verifyManaged(tabId, channel, kind, product, target);
+    return res;   // prepared (simulation) | not-found | blocked
+  }
+  return { ok: true, action: 'blocked', reason: 'trop d’étapes sans aboutir.' };
+}
+
+/** Met à jour (kind = 'update') ou supprime (kind = 'delete') l'annonce d'une pièce sur la plateforme. */
+async function manageListing(channel, ref, kind) {
+  const settings = await getSettings();
+  let listing = null;
+  try {
+    const res = await api('/publications?channel=' + encodeURIComponent(channel));
+    listing = (res.listings || []).find((l) => String(l.ref) === String(ref)) || null;
+  } catch (_) {}
+  if (!listing) return { ref, action: 'not-found', reason: 'aucune annonce enregistrée pour cette pièce sur ce canal.' };
+
+  let product = null;
+  try { product = (await api('/produit/' + encodeURIComponent(ref))).product; } catch (_) {}
+  if (kind === 'update' && !product) return { ref, action: 'not-found', reason: 'la pièce n’est plus disponible dans la boutique : supprimez l’annonce plutôt.' };
+
+  const id = listing.external_id || listingIdFromUrl(listing.listing_url);
+  const title = product ? String(product.title || product.name || '') : '';
+  if (!id && !title) return { ref, action: 'not-found', reason: 'adresse de l’annonce inconnue : supprimez-la à la main sur le site.' };
+
+  let url;
+  if (channel === 'vinted') {
+    url = id ? 'https://www.vinted.fr/items/' + id + (kind === 'update' ? '/edit' : '') : 'https://www.vinted.fr/';
+  } else {
+    url = id && kind === 'update' ? 'https://www.leboncoin.fr/annonce/' + id + '/editer' : 'https://www.leboncoin.fr/compte/part/mes-annonces';
+  }
+  const target = { id, title };
+  const dryRun = !!settings.dryRun;
+  let tabId = null;
+  let result;
+  try {
+    const tab = await chrome.tabs.create({ url, active: true });
+    tabId = tab.id;
+    await waitForContent(tabId, channel, 60000);
+    result = await runManageInTab(tabId, channel, kind, product, target, dryRun);
+  } catch (error) {
+    result = { ok: true, action: 'error', reason: (error && error.message) || 'erreur inconnue' };
+  }
+
+  const done = result.action === 'done';
+  if (done) {
+    try {
+      if (kind === 'update') {
+        const hash = product && globalThis.AmQuality ? '[h:' + AmQuality.fingerprint(product, channel) + '] ' : '';
+        await api('/marquer', { method: 'POST', json: { product_ref: ref, channel, status: 'published', listing_url: listing.listing_url || '', external_id: id, note: hash + 'updated — annonce mise à jour' } });
+      } else {
+        await api('/marquer', { method: 'POST', json: { product_ref: ref, channel, status: 'removed', listing_url: listing.listing_url || '', external_id: id, note: 'removed — annonce supprimée de la plateforme' } });
+      }
+    } catch (_) {}
+  }
+  await pushHistory({
+    ref, channel,
+    action: done ? (kind === 'update' ? 'updated' : 'removed') : result.action === 'prepared' ? 'prepared' : result.action === 'not-found' ? 'skipped' : result.action,
+    reason: result.reason || '', dryRun, at: Date.now(),
+  });
+  if (tabId && (done || result.action === 'prepared') && !settings.keepTabs) {
+    try { await chrome.tabs.remove(tabId); } catch (_) {}
+  } else if (tabId && result.action !== 'done') {
+    try { await chrome.tabs.update(tabId, { active: true }); } catch (_) {}
+  }
+  return { ref, action: result.action, reason: result.reason || '' };
+}
+
+/** Enchaîne les actions sur plusieurs pièces, une à la fois ; s'arrête sur un blocage. */
+async function manageBatch(channel, kind, refs) {
+  const settings = await getSettings();
+  if (!settings.armed) throw new Error('Cochez « J’assume le risque » avant de modifier ou supprimer des annonces.');
+  const queue = await getQueue();
+  if (queue && (queue.status === 'running' || queue.status === 'paused')) {
+    throw new Error('Une file de publication est en cours : reprenez-la ou arrêtez-la avant.');
+  }
+  const current = await getManage();
+  if (current && current.status === 'running' && Date.now() - (current.updatedAt || 0) < 10 * 60 * 1000) {
+    throw new Error('Une action est déjà en cours sur les annonces.');
+  }
+  if (!CHANNELS.includes(channel) || !['update', 'delete'].includes(kind) || !refs.length) throw new Error('Demande invalide.');
+  await chrome.storage.local.set({ [MANAGE_KEY]: { status: 'running', channel, kind, total: refs.length, index: 0, results: [], cancel: false, updatedAt: Date.now() } });
+  (async () => {
+    const results = [];
+    for (let i = 0; i < refs.length; i++) {
+      const state = await getManage();
+      if (state && state.cancel) break;
+      await setManage({ index: i, current: refs[i], updatedAt: Date.now() });
+      let res;
+      try { res = await manageListing(channel, refs[i], kind); } catch (error) { res = { ref: refs[i], action: 'error', reason: (error && error.message) || 'erreur' }; }
+      results.push(res);
+      await setManage({ results, updatedAt: Date.now() });
+      if (res.action === 'blocked' || res.action === 'error') break;
+      if (i < refs.length - 1) await sleep(8000 + Math.floor(Math.random() * 6000));
+    }
+    await setManage({ status: 'done', current: '', results, updatedAt: Date.now() });
+  })().catch(async (error) => { await setManage({ status: 'done', error: (error && error.message) || 'erreur', updatedAt: Date.now() }); });
 }
 
 /* ---------- Messages ---------- */
@@ -563,7 +1041,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         amSelectedProduct: { product, channel, selectedAt: Date.now() },
         amFillStatus: 'Préremplissage en cours…',
       });
-      const result = await chrome.tabs.sendMessage(tabId, { type: 'am-fill', channel, product });
+      const result = await sendToDeposit(tabId, channel, { type: 'am-fill', channel, product });
       if (!result || !result.ok) {
         throw new Error((result && result.error) || 'Le formulaire n’a pas répondu. Rechargez la page et réessayez.');
       }
@@ -594,20 +1072,34 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'am-selftest') {
+    (async () => {
+      const { tabId, channel } = message;
+      if (!Number.isInteger(tabId) || !CHANNELS.includes(channel)) throw new Error('Onglet invalide.');
+      const res = await sendToDeposit(tabId, channel, { type: 'am-selftest', channel });
+      sendResponse(res && res.ok ? res : { ok: false, error: (res && res.error) || 'Le formulaire n’a pas répondu. Rechargez la page.' });
+    })().catch((error) => sendResponse({ ok: false, error: error.message || 'Contrôle impossible.' }));
+    return true;
+  }
+
+  if (message.type === 'am-report-unknown') {
+    // Valeur du site introuvable (ex. Univers) : elle rejoint la liste « À renseigner » de la page Correspondances du portail.
+    (async () => {
+      const items = Array.isArray(message.items) ? message.items.slice(0, 20) : [];
+      if (!CHANNELS.includes(message.channel) || !items.length) { sendResponse({ ok: false }); return; }
+      await api('/champs-inconnus', { method: 'POST', json: { channel: message.channel, items } });
+      sendResponse({ ok: true });
+    })().catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
   if (message.type === 'am-fetch-photo') {
     // Le service worker lit la photo sans contrainte CORS de la page, puis la renvoie en base64.
     (async () => {
       try {
         const url = String(message.url || '');
         if (!/^https?:\/\//i.test(url)) throw new Error('URL de photo invalide.');
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
-        let res;
-        try {
-          res = await fetch(url, { signal: controller.signal });
-        } finally {
-          clearTimeout(timer);
-        }
+        const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const type = ((res.headers.get('content-type') || '').split(';')[0] || 'image/jpeg').trim();
         if (!/^image\//i.test(type)) throw new Error('Le fichier n’est pas une image.');
@@ -655,6 +1147,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       sendResponse({ ok: true, settings });
     })().catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === 'am-online-list') {
+    listOnline(message.channel)
+      .then((items) => sendResponse({ ok: true, items }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || 'Liste impossible.' }));
+    return true;
+  }
+
+  if (message.type === 'am-manage') {
+    const refs = Array.isArray(message.refs) ? message.refs.map(String).slice(0, 50) : [];
+    manageBatch(message.channel, message.kind, refs)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || 'Action impossible.' }));
+    return true;
+  }
+
+  if (message.type === 'am-manage-cancel') {
+    setManage({ cancel: true }).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
     return true;
   }
 
