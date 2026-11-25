@@ -1,6 +1,6 @@
 # Suivi des tâches ouvertes — Brocs
 
-> Dernière mise à jour : **2026-11-10**
+> Dernière mise à jour : **2026-11-22** (statuts des tâches #5 à #20 inchangés depuis le 10/11 ; seul le journal est complété)
 > Source : backlog constitué le 31/10/2026 · migré du dossier `brocs` archivé (2026-11-09) · **16 tâches** (#5 à #20)
 
 ## Vue d'ensemble
@@ -233,3 +233,8 @@ Les sept sont « À faire », Technique / P1 dans Notion. Quatre portent sur le 
 | 2026-11-10 | Backlog relu contre le code et la production : #7, #8 et #9 passent « fait » (donnerie livrée par l'extension Invendus & dons), #14 et #15 « en cours » (export PDF en ligne, affiche et médias à faire), #18 et #19 « en cours ». Les 11 tâches absentes de Notion y ont été créées ; #18 et #19 mis à jour. |
 | 2026-11-10 | Sept retours testeurs de la boutique La friperie de naty (03 au 09/11) relus depuis la préproduction ; trois étaient déjà publiés dans Notion, les quatre plus anciens y ont été ajoutés. |
 | 2026-11-10 | Publication réseaux sociaux détachée en pack indépendant `packs/publication-rs/` : deux pages (publication, API & Réseaux), API `eb80` réduite (lecture média et envoi pour le community manager, réglages et jetons pour les administrateurs, `/rs/schedule/run` réservé au cron) et cron propre. Le pack partage la base `data/com/<boutique>.db`, les `uploads/<boutique>/` et le verrou `data/com/<boutique>.cron.lock` avec le pack Communication, donc jetons, programmations et images existants resservent et un post dû n'est publié qu'une fois. Testé localement sur `petit-chalet` (pages 200, onglets réduits, appels API, cron à 0 publication, lint propre). Non commité ni déployé. |
+| 2026-11-11 | Étiquettes Fichero D11s : Data Matrix, aperçu fidèle, contraste renforcé et impression sur mobile fusionnés dans `main` (PR n° 79 et n° 80). Reste à valider la lecture du Data Matrix sur une vraie imprimante. |
+| 2026-11-13 | Page de vente des marketplaces de marché aux puces (aux-puces.com) fusionnée (PR n° 82) et en production (`prod-2026-11-13-1555`). |
+| 2026-11-21 | Galeries : hall/bâtiment du commerce affiché dans la navigation (PR n° 83), grille des places masquée quand la réservation est fermée (PR n° 84), visite guidée des marchés aux puces par hall (PR n° 86), sélection des photos de départ conservée au rechargement (PR n° 87). Mises en production le jour même (tags `prod-2026-11-21-*`). |
+| 2026-11-22 | Adresses `<boutique>.aux-puces.com` pour les boutiques membres des Puces de Villeurbanne, nouvelles adresses de la galerie `lespuces` et de la boutique `petit-chalet` (PR n° 88 et n° 89). Préprod `preprod-2026-11-22-1133` sur `main` (`9f8006c`) ; prod `prod-2026-11-22-0922` (`1c06bad`) sans ces deux dernières PR. |
+| 2026-11-22 | Point d'avancement : aucun commit lié à #12, #18 ni #20 depuis le 10/11. L'échéance de #18 (21/11) est dépassée : l'état réel de l'activation Stripe Connect est à confirmer par l'utilisateur. PR ouvertes avec CI verte : n° 81 (SMS des notifications via le compte SMS du portail) et n° 85 (lien de nouveau mot de passe envoyé à l'admin d'une boutique). |

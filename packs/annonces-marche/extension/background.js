@@ -1099,14 +1099,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       try {
         const url = String(message.url || '');
         if (!/^https?:\/\//i.test(url)) throw new Error('URL de photo invalide.');
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
-        let res;
-        try {
-          res = await fetch(url, { signal: controller.signal });
-        } finally {
-          clearTimeout(timer);
-        }
+        const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const type = ((res.headers.get('content-type') || '').split(';')[0] || 'image/jpeg').trim();
         if (!/^image\//i.test(type)) throw new Error('Le fichier n’est pas une image.');

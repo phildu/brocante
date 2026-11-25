@@ -27,6 +27,7 @@ $uploadLimits = [
 <title>Import par lot — <?= h($content['site_name']) ?></title>
 <?= tenant_head_html() ?>
 <link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/heic-convert.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/heic-convert.js') ?>"></script>
 <style>
   .bi-group-card { background: var(--surface); border: 1px solid var(--line); padding: 18px 20px; margin-top: 20px; }
   .bi-group-card.is-done { opacity: 0.7; }
@@ -226,7 +227,10 @@ $uploadLimits = [
     var hasHeic = list.some(function (f) { return /\.(heic|heif)$/i.test(f.name); });
     if (!hasHeic || !window.heicConvertFiles) { addNow(list); return; }
     var info = $('bi-picked'); info.hidden = false; info.textContent = 'Conversion des photos HEIC en JPEG…';
-    window.heicConvertFiles(list).then(addNow);
+    window.heicConvertFiles(list).then(addNow, function () {
+      ignored.push('conversion HEIC impossible — exportez les photos en JPEG');
+      addNow(list.filter(function (f) { return !/\.(heic|heif)$/i.test(f.name); }));
+    });
   }
 
   function addNow(files) {

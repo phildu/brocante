@@ -229,7 +229,7 @@
   }
 
   function renderList(items) {
-    list.innerHTML = '';
+    list.replaceChildren();
     detail.hidden = true;
     if (!items.length) {
       list.innerHTML = '<li class="empty">Aucun article.</li>';
@@ -272,7 +272,7 @@
       renderList(data.items || []);
     } catch (e) {
       lockSearch(e.message);
-      list.innerHTML = '';
+      list.replaceChildren();
     }
   }
 
@@ -282,7 +282,7 @@
     try {
       const data = await api('/produit/' + encodeURIComponent(ref));
       const p = data.product;
-      detail.innerHTML = '';
+      detail.replaceChildren();
       const title = document.createElement('h2');
       title.textContent = p.title;
       const desc = document.createElement('p');
@@ -614,7 +614,8 @@
 
   btnSearch.addEventListener('click', () => search(q.value));
   q.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') search(q.value);
+    // Entrée qui valide une composition (méthode de saisie) : ne pas lancer la recherche.
+    if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) search(q.value);
   });
 
   /* ---------- Publication automatique locale ---------- */
