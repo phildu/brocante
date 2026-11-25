@@ -10,7 +10,8 @@
 //
 // Fournisseurs fournis au départ : Gemini (texte et image), Claude (texte), Veo (vidéo), SiliconFlow (vidéo) et Modal (vidéo).
 // On peut en ajouter d'autres : un service « compatible OpenAI » pour le texte et l'image, « compatible SiliconFlow » pour la
-// vidéo, ou Claude. La clé d'un fournisseur ajouté est un fichier .secrets/_partage/ai-<catégorie>-<identifiant>.key (0600).
+// vidéo, ou Claude. Pour l'image, deux connecteurs ont une offre gratuite : Cloudflare Workers AI (retouche de photo et texte → image)
+// et Hugging Face (texte → image seulement). La clé d'un fournisseur ajouté est un fichier .secrets/_partage/ai-<catégorie>-<identifiant>.key (0600).
 
 require_once __DIR__ . '/shared-secrets.php';
 
@@ -19,7 +20,7 @@ const AI_PROVIDER_CATEGORIES = ['text' => 'Texte', 'image' => 'Image', 'video' =
 /** Connecteurs disponibles par catégorie : identifiant => libellé. */
 const AI_PROVIDER_DRIVERS = [
     'text' => ['gemini' => 'Google Gemini', 'openai' => 'Compatible OpenAI', 'anthropic' => 'Anthropic Claude'],
-    'image' => ['gemini' => 'Google Gemini', 'openai' => 'Compatible OpenAI'],
+    'image' => ['gemini' => 'Google Gemini', 'openai' => 'Compatible OpenAI', 'cloudflare' => 'Cloudflare Workers AI (gratuit)', 'huggingface' => 'Hugging Face (gratuit)'],
     'video' => ['veo' => 'Google Veo', 'siliconflow' => 'Compatible SiliconFlow', 'modal' => 'Modal'],
 ];
 
@@ -116,8 +117,9 @@ function ai_provider_row(array $row, string $category, ?array $base = null): ?ar
     $builtin = $base !== null;
     $secret = $builtin ? (string) $base['secret'] : ai_provider_custom_secret($category, $id);
     $enabled = array_key_exists('enabled', $row) ? (bool) $row['enabled'] : true;
+    $fallback = array_key_exists('fallback', $row) ? (bool) $row['fallback'] : (bool) ($base['fallback'] ?? false);
     return ['id' => $id, 'label' => $label, 'driver' => $driver, 'base_url' => $baseUrl, 'model' => $model,
-        'secret' => $secret, 'builtin' => $builtin, 'enabled' => $enabled];
+        'secret' => $secret, 'builtin' => $builtin, 'enabled' => $enabled, 'fallback' => $fallback];
 }
 
 /** Fournisseurs d'une catégorie, dans l'ordre enregistré (à défaut, ceux fournis au départ). */
@@ -155,6 +157,25 @@ function ai_provider_active(string $category): ?array
     foreach ($rows as $row) if ($row['id'] === $active && $row['enabled']) return $row;
     foreach ($rows as $row) if ($row['enabled']) return $row;
     return null;
+}
+
+/**
+ * Fournisseurs à essayer dans l'ordre pour une catégorie : l'actif d'abord, puis ceux cochés « secours » (activés, avec une clé),
+ * dans l'ordre de la liste du portail. $mode : « retouch » (photo + consigne : Gemini, compatible OpenAI, Cloudflare) ou
+ * « text_image » (texte seul : Gemini, Cloudflare, Hugging Face). Un connecteur qui ne sait pas faire le travail est écarté.
+ */
+function ai_provider_chain(string $category, string $mode = 'retouch'): array
+{
+    $can = $mode === 'text_image' ? ['gemini', 'cloudflare', 'huggingface'] : ['gemini', 'openai', 'cloudflare'];
+    $active = ai_provider_active($category);
+    $chain = [];
+    if ($active && in_array($active['driver'], $can, true)) $chain[] = $active;
+    foreach (ai_provider_rows($category) as $row) {
+        if (!$row['enabled'] || empty($row['fallback']) || ($active && $row['id'] === $active['id']) || !in_array($row['driver'], $can, true)) continue;
+        $ready = $row['driver'] === 'gemini' ? (defined('GEMINI_API_KEY') ? GEMINI_API_KEY !== '' : ai_provider_has_key($row)) : ai_provider_has_key($row);
+        if ($ready) $chain[] = $row;
+    }
+    return $chain;
 }
 
 /** Fournisseur choisi par défaut dans le portail (même s'il est désactivé), pour l'affichage. */
@@ -276,6 +297,22 @@ function ai_provider_test(array $provider): array
             : ['ok' => false, 'message' => "Adresse Modal absente : renseignez l'adresse et le jeton dans « API & réseaux »."];
     }
     $base = rtrim((string) ($provider['base_url'] ?? ''), '/');
+    if ($driver === 'huggingface') {
+        [$code, $raw] = ai_provider_http('GET', 'https://huggingface.co/api/whoami-v2', ['Authorization: Bearer ' . $key]);
+        return $code === 200
+            ? ['ok' => true, 'message' => 'Connexion réussie : le jeton Hugging Face est valide.']
+            : ['ok' => false, 'message' => in_array($code, [401, 403], true) ? 'Jeton refusé par Hugging Face (HTTP ' . $code . ').' : ($code === 0 ? 'Aucune réponse du service : réseau indisponible.' : 'Réponse inattendue (HTTP ' . $code . ').')];
+    }
+    if ($driver === 'cloudflare') {
+        $account = ai_provider_cloudflare_account($provider);
+        if ($account === '') return ['ok' => false, 'message' => "Identifiant de compte absent de l'adresse de base : https://api.cloudflare.com/client/v4/accounts/<identifiant>/ai/run"];
+        [$code, $raw] = ai_provider_http('GET', 'https://api.cloudflare.com/client/v4/accounts/' . $account . '/tokens/verify', ['Authorization: Bearer ' . $key]);
+        $data = json_decode($raw, true) ?: [];
+        if ($code === 200 && !empty($data['success'])) return ['ok' => true, 'message' => 'Connexion réussie : le jeton Cloudflare est valide.'];
+        if ($code === 0) return ['ok' => false, 'message' => 'Aucune réponse du service : réseau indisponible.'];
+        $detail = trim((string) ($data['errors'][0]['message'] ?? ''));
+        return ['ok' => false, 'message' => 'Jeton ou identifiant de compte refusé (HTTP ' . $code . ')' . ($detail !== '' ? ' : ' . mb_substr($detail, 0, 160) : '.')];
+    }
     if ($base === '') return ['ok' => false, 'message' => "Adresse de base absente : indiquez-la pour pouvoir tester."];
     $url = $base . '/models';
     if ($driver === 'gemini' || $driver === 'veo') {
@@ -380,7 +417,12 @@ function ai_provider_text(array $provider, string $prompt, array $imagePaths = [
  */
 function ai_provider_image(array $provider, string $srcAbsPath, string $prompt, ?string $aspectRatio = null, array $extraAbsPaths = []): ?string
 {
-    if ((string) ($provider['driver'] ?? '') !== 'openai') return null;
+    $driver = (string) ($provider['driver'] ?? '');
+    if ($driver === 'cloudflare') return ai_provider_cloudflare_edit($provider, $srcAbsPath, $prompt, $aspectRatio);
+    if ($driver !== 'openai') {
+        error_log('ai_provider_image: le connecteur « ' . $driver . ' » ne retouche pas de photo (texte → image seulement).');
+        return null;
+    }
     $key = ai_provider_key_value($provider);
     if ($key === '') return null;
     $src = @file_get_contents($srcAbsPath);
@@ -433,6 +475,144 @@ function ai_provider_image(array $provider, string $srcAbsPath, string $prompt, 
         @unlink($tmp);
     }
     return null;
+}
+
+// ── Image gratuite : Cloudflare Workers AI et Hugging Face ────────────────────────────────────────────────────────────────
+
+/** Modèle Cloudflare de retouche de photo (image + consigne) et de texte → image, utilisés si le réglage « Modèle » est vide. */
+const AI_CF_EDIT_MODEL = '@cf/runwayml/stable-diffusion-v1-5-img2img';
+const AI_CF_TEXT_MODEL = '@cf/black-forest-labs/flux-1-schnell';
+const AI_HF_TEXT_MODEL = 'black-forest-labs/FLUX.1-schnell';
+
+/** Identifiant de compte Cloudflare lu dans l'adresse de base (…/accounts/<identifiant>/ai/run), ou chaîne vide. */
+function ai_provider_cloudflare_account(array $provider): string
+{
+    return preg_match('#/accounts/([0-9a-f]{32})(?:/|$)#i', (string) ($provider['base_url'] ?? ''), $m) ? strtolower($m[1]) : '';
+}
+
+/** Dimensions (multiples de 8) d'une image au format demandé, côté long de $long pixels. */
+function ai_provider_ratio_size(?string $ratio, int $long = 1024): array
+{
+    $w = 1; $h = 1;
+    if ($ratio !== null && preg_match('/^(\d{1,2}):(\d{1,2})$/', $ratio, $m) && (int) $m[1] > 0 && (int) $m[2] > 0) { $w = (int) $m[1]; $h = (int) $m[2]; }
+    $scale = $long / max($w, $h);
+    return [max(256, (int) (round($w * $scale / 8) * 8)), max(256, (int) (round($h * $scale / 8) * 8))];
+}
+
+/** Octets d'une image si $raw en est une (PNG, JPEG, WebP), sinon null. */
+function ai_provider_is_image(string $raw): bool
+{
+    return str_starts_with($raw, "\x89PNG") || str_starts_with($raw, "\xFF\xD8") || (str_starts_with($raw, 'RIFF') && substr($raw, 8, 4) === 'WEBP');
+}
+
+/** Recadre au centre une image sur le format demandé (« 16:9 »…) : les modèles gratuits ignorent souvent le format. */
+function ai_provider_crop_ratio(string $bytes, ?string $ratio): string
+{
+    if ($ratio === null || !function_exists('imagecreatefromstring') || !preg_match('/^(\d{1,2}):(\d{1,2})$/', $ratio, $m) || (int) $m[2] === 0) return $bytes;
+    $im = @imagecreatefromstring($bytes);
+    if (!$im) return $bytes;
+    $w = imagesx($im); $h = imagesy($im);
+    $target = (int) $m[1] / (int) $m[2];
+    if (abs($w / $h - $target) < 0.02) { imagedestroy($im); return $bytes; }
+    $cw = $w / $h > $target ? (int) round($h * $target) : $w;
+    $ch = $w / $h > $target ? $h : (int) round($w / $target);
+    $crop = imagecrop($im, ['x' => (int) (($w - $cw) / 2), 'y' => (int) (($h - $ch) / 2), 'width' => $cw, 'height' => $ch]);
+    imagedestroy($im);
+    if (!$crop) return $bytes;
+    ob_start();
+    imagejpeg($crop, null, 92);
+    $out = (string) ob_get_clean();
+    imagedestroy($crop);
+    return $out !== '' ? $out : $bytes;
+}
+
+/** Appel Cloudflare Workers AI : octets de l'image (PNG binaire ou JSON {result:{image:base64}}), ou null. */
+function ai_provider_cloudflare_run(array $provider, string $model, array $input): ?string
+{
+    $key = ai_provider_key_value($provider);
+    if ($key === '' || ai_provider_cloudflare_account($provider) === '') {
+        error_log('ai_provider_cloudflare: jeton ou identifiant de compte absent.');
+        return null;
+    }
+    $url = rtrim((string) $provider['base_url'], '/') . '/' . ltrim($model, '/');
+    for ($attempt = 1; $attempt <= 2; $attempt++) {
+        [$status, $raw] = ai_provider_http('POST', $url, ['Authorization: Bearer ' . $key, 'Content-Type: application/json'], json_encode($input), 100);
+        if ($status >= 200 && $status < 300) {
+            if (ai_provider_is_image($raw)) return $raw;
+            $data = json_decode($raw, true) ?: [];
+            $b64 = (string) ($data['result']['image'] ?? '');
+            if ($b64 !== '' && ($bytes = base64_decode($b64, true)) !== false && ai_provider_is_image($bytes)) return $bytes;
+            error_log('ai_provider_cloudflare: réponse sans image (HTTP ' . $status . ') ' . substr($raw, 0, 200));
+            return null;
+        }
+        error_log('ai_provider_cloudflare attempt ' . $attempt . ': HTTP ' . $status . ' ' . substr($raw, 0, 300));
+        if ($status !== 429 && $status < 500) return null;
+        if ($attempt < 2) sleep(3);
+    }
+    return null;
+}
+
+/** Retouche d'une photo par Cloudflare (Stable Diffusion img2img, gratuit dans le quota quotidien du compte). */
+function ai_provider_cloudflare_edit(array $provider, string $srcAbsPath, string $prompt, ?string $aspectRatio = null): ?string
+{
+    $model = trim((string) ($provider['model'] ?? ''));
+    if ($model === '' || !str_contains($model, 'img2img')) $model = AI_CF_EDIT_MODEL;   // un modèle texte → image ne peut pas partir de la photo
+    $src = @file_get_contents($srcAbsPath);
+    if ($src === false) return null;
+    [$w, $h] = ai_provider_ratio_size($aspectRatio, 768);
+    // Le modèle travaille en petit format : photo réduite à ce cadre, sinon la requête est refusée.
+    if (function_exists('imagecreatefromstring') && ($im = @imagecreatefromstring($src))) {
+        $dst = imagecreatetruecolor($w, $h);
+        $sw = imagesx($im); $sh = imagesy($im);
+        $scale = max($w / $sw, $h / $sh);
+        $cw = (int) round($w / $scale); $ch = (int) round($h / $scale);
+        imagecopyresampled($dst, $im, 0, 0, (int) (($sw - $cw) / 2), (int) (($sh - $ch) / 2), $w, $h, $cw, $ch);
+        ob_start();
+        imagepng($dst);
+        $src = (string) ob_get_clean();
+        imagedestroy($im); imagedestroy($dst);
+    }
+    $bytes = ai_provider_cloudflare_run($provider, $model, [
+        'prompt' => mb_substr($prompt, 0, 400), 'image_b64' => base64_encode($src),
+        'width' => $w, 'height' => $h, 'strength' => 0.5, 'num_steps' => 20, 'guidance' => 7.5,
+    ]);
+    if ($bytes !== null && function_exists('ai_usage_record')) ai_usage_record('image', 0.0, $model, 0, 0, (string) ($provider['label'] ?? ''));
+    return $bytes;
+}
+
+/**
+ * Image créée à partir d'un texte seul (bandeaux, visuels sans photo) par Cloudflare (FLUX.1 schnell) ou Hugging Face.
+ * Les octets sont recadrés sur le format demandé. Null si le connecteur ne sait pas ou en cas d'échec.
+ */
+function ai_provider_text_image(array $provider, string $prompt, ?string $aspectRatio = null): ?string
+{
+    $driver = (string) ($provider['driver'] ?? '');
+    $model = trim((string) ($provider['model'] ?? ''));
+    $bytes = null;
+    if ($driver === 'cloudflare') {
+        if ($model === '' || str_contains($model, 'img2img')) $model = AI_CF_TEXT_MODEL;
+        $input = ['prompt' => mb_substr($prompt, 0, 2000)];
+        if (str_contains($model, 'flux')) $input['steps'] = 4;
+        else { [$w, $h] = ai_provider_ratio_size($aspectRatio, 1024); $input += ['width' => $w, 'height' => $h]; }
+        $bytes = ai_provider_cloudflare_run($provider, $model, $input);
+    } elseif ($driver === 'huggingface') {
+        $key = ai_provider_key_value($provider);
+        if ($key === '') return null;
+        if ($model === '') $model = AI_HF_TEXT_MODEL;
+        $base = rtrim((string) ($provider['base_url'] ?? ''), '/') ?: 'https://router.huggingface.co/hf-inference/models';
+        [$w, $h] = ai_provider_ratio_size($aspectRatio, 1024);
+        for ($attempt = 1; $attempt <= 2 && $bytes === null; $attempt++) {
+            [$status, $raw] = ai_provider_http('POST', $base . '/' . $model, ['Authorization: Bearer ' . $key, 'Content-Type: application/json', 'Accept: image/png'],
+                json_encode(['inputs' => mb_substr($prompt, 0, 2000), 'parameters' => ['width' => $w, 'height' => $h]]), 100);
+            if ($status >= 200 && $status < 300 && ai_provider_is_image($raw)) { $bytes = $raw; break; }
+            error_log('ai_provider_text_image huggingface attempt ' . $attempt . ': HTTP ' . $status . ' ' . substr($raw, 0, 300));
+            if ($status !== 429 && $status !== 503) break;
+            if ($attempt < 2) sleep(4);
+        }
+    }
+    if ($bytes === null) return null;
+    if (function_exists('ai_usage_record')) ai_usage_record('image', 0.0, $model, 0, 0, (string) ($provider['label'] ?? ''));
+    return ai_provider_crop_ratio($bytes, $aspectRatio);
 }
 
 // ── Vidéo : fournisseurs compatibles SiliconFlow ──────────────────────────────────────────────────────────────────────────
