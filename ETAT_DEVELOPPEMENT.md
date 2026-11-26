@@ -1,7 +1,7 @@
 # Brocante / Brocs / bricbrok — état du développement
 
 > Document de reprise pour une autre IA ou un autre développeur.
-> Rédigé le 2026-11-16, **mis à jour le 2026-11-22** à partir du dépôt local `brocante` (branche `claude/changes`, base `b22643c`, en retard de 50 commits sur `main` = `9f8006c`).
+> Rédigé le 2026-11-16, **mis à jour le 2026-11-26** (`main` = `161a155`).
 > À lire avec : `CLAUDE.md` (règles de session), `DEPLOIEMENT.md` (circuit de mise en ligne), `README.md` (très complet, ~1 600 lignes), `docs/SUIVI_TACHES.md` (backlog).
 
 ---
@@ -23,7 +23,7 @@ Le Petit Chalet (`tenants/petit-chalet`) est le commerce historique ; les commer
 | Élément | Détail |
 |---|---|
 | Langage | PHP 8.5 en local (CI en 8.4), SQLite (`brocante.db`, `data/<slug>.db`, `data/saas/*.db`) |
-| Dépendances | Composer : `ovh/ovh`, `phpoffice/phpspreadsheet`, `phpunit` 13 (dev). Le travail Fichero en cours ajoute `tecnickcom/tc-lib-barcode` et `tc-lib-color` |
+| Dépendances | Composer : `ovh/ovh`, `phpoffice/phpspreadsheet`, `phpunit` 13 (dev). Fichero a ajouté `tecnickcom/tc-lib-barcode` et `tc-lib-color` |
 | Front | PHP rendu côté serveur, JS natif, pas de bundler ; `assets/vendor/` pour les bibliothèques (ex. `qrcode-generator.js`) |
 | Local | **Laravel Herd** : `http://brocante.test`, `http://brocenstock.test/portail/`, sous-domaines `<commerce>.brocenstock.test`. Ne jamais lancer de serveur soi-même (`LocalValetDriver.php` reproduit les règles du `.htaccess`) |
 | Hébergement | OVH mutualisé, déploiement FTP/SSH par script |
@@ -42,7 +42,7 @@ tenants/<slug>/         tenant.php + seed-data.json par commerce ; tenants/_mode
 galerie/, accueil/, annuaire/, aide/, inscription/, marche-*/…   pages publiques de la plateforme
 api/, oauth/, notifications/, connecteurs…       API et connecteurs externes
 scripts/                release.sh, preflight.sh, smoke*.sh, exchange-baseline.php, tests de recette PHP
-tests/                  PHPUnit (≈ 600 tests) + tests JS (node --test)
+tests/                  PHPUnit (≈ 700 tests) + tests JS (node --test)
 data/, var/, uploads/, backups/   données runtime (jamais servies en HTTP ni versionnées)
 docs/                   SUIVI_TACHES.md, messagerie-portail.md, branding-et-domaines.md, applis-mobiles-decoupage.md
 *.md racine             un document par module : BUVETTE, COMPTAGE, INVENDUS_MODULE, ANNULATION, NOTIFICATIONS, CONNECTEURS, IMPRESSION_MODULE, AUTORISATIONS…
@@ -61,7 +61,7 @@ Résolution du commerce affiché (`includes/tenant.php`) : variable `TENANT` →
 Circuit (détail dans `DEPLOIEMENT.md`) : branche → tests verts → PR vers `main` → CI verte → `scripts/release.sh preprod --portail` → validation manuelle de l'utilisateur → `scripts/release.sh prod --portail --confirm-prod` (la confirmation est le clic d'approbation de l'application ; ne jamais le contourner). Tags `preprod-AAAA-MM-JJ-HHMM` et `prod-…`.
 Mots-clés de l'utilisateur : **« go preprod » / « go prod »** = déployer ; prod toujours confirmée par la carte d'approbation.
 
-**Dernier état connu (2026-11-22)** : préprod `preprod-2026-11-22-1133` = `main` = `9f8006c` (PR #89). Prod `prod-2026-11-22-0922` = `1c06bad` : elle n'a pas encore les dernières adresses `<boutique>.aux-puces.com` (PR #88 et #89) ; mise en prod à demander (« go prod »).
+**État vérifié le 2026-11-26** : préprod `preprod-2026-11-25-1430` = `main` = `161a155` (PR #108). Prod `prod-2026-11-25-1242` = `cb0f2ac` : il lui manque uniquement la PR #108 (images IA gratuites Cloudflare / Hugging Face et secours automatique), à valider en préprod puis déployer sur « go prod ». `/health.php` répond OK sur les deux sites.
 
 ## 5. Règles à ne pas enfreindre
 
@@ -81,47 +81,41 @@ Mots-clés de l'utilisateur : **« go preprod » / « go prod »** = déployer ;
 
 Chronologie récente (détail dans `git log` et le journal de `docs/SUIVI_TACHES.md`) :
 
-- **Galeries** : types (dont Marché de Noël et Marché des producteurs), plan d'implantation avec export PDF 300 dpi / PSD, réservations (arrhes), file d'attente, horaires + alerte de fermeture, messagerie interne, fidélité/espace visiteur, sponsors & partenaires, sous-zones (branche `sous-zones-galerie`).
+- **Galeries** : types (dont Marché de Noël et Marché des producteurs), plan d'implantation avec export PDF 300 dpi / PSD, réservations (arrhes), file d'attente, horaires + alerte de fermeture, messagerie interne, fidélité/espace visiteur, sponsors & partenaires. (Les sous-zones de la branche `sous-zones-galerie` ne sont pas livrées, voir § 8.)
 - **Extensions de galerie** : Buvette (carte, recettes, courses, check-list, bénévoles), Invendus & dons (tournées, bordereaux, page publique `/dons.php`), Comptage de foule, Annulation & remboursements.
 - **Paiement** : Stripe + **Stripe Connect** (code en prod, commissions), SumUp (page hébergée et terminal Solo), Wero, Revolut, virement SEPA.
 - **Caisse** : vente express, avis de l'expert, rôle vendeur, journal des ventes enrichi ; journal des dépenses (achats, factures, notes de frais).
-- **Plateforme** : retours testeurs (widget, interrupteurs par espace, exceptions par rôle) avec import automatique vers les tâches du portail et vers Notion ; module Tâches `/portail/todo/` ; recherche globale ⌘K (portail + admin) ; laboratoire d'appels à l'action (A/B) ; module Équipe ; Rendez-vous (pack `rendez-vous`) ; publication réseaux sociaux (pack indépendant `publication-rs`) ; centre d'aide `/aide/` avec éditeur de tutoriels dans le portail ; impact CO₂/eau/numérique ; logo en trois déclinaisons + favicon pour le portail ; serveur MCP + OAuth ; prospection avec audit des sites et réseaux sociaux ; annonces avec publication automatique locale depuis le navigateur du vendeur (dernier commit de la branche) ; page de vente aux-puces.com.
+- **Plateforme** : retours testeurs (widget, interrupteurs par espace, exceptions par rôle) avec import automatique vers les tâches du portail et vers Notion ; module Tâches `/portail/todo/` ; recherche globale ⌘K (portail + admin) ; laboratoire d'appels à l'action (A/B) ; module Équipe ; Rendez-vous (pack `rendez-vous`) ; publication réseaux sociaux (pack indépendant `publication-rs`) ; centre d'aide `/aide/` avec éditeur de tutoriels dans le portail ; impact CO₂/eau/numérique ; logo en trois déclinaisons + favicon pour le portail ; serveur MCP + OAuth ; prospection avec audit des sites et réseaux sociaux ; annonces avec publication automatique locale depuis le navigateur du vendeur ; page de vente aux-puces.com.
 - **Étiquettes Fichero D11s** (impression Bluetooth depuis le navigateur) : **entièrement fusionné dans `main`** (PR #78, #79 et #80 : QR, nom/prix/réf, contraste, reconnexion Chrome, aperçu fidèle, Data Matrix, impression sur mobile).
 - **Depuis le 2026-11-13 (PR #82 à #89)** : page de vente aux-puces.com ; hall/bâtiment du commerce dans la navigation et les cartes de galerie (#83) ; grille des places masquée quand la réservation est fermée (#84) ; visite guidée des marchés aux puces par hall (#86) ; sélection des photos de départ conservée au rechargement (#87) ; adresses `<boutique>.aux-puces.com` pour les boutiques des Puces de Villeurbanne, la galerie `lespuces` et `petit-chalet` changent d'adresse (#88, #89).
-- **Qualité** : 600 tests PHPUnit (2 834 assertions) **verts** sur l'arbre local, 9 tests JS (`node --test tests/fichero-print.test.js`) verts. CI : syntaxe PHP, PHPUnit, contrôle des secrets (`.github/workflows/ci.yml`).
+- **Du 23 au 25/11 (PR #81, #85, #90 à #105, #107 à #109)** : SMS des notifications via le compte du portail ; lien de nouveau mot de passe admin ; extension Chrome « annonces » jusqu'à la **1.11.1** (publication Leboncoin/Vinted en file, brouillon Vinted, mise à jour et suppression d'annonces, quotas, catégories, relevé des prix) ; import par lot (HEIC, photos réduites) ; images IA gratuites.
+- **Qualité** : 701 tests PHPUnit (3 239 assertions) **verts** au 26/11 sur `main` (`161a155`). Tests JS de l'extension (`packs/annonces-marche/extension/tests/`) : 7 verts.
 
-## 7. Travail en cours (au 2026-11-22)
+## 7. Reste à faire immédiat (au 2026-11-26)
 
-Le travail Fichero décrit dans la version du 16/11 est **terminé et fusionné dans `main`** (PR #80) : ne plus le reprendre depuis les copies locales anciennes de `claude/changes`.
+1. **Valider la PR #108 en préprod**, puis « go prod ».
+2. **Tester l'extension annonces avec de vrais comptes** Leboncoin et Vinted : voir `docs/protocole-test-publication-annonces.md` et `docs/protocole-test-publication-vinted.md` (version de l'extension citée : 1.11.1). Facebook Marketplace figure dans le protocole ; son état n'a pas été revérifié.
+3. **Fermer la PR #106** (`claude/changes`) sans la fusionner : fusion simulée = aucun changement, tout est déjà dans `main` (via #107).
+4. **Sécurité** : le dépôt GitHub est **public** et `tenants/petit-chalet/tenant.php` sur `main` contient les nouveaux identifiants administrateur du commerce d'essai (identifiant lisible, mot de passe haché), arrivés avec #107. Changer ce mot de passe s'il sert ailleurs (préprod, prod, autre service) ou s'il est faible ; décider si le dépôt doit rester public.
+5. **Data Matrix** : lecture à valider sur une vraie imprimante Fichero D11s.
 
-État de l'arbre local sur `claude/changes` (50 commits de retard sur `main`) :
+## 8. Branches, travail non commité et copies de travail
 
-| Fichier | État |
-|---|---|
-| `admin/gallery.php` | modifié, non commité : mémorise la sélection des photos de départ (`localStorage`). Même fonction déjà fusionnée dans `main` (PR #87) : **ne pas commiter**, abandonner ou comparer avant. |
-| `tenants/petit-chalet/tenant.php` | modification **locale d'identifiants de test**, jamais à commiter (restaurer avec `git checkout -- tenants/petit-chalet/tenant.php` avant de livrer ; ne pas afficher la valeur). |
-| `ETAT_DEVELOPPEMENT.md` | ce document, non suivi. |
+| Élément | État au 26/11 | Avis |
+|---|---|---|
+| `serveur-mcp` (4 commits, 12/11) | corbeille, frais de port, prix d'achat, suivi de commande, photos, campagnes promo ; fusion simulée **sans conflit** (~860 lignes) | à décider ; à retester |
+| `sous-zones-galerie` (1 commit, 07/11) | sous-zones du plan ; **conflits** (`gallery-map.php`, `galerie-plan.php`, test) | à décider ; comparer avec les halls déjà livrés (#83, #86) |
+| `fix/import-lot-heic`, `fix/import-lot-envoi`, `feat/ia-image-gratuits` | déjà livrées via #107, #109, #108 | obsolètes |
+| worktree `agents/choix-comptes` (`~/.copilot/session-state/…/choix-comptes`) | **non commité** : 4 fichiers modifiés + 2 nouveaux (d'après les noms de fichiers : changement de compte client à la connexion), absent de GitHub | à relire avant tout nettoyage ; peut concerner le retour testeur « choix du rôle » |
+| worktree `.claude/worktrees/nice-mendeleev-42e01a` | **non commité** : 112 entrées (pack communication) | non analysé ; ne pas supprimer sans vérifier |
+| `stash@{0}` (11/11) / `stash@{1}` (09/11) | README, étiquettes, QR / tableau de bord admin et menu du portail | non comparés à `main` |
+| autres worktrees (une cinquantaine au total) | aucune autre modification non commitée parmi les dossiers présents | nettoyage seulement sur demande |
 
-PR ouvertes (CI verte, non fusionnées) :
+Pour reprendre : partir d'une branche neuve (`git fetch && git switch -c <ma-branche> origin/main`).
 
-- **#85** `claude/mdp-admin-lien` : lien de nouveau mot de passe envoyé à l'admin d'une boutique.
-- **#81** `sms-portail-notifications` : le canal SMS des notifications reprend le compte SMS du portail.
+## 9. Backlog produit (extrait de `docs/SUIVI_TACHES.md`, statuts relus le 2026-11-10, non revalidés depuis)
 
-À faire côté mise en ligne : la prod (`1c06bad`) est un cran derrière `main` (`9f8006c`) ; elle n'a pas les adresses `<boutique>.aux-puces.com` des PR #88 et #89. À déployer sur « go prod » de l'utilisateur.
-
-Pour reprendre une tâche : partir d'une branche neuve issue de `main` à jour (`git fetch && git switch -c <ma-branche> main`) plutôt que de `claude/changes`.
-
-Reste à valider : la lecture du Data Matrix sur une vraie Fichero D11s (Web Bluetooth : Chrome ordinateur ou Android, HTTPS ; pas d'iPhone → exporter les images ; limite de 50 pièces par export ou impression).
-
-## 8. Autres branches et worktrees ouverts
-
-Branches non fusionnées dans `main` (au 2026-11-22) : `claude/mdp-admin-lien` (PR #85), `sms-portail-notifications` (PR #81), `serveur-mcp` (MCP : corbeille réversible, frais de port, prix d'achat, suivi de commande, photos, campagnes de promo), `sous-zones-galerie`, et `claude/changes` (cette branche). `agents/etiquettes-data-matrix` est fusionnée (PR #80).
-Le dépôt compte environ 36 worktrees (`.claude/worktrees/`), dont beaucoup correspondent à des PR déjà fusionnées : à nettoyer (`git worktree prune` / suppression des dossiers) seulement sur demande.
-Autres dossiers du « web local » (louxor, electroboy80, antiqua…) sont **indépendants** : ne pas y toucher depuis ce dépôt.
-
-## 9. Backlog produit (extrait de `docs/SUIVI_TACHES.md`, relu le 2026-11-10 ; journal complété le 2026-11-22)
-
-> Aucun commit lié à #12, #18 ni #20 depuis le 10/11. L'échéance de #18 (21/11) est dépassée : l'état réel de l'activation Stripe Connect est à confirmer par l'utilisateur. Prochaine échéance : #20 le 30/11.
+> Au 26/11 : échéance de #18 (21/11) dépassée, état réel de Stripe Connect à confirmer par l'utilisateur ; **#20 échoit le 30/11** ; #12 : aucune mention équivalente trouvée dans le code. Les dates et priorités viennent de Notion telles que recopiées dans le suivi (Notion non reconsulté).
 
 | # | Tâche | État |
 |---|---|---|
@@ -136,14 +130,15 @@ Autres dossiers du « web local » (louxor, electroboy80, antiqua…) sont **ind
 | 19 | Alternative à Stripe : SEPA + Revolut codés, recette réelle à faire ; Mollie Connect recommandé en secours | en cours, P2 (15/12/2026) |
 | 20 | Montée en charge OVH (paliers, mesures, préprod avant la 10ᵉ boutique) | à faire, P1 (30/11/2026) |
 
-Retours testeurs ouverts (boutique « La friperie de naty ») : parcours photo / shooting (ouverture de l'appareil, assistance vocale dès le premier écran, recto d'analyse repris dans le parcours, focale iPhone, message du footing audio, article par défaut du Fitting photo) et **choix du rôle à la connexion** pour un compte multi-rôles (`admin/accounts.php`). Autres idées P2 : statistiques/notation de l'IA (livré), tableau de bord frais/CA par mois, pack antiquaire (gelé), ventes flash dans le pack actions commerciales, étiquettes et recalcul des marges.
+Au 10/11, retours testeurs ouverts (boutique « La friperie de naty ») : parcours photo / shooting (ouverture de l'appareil, assistance vocale dès le premier écran, recto d'analyse repris dans le parcours, focale iPhone, message du footing audio, article par défaut du Fitting photo) et **choix du rôle à la connexion** pour un compte multi-rôles (`admin/accounts.php`). Autres idées P2 : statistiques/notation de l'IA (livré), tableau de bord frais/CA par mois, pack antiquaire (gelé), ventes flash dans le pack actions commerciales, étiquettes et recalcul des marges. Leur statut actuel n'a pas été revérifié.
 
 ## 10. Commandes utiles
 
 ```bash
 cd "/Users/admin/Documents/projet/web local/brocante"
-vendor/bin/phpunit                                  # suite PHP (≈ 8 s, 600 tests)
+vendor/bin/phpunit                                  # suite PHP (≈ 30 s, 701 tests)
 node --test tests/fichero-print.test.js             # tests JS Fichero
+node --test packs/annonces-marche/extension/tests/*.test.js   # tests de l'extension
 php scripts/exchange-baseline.php                   # régénérer la ligne de base de l'échange
 scripts/release.sh preprod --portail --dry-run      # liste ce qui partirait (n'écrit rien)
 scripts/smoke-remote.sh https://pre.bricbrok.com preprod
@@ -154,5 +149,5 @@ php -l fichier.php                                  # contrôle de syntaxe
 
 1. `git fetch && git switch -c <ma-branche> main` (ou `git worktree add` pour s'isoler).
 2. Lire `CLAUDE.md`, `DEPLOIEMENT.md`, la section du `README.md` qui concerne le sujet et le `*.md` du module.
-3. Prendre une tâche du backlog (§ 9) ou fusionner les PR #81 et #85 sur demande. Priorités datées : #18 (échéance du 21/11 dépassée), #20 (30/11), #12 (petit lot rapide).
+3. Ordre conseillé : § 7 (points 1 à 4), puis #20 (30/11), #18 (en retard), #12 (petit lot rapide), puis le reste du § 9.
 4. Tester sur `*.test` via Herd, `vendor/bin/phpunit`, PR vers `main`. **Ne pas fusionner ni déployer sans demande explicite.**
