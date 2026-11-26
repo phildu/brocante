@@ -103,7 +103,7 @@ case "$cmd" in
     git tag -a "$tag" -m "Déploiement $env de $(git rev-parse --short HEAD) vers $url" HEAD
     echo; echo "✅ $env à jour : $url"
     echo "   Tag local $tag sur $(git rev-parse --short HEAD) — le pousser : git push origin $tag"
-    [ "$env" = "preprod" ] && echo "   Valider à la main sur la préprod, puis : scripts/release.sh prod --portail"
+    if [ "$env" = "preprod" ]; then echo "   Valider à la main sur la préprod, puis : scripts/release.sh prod --portail"; fi
     ;;
 
   *)
