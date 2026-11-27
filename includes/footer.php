@@ -322,5 +322,8 @@
 </script>
 <script src="/assets/lightbox.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/lightbox.js') ?>" defer></script>
 <script src="/assets/pwd-toggle.js" defer></script>
+<?php // Animations des pages publiques (apparition au défilement, survol des cartes) : voir assets/motion-site.js. ?>
+<script src="/assets/lib/motion/motion.js?v=11.11.17" defer></script>
+<script src="/assets/motion-site.js?v=<?= (int) @filemtime(__DIR__ . '/../assets/motion-site.js') ?>" defer></script>
 </body>
 </html>
