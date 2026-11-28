@@ -306,10 +306,16 @@ function ai_provider_test(array $provider): array
     if ($driver === 'cloudflare') {
         $account = ai_provider_cloudflare_account($provider);
         if ($account === '') return ['ok' => false, 'message' => "Identifiant de compte absent de l'adresse de base : https://api.cloudflare.com/client/v4/accounts/<identifiant>/ai/run"];
-        [$code, $raw] = ai_provider_http('GET', 'https://api.cloudflare.com/client/v4/accounts/' . $account . '/tokens/verify', ['Authorization: Bearer ' . $key]);
-        $data = json_decode($raw, true) ?: [];
-        if ($code === 200 && !empty($data['success'])) return ['ok' => true, 'message' => 'Connexion réussie : le jeton Cloudflare est valide.'];
-        if ($code === 0) return ['ok' => false, 'message' => 'Aucune réponse du service : réseau indisponible.'];
+        // Jeton de compte d'abord, puis jeton personnel (celui que crée le bouton « Create a Workers AI API Token »),
+        // que Cloudflare ne vérifie qu'à une autre adresse : les deux servent pareil pour générer des images.
+        foreach (ai_provider_cloudflare_verify_urls($account) as $verifyUrl) {
+            [$code, $raw] = ai_provider_http('GET', $verifyUrl, ['Authorization: Bearer ' . $key]);
+            if ($code === 0) return ['ok' => false, 'message' => 'Aucune réponse du service : réseau indisponible.'];
+            $data = json_decode($raw, true) ?: [];
+            if ($code === 200 && !empty($data['success'])) return ['ok' => true, 'message' => 'Connexion réussie : le jeton Cloudflare est valide.'];
+            if (!isset($firstError)) $firstError = [$code, $data];
+        }
+        [$code, $data] = $firstError;
         $detail = trim((string) ($data['errors'][0]['message'] ?? ''));
         return ['ok' => false, 'message' => 'Jeton ou identifiant de compte refusé (HTTP ' . $code . ')' . ($detail !== '' ? ' : ' . mb_substr($detail, 0, 160) : '.')];
     }
@@ -483,6 +489,15 @@ function ai_provider_image(array $provider, string $srcAbsPath, string $prompt, 
 const AI_CF_EDIT_MODEL = '@cf/runwayml/stable-diffusion-v1-5-img2img';
 const AI_CF_TEXT_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 const AI_HF_TEXT_MODEL = 'black-forest-labs/FLUX.1-schnell';
+
+/** Adresses de vérification d'un jeton Cloudflare, dans l'ordre : jeton de compte, puis jeton personnel. */
+function ai_provider_cloudflare_verify_urls(string $account): array
+{
+    return [
+        'https://api.cloudflare.com/client/v4/accounts/' . $account . '/tokens/verify',
+        'https://api.cloudflare.com/client/v4/user/tokens/verify',
+    ];
+}
 
 /** Identifiant de compte Cloudflare lu dans l'adresse de base (…/accounts/<identifiant>/ai/run), ou chaîne vide. */
 function ai_provider_cloudflare_account(array $provider): string

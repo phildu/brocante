@@ -25,6 +25,15 @@ final class AiFreeImageProvidersTest extends TestCase
         $this->assertSame('', ai_provider_cloudflare_account([]));
     }
 
+    public function testTokenVerifiedAsAccountThenPersonalToken(): void
+    {
+        $account = str_repeat('a', 32);
+        $this->assertSame([
+            'https://api.cloudflare.com/client/v4/accounts/' . $account . '/tokens/verify',
+            'https://api.cloudflare.com/client/v4/user/tokens/verify',
+        ], ai_provider_cloudflare_verify_urls($account));
+    }
+
     public function testRatioSizeIsMultipleOfEight(): void
     {
         [$w, $h] = ai_provider_ratio_size('16:9', 1024);
